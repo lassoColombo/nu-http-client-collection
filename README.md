@@ -117,7 +117,7 @@ The regeneration is just three small Nushell scripts called in order:
 
 | Script                  | What it does                                                                                                              |
 | ----------------------- | ------------------------------------------------------------------------------------------------------------------------- |
-| `scripts/generate.nu`   | Generates every client listed in `clients.yaml` against the current upstream spec. Reads flags per entry.                 |
+| `scripts/generate.nu`   | Generates every client listed in `clients.yaml` against the current upstream spec. Reads flags per entry. `--timeout` (default `1min`) aborts any single generation that hangs. |
 | `scripts/template.nu`   | Refreshes `CLIENTS.md` and the stats block in `README.md` based on what landed on disk.                                   |
 | `scripts/ci.nu`         | Commits whatever changed under `clients/`, `clients.yaml`, `CLIENTS.md`, `README.md`, then tags `v<UTC-date>`.             |
 

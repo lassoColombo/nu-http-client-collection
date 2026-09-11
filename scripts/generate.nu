@@ -9,6 +9,7 @@
 #   nu scripts/generate.nu                     # generate every missing client
 #   nu scripts/generate.nu --force             # regenerate every client
 #   nu scripts/generate.nu --name countries    # generate `countries` if missing
+#   nu scripts/generate.nu --timeout 5min      # allow 5 minutes per client
 #
 # Clients are written flat to `<out-dir>/<name>.nu`. Names and sources must
 # both be globally unique (validated at startup).
@@ -23,6 +24,7 @@ def main [
     --generator: path = "_generator"         # path to the nu-http-client-generator directory
     --out-dir: path = "clients"              # where to write generated `.nu` files
     --jobs: int = 8                          # par-each thread count
+    --timeout: string = "1min"               # abort a single client generation after this long (e.g. 90sec, 5min)
     --force                                  # regenerate even if the output file already exists
 ] {
     if not ($config | path exists) {
@@ -33,6 +35,13 @@ def main [
         print $"No clients defined in ($config). Nothing to do."
         return
     }
+    let timeout = (try { $timeout | into duration } catch {
+        error make { msg: $"invalid --timeout '($timeout)': expected a duration like 90sec or 5min" }
+    })
+    if $timeout <= 0sec {
+        error make { msg: $"invalid --timeout '($timeout)': must be positive" }
+    }
+
     validate-unique-sources $clients
     validate-unique-names $clients
 
@@ -70,7 +79,7 @@ def main [
         $selected
         | par-each --threads $jobs {|c|
             try {
-                generate-one $c $out_dir $generator_path $generator_name
+                generate-one $c $out_dir $generator_path $generator_name $timeout
                 print $"  ✓ ($c.name)"
                 { ok: true, name: $c.name }
             } catch {|e|
@@ -138,6 +147,7 @@ def generate-one [
     out_dir: path
     generator_path: string
     generator_name: string
+    timeout: duration
 ] {
     let required = ["name" "source"]
     for key in $required {
@@ -153,7 +163,59 @@ def generate-one [
     let gen_lit = ($generator_path | to nuon)
 
     let cmd = $"use ($gen_lit); ($generator_name) ($source_lit) -o ($out_lit) ($flags_str)"
-    nu -c $cmd
+
+    # A killed generator may leave a truncated file behind, so keep a copy of
+    # the previous output and put it back rather than losing a good client to
+    # a transient hang.
+    let backup = if ($out_path | path exists) {
+        let b = (mktemp -t nu-http-client-prev-XXXXXX)
+        cp $out_path $b
+        $b
+    } else { null }
+
+    let result = (run-with-timeout $cmd $timeout)
+
+    if $result.timed_out {
+        if $backup != null { mv -f $backup $out_path } else { rm -f $out_path }
+        error make { msg: $"timed out after ($timeout)" }
+    }
+    if $backup != null { rm -f $backup }
+    if $result.exit_code != 0 {
+        let detail = ($result.stderr | str trim | lines | last 5 | str join "\n")
+        error make { msg: $"generator exited ($result.exit_code): ($detail)" }
+    }
+}
+
+# Run `nu -c <cmd>` in a background job, killing it if it outlives `timeout`.
+#
+# `job kill` terminates the job's child processes too, so an aborted generation
+# leaves nothing running. The job writes its `complete` record to a temp file
+# because job mailboxes are shared per-thread and would interleave under
+# `par-each`; polling `job list` keeps each waiter independent.
+def run-with-timeout [cmd: string, timeout: duration]: nothing -> record {
+    let tmp = (mktemp -t nu-http-client-gen-XXXXXX)
+    let job = (job spawn { nu -c $cmd | complete | to nuon | save -f $tmp })
+
+    mut waited = 0ms
+    mut timed_out = false
+    loop {
+        if not ($job in (job list | get id)) { break }
+        if $waited >= $timeout {
+            job kill $job
+            $timed_out = true
+            break
+        }
+        sleep 100ms
+        $waited = $waited + 100ms
+    }
+
+    if $timed_out {
+        rm -f $tmp
+        return { stdout: "", stderr: "", exit_code: 124, timed_out: true }
+    }
+    let result = (open $tmp | from nuon)
+    rm -f $tmp
+    $result | insert timed_out false
 }
 
 # Render a record of {flag-name: value} pairs as CLI args.

@@ -15,6 +15,11 @@ on:
         required: false
         default: "8"
         type: string
+      timeout:
+        description: "Per-client generation timeout for generate.nu (e.g. 1min, 90sec)."
+        required: false
+        default: "5min"
+        type: string
 
 concurrency:
   group: update-registry
@@ -30,6 +35,7 @@ jobs:
     env:
       GENERATOR_REF: ${{ github.event.inputs.generator_ref || 'main' }}
       JOBS: ${{ github.event.inputs.jobs || '8' }}
+      TIMEOUT: ${{ github.event.inputs.timeout || '1min' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -58,7 +64,7 @@ jobs:
         # expected on flaky upstream specs — surface it as a red step but
         # don't poison the job, so Commit & push and Tag datever still run.
         continue-on-error: true
-        run: nu scripts/generate.nu --jobs "$JOBS" --force
+        run: nu scripts/generate.nu --jobs "$JOBS" --timeout "$TIMEOUT" --force
 
       - name: Template README
         # Always render the listing, even if generate exited non-zero — pending
