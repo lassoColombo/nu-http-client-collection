@@ -117,7 +117,7 @@ def accept-completer [] { ["application/json" "application/xml"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "v1-addresses delete-customer-address-repository-by" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "customer-address-repository-v1-delete-by-id-delete" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -141,7 +141,7 @@ export def commands []: nothing -> table {
 #
 # DELETE /V1/addresses/{addressId}
 # operationId: customerAddressRepositoryV1DeleteByIdDelete
-export def "v1-addresses delete-customer-address-repository-by" [
+export def "customer-address-repository-v1-delete-by-id-delete" [
   address_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -178,7 +178,7 @@ export def "v1-addresses delete-customer-address-repository-by" [
 #
 # PUT /V1/amazon-billing-address/{amazonOrderReferenceId}
 # operationId: amazonPaymentAddressManagementV1GetBillingAddressPut
-export def "v1-amazon-billing-address get-payment-management-update" [
+export def "amazon-payment-address-management-v1-get-billing-address-put" [
   amazon_order_reference_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -219,7 +219,7 @@ export def "v1-amazon-billing-address get-payment-management-update" [
 #
 # PUT /V1/amazon-shipping-address/{amazonOrderReferenceId}
 # operationId: amazonPaymentAddressManagementV1GetShippingAddressPut
-export def "v1-amazon-shipping-address get-payment-management-update" [
+export def "amazon-payment-address-management-v1-get-shipping-address-put" [
   amazon_order_reference_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -260,7 +260,7 @@ export def "v1-amazon-shipping-address get-payment-management-update" [
 #
 # DELETE /V1/amazon/order-ref
 # operationId: amazonPaymentOrderInformationManagementV1RemoveOrderReferenceDelete
-export def "v1-amazon-order-ref delete-payment-information-management-reference" [
+export def "amazon-payment-order-information-management-v1-remove-order-reference-delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -295,7 +295,7 @@ export def "v1-amazon-order-ref delete-payment-information-management-reference"
 #
 # GET /V1/analytics/link
 # operationId: analyticsLinkProviderV1GetGet
-export def "v1-analytics-link get-provider" [
+export def "analytics-link-provider-v1-get-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -330,7 +330,7 @@ export def "v1-analytics-link get-provider" [
 #
 # GET /V1/attributeMetadata/customer
 # operationId: customerCustomerMetadataV1GetAllAttributesMetadataGet
-export def "v1-attribute-metadata-customer get-list" [
+export def "customer-customer-metadata-v1-get-all-attributes-metadata-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -365,7 +365,7 @@ export def "v1-attribute-metadata-customer get-list" [
 #
 # GET /V1/attributeMetadata/customer/attribute/{attributeCode}
 # operationId: customerCustomerMetadataV1GetAttributeMetadataGet
-export def "v1-attribute-metadata-customer-attribute get" [
+export def "customer-customer-metadata-v1-get-attribute-metadata-get" [
   attribute_code: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -402,7 +402,7 @@ export def "v1-attribute-metadata-customer-attribute get" [
 #
 # GET /V1/attributeMetadata/customer/custom
 # operationId: customerCustomerMetadataV1GetCustomAttributesMetadataGet
-export def "v1-attribute-metadata-customer-custom get" [
+export def "customer-customer-metadata-v1-get-custom-attributes-metadata-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -439,7 +439,7 @@ export def "v1-attribute-metadata-customer-custom get" [
 #
 # GET /V1/attributeMetadata/customer/form/{formCode}
 # operationId: customerCustomerMetadataV1GetAttributesGet
-export def "v1-attribute-metadata-customer-form get" [
+export def "customer-customer-metadata-v1-get-attributes-get" [
   form_code: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -476,7 +476,7 @@ export def "v1-attribute-metadata-customer-form get" [
 #
 # GET /V1/attributeMetadata/customerAddress
 # operationId: customerAddressMetadataV1GetAllAttributesMetadataGet
-export def "v1-attribute-metadata-customer-address get-list" [
+export def "customer-address-metadata-v1-get-all-attributes-metadata-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -511,7 +511,7 @@ export def "v1-attribute-metadata-customer-address get-list" [
 #
 # GET /V1/attributeMetadata/customerAddress/attribute/{attributeCode}
 # operationId: customerAddressMetadataV1GetAttributeMetadataGet
-export def "v1-attribute-metadata-customer-address-attribute get" [
+export def "customer-address-metadata-v1-get-attribute-metadata-get" [
   attribute_code: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -548,7 +548,7 @@ export def "v1-attribute-metadata-customer-address-attribute get" [
 #
 # GET /V1/attributeMetadata/customerAddress/custom
 # operationId: customerAddressMetadataV1GetCustomAttributesMetadataGet
-export def "v1-attribute-metadata-customer-address-custom get" [
+export def "customer-address-metadata-v1-get-custom-attributes-metadata-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -585,7 +585,7 @@ export def "v1-attribute-metadata-customer-address-custom get" [
 #
 # GET /V1/attributeMetadata/customerAddress/form/{formCode}
 # operationId: customerAddressMetadataV1GetAttributesGet
-export def "v1-attribute-metadata-customer-address-form get" [
+export def "customer-address-metadata-v1-get-attributes-get" [
   form_code: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -622,7 +622,7 @@ export def "v1-attribute-metadata-customer-address-form get" [
 #
 # GET /V1/bulk/{bulkUuid}/detailed-status
 # operationId: asynchronousOperationsBulkStatusV1GetBulkDetailedStatusGet
-export def "v1-bulk-detailed-status get-asynchronous-operations" [
+export def "asynchronous-operations-bulk-status-v1-get-bulk-detailed-status-get" [
   bulk_uuid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -659,7 +659,7 @@ export def "v1-bulk-detailed-status get-asynchronous-operations" [
 #
 # GET /V1/bulk/{bulkUuid}/operation-status/{status}
 # operationId: asynchronousOperationsBulkStatusV1GetOperationsCountByBulkIdAndStatusGet
-export def "v1-bulk-operation-status get-asynchronous-count-by-and" [
+export def "asynchronous-operations-bulk-status-v1-get-operations-count-by-bulk-id-and-status-get" [
   bulk_uuid: string
   status: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -698,7 +698,7 @@ export def "v1-bulk-operation-status get-asynchronous-count-by-and" [
 #
 # GET /V1/bulk/{bulkUuid}/status
 # operationId: asynchronousOperationsBulkStatusV1GetBulkShortStatusGet
-export def "v1-bulk-status get-asynchronous-operations-short" [
+export def "asynchronous-operations-bulk-status-v1-get-bulk-short-status-get" [
   bulk_uuid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -736,7 +736,7 @@ export def "v1-bulk-status get-asynchronous-operations-short" [
 # POST /V1/bundle-products/options/add
 # operationId: bundleProductOptionManagementV1SavePost
 # --option shape: {extension_attributes?: record, option_id?: int, position?: int, product_links?: list, required?: bool, sku?: string, title?: string, type?: string}
-export def "v1-bundle-products-options-add create-management-save" [
+export def "bundle-product-option-management-v1-save-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -775,7 +775,7 @@ export def "v1-bundle-products-options-add create-management-save" [
 #
 # GET /V1/bundle-products/options/types
 # operationId: bundleProductOptionTypeListV1GetItemsGet
-export def "v1-bundle-products-options-types list-get-items" [
+export def "bundle-product-option-type-list-v1-get-items-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -811,7 +811,7 @@ export def "v1-bundle-products-options-types list-get-items" [
 # PUT /V1/bundle-products/options/{optionId}
 # operationId: bundleProductOptionManagementV1SavePut
 # --option shape: {extension_attributes?: record, option_id?: int, position?: int, product_links?: list, required?: bool, sku?: string, title?: string, type?: string}
-export def "v1-bundle-products-options update-management-save" [
+export def "bundle-product-option-management-v1-save-put" [
   option_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -852,7 +852,7 @@ export def "v1-bundle-products-options update-management-save" [
 #
 # GET /V1/bundle-products/{productSku}/children
 # operationId: bundleProductLinkManagementV1GetChildrenGet
-export def "v1-bundle-products-children get-link-management" [
+export def "bundle-product-link-management-v1-get-children-get" [
   product_sku: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -892,7 +892,7 @@ export def "v1-bundle-products-children get-link-management" [
 # PUT /V1/bundle-products/{sku}/links/{id}
 # operationId: bundleProductLinkManagementV1SaveChildPut
 # --linkedProduct shape: {can_change_quantity?: int, extension_attributes?: record, id?: string, is_default: bool, option_id?: int, position?: int, price: float, price_type: int, qty?: float, sku?: string}
-export def "v1-bundle-products-links update-management-save-child" [
+export def "bundle-product-link-management-v1-save-child-put" [
   sku: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -936,7 +936,7 @@ export def "v1-bundle-products-links update-management-save-child" [
 # POST /V1/bundle-products/{sku}/links/{optionId}
 # operationId: bundleProductLinkManagementV1AddChildByProductSkuPost
 # --linkedProduct shape: {can_change_quantity?: int, extension_attributes?: record, id?: string, is_default: bool, option_id?: int, position?: int, price: float, price_type: int, qty?: float, sku?: string}
-export def "v1-bundle-products-links create-management-child-by" [
+export def "bundle-product-link-management-v1-add-child-by-product-sku-post" [
   sku: string
   option_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -979,7 +979,7 @@ export def "v1-bundle-products-links create-management-child-by" [
 #
 # GET /V1/bundle-products/{sku}/options/all
 # operationId: bundleProductOptionRepositoryV1GetListGet
-export def "v1-bundle-products-options-all get-repository-list" [
+export def "bundle-product-option-repository-v1-get-list-get" [
   sku: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1016,7 +1016,7 @@ export def "v1-bundle-products-options-all get-repository-list" [
 #
 # DELETE /V1/bundle-products/{sku}/options/{optionId}
 # operationId: bundleProductOptionRepositoryV1DeleteByIdDelete
-export def "v1-bundle-products-options delete-repository-by" [
+export def "bundle-product-option-repository-v1-delete-by-id-delete" [
   sku: string
   option_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -1055,7 +1055,7 @@ export def "v1-bundle-products-options delete-repository-by" [
 #
 # GET /V1/bundle-products/{sku}/options/{optionId}
 # operationId: bundleProductOptionRepositoryV1GetGet
-export def "v1-bundle-products-options get-repository" [
+export def "bundle-product-option-repository-v1-get-get" [
   sku: string
   option_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -1094,7 +1094,7 @@ export def "v1-bundle-products-options get-repository" [
 #
 # DELETE /V1/bundle-products/{sku}/options/{optionId}/children/{childSku}
 # operationId: bundleProductLinkManagementV1RemoveChildDelete
-export def "v1-bundle-products-options-children delete-link-management-child" [
+export def "bundle-product-link-management-v1-remove-child-delete" [
   sku: string
   option_id: int
   child_sku: string
@@ -1135,7 +1135,7 @@ export def "v1-bundle-products-options-children delete-link-management-child" [
 #
 # POST /V1/carts/
 # operationId: quoteCartManagementV1CreateEmptyCartPost
-export def "v1-carts create-quote-management-empty" [
+export def "quote-cart-management-v1-create-empty-cart-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1170,7 +1170,7 @@ export def "v1-carts create-quote-management-empty" [
 #
 # GET /V1/carts/guest-carts/{cartId}/checkGiftCard/{giftCardCode}
 # operationId: giftCardAccountGuestGiftCardAccountManagementV1CheckGiftCardGet
-export def "v1-carts-guest-carts-check-gift-card get-account-account-management" [
+export def "gift-card-account-guest-gift-card-account-management-v1-check-gift-card-get" [
   cart_id: string
   gift_card_code: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1210,7 +1210,7 @@ export def "v1-carts-guest-carts-check-gift-card get-account-account-management"
 # POST /V1/carts/guest-carts/{cartId}/giftCards
 # operationId: giftCardAccountGuestGiftCardAccountManagementV1AddGiftCardPost
 # --giftCardAccountData shape: {base_gift_cards_amount: float, base_gift_cards_amount_used: float, extension_attributes?: record, gift_cards: list<string>, gift_cards_amount: float, gift_cards_amount_used: float}
-export def "v1-carts-guest-carts-gift-cards create-account-account-management" [
+export def "gift-card-account-guest-gift-card-account-management-v1-add-gift-card-post" [
   cart_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1251,7 +1251,7 @@ export def "v1-carts-guest-carts-gift-cards create-account-account-management" [
 #
 # DELETE /V1/carts/guest-carts/{cartId}/giftCards/{giftCardCode}
 # operationId: giftCardAccountGuestGiftCardAccountManagementV1DeleteByQuoteIdDelete
-export def "v1-carts-guest-carts-gift-cards delete-account-account-management-by-quote" [
+export def "gift-card-account-guest-gift-card-account-management-v1-delete-by-quote-id-delete" [
   cart_id: string
   gift_card_code: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1290,7 +1290,7 @@ export def "v1-carts-guest-carts-gift-cards delete-account-account-management-by
 #
 # GET /V1/carts/licence
 # operationId: checkoutAgreementsCheckoutAgreementsRepositoryV1GetListGet
-export def "v1-carts-licence get-checkout-agreements-checkout-agreements-repository-list" [
+export def "checkout-agreements-checkout-agreements-repository-v1-get-list-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1325,7 +1325,7 @@ export def "v1-carts-licence get-checkout-agreements-checkout-agreements-reposit
 #
 # GET /V1/carts/mine
 # operationId: quoteCartManagementV1GetCartForCustomerGet
-export def "v1-carts-mine get-quote-management-for-customer" [
+export def "quote-cart-management-v1-get-cart-for-customer-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1360,7 +1360,7 @@ export def "v1-carts-mine get-quote-management-for-customer" [
 #
 # POST /V1/carts/mine
 # operationId: quoteCartManagementV1CreateEmptyCartForCustomerPost
-export def "v1-carts-mine create-quote-management-empty-for-customer" [
+export def "quote-cart-management-v1-create-empty-cart-for-customer-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1396,7 +1396,7 @@ export def "v1-carts-mine create-quote-management-empty-for-customer" [
 # PUT /V1/carts/mine
 # operationId: quoteCartRepositoryV1SavePut
 # --quote shape: {billing_address?: record, converted_at?: string, created_at?: string, currency?: record, customer: record, customer_is_guest?: bool, customer_note?: string, customer_note_notify?: bool, customer_tax_class_id?: int, extension_attributes?: record, id: int, is_active?: bool, is_virtual?: bool, items?: list, items_count?: int, items_qty?: float, orig_order_id?: int, reserved_order_id?: string, store_id: int, updated_at?: string}
-export def "v1-carts-mine update-quote-repository-save" [
+export def "quote-cart-repository-v1-save-put" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1435,7 +1435,7 @@ export def "v1-carts-mine update-quote-repository-save" [
 #
 # POST /V1/carts/mine/balance/apply
 # operationId: customerBalanceBalanceManagementFromQuoteV1ApplyPost
-export def "v1-carts-mine-balance-apply create-customer-management-from-quote" [
+export def "customer-balance-balance-management-from-quote-v1-apply-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1470,7 +1470,7 @@ export def "v1-carts-mine-balance-apply create-customer-management-from-quote" [
 #
 # POST /V1/carts/mine/balance/unapply
 # operationId: customerBalanceBalanceManagementFromQuoteV1UnapplyPost
-export def "v1-carts-mine-balance-unapply create-customer-management-from-quote" [
+export def "customer-balance-balance-management-from-quote-v1-unapply-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1505,7 +1505,7 @@ export def "v1-carts-mine-balance-unapply create-customer-management-from-quote"
 #
 # GET /V1/carts/mine/billing-address
 # operationId: quoteBillingAddressManagementV1GetGet
-export def "v1-carts-mine-billing-address get-quote-management" [
+export def "quote-billing-address-management-v1-get-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1541,7 +1541,7 @@ export def "v1-carts-mine-billing-address get-quote-management" [
 # POST /V1/carts/mine/billing-address
 # operationId: quoteBillingAddressManagementV1AssignPost
 # --address shape: {city: string, company?: string, country_id: string, custom_attributes?: list, customer_address_id?: int, customer_id?: int, email: string, extension_attributes?: record, fax?: string, firstname: string, id?: int, lastname: string, middlename?: string, postcode: string, prefix?: string, region: string, region_code: string, region_id: int, same_as_billing?: int, save_in_address_book?: int, street: list<string>, suffix?: string, telephone: string, vat_id?: string}
-export def "v1-carts-mine-billing-address assign-quote-management-create" [
+export def "quote-billing-address-management-v1-assign-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1581,7 +1581,7 @@ export def "v1-carts-mine-billing-address assign-quote-management-create" [
 #
 # GET /V1/carts/mine/checkGiftCard/{giftCardCode}
 # operationId: giftCardAccountGiftCardAccountManagementV1CheckGiftCardGet
-export def "v1-carts-mine-check-gift-card get-account-account-management" [
+export def "gift-card-account-gift-card-account-management-v1-check-gift-card-get" [
   gift_card_code: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1619,7 +1619,7 @@ export def "v1-carts-mine-check-gift-card get-account-account-management" [
 # POST /V1/carts/mine/checkout-fields
 # operationId: temandoShippingQuoteCartCheckoutFieldManagementV1SaveCheckoutFieldsPost
 # --serviceSelection item shape: {attribute_code: string, value: string}
-export def "v1-carts-mine-checkout-fields create-temando-shipping-quote-management-save" [
+export def "temando-shipping-quote-cart-checkout-field-management-v1-save-checkout-fields-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1660,7 +1660,7 @@ export def "v1-carts-mine-checkout-fields create-temando-shipping-quote-manageme
 # operationId: quoteCartTotalManagementV1CollectTotalsPut
 # --additionalData shape: {custom_attributes?: list, extension_attributes?: record}
 # --paymentMethod shape: {additional_data?: list<string>, extension_attributes?: record, method: string, po_number?: string}
-export def "v1-carts-mine-collect-totals update-quote-management" [
+export def "quote-cart-total-management-v1-collect-totals-put" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1702,7 +1702,7 @@ export def "v1-carts-mine-collect-totals update-quote-management" [
 #
 # DELETE /V1/carts/mine/collection-point/search-request
 # operationId: temandoShippingCollectionPointCartCollectionPointManagementV1DeleteSearchRequestDelete
-export def "v1-carts-mine-collection-point-search-request delete-temando-shipping-management" [
+export def "temando-shipping-collection-point-cart-collection-point-management-v1-delete-search-request-delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1737,7 +1737,7 @@ export def "v1-carts-mine-collection-point-search-request delete-temando-shippin
 #
 # PUT /V1/carts/mine/collection-point/search-request
 # operationId: temandoShippingCollectionPointCartCollectionPointManagementV1SaveSearchRequestPut
-export def "v1-carts-mine-collection-point-search-request update-temando-shipping-management-save" [
+export def "temando-shipping-collection-point-cart-collection-point-management-v1-save-search-request-put" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1777,7 +1777,7 @@ export def "v1-carts-mine-collection-point-search-request update-temando-shippin
 #
 # GET /V1/carts/mine/collection-point/search-result
 # operationId: temandoShippingCollectionPointCartCollectionPointManagementV1GetCollectionPointsGet
-export def "v1-carts-mine-collection-point-search-result get-temando-shipping-management" [
+export def "temando-shipping-collection-point-cart-collection-point-management-v1-get-collection-points-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1812,7 +1812,7 @@ export def "v1-carts-mine-collection-point-search-result get-temando-shipping-ma
 #
 # POST /V1/carts/mine/collection-point/select
 # operationId: temandoShippingCollectionPointCartCollectionPointManagementV1SelectCollectionPointPost
-export def "v1-carts-mine-collection-point-select create-temando-shipping-management" [
+export def "temando-shipping-collection-point-cart-collection-point-management-v1-select-collection-point-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1851,7 +1851,7 @@ export def "v1-carts-mine-collection-point-select create-temando-shipping-manage
 #
 # DELETE /V1/carts/mine/coupons
 # operationId: quoteCouponManagementV1RemoveDelete
-export def "v1-carts-mine-coupons delete-quote-management" [
+export def "quote-coupon-management-v1-remove-delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1886,7 +1886,7 @@ export def "v1-carts-mine-coupons delete-quote-management" [
 #
 # GET /V1/carts/mine/coupons
 # operationId: quoteCouponManagementV1GetGet
-export def "v1-carts-mine-coupons get-quote-management" [
+export def "quote-coupon-management-v1-get-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1921,7 +1921,7 @@ export def "v1-carts-mine-coupons get-quote-management" [
 #
 # PUT /V1/carts/mine/coupons/{couponCode}
 # operationId: quoteCouponManagementV1SetPut
-export def "v1-carts-mine-coupons update-quote-management" [
+export def "quote-coupon-management-v1-set-put" [
   coupon_code: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1958,7 +1958,7 @@ export def "v1-carts-mine-coupons update-quote-management" [
 #
 # POST /V1/carts/mine/delivery-option
 # operationId: temandoShippingQuoteCartDeliveryOptionManagementV1SavePost
-export def "v1-carts-mine-delivery-option create-temando-shipping-quote-management-save" [
+export def "temando-shipping-quote-cart-delivery-option-management-v1-save-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1998,7 +1998,7 @@ export def "v1-carts-mine-delivery-option create-temando-shipping-quote-manageme
 # POST /V1/carts/mine/estimate-shipping-methods
 # operationId: quoteShipmentEstimationV1EstimateByExtendedAddressPost
 # --address shape: {city: string, company?: string, country_id: string, custom_attributes?: list, customer_address_id?: int, customer_id?: int, email: string, extension_attributes?: record, fax?: string, firstname: string, id?: int, lastname: string, middlename?: string, postcode: string, prefix?: string, region: string, region_code: string, region_id: int, same_as_billing?: int, save_in_address_book?: int, street: list<string>, suffix?: string, telephone: string, vat_id?: string}
-export def "v1-carts-mine-estimate-shipping-methods create-quote-shipment-estimation-by-extended-address" [
+export def "quote-shipment-estimation-v1-estimate-by-extended-address-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2037,7 +2037,7 @@ export def "v1-carts-mine-estimate-shipping-methods create-quote-shipment-estima
 #
 # POST /V1/carts/mine/estimate-shipping-methods-by-address-id
 # operationId: quoteShippingMethodManagementV1EstimateByAddressIdPost
-export def "v1-carts-mine-estimate-shipping-methods-by-address-id create-quote-management" [
+export def "quote-shipping-method-management-v1-estimate-by-address-id-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2076,7 +2076,7 @@ export def "v1-carts-mine-estimate-shipping-methods-by-address-id create-quote-m
 #
 # GET /V1/carts/mine/gift-message
 # operationId: giftMessageCartRepositoryV1GetGet
-export def "v1-carts-mine-gift-message get-repository" [
+export def "gift-message-cart-repository-v1-get-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2112,7 +2112,7 @@ export def "v1-carts-mine-gift-message get-repository" [
 # POST /V1/carts/mine/gift-message
 # operationId: giftMessageCartRepositoryV1SavePost
 # --giftMessage shape: {customer_id?: int, extension_attributes?: record, gift_message_id?: int, message: string, recipient: string, sender: string}
-export def "v1-carts-mine-gift-message create-repository-save" [
+export def "gift-message-cart-repository-v1-save-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2151,7 +2151,7 @@ export def "v1-carts-mine-gift-message create-repository-save" [
 #
 # GET /V1/carts/mine/gift-message/{itemId}
 # operationId: giftMessageItemRepositoryV1GetGet
-export def "v1-carts-mine-gift-message get-item-repository" [
+export def "gift-message-item-repository-v1-get-get" [
   item_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2189,7 +2189,7 @@ export def "v1-carts-mine-gift-message get-item-repository" [
 # POST /V1/carts/mine/gift-message/{itemId}
 # operationId: giftMessageItemRepositoryV1SavePost
 # --giftMessage shape: {customer_id?: int, extension_attributes?: record, gift_message_id?: int, message: string, recipient: string, sender: string}
-export def "v1-carts-mine-gift-message create-item-repository-save" [
+export def "gift-message-item-repository-v1-save-post" [
   item_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2231,7 +2231,7 @@ export def "v1-carts-mine-gift-message create-item-repository-save" [
 # POST /V1/carts/mine/giftCards
 # operationId: giftCardAccountGiftCardAccountManagementV1SaveByQuoteIdPost
 # --giftCardAccountData shape: {base_gift_cards_amount: float, base_gift_cards_amount_used: float, extension_attributes?: record, gift_cards: list<string>, gift_cards_amount: float, gift_cards_amount_used: float}
-export def "v1-carts-mine-gift-cards create-account-account-management-save-by-quote" [
+export def "gift-card-account-gift-card-account-management-v1-save-by-quote-id-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2270,7 +2270,7 @@ export def "v1-carts-mine-gift-cards create-account-account-management-save-by-q
 #
 # DELETE /V1/carts/mine/giftCards/{giftCardCode}
 # operationId: giftCardAccountGiftCardAccountManagementV1DeleteByQuoteIdDelete
-export def "v1-carts-mine-gift-cards delete-account-account-management-by-quote" [
+export def "gift-card-account-gift-card-account-management-v1-delete-by-quote-id-delete" [
   gift_card_code: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2307,7 +2307,7 @@ export def "v1-carts-mine-gift-cards delete-account-account-management-by-quote"
 #
 # GET /V1/carts/mine/items
 # operationId: quoteCartItemRepositoryV1GetListGet
-export def "v1-carts-mine-items get-quote-repository-list" [
+export def "quote-cart-item-repository-v1-get-list-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2343,7 +2343,7 @@ export def "v1-carts-mine-items get-quote-repository-list" [
 # POST /V1/carts/mine/items
 # operationId: quoteCartItemRepositoryV1SavePost
 # --cartItem shape: {extension_attributes?: record, item_id?: int, name?: string, price?: float, product_option?: record, product_type?: string, qty: float, quote_id: string, sku?: string}
-export def "v1-carts-mine-items create-quote-repository-save" [
+export def "quote-cart-item-repository-v1-save-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2382,7 +2382,7 @@ export def "v1-carts-mine-items create-quote-repository-save" [
 #
 # DELETE /V1/carts/mine/items/{itemId}
 # operationId: quoteCartItemRepositoryV1DeleteByIdDelete
-export def "v1-carts-mine-items delete-quote-repository-by" [
+export def "quote-cart-item-repository-v1-delete-by-id-delete" [
   item_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2420,7 +2420,7 @@ export def "v1-carts-mine-items delete-quote-repository-by" [
 # PUT /V1/carts/mine/items/{itemId}
 # operationId: quoteCartItemRepositoryV1SavePut
 # --cartItem shape: {extension_attributes?: record, item_id?: int, name?: string, price?: float, product_option?: record, product_type?: string, qty: float, quote_id: string, sku?: string}
-export def "v1-carts-mine-items update-quote-repository-save" [
+export def "quote-cart-item-repository-v1-save-put" [
   item_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2462,7 +2462,7 @@ export def "v1-carts-mine-items update-quote-repository-save" [
 # PUT /V1/carts/mine/order
 # operationId: quoteCartManagementV1PlaceOrderPut
 # --paymentMethod shape: {additional_data?: list<string>, extension_attributes?: record, method: string, po_number?: string}
-export def "v1-carts-mine-order update-quote-management-place" [
+export def "quote-cart-management-v1-place-order-put" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2501,7 +2501,7 @@ export def "v1-carts-mine-order update-quote-management-place" [
 #
 # GET /V1/carts/mine/payment-information
 # operationId: checkoutPaymentInformationManagementV1GetPaymentInformationGet
-export def "v1-carts-mine-payment-information get-checkout-management" [
+export def "checkout-payment-information-management-v1-get-payment-information-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2538,7 +2538,7 @@ export def "v1-carts-mine-payment-information get-checkout-management" [
 # operationId: checkoutPaymentInformationManagementV1SavePaymentInformationAndPlaceOrderPost
 # --billingAddress shape: {city: string, company?: string, country_id: string, custom_attributes?: list, customer_address_id?: int, customer_id?: int, email: string, extension_attributes?: record, fax?: string, firstname: string, id?: int, lastname: string, middlename?: string, postcode: string, prefix?: string, region: string, region_code: string, region_id: int, same_as_billing?: int, save_in_address_book?: int, street: list<string>, suffix?: string, telephone: string, vat_id?: string}
 # --paymentMethod shape: {additional_data?: list<string>, extension_attributes?: record, method: string, po_number?: string}
-export def "v1-carts-mine-payment-information create-checkout-management-save-and-place-order" [
+export def "checkout-payment-information-management-v1-save-payment-information-and-place-order-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2578,7 +2578,7 @@ export def "v1-carts-mine-payment-information create-checkout-management-save-an
 #
 # GET /V1/carts/mine/payment-methods
 # operationId: quotePaymentMethodManagementV1GetListGet
-export def "v1-carts-mine-payment-methods get-quote-management-list" [
+export def "quote-payment-method-management-v1-get-list-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2613,7 +2613,7 @@ export def "v1-carts-mine-payment-methods get-quote-management-list" [
 #
 # GET /V1/carts/mine/selected-payment-method
 # operationId: quotePaymentMethodManagementV1GetGet
-export def "v1-carts-mine-selected-payment-method get-quote-management" [
+export def "quote-payment-method-management-v1-get-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2649,7 +2649,7 @@ export def "v1-carts-mine-selected-payment-method get-quote-management" [
 # PUT /V1/carts/mine/selected-payment-method
 # operationId: quotePaymentMethodManagementV1SetPut
 # --method shape: {additional_data?: list<string>, extension_attributes?: record, method: string, po_number?: string}
-export def "v1-carts-mine-selected-payment-method update-quote-management" [
+export def "quote-payment-method-management-v1-set-put" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2690,7 +2690,7 @@ export def "v1-carts-mine-selected-payment-method update-quote-management" [
 # operationId: checkoutPaymentInformationManagementV1SavePaymentInformationPost
 # --billingAddress shape: {city: string, company?: string, country_id: string, custom_attributes?: list, customer_address_id?: int, customer_id?: int, email: string, extension_attributes?: record, fax?: string, firstname: string, id?: int, lastname: string, middlename?: string, postcode: string, prefix?: string, region: string, region_code: string, region_id: int, same_as_billing?: int, save_in_address_book?: int, street: list<string>, suffix?: string, telephone: string, vat_id?: string}
 # --paymentMethod shape: {additional_data?: list<string>, extension_attributes?: record, method: string, po_number?: string}
-export def "v1-carts-mine-set-payment-information create-checkout-management-save" [
+export def "checkout-payment-information-management-v1-save-payment-information-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2731,7 +2731,7 @@ export def "v1-carts-mine-set-payment-information create-checkout-management-sav
 # POST /V1/carts/mine/shipping-information
 # operationId: checkoutShippingInformationManagementV1SaveAddressInformationPost
 # --addressInformation shape: {billing_address?: record, custom_attributes?: list, extension_attributes?: record, shipping_address: record, shipping_carrier_code: string, shipping_method_code: string}
-export def "v1-carts-mine-shipping-information create-checkout-management-save-address" [
+export def "checkout-shipping-information-management-v1-save-address-information-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2770,7 +2770,7 @@ export def "v1-carts-mine-shipping-information create-checkout-management-save-a
 #
 # GET /V1/carts/mine/shipping-methods
 # operationId: quoteShippingMethodManagementV1GetListGet
-export def "v1-carts-mine-shipping-methods get-quote-management-list" [
+export def "quote-shipping-method-management-v1-get-list-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2805,7 +2805,7 @@ export def "v1-carts-mine-shipping-methods get-quote-management-list" [
 #
 # GET /V1/carts/mine/totals
 # operationId: quoteCartTotalRepositoryV1GetGet
-export def "v1-carts-mine-totals get-quote-repository" [
+export def "quote-cart-total-repository-v1-get-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2841,7 +2841,7 @@ export def "v1-carts-mine-totals get-quote-repository" [
 # POST /V1/carts/mine/totals-information
 # operationId: checkoutTotalsInformationManagementV1CalculatePost
 # --addressInformation shape: {address: record, custom_attributes?: list, extension_attributes?: record, shipping_carrier_code?: string, shipping_method_code?: string}
-export def "v1-carts-mine-totals-information create-checkout-management-calculate" [
+export def "checkout-totals-information-management-v1-calculate-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2880,7 +2880,7 @@ export def "v1-carts-mine-totals-information create-checkout-management-calculat
 #
 # GET /V1/carts/search
 # operationId: quoteCartRepositoryV1GetListGet
-export def "v1-carts-search get-quote-repository-list" [
+export def "quote-cart-repository-v1-get-list-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2923,7 +2923,7 @@ export def "v1-carts-search get-quote-repository-list" [
 #
 # GET /V1/carts/{cartId}
 # operationId: quoteCartRepositoryV1GetGet
-export def "v1-carts get-quote-repository" [
+export def "quote-cart-repository-v1-get-get" [
   cart_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2960,7 +2960,7 @@ export def "v1-carts get-quote-repository" [
 #
 # PUT /V1/carts/{cartId}
 # operationId: quoteCartManagementV1AssignCustomerPut
-export def "v1-carts assign-quote-management-customer-update" [
+export def "quote-cart-management-v1-assign-customer-put" [
   cart_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3001,7 +3001,7 @@ export def "v1-carts assign-quote-management-customer-update" [
 # carts/{cartId}/billing-address
 #
 # GET /V1/carts/{cartId}/billing-address
-export def "v1-carts-billing-address get" [
+export def "get-v1-carts-cart-id-billing-address" [
   cart_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3038,7 +3038,7 @@ export def "v1-carts-billing-address get" [
 #
 # POST /V1/carts/{cartId}/billing-address
 # --address shape: {city: string, company?: string, country_id: string, custom_attributes?: list, customer_address_id?: int, customer_id?: int, email: string, extension_attributes?: record, fax?: string, firstname: string, id?: int, lastname: string, middlename?: string, postcode: string, prefix?: string, region: string, region_code: string, region_id: int, same_as_billing?: int, save_in_address_book?: int, street: list<string>, suffix?: string, telephone: string, vat_id?: string}
-export def "v1-carts-billing-address create" [
+export def "post-v1-carts-cart-id-billing-address" [
   cart_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3079,7 +3079,7 @@ export def "v1-carts-billing-address create" [
 # carts/{cartId}/coupons
 #
 # DELETE /V1/carts/{cartId}/coupons
-export def "v1-carts-coupons delete" [
+export def "delete-v1-carts-cart-id-coupons" [
   cart_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3115,7 +3115,7 @@ export def "v1-carts-coupons delete" [
 # carts/{cartId}/coupons
 #
 # GET /V1/carts/{cartId}/coupons
-export def "v1-carts-coupons get" [
+export def "get-v1-carts-cart-id-coupons" [
   cart_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3151,7 +3151,7 @@ export def "v1-carts-coupons get" [
 # carts/{cartId}/coupons/{couponCode}
 #
 # PUT /V1/carts/{cartId}/coupons/{couponCode}
-export def "v1-carts-coupons update" [
+export def "put-v1-carts-cart-id-coupons-coupon-code" [
   cart_id: int
   coupon_code: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3190,7 +3190,7 @@ export def "v1-carts-coupons update" [
 #
 # POST /V1/carts/{cartId}/estimate-shipping-methods
 # --address shape: {city: string, company?: string, country_id: string, custom_attributes?: list, customer_address_id?: int, customer_id?: int, email: string, extension_attributes?: record, fax?: string, firstname: string, id?: int, lastname: string, middlename?: string, postcode: string, prefix?: string, region: string, region_code: string, region_id: int, same_as_billing?: int, save_in_address_book?: int, street: list<string>, suffix?: string, telephone: string, vat_id?: string}
-export def "v1-carts-estimate-shipping-methods create" [
+export def "post-v1-carts-cart-id-estimate-shipping-methods" [
   cart_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3230,7 +3230,7 @@ export def "v1-carts-estimate-shipping-methods create" [
 # carts/{cartId}/estimate-shipping-methods-by-address-id
 #
 # POST /V1/carts/{cartId}/estimate-shipping-methods-by-address-id
-export def "v1-carts-estimate-shipping-methods-by-address-id create" [
+export def "post-v1-carts-cart-id-estimate-shipping-methods-by-address-id" [
   cart_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3270,7 +3270,7 @@ export def "v1-carts-estimate-shipping-methods-by-address-id create" [
 # carts/{cartId}/gift-message
 #
 # GET /V1/carts/{cartId}/gift-message
-export def "v1-carts-gift-message list" [
+export def "get-v1-carts-cart-id-gift-message" [
   cart_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3307,7 +3307,7 @@ export def "v1-carts-gift-message list" [
 #
 # POST /V1/carts/{cartId}/gift-message
 # --giftMessage shape: {customer_id?: int, extension_attributes?: record, gift_message_id?: int, message: string, recipient: string, sender: string}
-export def "v1-carts-gift-message create-by-cart-id" [
+export def "post-v1-carts-cart-id-gift-message" [
   cart_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3347,7 +3347,7 @@ export def "v1-carts-gift-message create-by-cart-id" [
 # carts/{cartId}/gift-message/{itemId}
 #
 # GET /V1/carts/{cartId}/gift-message/{itemId}
-export def "v1-carts-gift-message get" [
+export def "get-v1-carts-cart-id-gift-message-item-id" [
   cart_id: int
   item_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -3386,7 +3386,7 @@ export def "v1-carts-gift-message get" [
 #
 # POST /V1/carts/{cartId}/gift-message/{itemId}
 # --giftMessage shape: {customer_id?: int, extension_attributes?: record, gift_message_id?: int, message: string, recipient: string, sender: string}
-export def "v1-carts-gift-message create-by-cart-id-item-id" [
+export def "post-v1-carts-cart-id-gift-message-item-id" [
   cart_id: int
   item_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -3430,7 +3430,7 @@ export def "v1-carts-gift-message create-by-cart-id-item-id" [
 # PUT /V1/carts/{cartId}/giftCards
 # operationId: giftCardAccountGiftCardAccountManagementV1SaveByQuoteIdPut
 # --giftCardAccountData shape: {base_gift_cards_amount: float, base_gift_cards_amount_used: float, extension_attributes?: record, gift_cards: list<string>, gift_cards_amount: float, gift_cards_amount_used: float}
-export def "v1-carts-gift-cards update-account-account-management-save-by-quote" [
+export def "gift-card-account-gift-card-account-management-v1-save-by-quote-id-put" [
   cart_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3470,7 +3470,7 @@ export def "v1-carts-gift-cards update-account-account-management-save-by-quote"
 # carts/{cartId}/giftCards/{giftCardCode}
 #
 # DELETE /V1/carts/{cartId}/giftCards/{giftCardCode}
-export def "v1-carts-gift-cards delete" [
+export def "delete-v1-carts-cart-id-gift-cards-gift-card-code" [
   cart_id: int
   gift_card_code: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3508,7 +3508,7 @@ export def "v1-carts-gift-cards delete" [
 # carts/{cartId}/items
 #
 # GET /V1/carts/{cartId}/items
-export def "v1-carts-items get" [
+export def "get-v1-carts-cart-id-items" [
   cart_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3544,7 +3544,7 @@ export def "v1-carts-items get" [
 # carts/{cartId}/items/{itemId}
 #
 # DELETE /V1/carts/{cartId}/items/{itemId}
-export def "v1-carts-items delete" [
+export def "delete-v1-carts-cart-id-items-item-id" [
   cart_id: int
   item_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -3583,7 +3583,7 @@ export def "v1-carts-items delete" [
 #
 # PUT /V1/carts/{cartId}/items/{itemId}
 # --cartItem shape: {extension_attributes?: record, item_id?: int, name?: string, price?: float, product_option?: record, product_type?: string, qty: float, quote_id: string, sku?: string}
-export def "v1-carts-items update" [
+export def "put-v1-carts-cart-id-items-item-id" [
   cart_id: string
   item_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3626,7 +3626,7 @@ export def "v1-carts-items update" [
 #
 # PUT /V1/carts/{cartId}/order
 # --paymentMethod shape: {additional_data?: list<string>, extension_attributes?: record, method: string, po_number?: string}
-export def "v1-carts-order update" [
+export def "put-v1-carts-cart-id-order" [
   cart_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3666,7 +3666,7 @@ export def "v1-carts-order update" [
 # carts/{cartId}/payment-methods
 #
 # GET /V1/carts/{cartId}/payment-methods
-export def "v1-carts-payment-methods get" [
+export def "get-v1-carts-cart-id-payment-methods" [
   cart_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3702,7 +3702,7 @@ export def "v1-carts-payment-methods get" [
 # carts/{cartId}/selected-payment-method
 #
 # GET /V1/carts/{cartId}/selected-payment-method
-export def "v1-carts-selected-payment-method get" [
+export def "get-v1-carts-cart-id-selected-payment-method" [
   cart_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3739,7 +3739,7 @@ export def "v1-carts-selected-payment-method get" [
 #
 # PUT /V1/carts/{cartId}/selected-payment-method
 # --method shape: {additional_data?: list<string>, extension_attributes?: record, method: string, po_number?: string}
-export def "v1-carts-selected-payment-method update" [
+export def "put-v1-carts-cart-id-selected-payment-method" [
   cart_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3780,7 +3780,7 @@ export def "v1-carts-selected-payment-method update" [
 #
 # POST /V1/carts/{cartId}/shipping-information
 # --addressInformation shape: {billing_address?: record, custom_attributes?: list, extension_attributes?: record, shipping_address: record, shipping_carrier_code: string, shipping_method_code: string}
-export def "v1-carts-shipping-information create" [
+export def "post-v1-carts-cart-id-shipping-information" [
   cart_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3820,7 +3820,7 @@ export def "v1-carts-shipping-information create" [
 # carts/{cartId}/shipping-methods
 #
 # GET /V1/carts/{cartId}/shipping-methods
-export def "v1-carts-shipping-methods get" [
+export def "get-v1-carts-cart-id-shipping-methods" [
   cart_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3856,7 +3856,7 @@ export def "v1-carts-shipping-methods get" [
 # carts/{cartId}/totals
 #
 # GET /V1/carts/{cartId}/totals
-export def "v1-carts-totals get" [
+export def "get-v1-carts-cart-id-totals" [
   cart_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3893,7 +3893,7 @@ export def "v1-carts-totals get" [
 #
 # POST /V1/carts/{cartId}/totals-information
 # --addressInformation shape: {address: record, custom_attributes?: list, extension_attributes?: record, shipping_carrier_code?: string, shipping_method_code?: string}
-export def "v1-carts-totals-information create" [
+export def "post-v1-carts-cart-id-totals-information" [
   cart_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3934,7 +3934,7 @@ export def "v1-carts-totals-information create" [
 #
 # GET /V1/carts/{quoteId}/giftCards
 # operationId: giftCardAccountGiftCardAccountManagementV1GetListByQuoteIdGet
-export def "v1-carts-gift-cards get-account-account-management-list-by-quote" [
+export def "gift-card-account-gift-card-account-management-v1-get-list-by-quote-id-get" [
   quote_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3971,7 +3971,7 @@ export def "v1-carts-gift-cards get-account-account-management-list-by-quote" [
 #
 # POST /V1/carts/{quoteId}/items
 # --cartItem shape: {extension_attributes?: record, item_id?: int, name?: string, price?: float, product_option?: record, product_type?: string, qty: float, quote_id: string, sku?: string}
-export def "v1-carts-items create" [
+export def "post-v1-carts-quote-id-items" [
   quote_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4012,7 +4012,7 @@ export def "v1-carts-items create" [
 #
 # GET /V1/categories
 # operationId: catalogCategoryManagementV1GetTreeGet
-export def "v1-categories get-catalog-category-management-tree" [
+export def "catalog-category-management-v1-get-tree-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4051,7 +4051,7 @@ export def "v1-categories get-catalog-category-management-tree" [
 # POST /V1/categories
 # operationId: catalogCategoryRepositoryV1SavePost
 # --category shape: {available_sort_by?: list<string>, children?: string, created_at?: string, custom_attributes?: list, extension_attributes?: record, id?: int, include_in_menu?: bool, is_active?: bool, level?: int, name?: string, parent_id?: int, path?: string, position?: int, updated_at?: string}
-export def "v1-categories create-catalog-category-repository-save" [
+export def "catalog-category-repository-v1-save-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4090,7 +4090,7 @@ export def "v1-categories create-catalog-category-repository-save" [
 #
 # GET /V1/categories/attributes
 # operationId: catalogCategoryAttributeRepositoryV1GetListGet
-export def "v1-categories-attributes get-catalog-category-repository-list" [
+export def "catalog-category-attribute-repository-v1-get-list-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4133,7 +4133,7 @@ export def "v1-categories-attributes get-catalog-category-repository-list" [
 #
 # GET /V1/categories/attributes/{attributeCode}
 # operationId: catalogCategoryAttributeRepositoryV1GetGet
-export def "v1-categories-attributes get-catalog-category-repository" [
+export def "catalog-category-attribute-repository-v1-get-get" [
   attribute_code: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4170,7 +4170,7 @@ export def "v1-categories-attributes get-catalog-category-repository" [
 #
 # GET /V1/categories/attributes/{attributeCode}/options
 # operationId: catalogCategoryAttributeOptionManagementV1GetItemsGet
-export def "v1-categories-attributes-options get-catalog-category-management-items" [
+export def "catalog-category-attribute-option-management-v1-get-items-get" [
   attribute_code: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4207,7 +4207,7 @@ export def "v1-categories-attributes-options get-catalog-category-management-ite
 #
 # GET /V1/categories/list
 # operationId: catalogCategoryListV1GetListGet
-export def "v1-categories-list get-catalog-category" [
+export def "catalog-category-list-v1-get-list-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4250,7 +4250,7 @@ export def "v1-categories-list get-catalog-category" [
 #
 # DELETE /V1/categories/{categoryId}
 # operationId: catalogCategoryRepositoryV1DeleteByIdentifierDelete
-export def "v1-categories delete-catalog-category-repository-by-identifier" [
+export def "catalog-category-repository-v1-delete-by-identifier-delete" [
   category_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4287,7 +4287,7 @@ export def "v1-categories delete-catalog-category-repository-by-identifier" [
 #
 # GET /V1/categories/{categoryId}
 # operationId: catalogCategoryRepositoryV1GetGet
-export def "v1-categories get-catalog-category-repository" [
+export def "catalog-category-repository-v1-get-get" [
   category_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4326,7 +4326,7 @@ export def "v1-categories get-catalog-category-repository" [
 #
 # PUT /V1/categories/{categoryId}/move
 # operationId: catalogCategoryManagementV1MovePut
-export def "v1-categories-move update-catalog-category-management" [
+export def "catalog-category-management-v1-move-put" [
   category_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4368,7 +4368,7 @@ export def "v1-categories-move update-catalog-category-management" [
 #
 # GET /V1/categories/{categoryId}/products
 # operationId: catalogCategoryLinkManagementV1GetAssignedProductsGet
-export def "v1-categories-products get-catalog-category-link-management-assigned" [
+export def "catalog-category-link-management-v1-get-assigned-products-get" [
   category_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4406,7 +4406,7 @@ export def "v1-categories-products get-catalog-category-link-management-assigned
 # POST /V1/categories/{categoryId}/products
 # operationId: catalogCategoryLinkRepositoryV1SavePost
 # --productLink shape: {category_id: string, extension_attributes?: record, position?: int, sku?: string}
-export def "v1-categories-products create-catalog-category-link-repository-save" [
+export def "catalog-category-link-repository-v1-save-post" [
   category_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4448,7 +4448,7 @@ export def "v1-categories-products create-catalog-category-link-repository-save"
 # PUT /V1/categories/{categoryId}/products
 # operationId: catalogCategoryLinkRepositoryV1SavePut
 # --productLink shape: {category_id: string, extension_attributes?: record, position?: int, sku?: string}
-export def "v1-categories-products update-catalog-category-link-repository-save" [
+export def "catalog-category-link-repository-v1-save-put" [
   category_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4489,7 +4489,7 @@ export def "v1-categories-products update-catalog-category-link-repository-save"
 #
 # DELETE /V1/categories/{categoryId}/products/{sku}
 # operationId: catalogCategoryLinkRepositoryV1DeleteByIdsDelete
-export def "v1-categories-products delete-catalog-category-link-repository-by" [
+export def "catalog-category-link-repository-v1-delete-by-ids-delete" [
   category_id: string
   sku: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4529,7 +4529,7 @@ export def "v1-categories-products delete-catalog-category-link-repository-by" [
 # PUT /V1/categories/{id}
 # operationId: catalogCategoryRepositoryV1SavePut
 # --category shape: {available_sort_by?: list<string>, children?: string, created_at?: string, custom_attributes?: list, extension_attributes?: record, id?: int, include_in_menu?: bool, is_active?: bool, level?: int, name?: string, parent_id?: int, path?: string, position?: int, updated_at?: string}
-export def "v1-categories update-catalog-category-repository-save" [
+export def "catalog-category-repository-v1-save-put" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4571,7 +4571,7 @@ export def "v1-categories update-catalog-category-repository-save" [
 # POST /V1/cmsBlock
 # operationId: cmsBlockRepositoryV1SavePost
 # --block shape: {active?: bool, content?: string, creation_time?: string, id?: int, identifier: string, title?: string, update_time?: string}
-export def "v1-cms-block create-repository-save" [
+export def "cms-block-repository-v1-save-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4610,7 +4610,7 @@ export def "v1-cms-block create-repository-save" [
 #
 # GET /V1/cmsBlock/search
 # operationId: cmsBlockRepositoryV1GetListGet
-export def "v1-cms-block-search get-repository-list" [
+export def "cms-block-repository-v1-get-list-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4653,7 +4653,7 @@ export def "v1-cms-block-search get-repository-list" [
 #
 # DELETE /V1/cmsBlock/{blockId}
 # operationId: cmsBlockRepositoryV1DeleteByIdDelete
-export def "v1-cms-block delete-repository-by" [
+export def "cms-block-repository-v1-delete-by-id-delete" [
   block_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4690,7 +4690,7 @@ export def "v1-cms-block delete-repository-by" [
 #
 # GET /V1/cmsBlock/{blockId}
 # operationId: cmsBlockRepositoryV1GetByIdGet
-export def "v1-cms-block get-repository-by" [
+export def "cms-block-repository-v1-get-by-id-get" [
   block_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4728,7 +4728,7 @@ export def "v1-cms-block get-repository-by" [
 # PUT /V1/cmsBlock/{id}
 # operationId: cmsBlockRepositoryV1SavePut
 # --block shape: {active?: bool, content?: string, creation_time?: string, id?: int, identifier: string, title?: string, update_time?: string}
-export def "v1-cms-block update-repository-save" [
+export def "cms-block-repository-v1-save-put" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4770,7 +4770,7 @@ export def "v1-cms-block update-repository-save" [
 # POST /V1/cmsPage
 # operationId: cmsPageRepositoryV1SavePost
 # --page shape: {active?: bool, content?: string, content_heading?: string, creation_time?: string, custom_layout_update_xml?: string, custom_root_template?: string, custom_theme?: string, custom_theme_from?: string, custom_theme_to?: string, id?: int, identifier: string, layout_update_xml?: string, meta_description?: string, meta_keywords?: string, meta_title?: string, page_layout?: string, sort_order?: string, title?: string, update_time?: string}
-export def "v1-cms-page create-repository-save" [
+export def "cms-page-repository-v1-save-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4809,7 +4809,7 @@ export def "v1-cms-page create-repository-save" [
 #
 # GET /V1/cmsPage/search
 # operationId: cmsPageRepositoryV1GetListGet
-export def "v1-cms-page-search get-repository-list" [
+export def "cms-page-repository-v1-get-list-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4853,7 +4853,7 @@ export def "v1-cms-page-search get-repository-list" [
 # PUT /V1/cmsPage/{id}
 # operationId: cmsPageRepositoryV1SavePut
 # --page shape: {active?: bool, content?: string, content_heading?: string, creation_time?: string, custom_layout_update_xml?: string, custom_root_template?: string, custom_theme?: string, custom_theme_from?: string, custom_theme_to?: string, id?: int, identifier: string, layout_update_xml?: string, meta_description?: string, meta_keywords?: string, meta_title?: string, page_layout?: string, sort_order?: string, title?: string, update_time?: string}
-export def "v1-cms-page update-repository-save" [
+export def "cms-page-repository-v1-save-put" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4894,7 +4894,7 @@ export def "v1-cms-page update-repository-save" [
 #
 # DELETE /V1/cmsPage/{pageId}
 # operationId: cmsPageRepositoryV1DeleteByIdDelete
-export def "v1-cms-page delete-repository-by" [
+export def "cms-page-repository-v1-delete-by-id-delete" [
   page_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4931,7 +4931,7 @@ export def "v1-cms-page delete-repository-by" [
 #
 # GET /V1/cmsPage/{pageId}
 # operationId: cmsPageRepositoryV1GetByIdGet
-export def "v1-cms-page get-repository-by" [
+export def "cms-page-repository-v1-get-by-id-get" [
   page_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4968,7 +4968,7 @@ export def "v1-cms-page get-repository-by" [
 #
 # GET /V1/company/
 # operationId: companyCompanyRepositoryV1GetListGet
-export def "v1-company get-repository-list" [
+export def "company-company-repository-v1-get-list-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5012,7 +5012,7 @@ export def "v1-company get-repository-list" [
 # POST /V1/company/
 # operationId: companyCompanyRepositoryV1SavePost
 # --company shape: {city?: string, comment?: string, company_email?: string, company_name?: string, country_id?: string, customer_group_id: int, extension_attributes?: record, id?: int, legal_name?: string, postcode?: string, region?: string, region_id?: string, reject_reason: string, rejected_at: string, reseller_id?: string, sales_representative_id: int, status?: int, street: list<string>, super_user_id: int, telephone?: string, vat_tax_id?: string}
-export def "v1-company create-repository-save" [
+export def "company-company-repository-v1-save-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5052,7 +5052,7 @@ export def "v1-company create-repository-save" [
 # PUT /V1/company/assignRoles
 # operationId: companyAclV1AssignRolesPut
 # --roles item shape: {company_id?: int, extension_attributes?: record, id?: int, permissions: list, role_name?: string}
-export def "v1-company-assign-roles update-acl" [
+export def "company-acl-v1-assign-roles-put" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5092,7 +5092,7 @@ export def "v1-company-assign-roles update-acl" [
 #
 # GET /V1/company/role/
 # operationId: companyRoleRepositoryV1GetListGet
-export def "v1-company-role get-repository-list" [
+export def "company-role-repository-v1-get-list-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5136,7 +5136,7 @@ export def "v1-company-role get-repository-list" [
 # POST /V1/company/role/
 # operationId: companyRoleRepositoryV1SavePost
 # --role shape: {company_id?: int, extension_attributes?: record, id?: int, permissions: list, role_name?: string}
-export def "v1-company-role create-repository-save" [
+export def "company-role-repository-v1-save-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5176,7 +5176,7 @@ export def "v1-company-role create-repository-save" [
 # PUT /V1/company/role/{id}
 # operationId: companyRoleRepositoryV1SavePut
 # --role shape: {company_id?: int, extension_attributes?: record, id?: int, permissions: list, role_name?: string}
-export def "v1-company-role update-repository-save" [
+export def "company-role-repository-v1-save-put" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5217,7 +5217,7 @@ export def "v1-company-role update-repository-save" [
 #
 # DELETE /V1/company/role/{roleId}
 # operationId: companyRoleRepositoryV1DeleteDelete
-export def "v1-company-role delete-repository" [
+export def "company-role-repository-v1-delete-delete" [
   role_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5254,7 +5254,7 @@ export def "v1-company-role delete-repository" [
 #
 # GET /V1/company/role/{roleId}
 # operationId: companyRoleRepositoryV1GetGet
-export def "v1-company-role get-repository" [
+export def "company-role-repository-v1-get-get" [
   role_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5291,7 +5291,7 @@ export def "v1-company-role get-repository" [
 #
 # GET /V1/company/role/{roleId}/users
 # operationId: companyAclV1GetUsersByRoleIdGet
-export def "v1-company-role-users get-acl-by" [
+export def "company-acl-v1-get-users-by-role-id-get" [
   role_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5328,7 +5328,7 @@ export def "v1-company-role-users get-acl-by" [
 #
 # DELETE /V1/company/{companyId}
 # operationId: companyCompanyRepositoryV1DeleteByIdDelete
-export def "v1-company delete-repository-by" [
+export def "company-company-repository-v1-delete-by-id-delete" [
   company_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5365,7 +5365,7 @@ export def "v1-company delete-repository-by" [
 #
 # GET /V1/company/{companyId}
 # operationId: companyCompanyRepositoryV1GetGet
-export def "v1-company get-repository" [
+export def "company-company-repository-v1-get-get" [
   company_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5403,7 +5403,7 @@ export def "v1-company get-repository" [
 # PUT /V1/company/{companyId}
 # operationId: companyCompanyRepositoryV1SavePut
 # --company shape: {city?: string, comment?: string, company_email?: string, company_name?: string, country_id?: string, customer_group_id: int, extension_attributes?: record, id?: int, legal_name?: string, postcode?: string, region?: string, region_id?: string, reject_reason: string, rejected_at: string, reseller_id?: string, sales_representative_id: int, status?: int, street: list<string>, super_user_id: int, telephone?: string, vat_tax_id?: string}
-export def "v1-company update-repository-save" [
+export def "company-company-repository-v1-save-put" [
   company_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5444,7 +5444,7 @@ export def "v1-company update-repository-save" [
 #
 # GET /V1/companyCredits/
 # operationId: companyCreditCreditLimitRepositoryV1GetListGet
-export def "v1-company-credits get-limit-repository-list" [
+export def "company-credit-credit-limit-repository-v1-get-list-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5487,7 +5487,7 @@ export def "v1-company-credits get-limit-repository-list" [
 #
 # GET /V1/companyCredits/company/{companyId}
 # operationId: companyCreditCreditLimitManagementV1GetCreditByCompanyIdGet
-export def "v1-company-credits-company get-limit-management-by" [
+export def "company-credit-credit-limit-management-v1-get-credit-by-company-id-get" [
   company_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5524,7 +5524,7 @@ export def "v1-company-credits-company get-limit-management-by" [
 #
 # GET /V1/companyCredits/history
 # operationId: companyCreditCreditHistoryManagementV1GetListGet
-export def "v1-company-credits-history get-management-list" [
+export def "company-credit-credit-history-management-v1-get-list-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5567,7 +5567,7 @@ export def "v1-company-credits-history get-management-list" [
 #
 # PUT /V1/companyCredits/history/{historyId}
 # operationId: companyCreditCreditHistoryManagementV1UpdatePut
-export def "v1-company-credits-history update-management" [
+export def "company-credit-credit-history-management-v1-update-put" [
   history_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5609,7 +5609,7 @@ export def "v1-company-credits-history update-management" [
 #
 # GET /V1/companyCredits/{creditId}
 # operationId: companyCreditCreditLimitRepositoryV1GetGet
-export def "v1-company-credits get-limit-repository" [
+export def "company-credit-credit-limit-repository-v1-get-get" [
   credit_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5649,7 +5649,7 @@ export def "v1-company-credits get-limit-repository" [
 # POST /V1/companyCredits/{creditId}/decreaseBalance
 # operationId: companyCreditCreditBalanceManagementV1DecreasePost
 # --options shape: {currency_base: string, currency_display: string, order_increment: string, purchase_order: string}
-export def "v1-company-credits-decrease-balance create-management" [
+export def "company-credit-credit-balance-management-v1-decrease-post" [
   credit_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5695,7 +5695,7 @@ export def "v1-company-credits-decrease-balance create-management" [
 # POST /V1/companyCredits/{creditId}/increaseBalance
 # operationId: companyCreditCreditBalanceManagementV1IncreasePost
 # --options shape: {currency_base: string, currency_display: string, order_increment: string, purchase_order: string}
-export def "v1-company-credits-increase-balance create-management" [
+export def "company-credit-credit-balance-management-v1-increase-post" [
   credit_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5741,7 +5741,7 @@ export def "v1-company-credits-increase-balance create-management" [
 # PUT /V1/companyCredits/{id}
 # operationId: companyCreditCreditLimitRepositoryV1SavePut
 # --creditLimit shape: {available_limit?: float, balance?: float, company_id?: int, credit_comment?: string, credit_limit?: float, currency_code?: string, exceed_limit: bool, extension_attributes?: record, id?: int}
-export def "v1-company-credits update-limit-repository-save" [
+export def "company-credit-credit-limit-repository-v1-save-put" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5784,7 +5784,7 @@ export def "v1-company-credits update-limit-repository-save" [
 # operationId: configurableProductConfigurableProductManagementV1GenerateVariationPut
 # --options item shape: {attribute_id?: string, extension_attributes?: record, id?: int, is_use_default?: bool, label?: string, position?: int, product_id?: int, values?: list}
 # --product shape: {attribute_set_id?: int, created_at?: string, custom_attributes?: list, extension_attributes?: record, id?: int, media_gallery_entries?: list, name?: string, options?: list, price?: float, product_links?: list, sku: string, status?: int, tier_prices?: list, type_id?: string, updated_at?: string, visibility?: int, weight?: float}
-export def "v1-configurable-products-variation generate-management-update" [
+export def "configurable-product-configurable-product-management-v1-generate-variation-put" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5824,7 +5824,7 @@ export def "v1-configurable-products-variation generate-management-update" [
 #
 # POST /V1/configurable-products/{sku}/child
 # operationId: configurableProductLinkManagementV1AddChildPost
-export def "v1-configurable-products-child create-link-management" [
+export def "configurable-product-link-management-v1-add-child-post" [
   sku: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5865,7 +5865,7 @@ export def "v1-configurable-products-child create-link-management" [
 #
 # GET /V1/configurable-products/{sku}/children
 # operationId: configurableProductLinkManagementV1GetChildrenGet
-export def "v1-configurable-products-children get-link-management" [
+export def "configurable-product-link-management-v1-get-children-get" [
   sku: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5902,7 +5902,7 @@ export def "v1-configurable-products-children get-link-management" [
 #
 # DELETE /V1/configurable-products/{sku}/children/{childSku}
 # operationId: configurableProductLinkManagementV1RemoveChildDelete
-export def "v1-configurable-products-children delete-link-management-child" [
+export def "configurable-product-link-management-v1-remove-child-delete" [
   sku: string
   child_sku: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5942,7 +5942,7 @@ export def "v1-configurable-products-children delete-link-management-child" [
 # POST /V1/configurable-products/{sku}/options
 # operationId: configurableProductOptionRepositoryV1SavePost
 # --option shape: {attribute_id?: string, extension_attributes?: record, id?: int, is_use_default?: bool, label?: string, position?: int, product_id?: int, values?: list}
-export def "v1-configurable-products-options create-repository-save" [
+export def "configurable-product-option-repository-v1-save-post" [
   sku: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5983,7 +5983,7 @@ export def "v1-configurable-products-options create-repository-save" [
 #
 # GET /V1/configurable-products/{sku}/options/all
 # operationId: configurableProductOptionRepositoryV1GetListGet
-export def "v1-configurable-products-options-all get-repository-list" [
+export def "configurable-product-option-repository-v1-get-list-get" [
   sku: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6020,7 +6020,7 @@ export def "v1-configurable-products-options-all get-repository-list" [
 #
 # DELETE /V1/configurable-products/{sku}/options/{id}
 # operationId: configurableProductOptionRepositoryV1DeleteByIdDelete
-export def "v1-configurable-products-options delete-repository-by" [
+export def "configurable-product-option-repository-v1-delete-by-id-delete" [
   sku: string
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -6059,7 +6059,7 @@ export def "v1-configurable-products-options delete-repository-by" [
 #
 # GET /V1/configurable-products/{sku}/options/{id}
 # operationId: configurableProductOptionRepositoryV1GetGet
-export def "v1-configurable-products-options get-repository" [
+export def "configurable-product-option-repository-v1-get-get" [
   sku: string
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -6099,7 +6099,7 @@ export def "v1-configurable-products-options get-repository" [
 # PUT /V1/configurable-products/{sku}/options/{id}
 # operationId: configurableProductOptionRepositoryV1SavePut
 # --option shape: {attribute_id?: string, extension_attributes?: record, id?: int, is_use_default?: bool, label?: string, position?: int, product_id?: int, values?: list}
-export def "v1-configurable-products-options update-repository-save" [
+export def "configurable-product-option-repository-v1-save-put" [
   sku: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6143,7 +6143,7 @@ export def "v1-configurable-products-options update-repository-save" [
 # POST /V1/coupons
 # operationId: salesRuleCouponRepositoryV1SavePost
 # --coupon shape: {code?: string, coupon_id?: int, created_at?: string, expiration_date?: string, extension_attributes?: record, is_primary: bool, rule_id: int, times_used: int, type?: int, usage_limit?: int, usage_per_customer?: int}
-export def "v1-coupons create-sales-rule-repository-save" [
+export def "sales-rule-coupon-repository-v1-save-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6182,7 +6182,7 @@ export def "v1-coupons create-sales-rule-repository-save" [
 #
 # POST /V1/coupons/deleteByCodes
 # operationId: salesRuleCouponManagementV1DeleteByCodesPost
-export def "v1-coupons-delete-by-codes create-sales-rule-management" [
+export def "sales-rule-coupon-management-v1-delete-by-codes-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6222,7 +6222,7 @@ export def "v1-coupons-delete-by-codes create-sales-rule-management" [
 #
 # POST /V1/coupons/deleteByIds
 # operationId: salesRuleCouponManagementV1DeleteByIdsPost
-export def "v1-coupons-delete-by-ids create-sales-rule-management" [
+export def "sales-rule-coupon-management-v1-delete-by-ids-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6263,7 +6263,7 @@ export def "v1-coupons-delete-by-ids create-sales-rule-management" [
 # POST /V1/coupons/generate
 # operationId: salesRuleCouponManagementV1GeneratePost
 # --couponSpec shape: {delimiter?: string, delimiter_at_every?: int, extension_attributes?: record, format: string, length: int, prefix?: string, quantity: int, rule_id: int, suffix?: string}
-export def "v1-coupons-generate create-sales-rule-management" [
+export def "sales-rule-coupon-management-v1-generate-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6302,7 +6302,7 @@ export def "v1-coupons-generate create-sales-rule-management" [
 #
 # GET /V1/coupons/search
 # operationId: salesRuleCouponRepositoryV1GetListGet
-export def "v1-coupons-search get-sales-rule-repository-list" [
+export def "sales-rule-coupon-repository-v1-get-list-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6345,7 +6345,7 @@ export def "v1-coupons-search get-sales-rule-repository-list" [
 #
 # DELETE /V1/coupons/{couponId}
 # operationId: salesRuleCouponRepositoryV1DeleteByIdDelete
-export def "v1-coupons delete-sales-rule-repository-by" [
+export def "sales-rule-coupon-repository-v1-delete-by-id-delete" [
   coupon_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6382,7 +6382,7 @@ export def "v1-coupons delete-sales-rule-repository-by" [
 #
 # GET /V1/coupons/{couponId}
 # operationId: salesRuleCouponRepositoryV1GetByIdGet
-export def "v1-coupons get-sales-rule-repository-by" [
+export def "sales-rule-coupon-repository-v1-get-by-id-get" [
   coupon_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6420,7 +6420,7 @@ export def "v1-coupons get-sales-rule-repository-by" [
 # PUT /V1/coupons/{couponId}
 # operationId: salesRuleCouponRepositoryV1SavePut
 # --coupon shape: {code?: string, coupon_id?: int, created_at?: string, expiration_date?: string, extension_attributes?: record, is_primary: bool, rule_id: int, times_used: int, type?: int, usage_limit?: int, usage_per_customer?: int}
-export def "v1-coupons update-sales-rule-repository-save" [
+export def "sales-rule-coupon-repository-v1-save-put" [
   coupon_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6462,7 +6462,7 @@ export def "v1-coupons update-sales-rule-repository-save" [
 # POST /V1/creditmemo
 # operationId: salesCreditmemoRepositoryV1SavePost
 # --entity shape: {adjustment?: float, adjustment_negative?: float, adjustment_positive?: float, base_adjustment?: float, base_adjustment_negative?: float, base_adjustment_positive?: float, base_currency_code?: string, base_discount_amount?: float, base_discount_tax_compensation_amount?: float, base_grand_total?: float, base_shipping_amount?: float, base_shipping_discount_tax_compensation_amnt?: float, base_shipping_incl_tax?: float, base_shipping_tax_amount?: float, base_subtotal?: float, ... (36 more fields)}
-export def "v1-creditmemo create-sales-repository-save" [
+export def "sales-creditmemo-repository-v1-save-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6502,7 +6502,7 @@ export def "v1-creditmemo create-sales-repository-save" [
 # POST /V1/creditmemo/refund
 # operationId: salesCreditmemoManagementV1RefundPost
 # --creditmemo shape: {adjustment?: float, adjustment_negative?: float, adjustment_positive?: float, base_adjustment?: float, base_adjustment_negative?: float, base_adjustment_positive?: float, base_currency_code?: string, base_discount_amount?: float, base_discount_tax_compensation_amount?: float, base_grand_total?: float, base_shipping_amount?: float, base_shipping_discount_tax_compensation_amnt?: float, base_shipping_incl_tax?: float, base_shipping_tax_amount?: float, base_subtotal?: float, ... (36 more fields)}
-export def "v1-creditmemo-refund create-sales-management" [
+export def "sales-creditmemo-management-v1-refund-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6542,7 +6542,7 @@ export def "v1-creditmemo-refund create-sales-management" [
 #
 # GET /V1/creditmemo/{id}
 # operationId: salesCreditmemoRepositoryV1GetGet
-export def "v1-creditmemo get-sales-repository" [
+export def "sales-creditmemo-repository-v1-get-get" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6579,7 +6579,7 @@ export def "v1-creditmemo get-sales-repository" [
 #
 # PUT /V1/creditmemo/{id}
 # operationId: salesCreditmemoManagementV1CancelPut
-export def "v1-creditmemo cancel-sales-management-update" [
+export def "sales-creditmemo-management-v1-cancel-put" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6616,7 +6616,7 @@ export def "v1-creditmemo cancel-sales-management-update" [
 #
 # GET /V1/creditmemo/{id}/comments
 # operationId: salesCreditmemoManagementV1GetCommentsListGet
-export def "v1-creditmemo-comments get-sales-management-list" [
+export def "sales-creditmemo-management-v1-get-comments-list-get" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6654,7 +6654,7 @@ export def "v1-creditmemo-comments get-sales-management-list" [
 # POST /V1/creditmemo/{id}/comments
 # operationId: salesCreditmemoCommentRepositoryV1SavePost
 # --entity shape: {comment: string, created_at?: string, entity_id?: int, extension_attributes?: record, is_customer_notified: int, is_visible_on_front: int, parent_id: int}
-export def "v1-creditmemo-comments create-sales-repository-save" [
+export def "sales-creditmemo-comment-repository-v1-save-post" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6695,7 +6695,7 @@ export def "v1-creditmemo-comments create-sales-repository-save" [
 #
 # POST /V1/creditmemo/{id}/emails
 # operationId: salesCreditmemoManagementV1NotifyPost
-export def "v1-creditmemo-emails notify-sales-management-create" [
+export def "sales-creditmemo-management-v1-notify-post" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6732,7 +6732,7 @@ export def "v1-creditmemo-emails notify-sales-management-create" [
 #
 # GET /V1/creditmemos
 # operationId: salesCreditmemoRepositoryV1GetListGet
-export def "v1-creditmemos get-sales-repository-list" [
+export def "sales-creditmemo-repository-v1-get-list-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6776,7 +6776,7 @@ export def "v1-creditmemos get-sales-repository-list" [
 # POST /V1/customerGroups
 # operationId: customerGroupRepositoryV1SavePost
 # --group shape: {code: string, extension_attributes?: record, id?: int, tax_class_id: int, tax_class_name?: string}
-export def "v1-customer-groups create-repository-save" [
+export def "customer-group-repository-v1-save-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6815,7 +6815,7 @@ export def "v1-customer-groups create-repository-save" [
 #
 # GET /V1/customerGroups/default
 # operationId: customerGroupManagementV1GetDefaultGroupGet
-export def "v1-customer-groups-default get-management" [
+export def "customer-group-management-v1-get-default-group-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6852,7 +6852,7 @@ export def "v1-customer-groups-default get-management" [
 #
 # PUT /V1/customerGroups/default/{id}
 # operationId: customerCustomerGroupConfigV1SetDefaultCustomerGroupPut
-export def "v1-customer-groups-default update-config" [
+export def "customer-customer-group-config-v1-set-default-customer-group-put" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6888,7 +6888,7 @@ export def "v1-customer-groups-default update-config" [
 # customerGroups/default/{storeId}
 #
 # GET /V1/customerGroups/default/{storeId}
-export def "v1-customer-groups-default get" [
+export def "get-v1-customer-groups-default-store-id" [
   store_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6925,7 +6925,7 @@ export def "v1-customer-groups-default get" [
 #
 # GET /V1/customerGroups/search
 # operationId: customerGroupRepositoryV1GetListGet
-export def "v1-customer-groups-search get-repository-list" [
+export def "customer-group-repository-v1-get-list-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6968,7 +6968,7 @@ export def "v1-customer-groups-search get-repository-list" [
 #
 # DELETE /V1/customerGroups/{id}
 # operationId: customerGroupRepositoryV1DeleteByIdDelete
-export def "v1-customer-groups delete-repository-by" [
+export def "customer-group-repository-v1-delete-by-id-delete" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7005,7 +7005,7 @@ export def "v1-customer-groups delete-repository-by" [
 #
 # GET /V1/customerGroups/{id}
 # operationId: customerGroupRepositoryV1GetByIdGet
-export def "v1-customer-groups get-repository-by" [
+export def "customer-group-repository-v1-get-by-id-get" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7043,7 +7043,7 @@ export def "v1-customer-groups get-repository-by" [
 # PUT /V1/customerGroups/{id}
 # operationId: customerGroupRepositoryV1SavePut
 # --group shape: {code: string, extension_attributes?: record, id?: int, tax_class_id: int, tax_class_name?: string}
-export def "v1-customer-groups update-repository-save" [
+export def "customer-group-repository-v1-save-put" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7084,7 +7084,7 @@ export def "v1-customer-groups update-repository-save" [
 #
 # GET /V1/customerGroups/{id}/permissions
 # operationId: customerGroupManagementV1IsReadonlyGet
-export def "v1-customer-groups-permissions get-management-is-readonly" [
+export def "customer-group-management-v1-is-readonly-get" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7122,7 +7122,7 @@ export def "v1-customer-groups-permissions get-management-is-readonly" [
 # POST /V1/customers
 # operationId: customerAccountManagementV1CreateAccountPost
 # --customer shape: {addresses?: list, confirmation?: string, created_at?: string, created_in?: string, custom_attributes?: list, default_billing?: string, default_shipping?: string, disable_auto_group_change?: int, dob?: string, email: string, extension_attributes?: record, firstname: string, gender?: int, group_id?: int, id?: int, lastname: string, middlename?: string, prefix?: string, store_id?: int, suffix?: string, taxvat?: string, updated_at?: string, website_id?: int}
-export def "v1-customers create-account-management-account" [
+export def "customer-account-management-v1-create-account-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7163,7 +7163,7 @@ export def "v1-customers create-account-management-account" [
 #
 # GET /V1/customers/addresses/{addressId}
 # operationId: customerAddressRepositoryV1GetByIdGet
-export def "v1-customers-addresses get-address-repository-by" [
+export def "customer-address-repository-v1-get-by-id-get" [
   address_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7200,7 +7200,7 @@ export def "v1-customers-addresses get-address-repository-by" [
 #
 # POST /V1/customers/confirm
 # operationId: customerAccountManagementV1ResendConfirmationPost
-export def "v1-customers-confirm resend-account-management-confirmation-create" [
+export def "customer-account-management-v1-resend-confirmation-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7241,7 +7241,7 @@ export def "v1-customers-confirm resend-account-management-confirmation-create" 
 #
 # POST /V1/customers/isEmailAvailable
 # operationId: customerAccountManagementV1IsEmailAvailablePost
-export def "v1-customers-is-email-available create-account-management" [
+export def "customer-account-management-v1-is-email-available-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7281,7 +7281,7 @@ export def "v1-customers-is-email-available create-account-management" [
 #
 # GET /V1/customers/me
 # operationId: customerCustomerRepositoryV1GetByIdGet
-export def "v1-customers-me get-repository-by" [
+export def "customer-customer-repository-v1-get-by-id-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7317,7 +7317,7 @@ export def "v1-customers-me get-repository-by" [
 # PUT /V1/customers/me
 # operationId: customerCustomerRepositoryV1SavePut
 # --customer shape: {addresses?: list, confirmation?: string, created_at?: string, created_in?: string, custom_attributes?: list, default_billing?: string, default_shipping?: string, disable_auto_group_change?: int, dob?: string, email: string, extension_attributes?: record, firstname: string, gender?: int, group_id?: int, id?: int, lastname: string, middlename?: string, prefix?: string, store_id?: int, suffix?: string, taxvat?: string, updated_at?: string, website_id?: int}
-export def "v1-customers-me update-repository-save" [
+export def "customer-customer-repository-v1-save-put" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7357,7 +7357,7 @@ export def "v1-customers-me update-repository-save" [
 #
 # PUT /V1/customers/me/activate
 # operationId: customerAccountManagementV1ActivateByIdPut
-export def "v1-customers-me-activate update-account-management-by" [
+export def "customer-account-management-v1-activate-by-id-put" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7396,7 +7396,7 @@ export def "v1-customers-me-activate update-account-management-by" [
 #
 # GET /V1/customers/me/billingAddress
 # operationId: customerAccountManagementV1GetDefaultBillingAddressGet
-export def "v1-customers-me-billing-address get-account-management-default" [
+export def "customer-account-management-v1-get-default-billing-address-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7431,7 +7431,7 @@ export def "v1-customers-me-billing-address get-account-management-default" [
 #
 # PUT /V1/customers/me/password
 # operationId: customerAccountManagementV1ChangePasswordByIdPut
-export def "v1-customers-me-password update-account-management-change-by" [
+export def "customer-account-management-v1-change-password-by-id-put" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7471,7 +7471,7 @@ export def "v1-customers-me-password update-account-management-change-by" [
 #
 # GET /V1/customers/me/shippingAddress
 # operationId: customerAccountManagementV1GetDefaultShippingAddressGet
-export def "v1-customers-me-shipping-address get-account-management-default" [
+export def "customer-account-management-v1-get-default-shipping-address-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7506,7 +7506,7 @@ export def "v1-customers-me-shipping-address get-account-management-default" [
 #
 # PUT /V1/customers/password
 # operationId: customerAccountManagementV1InitiatePasswordResetPut
-export def "v1-customers-password reset-account-management-initiate-update" [
+export def "customer-account-management-v1-initiate-password-reset-put" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7547,7 +7547,7 @@ export def "v1-customers-password reset-account-management-initiate-update" [
 #
 # POST /V1/customers/resetPassword
 # operationId: customerAccountManagementV1ResetPasswordPost
-export def "v1-customers-reset-password create-account-management" [
+export def "customer-account-management-v1-reset-password-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7588,7 +7588,7 @@ export def "v1-customers-reset-password create-account-management" [
 #
 # GET /V1/customers/search
 # operationId: customerCustomerRepositoryV1GetListGet
-export def "v1-customers-search get-repository-list" [
+export def "customer-customer-repository-v1-get-list-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7632,7 +7632,7 @@ export def "v1-customers-search get-repository-list" [
 # PUT /V1/customers/validate
 # operationId: customerAccountManagementV1ValidatePut
 # --customer shape: {addresses?: list, confirmation?: string, created_at?: string, created_in?: string, custom_attributes?: list, default_billing?: string, default_shipping?: string, disable_auto_group_change?: int, dob?: string, email: string, extension_attributes?: record, firstname: string, gender?: int, group_id?: int, id?: int, lastname: string, middlename?: string, prefix?: string, store_id?: int, suffix?: string, taxvat?: string, updated_at?: string, website_id?: int}
-export def "v1-customers-validate update-account-management" [
+export def "customer-account-management-v1-validate-put" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7671,7 +7671,7 @@ export def "v1-customers-validate update-account-management" [
 #
 # DELETE /V1/customers/{customerId}
 # operationId: customerCustomerRepositoryV1DeleteByIdDelete
-export def "v1-customers delete-repository-by" [
+export def "customer-customer-repository-v1-delete-by-id-delete" [
   customer_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7707,7 +7707,7 @@ export def "v1-customers delete-repository-by" [
 # customers/{customerId}
 #
 # GET /V1/customers/{customerId}
-export def "v1-customers get" [
+export def "get-v1-customers-customer-id" [
   customer_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7744,7 +7744,7 @@ export def "v1-customers get" [
 #
 # PUT /V1/customers/{customerId}
 # --customer shape: {addresses?: list, confirmation?: string, created_at?: string, created_in?: string, custom_attributes?: list, default_billing?: string, default_shipping?: string, disable_auto_group_change?: int, dob?: string, email: string, extension_attributes?: record, firstname: string, gender?: int, group_id?: int, id?: int, lastname: string, middlename?: string, prefix?: string, store_id?: int, suffix?: string, taxvat?: string, updated_at?: string, website_id?: int}
-export def "v1-customers update" [
+export def "put-v1-customers-customer-id" [
   customer_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7785,7 +7785,7 @@ export def "v1-customers update" [
 # customers/{customerId}/billingAddress
 #
 # GET /V1/customers/{customerId}/billingAddress
-export def "v1-customers-billing-address get" [
+export def "get-v1-customers-customer-id-billing-address" [
   customer_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7821,7 +7821,7 @@ export def "v1-customers-billing-address get" [
 # customers/{customerId}/carts
 #
 # POST /V1/customers/{customerId}/carts
-export def "v1-customers-carts create" [
+export def "post-v1-customers-customer-id-carts" [
   customer_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7858,7 +7858,7 @@ export def "v1-customers-carts create" [
 #
 # GET /V1/customers/{customerId}/confirm
 # operationId: customerAccountManagementV1GetConfirmationStatusGet
-export def "v1-customers-confirm get-account-management-confirmation-status" [
+export def "customer-account-management-v1-get-confirmation-status-get" [
   customer_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7895,7 +7895,7 @@ export def "v1-customers-confirm get-account-management-confirmation-status" [
 #
 # GET /V1/customers/{customerId}/password/resetLinkToken/{resetPasswordLinkToken}
 # operationId: customerAccountManagementV1ValidateResetPasswordLinkTokenGet
-export def "v1-customers-password-reset-link-token validate-account-management-get" [
+export def "customer-account-management-v1-validate-reset-password-link-token-get" [
   customer_id: int
   reset_password_link_token: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7934,7 +7934,7 @@ export def "v1-customers-password-reset-link-token validate-account-management-g
 #
 # GET /V1/customers/{customerId}/permissions/readonly
 # operationId: customerAccountManagementV1IsReadonlyGet
-export def "v1-customers-permissions-readonly get-account-management-is" [
+export def "customer-account-management-v1-is-readonly-get" [
   customer_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7970,7 +7970,7 @@ export def "v1-customers-permissions-readonly get-account-management-is" [
 # customers/{customerId}/shippingAddress
 #
 # GET /V1/customers/{customerId}/shippingAddress
-export def "v1-customers-shipping-address get" [
+export def "get-v1-customers-customer-id-shipping-address" [
   customer_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8007,7 +8007,7 @@ export def "v1-customers-shipping-address get" [
 #
 # PUT /V1/customers/{email}/activate
 # operationId: customerAccountManagementV1ActivatePut
-export def "v1-customers-activate update-account-management" [
+export def "customer-account-management-v1-activate-put" [
   email: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8048,7 +8048,7 @@ export def "v1-customers-activate update-account-management" [
 #
 # GET /V1/directory/countries
 # operationId: directoryCountryInformationAcquirerV1GetCountriesInfoGet
-export def "v1-directory-countries get-country-information-acquirer" [
+export def "directory-country-information-acquirer-v1-get-countries-info-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8083,7 +8083,7 @@ export def "v1-directory-countries get-country-information-acquirer" [
 #
 # GET /V1/directory/countries/{countryId}
 # operationId: directoryCountryInformationAcquirerV1GetCountryInfoGet
-export def "v1-directory-countries get-country-information-acquirer-country" [
+export def "directory-country-information-acquirer-v1-get-country-info-get" [
   country_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8120,7 +8120,7 @@ export def "v1-directory-countries get-country-information-acquirer-country" [
 #
 # GET /V1/directory/currency
 # operationId: directoryCurrencyInformationAcquirerV1GetCurrencyInfoGet
-export def "v1-directory-currency get-information-acquirer" [
+export def "directory-currency-information-acquirer-v1-get-currency-info-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8156,7 +8156,7 @@ export def "v1-directory-currency get-information-acquirer" [
 # POST /V1/eav/attribute-sets
 # operationId: eavAttributeSetManagementV1CreatePost
 # --attributeSet shape: {attribute_set_id?: int, attribute_set_name: string, entity_type_id?: int, extension_attributes?: record, sort_order: int}
-export def "v1-eav-attribute-sets create-management" [
+export def "eav-attribute-set-management-v1-create-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8197,7 +8197,7 @@ export def "v1-eav-attribute-sets create-management" [
 #
 # GET /V1/eav/attribute-sets/list
 # operationId: eavAttributeSetRepositoryV1GetListGet
-export def "v1-eav-attribute-sets-list get-repository" [
+export def "eav-attribute-set-repository-v1-get-list-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8240,7 +8240,7 @@ export def "v1-eav-attribute-sets-list get-repository" [
 #
 # DELETE /V1/eav/attribute-sets/{attributeSetId}
 # operationId: eavAttributeSetRepositoryV1DeleteByIdDelete
-export def "v1-eav-attribute-sets delete-repository-by" [
+export def "eav-attribute-set-repository-v1-delete-by-id-delete" [
   attribute_set_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8277,7 +8277,7 @@ export def "v1-eav-attribute-sets delete-repository-by" [
 #
 # GET /V1/eav/attribute-sets/{attributeSetId}
 # operationId: eavAttributeSetRepositoryV1GetGet
-export def "v1-eav-attribute-sets get-repository" [
+export def "eav-attribute-set-repository-v1-get-get" [
   attribute_set_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8315,7 +8315,7 @@ export def "v1-eav-attribute-sets get-repository" [
 # PUT /V1/eav/attribute-sets/{attributeSetId}
 # operationId: eavAttributeSetRepositoryV1SavePut
 # --attributeSet shape: {attribute_set_id?: int, attribute_set_name: string, entity_type_id?: int, extension_attributes?: record, sort_order: int}
-export def "v1-eav-attribute-sets update-repository-save" [
+export def "eav-attribute-set-repository-v1-save-put" [
   attribute_set_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8356,7 +8356,7 @@ export def "v1-eav-attribute-sets update-repository-save" [
 #
 # GET /V1/gift-wrappings
 # operationId: giftWrappingWrappingRepositoryV1GetListGet
-export def "v1-gift-wrappings get-repository-list" [
+export def "gift-wrapping-wrapping-repository-v1-get-list-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8400,7 +8400,7 @@ export def "v1-gift-wrappings get-repository-list" [
 # POST /V1/gift-wrappings
 # operationId: giftWrappingWrappingRepositoryV1SavePost
 # --data shape: {base_currency_code?: string, base_price: float, design: string, extension_attributes?: record, image_base64_content?: string, image_name?: string, image_url?: string, status: int, website_ids?: list<int>, wrapping_id?: int}
-export def "v1-gift-wrappings create-repository-save" [
+export def "gift-wrapping-wrapping-repository-v1-save-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8440,7 +8440,7 @@ export def "v1-gift-wrappings create-repository-save" [
 #
 # DELETE /V1/gift-wrappings/{id}
 # operationId: giftWrappingWrappingRepositoryV1DeleteByIdDelete
-export def "v1-gift-wrappings delete-repository-by" [
+export def "gift-wrapping-wrapping-repository-v1-delete-by-id-delete" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8477,7 +8477,7 @@ export def "v1-gift-wrappings delete-repository-by" [
 #
 # GET /V1/gift-wrappings/{id}
 # operationId: giftWrappingWrappingRepositoryV1GetGet
-export def "v1-gift-wrappings get-repository" [
+export def "gift-wrapping-wrapping-repository-v1-get-get" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8517,7 +8517,7 @@ export def "v1-gift-wrappings get-repository" [
 # PUT /V1/gift-wrappings/{wrappingId}
 # operationId: giftWrappingWrappingRepositoryV1SavePut
 # --data shape: {base_currency_code?: string, base_price: float, design: string, extension_attributes?: record, image_base64_content?: string, image_name?: string, image_url?: string, status: int, website_ids?: list<int>, wrapping_id?: int}
-export def "v1-gift-wrappings update-repository-save" [
+export def "gift-wrapping-wrapping-repository-v1-save-put" [
   wrapping_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8559,7 +8559,7 @@ export def "v1-gift-wrappings update-repository-save" [
 #
 # POST /V1/giftregistry/mine/estimate-shipping-methods
 # operationId: giftRegistryShippingMethodManagementV1EstimateByRegistryIdPost
-export def "v1-giftregistry-mine-estimate-shipping-methods create-gift-registry-management-by-registry" [
+export def "gift-registry-shipping-method-management-v1-estimate-by-registry-id-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8598,7 +8598,7 @@ export def "v1-giftregistry-mine-estimate-shipping-methods create-gift-registry-
 #
 # POST /V1/guest-carts
 # operationId: quoteGuestCartManagementV1CreateEmptyCartPost
-export def "v1-guest-carts create-quote-management-empty" [
+export def "quote-guest-cart-management-v1-create-empty-cart-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8633,7 +8633,7 @@ export def "v1-guest-carts create-quote-management-empty" [
 #
 # GET /V1/guest-carts/{cartId}
 # operationId: quoteGuestCartRepositoryV1GetGet
-export def "v1-guest-carts get-quote-repository" [
+export def "quote-guest-cart-repository-v1-get-get" [
   cart_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8670,7 +8670,7 @@ export def "v1-guest-carts get-quote-repository" [
 #
 # PUT /V1/guest-carts/{cartId}
 # operationId: quoteGuestCartManagementV1AssignCustomerPut
-export def "v1-guest-carts assign-quote-management-customer-update" [
+export def "quote-guest-cart-management-v1-assign-customer-put" [
   cart_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8712,7 +8712,7 @@ export def "v1-guest-carts assign-quote-management-customer-update" [
 #
 # GET /V1/guest-carts/{cartId}/billing-address
 # operationId: quoteGuestBillingAddressManagementV1GetGet
-export def "v1-guest-carts-billing-address get-quote-management" [
+export def "quote-guest-billing-address-management-v1-get-get" [
   cart_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8750,7 +8750,7 @@ export def "v1-guest-carts-billing-address get-quote-management" [
 # POST /V1/guest-carts/{cartId}/billing-address
 # operationId: quoteGuestBillingAddressManagementV1AssignPost
 # --address shape: {city: string, company?: string, country_id: string, custom_attributes?: list, customer_address_id?: int, customer_id?: int, email: string, extension_attributes?: record, fax?: string, firstname: string, id?: int, lastname: string, middlename?: string, postcode: string, prefix?: string, region: string, region_code: string, region_id: int, same_as_billing?: int, save_in_address_book?: int, street: list<string>, suffix?: string, telephone: string, vat_id?: string}
-export def "v1-guest-carts-billing-address assign-quote-management-create" [
+export def "quote-guest-billing-address-management-v1-assign-post" [
   cart_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8793,7 +8793,7 @@ export def "v1-guest-carts-billing-address assign-quote-management-create" [
 # POST /V1/guest-carts/{cartId}/checkout-fields
 # operationId: temandoShippingQuoteGuestCartCheckoutFieldManagementV1SaveCheckoutFieldsPost
 # --serviceSelection item shape: {attribute_code: string, value: string}
-export def "v1-guest-carts-checkout-fields create-temando-shipping-quote-management-save" [
+export def "temando-shipping-quote-guest-cart-checkout-field-management-v1-save-checkout-fields-post" [
   cart_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8836,7 +8836,7 @@ export def "v1-guest-carts-checkout-fields create-temando-shipping-quote-managem
 # operationId: quoteGuestCartTotalManagementV1CollectTotalsPut
 # --additionalData shape: {custom_attributes?: list, extension_attributes?: record}
 # --paymentMethod shape: {additional_data?: list<string>, extension_attributes?: record, method: string, po_number?: string}
-export def "v1-guest-carts-collect-totals update-quote-management" [
+export def "quote-guest-cart-total-management-v1-collect-totals-put" [
   cart_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8880,7 +8880,7 @@ export def "v1-guest-carts-collect-totals update-quote-management" [
 #
 # DELETE /V1/guest-carts/{cartId}/collection-point/search-request
 # operationId: temandoShippingCollectionPointGuestCartCollectionPointManagementV1DeleteSearchRequestDelete
-export def "v1-guest-carts-collection-point-search-request delete-temando-shipping-management" [
+export def "temando-shipping-collection-point-guest-cart-collection-point-management-v1-delete-search-request-delete" [
   cart_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8917,7 +8917,7 @@ export def "v1-guest-carts-collection-point-search-request delete-temando-shippi
 #
 # PUT /V1/guest-carts/{cartId}/collection-point/search-request
 # operationId: temandoShippingCollectionPointGuestCartCollectionPointManagementV1SaveSearchRequestPut
-export def "v1-guest-carts-collection-point-search-request update-temando-shipping-management-save" [
+export def "temando-shipping-collection-point-guest-cart-collection-point-management-v1-save-search-request-put" [
   cart_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8959,7 +8959,7 @@ export def "v1-guest-carts-collection-point-search-request update-temando-shippi
 #
 # GET /V1/guest-carts/{cartId}/collection-point/search-result
 # operationId: temandoShippingCollectionPointGuestCartCollectionPointManagementV1GetCollectionPointsGet
-export def "v1-guest-carts-collection-point-search-result get-temando-shipping-management" [
+export def "temando-shipping-collection-point-guest-cart-collection-point-management-v1-get-collection-points-get" [
   cart_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8996,7 +8996,7 @@ export def "v1-guest-carts-collection-point-search-result get-temando-shipping-m
 #
 # POST /V1/guest-carts/{cartId}/collection-point/select
 # operationId: temandoShippingCollectionPointGuestCartCollectionPointManagementV1SelectCollectionPointPost
-export def "v1-guest-carts-collection-point-select create-temando-shipping-management" [
+export def "temando-shipping-collection-point-guest-cart-collection-point-management-v1-select-collection-point-post" [
   cart_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9037,7 +9037,7 @@ export def "v1-guest-carts-collection-point-select create-temando-shipping-manag
 #
 # DELETE /V1/guest-carts/{cartId}/coupons
 # operationId: quoteGuestCouponManagementV1RemoveDelete
-export def "v1-guest-carts-coupons delete-quote-management" [
+export def "quote-guest-coupon-management-v1-remove-delete" [
   cart_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9074,7 +9074,7 @@ export def "v1-guest-carts-coupons delete-quote-management" [
 #
 # GET /V1/guest-carts/{cartId}/coupons
 # operationId: quoteGuestCouponManagementV1GetGet
-export def "v1-guest-carts-coupons get-quote-management" [
+export def "quote-guest-coupon-management-v1-get-get" [
   cart_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9111,7 +9111,7 @@ export def "v1-guest-carts-coupons get-quote-management" [
 #
 # PUT /V1/guest-carts/{cartId}/coupons/{couponCode}
 # operationId: quoteGuestCouponManagementV1SetPut
-export def "v1-guest-carts-coupons update-quote-management" [
+export def "quote-guest-coupon-management-v1-set-put" [
   cart_id: string
   coupon_code: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9150,7 +9150,7 @@ export def "v1-guest-carts-coupons update-quote-management" [
 #
 # POST /V1/guest-carts/{cartId}/delivery-option
 # operationId: temandoShippingQuoteGuestCartDeliveryOptionManagementV1SavePost
-export def "v1-guest-carts-delivery-option create-temando-shipping-quote-management-save" [
+export def "temando-shipping-quote-guest-cart-delivery-option-management-v1-save-post" [
   cart_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9192,7 +9192,7 @@ export def "v1-guest-carts-delivery-option create-temando-shipping-quote-managem
 # POST /V1/guest-carts/{cartId}/estimate-shipping-methods
 # operationId: quoteGuestShipmentEstimationV1EstimateByExtendedAddressPost
 # --address shape: {city: string, company?: string, country_id: string, custom_attributes?: list, customer_address_id?: int, customer_id?: int, email: string, extension_attributes?: record, fax?: string, firstname: string, id?: int, lastname: string, middlename?: string, postcode: string, prefix?: string, region: string, region_code: string, region_id: int, same_as_billing?: int, save_in_address_book?: int, street: list<string>, suffix?: string, telephone: string, vat_id?: string}
-export def "v1-guest-carts-estimate-shipping-methods create-quote-shipment-estimation-by-extended-address" [
+export def "quote-guest-shipment-estimation-v1-estimate-by-extended-address-post" [
   cart_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9233,7 +9233,7 @@ export def "v1-guest-carts-estimate-shipping-methods create-quote-shipment-estim
 #
 # GET /V1/guest-carts/{cartId}/gift-message
 # operationId: giftMessageGuestCartRepositoryV1GetGet
-export def "v1-guest-carts-gift-message get-repository" [
+export def "gift-message-guest-cart-repository-v1-get-get" [
   cart_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9271,7 +9271,7 @@ export def "v1-guest-carts-gift-message get-repository" [
 # POST /V1/guest-carts/{cartId}/gift-message
 # operationId: giftMessageGuestCartRepositoryV1SavePost
 # --giftMessage shape: {customer_id?: int, extension_attributes?: record, gift_message_id?: int, message: string, recipient: string, sender: string}
-export def "v1-guest-carts-gift-message create-repository-save" [
+export def "gift-message-guest-cart-repository-v1-save-post" [
   cart_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9312,7 +9312,7 @@ export def "v1-guest-carts-gift-message create-repository-save" [
 #
 # GET /V1/guest-carts/{cartId}/gift-message/{itemId}
 # operationId: giftMessageGuestItemRepositoryV1GetGet
-export def "v1-guest-carts-gift-message get-item-repository" [
+export def "gift-message-guest-item-repository-v1-get-get" [
   cart_id: string
   item_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -9352,7 +9352,7 @@ export def "v1-guest-carts-gift-message get-item-repository" [
 # POST /V1/guest-carts/{cartId}/gift-message/{itemId}
 # operationId: giftMessageGuestItemRepositoryV1SavePost
 # --giftMessage shape: {customer_id?: int, extension_attributes?: record, gift_message_id?: int, message: string, recipient: string, sender: string}
-export def "v1-guest-carts-gift-message create-item-repository-save" [
+export def "gift-message-guest-item-repository-v1-save-post" [
   cart_id: string
   item_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -9395,7 +9395,7 @@ export def "v1-guest-carts-gift-message create-item-repository-save" [
 #
 # GET /V1/guest-carts/{cartId}/items
 # operationId: quoteGuestCartItemRepositoryV1GetListGet
-export def "v1-guest-carts-items get-quote-repository-list" [
+export def "quote-guest-cart-item-repository-v1-get-list-get" [
   cart_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9433,7 +9433,7 @@ export def "v1-guest-carts-items get-quote-repository-list" [
 # POST /V1/guest-carts/{cartId}/items
 # operationId: quoteGuestCartItemRepositoryV1SavePost
 # --cartItem shape: {extension_attributes?: record, item_id?: int, name?: string, price?: float, product_option?: record, product_type?: string, qty: float, quote_id: string, sku?: string}
-export def "v1-guest-carts-items create-quote-repository-save" [
+export def "quote-guest-cart-item-repository-v1-save-post" [
   cart_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9474,7 +9474,7 @@ export def "v1-guest-carts-items create-quote-repository-save" [
 #
 # DELETE /V1/guest-carts/{cartId}/items/{itemId}
 # operationId: quoteGuestCartItemRepositoryV1DeleteByIdDelete
-export def "v1-guest-carts-items delete-quote-repository-by" [
+export def "quote-guest-cart-item-repository-v1-delete-by-id-delete" [
   cart_id: string
   item_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -9514,7 +9514,7 @@ export def "v1-guest-carts-items delete-quote-repository-by" [
 # PUT /V1/guest-carts/{cartId}/items/{itemId}
 # operationId: quoteGuestCartItemRepositoryV1SavePut
 # --cartItem shape: {extension_attributes?: record, item_id?: int, name?: string, price?: float, product_option?: record, product_type?: string, qty: float, quote_id: string, sku?: string}
-export def "v1-guest-carts-items update-quote-repository-save" [
+export def "quote-guest-cart-item-repository-v1-save-put" [
   cart_id: string
   item_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9558,7 +9558,7 @@ export def "v1-guest-carts-items update-quote-repository-save" [
 # PUT /V1/guest-carts/{cartId}/order
 # operationId: quoteGuestCartManagementV1PlaceOrderPut
 # --paymentMethod shape: {additional_data?: list<string>, extension_attributes?: record, method: string, po_number?: string}
-export def "v1-guest-carts-order update-quote-management-place" [
+export def "quote-guest-cart-management-v1-place-order-put" [
   cart_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9599,7 +9599,7 @@ export def "v1-guest-carts-order update-quote-management-place" [
 #
 # GET /V1/guest-carts/{cartId}/payment-information
 # operationId: checkoutGuestPaymentInformationManagementV1GetPaymentInformationGet
-export def "v1-guest-carts-payment-information get-checkout-management" [
+export def "checkout-guest-payment-information-management-v1-get-payment-information-get" [
   cart_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9638,7 +9638,7 @@ export def "v1-guest-carts-payment-information get-checkout-management" [
 # operationId: checkoutGuestPaymentInformationManagementV1SavePaymentInformationAndPlaceOrderPost
 # --billingAddress shape: {city: string, company?: string, country_id: string, custom_attributes?: list, customer_address_id?: int, customer_id?: int, email: string, extension_attributes?: record, fax?: string, firstname: string, id?: int, lastname: string, middlename?: string, postcode: string, prefix?: string, region: string, region_code: string, region_id: int, same_as_billing?: int, save_in_address_book?: int, street: list<string>, suffix?: string, telephone: string, vat_id?: string}
 # --paymentMethod shape: {additional_data?: list<string>, extension_attributes?: record, method: string, po_number?: string}
-export def "v1-guest-carts-payment-information create-checkout-management-save-and-place-order" [
+export def "checkout-guest-payment-information-management-v1-save-payment-information-and-place-order-post" [
   cart_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9681,7 +9681,7 @@ export def "v1-guest-carts-payment-information create-checkout-management-save-a
 #
 # GET /V1/guest-carts/{cartId}/payment-methods
 # operationId: quoteGuestPaymentMethodManagementV1GetListGet
-export def "v1-guest-carts-payment-methods get-quote-management-list" [
+export def "quote-guest-payment-method-management-v1-get-list-get" [
   cart_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9718,7 +9718,7 @@ export def "v1-guest-carts-payment-methods get-quote-management-list" [
 #
 # GET /V1/guest-carts/{cartId}/selected-payment-method
 # operationId: quoteGuestPaymentMethodManagementV1GetGet
-export def "v1-guest-carts-selected-payment-method get-quote-management" [
+export def "quote-guest-payment-method-management-v1-get-get" [
   cart_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9756,7 +9756,7 @@ export def "v1-guest-carts-selected-payment-method get-quote-management" [
 # PUT /V1/guest-carts/{cartId}/selected-payment-method
 # operationId: quoteGuestPaymentMethodManagementV1SetPut
 # --method shape: {additional_data?: list<string>, extension_attributes?: record, method: string, po_number?: string}
-export def "v1-guest-carts-selected-payment-method update-quote-management" [
+export def "quote-guest-payment-method-management-v1-set-put" [
   cart_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9799,7 +9799,7 @@ export def "v1-guest-carts-selected-payment-method update-quote-management" [
 # operationId: checkoutGuestPaymentInformationManagementV1SavePaymentInformationPost
 # --billingAddress shape: {city: string, company?: string, country_id: string, custom_attributes?: list, customer_address_id?: int, customer_id?: int, email: string, extension_attributes?: record, fax?: string, firstname: string, id?: int, lastname: string, middlename?: string, postcode: string, prefix?: string, region: string, region_code: string, region_id: int, same_as_billing?: int, save_in_address_book?: int, street: list<string>, suffix?: string, telephone: string, vat_id?: string}
 # --paymentMethod shape: {additional_data?: list<string>, extension_attributes?: record, method: string, po_number?: string}
-export def "v1-guest-carts-set-payment-information create-checkout-management-save" [
+export def "checkout-guest-payment-information-management-v1-save-payment-information-post" [
   cart_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9843,7 +9843,7 @@ export def "v1-guest-carts-set-payment-information create-checkout-management-sa
 # POST /V1/guest-carts/{cartId}/shipping-information
 # operationId: checkoutGuestShippingInformationManagementV1SaveAddressInformationPost
 # --addressInformation shape: {billing_address?: record, custom_attributes?: list, extension_attributes?: record, shipping_address: record, shipping_carrier_code: string, shipping_method_code: string}
-export def "v1-guest-carts-shipping-information create-checkout-management-save-address" [
+export def "checkout-guest-shipping-information-management-v1-save-address-information-post" [
   cart_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9884,7 +9884,7 @@ export def "v1-guest-carts-shipping-information create-checkout-management-save-
 #
 # GET /V1/guest-carts/{cartId}/shipping-methods
 # operationId: quoteGuestShippingMethodManagementV1GetListGet
-export def "v1-guest-carts-shipping-methods get-quote-management-list" [
+export def "quote-guest-shipping-method-management-v1-get-list-get" [
   cart_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9921,7 +9921,7 @@ export def "v1-guest-carts-shipping-methods get-quote-management-list" [
 #
 # GET /V1/guest-carts/{cartId}/totals
 # operationId: quoteGuestCartTotalRepositoryV1GetGet
-export def "v1-guest-carts-totals get-quote-repository" [
+export def "quote-guest-cart-total-repository-v1-get-get" [
   cart_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9959,7 +9959,7 @@ export def "v1-guest-carts-totals get-quote-repository" [
 # POST /V1/guest-carts/{cartId}/totals-information
 # operationId: checkoutGuestTotalsInformationManagementV1CalculatePost
 # --addressInformation shape: {address: record, custom_attributes?: list, extension_attributes?: record, shipping_carrier_code?: string, shipping_method_code?: string}
-export def "v1-guest-carts-totals-information create-checkout-management-calculate" [
+export def "checkout-guest-totals-information-management-v1-calculate-post" [
   cart_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10000,7 +10000,7 @@ export def "v1-guest-carts-totals-information create-checkout-management-calcula
 #
 # POST /V1/guest-giftregistry/{cartId}/estimate-shipping-methods
 # operationId: giftRegistryGuestCartShippingMethodManagementV1EstimateByRegistryIdPost
-export def "v1-guest-giftregistry-estimate-shipping-methods create-gift-registry-cart-management-by-registry" [
+export def "gift-registry-guest-cart-shipping-method-management-v1-estimate-by-registry-id-post" [
   cart_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10041,7 +10041,7 @@ export def "v1-guest-giftregistry-estimate-shipping-methods create-gift-registry
 #
 # PUT /V1/hierarchy/move/{id}
 # operationId: companyCompanyHierarchyV1MoveNodePut
-export def "v1-hierarchy-move update-company-company-node" [
+export def "company-company-hierarchy-v1-move-node-put" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10082,7 +10082,7 @@ export def "v1-hierarchy-move update-company-company-node" [
 #
 # GET /V1/hierarchy/{id}
 # operationId: companyCompanyHierarchyV1GetCompanyHierarchyGet
-export def "v1-hierarchy get-company-company-company" [
+export def "company-company-hierarchy-v1-get-company-hierarchy-get" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10119,7 +10119,7 @@ export def "v1-hierarchy get-company-company-company" [
 #
 # POST /V1/integration/admin/token
 # operationId: integrationAdminTokenServiceV1CreateAdminAccessTokenPost
-export def "v1-integration-admin-token create-service-access" [
+export def "integration-admin-token-service-v1-create-admin-access-token-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10159,7 +10159,7 @@ export def "v1-integration-admin-token create-service-access" [
 #
 # POST /V1/integration/customer/token
 # operationId: integrationCustomerTokenServiceV1CreateCustomerAccessTokenPost
-export def "v1-integration-customer-token create-service-access" [
+export def "integration-customer-token-service-v1-create-customer-access-token-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10202,7 +10202,7 @@ export def "v1-integration-customer-token create-service-access" [
 # --arguments shape: {adjustment_negative?: float, adjustment_positive?: float, extension_attributes?: record, shipping_amount?: float}
 # --comment shape: {comment: string, extension_attributes?: record, is_visible_on_front: int}
 # --items item shape: {extension_attributes?: record, order_item_id: int, qty: float}
-export def "v1-invoice-refund create-sales-execute" [
+export def "sales-refund-invoice-v1-execute-post" [
   invoice_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10248,7 +10248,7 @@ export def "v1-invoice-refund create-sales-execute" [
 #
 # GET /V1/invoices
 # operationId: salesInvoiceRepositoryV1GetListGet
-export def "v1-invoices get-sales-repository-list" [
+export def "sales-invoice-repository-v1-get-list-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10292,7 +10292,7 @@ export def "v1-invoices get-sales-repository-list" [
 # POST /V1/invoices/
 # operationId: salesInvoiceRepositoryV1SavePost
 # --entity shape: {base_currency_code?: string, base_discount_amount?: float, base_discount_tax_compensation_amount?: float, base_grand_total?: float, base_shipping_amount?: float, base_shipping_discount_tax_compensation_amnt?: float, base_shipping_incl_tax?: float, base_shipping_tax_amount?: float, base_subtotal?: float, base_subtotal_incl_tax?: float, base_tax_amount?: float, base_to_global_rate?: float, base_to_order_rate?: float, base_total_refunded?: float, billing_address_id?: int, can_void_flag?: int, ... (31 more fields)}
-export def "v1-invoices create-sales-repository-save" [
+export def "sales-invoice-repository-v1-save-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10332,7 +10332,7 @@ export def "v1-invoices create-sales-repository-save" [
 # POST /V1/invoices/comments
 # operationId: salesInvoiceCommentRepositoryV1SavePost
 # --entity shape: {comment: string, created_at?: string, entity_id?: int, extension_attributes?: record, is_customer_notified: int, is_visible_on_front: int, parent_id: int}
-export def "v1-invoices-comments create-sales-repository-save" [
+export def "sales-invoice-comment-repository-v1-save-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10371,7 +10371,7 @@ export def "v1-invoices-comments create-sales-repository-save" [
 #
 # GET /V1/invoices/{id}
 # operationId: salesInvoiceRepositoryV1GetGet
-export def "v1-invoices get-sales-repository" [
+export def "sales-invoice-repository-v1-get-get" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10408,7 +10408,7 @@ export def "v1-invoices get-sales-repository" [
 #
 # POST /V1/invoices/{id}/capture
 # operationId: salesInvoiceManagementV1SetCapturePost
-export def "v1-invoices-capture update-sales-management-create" [
+export def "sales-invoice-management-v1-set-capture-post" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10445,7 +10445,7 @@ export def "v1-invoices-capture update-sales-management-create" [
 #
 # GET /V1/invoices/{id}/comments
 # operationId: salesInvoiceManagementV1GetCommentsListGet
-export def "v1-invoices-comments get-sales-management-list" [
+export def "sales-invoice-management-v1-get-comments-list-get" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10482,7 +10482,7 @@ export def "v1-invoices-comments get-sales-management-list" [
 #
 # POST /V1/invoices/{id}/emails
 # operationId: salesInvoiceManagementV1NotifyPost
-export def "v1-invoices-emails notify-sales-management-create" [
+export def "sales-invoice-management-v1-notify-post" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10519,7 +10519,7 @@ export def "v1-invoices-emails notify-sales-management-create" [
 #
 # POST /V1/invoices/{id}/void
 # operationId: salesInvoiceManagementV1SetVoidPost
-export def "v1-invoices-void update-sales-management-create" [
+export def "sales-invoice-management-v1-set-void-post" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10556,7 +10556,7 @@ export def "v1-invoices-void update-sales-management-create" [
 #
 # GET /V1/modules
 # operationId: backendModuleServiceV1GetModulesGet
-export def "v1-modules get-backend-service" [
+export def "backend-module-service-v1-get-modules-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10591,7 +10591,7 @@ export def "v1-modules get-backend-service" [
 #
 # GET /V1/negotiable-carts/{cartId}/billing-address
 # operationId: negotiableQuoteBillingAddressManagementV1GetGet
-export def "v1-negotiable-carts-billing-address get-quote-management" [
+export def "negotiable-quote-billing-address-management-v1-get-get" [
   cart_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10629,7 +10629,7 @@ export def "v1-negotiable-carts-billing-address get-quote-management" [
 # POST /V1/negotiable-carts/{cartId}/billing-address
 # operationId: negotiableQuoteBillingAddressManagementV1AssignPost
 # --address shape: {city: string, company?: string, country_id: string, custom_attributes?: list, customer_address_id?: int, customer_id?: int, email: string, extension_attributes?: record, fax?: string, firstname: string, id?: int, lastname: string, middlename?: string, postcode: string, prefix?: string, region: string, region_code: string, region_id: int, same_as_billing?: int, save_in_address_book?: int, street: list<string>, suffix?: string, telephone: string, vat_id?: string}
-export def "v1-negotiable-carts-billing-address assign-quote-management-create" [
+export def "negotiable-quote-billing-address-management-v1-assign-post" [
   cart_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10671,7 +10671,7 @@ export def "v1-negotiable-carts-billing-address assign-quote-management-create" 
 #
 # DELETE /V1/negotiable-carts/{cartId}/coupons
 # operationId: negotiableQuoteCouponManagementV1RemoveDelete
-export def "v1-negotiable-carts-coupons delete-quote-management" [
+export def "negotiable-quote-coupon-management-v1-remove-delete" [
   cart_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10708,7 +10708,7 @@ export def "v1-negotiable-carts-coupons delete-quote-management" [
 #
 # PUT /V1/negotiable-carts/{cartId}/coupons/{couponCode}
 # operationId: negotiableQuoteCouponManagementV1SetPut
-export def "v1-negotiable-carts-coupons update-quote-management" [
+export def "negotiable-quote-coupon-management-v1-set-put" [
   cart_id: int
   coupon_code: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -10748,7 +10748,7 @@ export def "v1-negotiable-carts-coupons update-quote-management" [
 # POST /V1/negotiable-carts/{cartId}/estimate-shipping-methods
 # operationId: negotiableQuoteShipmentEstimationV1EstimateByExtendedAddressPost
 # --address shape: {city: string, company?: string, country_id: string, custom_attributes?: list, customer_address_id?: int, customer_id?: int, email: string, extension_attributes?: record, fax?: string, firstname: string, id?: int, lastname: string, middlename?: string, postcode: string, prefix?: string, region: string, region_code: string, region_id: int, same_as_billing?: int, save_in_address_book?: int, street: list<string>, suffix?: string, telephone: string, vat_id?: string}
-export def "v1-negotiable-carts-estimate-shipping-methods create-quote-shipment-estimation-by-extended-address" [
+export def "negotiable-quote-shipment-estimation-v1-estimate-by-extended-address-post" [
   cart_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10789,7 +10789,7 @@ export def "v1-negotiable-carts-estimate-shipping-methods create-quote-shipment-
 #
 # POST /V1/negotiable-carts/{cartId}/estimate-shipping-methods-by-address-id
 # operationId: negotiableQuoteShippingMethodManagementV1EstimateByAddressIdPost
-export def "v1-negotiable-carts-estimate-shipping-methods-by-address-id create-quote-management" [
+export def "negotiable-quote-shipping-method-management-v1-estimate-by-address-id-post" [
   cart_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10831,7 +10831,7 @@ export def "v1-negotiable-carts-estimate-shipping-methods-by-address-id create-q
 # POST /V1/negotiable-carts/{cartId}/giftCards
 # operationId: negotiableQuoteGiftCardAccountManagementV1SaveByQuoteIdPost
 # --giftCardAccountData shape: {base_gift_cards_amount: float, base_gift_cards_amount_used: float, extension_attributes?: record, gift_cards: list<string>, gift_cards_amount: float, gift_cards_amount_used: float}
-export def "v1-negotiable-carts-gift-cards create-quote-account-management-save-by-quote" [
+export def "negotiable-quote-gift-card-account-management-v1-save-by-quote-id-post" [
   cart_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10872,7 +10872,7 @@ export def "v1-negotiable-carts-gift-cards create-quote-account-management-save-
 #
 # DELETE /V1/negotiable-carts/{cartId}/giftCards/{giftCardCode}
 # operationId: negotiableQuoteGiftCardAccountManagementV1DeleteByQuoteIdDelete
-export def "v1-negotiable-carts-gift-cards delete-quote-account-management-by-quote" [
+export def "negotiable-quote-gift-card-account-management-v1-delete-by-quote-id-delete" [
   cart_id: int
   gift_card_code: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -10911,7 +10911,7 @@ export def "v1-negotiable-carts-gift-cards delete-quote-account-management-by-qu
 #
 # GET /V1/negotiable-carts/{cartId}/payment-information
 # operationId: negotiableQuotePaymentInformationManagementV1GetPaymentInformationGet
-export def "v1-negotiable-carts-payment-information get-quote-management" [
+export def "negotiable-quote-payment-information-management-v1-get-payment-information-get" [
   cart_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10950,7 +10950,7 @@ export def "v1-negotiable-carts-payment-information get-quote-management" [
 # operationId: negotiableQuotePaymentInformationManagementV1SavePaymentInformationAndPlaceOrderPost
 # --billingAddress shape: {city: string, company?: string, country_id: string, custom_attributes?: list, customer_address_id?: int, customer_id?: int, email: string, extension_attributes?: record, fax?: string, firstname: string, id?: int, lastname: string, middlename?: string, postcode: string, prefix?: string, region: string, region_code: string, region_id: int, same_as_billing?: int, save_in_address_book?: int, street: list<string>, suffix?: string, telephone: string, vat_id?: string}
 # --paymentMethod shape: {additional_data?: list<string>, extension_attributes?: record, method: string, po_number?: string}
-export def "v1-negotiable-carts-payment-information create-quote-management-save-and-place-order" [
+export def "negotiable-quote-payment-information-management-v1-save-payment-information-and-place-order-post" [
   cart_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10994,7 +10994,7 @@ export def "v1-negotiable-carts-payment-information create-quote-management-save
 # operationId: negotiableQuotePaymentInformationManagementV1SavePaymentInformationPost
 # --billingAddress shape: {city: string, company?: string, country_id: string, custom_attributes?: list, customer_address_id?: int, customer_id?: int, email: string, extension_attributes?: record, fax?: string, firstname: string, id?: int, lastname: string, middlename?: string, postcode: string, prefix?: string, region: string, region_code: string, region_id: int, same_as_billing?: int, save_in_address_book?: int, street: list<string>, suffix?: string, telephone: string, vat_id?: string}
 # --paymentMethod shape: {additional_data?: list<string>, extension_attributes?: record, method: string, po_number?: string}
-export def "v1-negotiable-carts-set-payment-information create-quote-management-save" [
+export def "negotiable-quote-payment-information-management-v1-save-payment-information-post" [
   cart_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11037,7 +11037,7 @@ export def "v1-negotiable-carts-set-payment-information create-quote-management-
 # POST /V1/negotiable-carts/{cartId}/shipping-information
 # operationId: negotiableQuoteShippingInformationManagementV1SaveAddressInformationPost
 # --addressInformation shape: {billing_address?: record, custom_attributes?: list, extension_attributes?: record, shipping_address: record, shipping_carrier_code: string, shipping_method_code: string}
-export def "v1-negotiable-carts-shipping-information create-quote-management-save-address" [
+export def "negotiable-quote-shipping-information-management-v1-save-address-information-post" [
   cart_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11078,7 +11078,7 @@ export def "v1-negotiable-carts-shipping-information create-quote-management-sav
 #
 # GET /V1/negotiable-carts/{cartId}/totals
 # operationId: negotiableQuoteCartTotalRepositoryV1GetGet
-export def "v1-negotiable-carts-totals get-quote-repository" [
+export def "negotiable-quote-cart-total-repository-v1-get-get" [
   cart_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11115,7 +11115,7 @@ export def "v1-negotiable-carts-totals get-quote-repository" [
 #
 # GET /V1/negotiableQuote/attachmentContent
 # operationId: negotiableQuoteAttachmentContentManagementV1GetGet
-export def "v1-negotiable-quote-attachment-content get-management" [
+export def "negotiable-quote-attachment-content-management-v1-get-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11152,7 +11152,7 @@ export def "v1-negotiable-quote-attachment-content get-management" [
 #
 # POST /V1/negotiableQuote/decline
 # operationId: negotiableQuoteNegotiableQuoteManagementV1DeclinePost
-export def "v1-negotiable-quote-decline create-management" [
+export def "negotiable-quote-negotiable-quote-management-v1-decline-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11192,7 +11192,7 @@ export def "v1-negotiable-quote-decline create-management" [
 #
 # POST /V1/negotiableQuote/pricesUpdated
 # operationId: negotiableQuoteNegotiableQuotePriceManagementV1PricesUpdatedPost
-export def "v1-negotiable-quote-prices-updated create-management" [
+export def "negotiable-quote-negotiable-quote-price-management-v1-prices-updated-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11232,7 +11232,7 @@ export def "v1-negotiable-quote-prices-updated create-management" [
 # POST /V1/negotiableQuote/request
 # operationId: negotiableQuoteNegotiableQuoteManagementV1CreatePost
 # --files item shape: {base64_encoded_data: string, extension_attributes?: record, name: string, type: string}
-export def "v1-negotiable-quote-request create-management" [
+export def "negotiable-quote-negotiable-quote-management-v1-create-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11275,7 +11275,7 @@ export def "v1-negotiable-quote-request create-management" [
 # POST /V1/negotiableQuote/submitToCustomer
 # operationId: negotiableQuoteNegotiableQuoteManagementV1AdminSendPost
 # --files item shape: {base64_encoded_data: string, extension_attributes?: record, name: string, type: string}
-export def "v1-negotiable-quote-submit-to-customer send-management-admin-create" [
+export def "negotiable-quote-negotiable-quote-management-v1-admin-send-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11317,7 +11317,7 @@ export def "v1-negotiable-quote-submit-to-customer send-management-admin-create"
 # PUT /V1/negotiableQuote/{quoteId}
 # operationId: negotiableQuoteNegotiableCartRepositoryV1SavePut
 # --quote shape: {billing_address?: record, converted_at?: string, created_at?: string, currency?: record, customer: record, customer_is_guest?: bool, customer_note?: string, customer_note_notify?: bool, customer_tax_class_id?: int, extension_attributes?: record, id: int, is_active?: bool, is_virtual?: bool, items?: list, items_count?: int, items_qty?: float, orig_order_id?: int, reserved_order_id?: string, store_id: int, updated_at?: string}
-export def "v1-negotiable-quote update-cart-repository-save" [
+export def "negotiable-quote-negotiable-cart-repository-v1-save-put" [
   quote_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11358,7 +11358,7 @@ export def "v1-negotiable-quote update-cart-repository-save" [
 #
 # GET /V1/negotiableQuote/{quoteId}/comments
 # operationId: negotiableQuoteCommentLocatorV1GetListForQuoteGet
-export def "v1-negotiable-quote-comments get-locator-list-for" [
+export def "negotiable-quote-comment-locator-v1-get-list-for-quote-get" [
   quote_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11395,7 +11395,7 @@ export def "v1-negotiable-quote-comments get-locator-list-for" [
 #
 # PUT /V1/negotiableQuote/{quoteId}/shippingMethod
 # operationId: negotiableQuoteNegotiableQuoteShippingManagementV1SetShippingMethodPut
-export def "v1-negotiable-quote-shipping-method update-management" [
+export def "negotiable-quote-negotiable-quote-shipping-management-v1-set-shipping-method-put" [
   quote_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11439,7 +11439,7 @@ export def "v1-negotiable-quote-shipping-method update-management" [
 # --arguments shape: {extension_attributes?: record}
 # --comment shape: {comment: string, extension_attributes?: record, is_visible_on_front: int}
 # --items item shape: {extension_attributes?: record, order_item_id: int, qty: float}
-export def "v1-order-invoice create-sales-execute" [
+export def "sales-invoice-order-v1-execute-post" [
   order_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11488,7 +11488,7 @@ export def "v1-order-invoice create-sales-execute" [
 # --arguments shape: {adjustment_negative?: float, adjustment_positive?: float, extension_attributes?: record, shipping_amount?: float}
 # --comment shape: {comment: string, extension_attributes?: record, is_visible_on_front: int}
 # --items item shape: {extension_attributes?: record, order_item_id: int, qty: float}
-export def "v1-order-refund create-sales-execute" [
+export def "sales-refund-order-v1-execute-post" [
   order_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11538,7 +11538,7 @@ export def "v1-order-refund create-sales-execute" [
 # --items item shape: {extension_attributes?: record, order_item_id: int, qty: float}
 # --packages item shape: {extension_attributes?: record}
 # --tracks item shape: {carrier_code: string, extension_attributes?: record, title: string, track_number: string}
-export def "v1-order-ship create-sales-execute" [
+export def "sales-ship-order-v1-execute-post" [
   order_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11585,7 +11585,7 @@ export def "v1-order-ship create-sales-execute" [
 #
 # GET /V1/orders
 # operationId: salesOrderRepositoryV1GetListGet
-export def "v1-orders get-sales-repository-list" [
+export def "sales-order-repository-v1-get-list-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11629,7 +11629,7 @@ export def "v1-orders get-sales-repository-list" [
 # POST /V1/orders/
 # operationId: salesOrderRepositoryV1SavePost
 # --entity shape: {adjustment_negative?: float, adjustment_positive?: float, applied_rule_ids?: string, base_adjustment_negative?: float, base_adjustment_positive?: float, base_currency_code?: string, base_discount_amount?: float, base_discount_canceled?: float, base_discount_invoiced?: float, base_discount_refunded?: float, base_discount_tax_compensation_amount?: float, base_discount_tax_compensation_invoiced?: float, base_discount_tax_compensation_refunded?: float, base_grand_total: float, ... (123 more fields)}
-export def "v1-orders create-sales-repository-save" [
+export def "sales-order-repository-v1-save-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11669,7 +11669,7 @@ export def "v1-orders create-sales-repository-save" [
 # PUT /V1/orders/create
 # operationId: salesOrderRepositoryV1SavePut
 # --entity shape: {adjustment_negative?: float, adjustment_positive?: float, applied_rule_ids?: string, base_adjustment_negative?: float, base_adjustment_positive?: float, base_currency_code?: string, base_discount_amount?: float, base_discount_canceled?: float, base_discount_invoiced?: float, base_discount_refunded?: float, base_discount_tax_compensation_amount?: float, base_discount_tax_compensation_invoiced?: float, base_discount_tax_compensation_refunded?: float, base_grand_total: float, ... (123 more fields)}
-export def "v1-orders-create update-sales-repository-save" [
+export def "sales-order-repository-v1-save-put" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11708,7 +11708,7 @@ export def "v1-orders-create update-sales-repository-save" [
 #
 # GET /V1/orders/items
 # operationId: salesOrderItemRepositoryV1GetListGet
-export def "v1-orders-items get-sales-repository-list" [
+export def "sales-order-item-repository-v1-get-list-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11751,7 +11751,7 @@ export def "v1-orders-items get-sales-repository-list" [
 #
 # GET /V1/orders/items/{id}
 # operationId: salesOrderItemRepositoryV1GetGet
-export def "v1-orders-items get-sales-repository" [
+export def "sales-order-item-repository-v1-get-get" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11788,7 +11788,7 @@ export def "v1-orders-items get-sales-repository" [
 #
 # GET /V1/orders/{id}
 # operationId: salesOrderRepositoryV1GetGet
-export def "v1-orders get-sales-repository" [
+export def "sales-order-repository-v1-get-get" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11825,7 +11825,7 @@ export def "v1-orders get-sales-repository" [
 #
 # POST /V1/orders/{id}/cancel
 # operationId: salesOrderManagementV1CancelPost
-export def "v1-orders-cancel create-sales-management" [
+export def "sales-order-management-v1-cancel-post" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11862,7 +11862,7 @@ export def "v1-orders-cancel create-sales-management" [
 #
 # GET /V1/orders/{id}/comments
 # operationId: salesOrderManagementV1GetCommentsListGet
-export def "v1-orders-comments get-sales-management-list" [
+export def "sales-order-management-v1-get-comments-list-get" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11900,7 +11900,7 @@ export def "v1-orders-comments get-sales-management-list" [
 # POST /V1/orders/{id}/comments
 # operationId: salesOrderManagementV1AddCommentPost
 # --statusHistory shape: {comment: string, created_at?: string, entity_id?: int, entity_name?: string, extension_attributes?: record, is_customer_notified: int, is_visible_on_front: int, parent_id: int, status?: string}
-export def "v1-orders-comments create-sales-management" [
+export def "sales-order-management-v1-add-comment-post" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11941,7 +11941,7 @@ export def "v1-orders-comments create-sales-management" [
 #
 # POST /V1/orders/{id}/emails
 # operationId: salesOrderManagementV1NotifyPost
-export def "v1-orders-emails notify-sales-management-create" [
+export def "sales-order-management-v1-notify-post" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11978,7 +11978,7 @@ export def "v1-orders-emails notify-sales-management-create" [
 #
 # POST /V1/orders/{id}/hold
 # operationId: salesOrderManagementV1HoldPost
-export def "v1-orders-hold create-sales-management" [
+export def "sales-order-management-v1-hold-post" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12015,7 +12015,7 @@ export def "v1-orders-hold create-sales-management" [
 #
 # GET /V1/orders/{id}/statuses
 # operationId: salesOrderManagementV1GetStatusGet
-export def "v1-orders-statuses get-sales-management-status" [
+export def "sales-order-management-v1-get-status-get" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12052,7 +12052,7 @@ export def "v1-orders-statuses get-sales-management-status" [
 #
 # POST /V1/orders/{id}/unhold
 # operationId: salesOrderManagementV1UnHoldPost
-export def "v1-orders-unhold create-sales-management-un-hold" [
+export def "sales-order-management-v1-un-hold-post" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12090,7 +12090,7 @@ export def "v1-orders-unhold create-sales-management-un-hold" [
 # PUT /V1/orders/{parent_id}
 # operationId: salesOrderAddressRepositoryV1SavePut
 # --entity shape: {address_type: string, city: string, company?: string, country_id: string, customer_address_id?: int, customer_id?: int, email?: string, entity_id?: int, extension_attributes?: record, fax?: string, firstname: string, lastname: string, middlename?: string, parent_id?: int, postcode: string, prefix?: string, region?: string, region_code?: string, region_id?: int, street?: list<string>, suffix?: string, telephone: string, vat_id?: string, vat_is_valid?: int, vat_request_date?: string, ... (2 more fields)}
-export def "v1-orders update-sales-address-repository-save" [
+export def "sales-order-address-repository-v1-save-put" [
   parent_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12131,7 +12131,7 @@ export def "v1-orders update-sales-address-repository-save" [
 #
 # GET /V1/products
 # operationId: catalogProductRepositoryV1GetListGet
-export def "v1-products get-catalog-repository-list" [
+export def "catalog-product-repository-v1-get-list-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12175,7 +12175,7 @@ export def "v1-products get-catalog-repository-list" [
 # POST /V1/products
 # operationId: catalogProductRepositoryV1SavePost
 # --product shape: {attribute_set_id?: int, created_at?: string, custom_attributes?: list, extension_attributes?: record, id?: int, media_gallery_entries?: list, name?: string, options?: list, price?: float, product_links?: list, sku: string, status?: int, tier_prices?: list, type_id?: string, updated_at?: string, visibility?: int, weight?: float}
-export def "v1-products create-catalog-repository-save" [
+export def "catalog-product-repository-v1-save-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12215,7 +12215,7 @@ export def "v1-products create-catalog-repository-save" [
 #
 # GET /V1/products-render-info
 # operationId: catalogProductRenderListV1GetListGet
-export def "v1-products-render-info list-catalog-get" [
+export def "catalog-product-render-list-v1-get-list-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12261,7 +12261,7 @@ export def "v1-products-render-info list-catalog-get" [
 # POST /V1/products/attribute-sets
 # operationId: catalogAttributeSetManagementV1CreatePost
 # --attributeSet shape: {attribute_set_id?: int, attribute_set_name: string, entity_type_id?: int, extension_attributes?: record, sort_order: int}
-export def "v1-products-attribute-sets create-catalog-management" [
+export def "catalog-attribute-set-management-v1-create-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12301,7 +12301,7 @@ export def "v1-products-attribute-sets create-catalog-management" [
 #
 # POST /V1/products/attribute-sets/attributes
 # operationId: catalogProductAttributeManagementV1AssignPost
-export def "v1-products-attribute-sets-attributes assign-catalog-management-create" [
+export def "catalog-product-attribute-management-v1-assign-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12344,7 +12344,7 @@ export def "v1-products-attribute-sets-attributes assign-catalog-management-crea
 # POST /V1/products/attribute-sets/groups
 # operationId: catalogProductAttributeGroupRepositoryV1SavePost
 # --group shape: {attribute_group_id?: string, attribute_group_name?: string, attribute_set_id?: int, extension_attributes?: record}
-export def "v1-products-attribute-sets-groups create-catalog-repository-save" [
+export def "catalog-product-attribute-group-repository-v1-save-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12383,7 +12383,7 @@ export def "v1-products-attribute-sets-groups create-catalog-repository-save" [
 #
 # GET /V1/products/attribute-sets/groups/list
 # operationId: catalogProductAttributeGroupRepositoryV1GetListGet
-export def "v1-products-attribute-sets-groups-list get-catalog-repository" [
+export def "catalog-product-attribute-group-repository-v1-get-list-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12426,7 +12426,7 @@ export def "v1-products-attribute-sets-groups-list get-catalog-repository" [
 #
 # DELETE /V1/products/attribute-sets/groups/{groupId}
 # operationId: catalogProductAttributeGroupRepositoryV1DeleteByIdDelete
-export def "v1-products-attribute-sets-groups delete-catalog-repository-by" [
+export def "catalog-product-attribute-group-repository-v1-delete-by-id-delete" [
   group_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12463,7 +12463,7 @@ export def "v1-products-attribute-sets-groups delete-catalog-repository-by" [
 #
 # GET /V1/products/attribute-sets/sets/list
 # operationId: catalogAttributeSetRepositoryV1GetListGet
-export def "v1-products-attribute-sets-sets-list get-catalog-repository" [
+export def "catalog-attribute-set-repository-v1-get-list-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12506,7 +12506,7 @@ export def "v1-products-attribute-sets-sets-list get-catalog-repository" [
 #
 # DELETE /V1/products/attribute-sets/{attributeSetId}
 # operationId: catalogAttributeSetRepositoryV1DeleteByIdDelete
-export def "v1-products-attribute-sets delete-catalog-repository-by" [
+export def "catalog-attribute-set-repository-v1-delete-by-id-delete" [
   attribute_set_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12543,7 +12543,7 @@ export def "v1-products-attribute-sets delete-catalog-repository-by" [
 #
 # GET /V1/products/attribute-sets/{attributeSetId}
 # operationId: catalogAttributeSetRepositoryV1GetGet
-export def "v1-products-attribute-sets get-catalog-repository" [
+export def "catalog-attribute-set-repository-v1-get-get" [
   attribute_set_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12581,7 +12581,7 @@ export def "v1-products-attribute-sets get-catalog-repository" [
 # PUT /V1/products/attribute-sets/{attributeSetId}
 # operationId: catalogAttributeSetRepositoryV1SavePut
 # --attributeSet shape: {attribute_set_id?: int, attribute_set_name: string, entity_type_id?: int, extension_attributes?: record, sort_order: int}
-export def "v1-products-attribute-sets update-catalog-repository-save" [
+export def "catalog-attribute-set-repository-v1-save-put" [
   attribute_set_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12622,7 +12622,7 @@ export def "v1-products-attribute-sets update-catalog-repository-save" [
 #
 # GET /V1/products/attribute-sets/{attributeSetId}/attributes
 # operationId: catalogProductAttributeManagementV1GetAttributesGet
-export def "v1-products-attribute-sets-attributes get-catalog-management" [
+export def "catalog-product-attribute-management-v1-get-attributes-get" [
   attribute_set_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12659,7 +12659,7 @@ export def "v1-products-attribute-sets-attributes get-catalog-management" [
 #
 # DELETE /V1/products/attribute-sets/{attributeSetId}/attributes/{attributeCode}
 # operationId: catalogProductAttributeManagementV1UnassignDelete
-export def "v1-products-attribute-sets-attributes delete-catalog-management-unassign" [
+export def "catalog-product-attribute-management-v1-unassign-delete" [
   attribute_set_id: string
   attribute_code: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -12699,7 +12699,7 @@ export def "v1-products-attribute-sets-attributes delete-catalog-management-unas
 # PUT /V1/products/attribute-sets/{attributeSetId}/groups
 # operationId: catalogProductAttributeGroupRepositoryV1SavePut
 # --group shape: {attribute_group_id?: string, attribute_group_name?: string, attribute_set_id?: int, extension_attributes?: record}
-export def "v1-products-attribute-sets-groups update-catalog-repository-save" [
+export def "catalog-product-attribute-group-repository-v1-save-put" [
   attribute_set_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12740,7 +12740,7 @@ export def "v1-products-attribute-sets-groups update-catalog-repository-save" [
 #
 # GET /V1/products/attributes
 # operationId: catalogProductAttributeRepositoryV1GetListGet
-export def "v1-products-attributes get-catalog-repository-list" [
+export def "catalog-product-attribute-repository-v1-get-list-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12784,7 +12784,7 @@ export def "v1-products-attributes get-catalog-repository-list" [
 # POST /V1/products/attributes
 # operationId: catalogProductAttributeRepositoryV1SavePost
 # --attribute shape: {apply_to?: list<string>, attribute_code: string, attribute_id?: int, backend_model?: string, backend_type?: string, custom_attributes?: list, default_frontend_label?: string, default_value?: string, entity_type_id: string, extension_attributes?: record, frontend_class?: string, frontend_input: string, frontend_labels: list, is_comparable?: string, is_filterable?: bool, is_filterable_in_grid?: bool, is_filterable_in_search?: bool, is_html_allowed_on_front?: bool, is_required: bool, ... (18 more fields)}
-export def "v1-products-attributes create-catalog-repository-save" [
+export def "catalog-product-attribute-repository-v1-save-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12823,7 +12823,7 @@ export def "v1-products-attributes create-catalog-repository-save" [
 #
 # GET /V1/products/attributes/types
 # operationId: catalogProductAttributeTypesListV1GetItemsGet
-export def "v1-products-attributes-types list-catalog-get-items" [
+export def "catalog-product-attribute-types-list-v1-get-items-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12858,7 +12858,7 @@ export def "v1-products-attributes-types list-catalog-get-items" [
 #
 # DELETE /V1/products/attributes/{attributeCode}
 # operationId: catalogProductAttributeRepositoryV1DeleteByIdDelete
-export def "v1-products-attributes delete-catalog-repository-by" [
+export def "catalog-product-attribute-repository-v1-delete-by-id-delete" [
   attribute_code: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12895,7 +12895,7 @@ export def "v1-products-attributes delete-catalog-repository-by" [
 #
 # GET /V1/products/attributes/{attributeCode}
 # operationId: catalogProductAttributeRepositoryV1GetGet
-export def "v1-products-attributes get-catalog-repository" [
+export def "catalog-product-attribute-repository-v1-get-get" [
   attribute_code: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12933,7 +12933,7 @@ export def "v1-products-attributes get-catalog-repository" [
 # PUT /V1/products/attributes/{attributeCode}
 # operationId: catalogProductAttributeRepositoryV1SavePut
 # --attribute shape: {apply_to?: list<string>, attribute_code: string, attribute_id?: int, backend_model?: string, backend_type?: string, custom_attributes?: list, default_frontend_label?: string, default_value?: string, entity_type_id: string, extension_attributes?: record, frontend_class?: string, frontend_input: string, frontend_labels: list, is_comparable?: string, is_filterable?: bool, is_filterable_in_grid?: bool, is_filterable_in_search?: bool, is_html_allowed_on_front?: bool, is_required: bool, ... (18 more fields)}
-export def "v1-products-attributes update-catalog-repository-save" [
+export def "catalog-product-attribute-repository-v1-save-put" [
   attribute_code: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12974,7 +12974,7 @@ export def "v1-products-attributes update-catalog-repository-save" [
 #
 # GET /V1/products/attributes/{attributeCode}/options
 # operationId: catalogProductAttributeOptionManagementV1GetItemsGet
-export def "v1-products-attributes-options get-catalog-management-items" [
+export def "catalog-product-attribute-option-management-v1-get-items-get" [
   attribute_code: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -13012,7 +13012,7 @@ export def "v1-products-attributes-options get-catalog-management-items" [
 # POST /V1/products/attributes/{attributeCode}/options
 # operationId: catalogProductAttributeOptionManagementV1AddPost
 # --option shape: {is_default?: bool, label: string, sort_order?: int, store_labels?: list, value: string}
-export def "v1-products-attributes-options create-catalog-management" [
+export def "catalog-product-attribute-option-management-v1-add-post" [
   attribute_code: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -13053,7 +13053,7 @@ export def "v1-products-attributes-options create-catalog-management" [
 #
 # DELETE /V1/products/attributes/{attributeCode}/options/{optionId}
 # operationId: catalogProductAttributeOptionManagementV1DeleteDelete
-export def "v1-products-attributes-options delete-catalog-management" [
+export def "catalog-product-attribute-option-management-v1-delete-delete" [
   attribute_code: string
   option_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -13093,7 +13093,7 @@ export def "v1-products-attributes-options delete-catalog-management" [
 # POST /V1/products/base-prices
 # operationId: catalogBasePriceStorageV1UpdatePost
 # --prices item shape: {extension_attributes?: record, price: float, sku: string, store_id: int}
-export def "v1-products-base-prices update-catalog-storage-create" [
+export def "catalog-base-price-storage-v1-update-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -13132,7 +13132,7 @@ export def "v1-products-base-prices update-catalog-storage-create" [
 #
 # POST /V1/products/base-prices-information
 # operationId: catalogBasePriceStorageV1GetPost
-export def "v1-products-base-prices-information get-catalog-storage-create" [
+export def "catalog-base-price-storage-v1-get-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -13172,7 +13172,7 @@ export def "v1-products-base-prices-information get-catalog-storage-create" [
 # POST /V1/products/cost
 # operationId: catalogCostStorageV1UpdatePost
 # --prices item shape: {cost: float, extension_attributes?: record, sku: string, store_id: int}
-export def "v1-products-cost update-catalog-storage-create" [
+export def "catalog-cost-storage-v1-update-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -13211,7 +13211,7 @@ export def "v1-products-cost update-catalog-storage-create" [
 #
 # POST /V1/products/cost-delete
 # operationId: catalogCostStorageV1DeletePost
-export def "v1-products-cost-delete create-catalog-storage" [
+export def "catalog-cost-storage-v1-delete-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -13250,7 +13250,7 @@ export def "v1-products-cost-delete create-catalog-storage" [
 #
 # POST /V1/products/cost-information
 # operationId: catalogCostStorageV1GetPost
-export def "v1-products-cost-information get-catalog-storage-create" [
+export def "catalog-cost-storage-v1-get-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -13289,7 +13289,7 @@ export def "v1-products-cost-information get-catalog-storage-create" [
 #
 # DELETE /V1/products/downloadable-links/samples/{id}
 # operationId: downloadableSampleRepositoryV1DeleteDelete
-export def "v1-products-downloadable-links-samples delete-repository" [
+export def "downloadable-sample-repository-v1-delete-delete" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -13326,7 +13326,7 @@ export def "v1-products-downloadable-links-samples delete-repository" [
 #
 # DELETE /V1/products/downloadable-links/{id}
 # operationId: downloadableLinkRepositoryV1DeleteDelete
-export def "v1-products-downloadable-links delete-repository" [
+export def "downloadable-link-repository-v1-delete-delete" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -13363,7 +13363,7 @@ export def "v1-products-downloadable-links delete-repository" [
 #
 # GET /V1/products/links/types
 # operationId: catalogProductLinkTypeListV1GetItemsGet
-export def "v1-products-links-types list-catalog-get-items" [
+export def "catalog-product-link-type-list-v1-get-items-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -13398,7 +13398,7 @@ export def "v1-products-links-types list-catalog-get-items" [
 #
 # GET /V1/products/links/{type}/attributes
 # operationId: catalogProductLinkTypeListV1GetItemAttributesGet
-export def "v1-products-links-attributes list-catalog-get-item" [
+export def "catalog-product-link-type-list-v1-get-item-attributes-get" [
   type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -13435,7 +13435,7 @@ export def "v1-products-links-attributes list-catalog-get-item" [
 #
 # GET /V1/products/media/types/{attributeSetName}
 # operationId: catalogProductMediaAttributeManagementV1GetListGet
-export def "v1-products-media-types get-catalog-attribute-management-list" [
+export def "catalog-product-media-attribute-management-v1-get-list-get" [
   attribute_set_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -13473,7 +13473,7 @@ export def "v1-products-media-types get-catalog-attribute-management-list" [
 # POST /V1/products/options
 # operationId: catalogProductCustomOptionRepositoryV1SavePost
 # --option shape: {extension_attributes?: record, file_extension?: string, image_size_x?: int, image_size_y?: int, is_require: bool, max_characters?: int, option_id?: int, price?: float, price_type?: string, product_sku: string, sku?: string, sort_order: int, title: string, type: string, values?: list}
-export def "v1-products-options create-catalog-custom-repository-save" [
+export def "catalog-product-custom-option-repository-v1-save-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -13512,7 +13512,7 @@ export def "v1-products-options create-catalog-custom-repository-save" [
 #
 # GET /V1/products/options/types
 # operationId: catalogProductCustomOptionTypeListV1GetItemsGet
-export def "v1-products-options-types list-catalog-custom-get-items" [
+export def "catalog-product-custom-option-type-list-v1-get-items-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -13548,7 +13548,7 @@ export def "v1-products-options-types list-catalog-custom-get-items" [
 # PUT /V1/products/options/{optionId}
 # operationId: catalogProductCustomOptionRepositoryV1SavePut
 # --option shape: {extension_attributes?: record, file_extension?: string, image_size_x?: int, image_size_y?: int, is_require: bool, max_characters?: int, option_id?: int, price?: float, price_type?: string, product_sku: string, sku?: string, sort_order: int, title: string, type: string, values?: list}
-export def "v1-products-options update-catalog-custom-repository-save" [
+export def "catalog-product-custom-option-repository-v1-save-put" [
   option_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -13590,7 +13590,7 @@ export def "v1-products-options update-catalog-custom-repository-save" [
 # POST /V1/products/special-price
 # operationId: catalogSpecialPriceStorageV1UpdatePost
 # --prices item shape: {extension_attributes?: record, price: float, price_from: string, price_to: string, sku: string, store_id: int}
-export def "v1-products-special-price update-catalog-storage-create" [
+export def "catalog-special-price-storage-v1-update-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -13630,7 +13630,7 @@ export def "v1-products-special-price update-catalog-storage-create" [
 # POST /V1/products/special-price-delete
 # operationId: catalogSpecialPriceStorageV1DeletePost
 # --prices item shape: {extension_attributes?: record, price: float, price_from: string, price_to: string, sku: string, store_id: int}
-export def "v1-products-special-price-delete create-catalog-storage" [
+export def "catalog-special-price-storage-v1-delete-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -13669,7 +13669,7 @@ export def "v1-products-special-price-delete create-catalog-storage" [
 #
 # POST /V1/products/special-price-information
 # operationId: catalogSpecialPriceStorageV1GetPost
-export def "v1-products-special-price-information get-catalog-storage-create" [
+export def "catalog-special-price-storage-v1-get-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -13709,7 +13709,7 @@ export def "v1-products-special-price-information get-catalog-storage-create" [
 # POST /V1/products/tier-prices
 # operationId: catalogTierPriceStorageV1UpdatePost
 # --prices item shape: {customer_group: string, extension_attributes?: record, price: float, price_type: string, quantity: float, sku: string, website_id: int}
-export def "v1-products-tier-prices update-catalog-storage-create" [
+export def "catalog-tier-price-storage-v1-update-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -13749,7 +13749,7 @@ export def "v1-products-tier-prices update-catalog-storage-create" [
 # PUT /V1/products/tier-prices
 # operationId: catalogTierPriceStorageV1ReplacePut
 # --prices item shape: {customer_group: string, extension_attributes?: record, price: float, price_type: string, quantity: float, sku: string, website_id: int}
-export def "v1-products-tier-prices update-catalog-storage" [
+export def "catalog-tier-price-storage-v1-replace-put" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -13789,7 +13789,7 @@ export def "v1-products-tier-prices update-catalog-storage" [
 # POST /V1/products/tier-prices-delete
 # operationId: catalogTierPriceStorageV1DeletePost
 # --prices item shape: {customer_group: string, extension_attributes?: record, price: float, price_type: string, quantity: float, sku: string, website_id: int}
-export def "v1-products-tier-prices-delete create-catalog-storage" [
+export def "catalog-tier-price-storage-v1-delete-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -13828,7 +13828,7 @@ export def "v1-products-tier-prices-delete create-catalog-storage" [
 #
 # POST /V1/products/tier-prices-information
 # operationId: catalogTierPriceStorageV1GetPost
-export def "v1-products-tier-prices-information get-catalog-storage-create" [
+export def "catalog-tier-price-storage-v1-get-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -13867,7 +13867,7 @@ export def "v1-products-tier-prices-information get-catalog-storage-create" [
 #
 # GET /V1/products/types
 # operationId: catalogProductTypeListV1GetProductTypesGet
-export def "v1-products-types list-catalog-get" [
+export def "catalog-product-type-list-v1-get-product-types-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -13903,7 +13903,7 @@ export def "v1-products-types list-catalog-get" [
 # PUT /V1/products/{productSku}/stockItems/{itemId}
 # operationId: catalogInventoryStockRegistryV1UpdateStockItemBySkuPut
 # --stockItem shape: {backorders: int, enable_qty_increments: bool, extension_attributes?: record, is_decimal_divided: bool, is_in_stock: bool, is_qty_decimal: bool, item_id?: int, low_stock_date: string, manage_stock: bool, max_sale_qty: float, min_qty: float, min_sale_qty: float, notify_stock_qty: float, product_id?: int, qty: float, qty_increments: float, show_default_notification_message: bool, stock_id?: int, stock_status_changed_auto: int, use_config_backorders: bool, use_config_enable_qty_inc: bool, ... (6 more fields)}
-export def "v1-products-stock-items update-catalog-inventory-registry-by-sku" [
+export def "catalog-inventory-stock-registry-v1-update-stock-item-by-sku-put" [
   product_sku: string
   item_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -13946,7 +13946,7 @@ export def "v1-products-stock-items update-catalog-inventory-registry-by-sku" [
 #
 # DELETE /V1/products/{sku}
 # operationId: catalogProductRepositoryV1DeleteByIdDelete
-export def "v1-products delete-catalog-repository-by" [
+export def "catalog-product-repository-v1-delete-by-id-delete" [
   sku: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -13983,7 +13983,7 @@ export def "v1-products delete-catalog-repository-by" [
 #
 # GET /V1/products/{sku}
 # operationId: catalogProductRepositoryV1GetGet
-export def "v1-products get-catalog-repository" [
+export def "catalog-product-repository-v1-get-get" [
   sku: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -14025,7 +14025,7 @@ export def "v1-products get-catalog-repository" [
 # PUT /V1/products/{sku}
 # operationId: catalogProductRepositoryV1SavePut
 # --product shape: {attribute_set_id?: int, created_at?: string, custom_attributes?: list, extension_attributes?: record, id?: int, media_gallery_entries?: list, name?: string, options?: list, price?: float, product_links?: list, sku: string, status?: int, tier_prices?: list, type_id?: string, updated_at?: string, visibility?: int, weight?: float}
-export def "v1-products update-catalog-repository-save" [
+export def "catalog-product-repository-v1-save-put" [
   sku: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -14067,7 +14067,7 @@ export def "v1-products update-catalog-repository-save" [
 #
 # GET /V1/products/{sku}/downloadable-links
 # operationId: downloadableLinkRepositoryV1GetListGet
-export def "v1-products-downloadable-links get-repository-list" [
+export def "downloadable-link-repository-v1-get-list-get" [
   sku: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -14105,7 +14105,7 @@ export def "v1-products-downloadable-links get-repository-list" [
 # POST /V1/products/{sku}/downloadable-links
 # operationId: downloadableLinkRepositoryV1SavePost
 # --link shape: {extension_attributes?: record, id?: int, is_shareable: int, link_file?: string, link_file_content?: record, link_type: string, link_url?: string, number_of_downloads?: int, price: float, sample_file?: string, sample_file_content?: record, sample_type: string, sample_url?: string, sort_order: int, title?: string}
-export def "v1-products-downloadable-links create-repository-save" [
+export def "downloadable-link-repository-v1-save-post" [
   sku: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -14147,7 +14147,7 @@ export def "v1-products-downloadable-links create-repository-save" [
 #
 # GET /V1/products/{sku}/downloadable-links/samples
 # operationId: downloadableSampleRepositoryV1GetListGet
-export def "v1-products-downloadable-links-samples get-repository-list" [
+export def "downloadable-sample-repository-v1-get-list-get" [
   sku: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -14185,7 +14185,7 @@ export def "v1-products-downloadable-links-samples get-repository-list" [
 # POST /V1/products/{sku}/downloadable-links/samples
 # operationId: downloadableSampleRepositoryV1SavePost
 # --sample shape: {extension_attributes?: record, id?: int, sample_file?: string, sample_file_content?: record, sample_type: string, sample_url?: string, sort_order: int, title: string}
-export def "v1-products-downloadable-links-samples create-repository-save" [
+export def "downloadable-sample-repository-v1-save-post" [
   sku: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -14228,7 +14228,7 @@ export def "v1-products-downloadable-links-samples create-repository-save" [
 # PUT /V1/products/{sku}/downloadable-links/samples/{id}
 # operationId: downloadableSampleRepositoryV1SavePut
 # --sample shape: {extension_attributes?: record, id?: int, sample_file?: string, sample_file_content?: record, sample_type: string, sample_url?: string, sort_order: int, title: string}
-export def "v1-products-downloadable-links-samples update-repository-save" [
+export def "downloadable-sample-repository-v1-save-put" [
   sku: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -14273,7 +14273,7 @@ export def "v1-products-downloadable-links-samples update-repository-save" [
 # PUT /V1/products/{sku}/downloadable-links/{id}
 # operationId: downloadableLinkRepositoryV1SavePut
 # --link shape: {extension_attributes?: record, id?: int, is_shareable: int, link_file?: string, link_file_content?: record, link_type: string, link_url?: string, number_of_downloads?: int, price: float, sample_file?: string, sample_file_content?: record, sample_type: string, sample_url?: string, sort_order: int, title?: string}
-export def "v1-products-downloadable-links update-repository-save" [
+export def "downloadable-link-repository-v1-save-put" [
   sku: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -14317,7 +14317,7 @@ export def "v1-products-downloadable-links update-repository-save" [
 #
 # GET /V1/products/{sku}/group-prices/{customerGroupId}/tiers
 # operationId: catalogProductTierPriceManagementV1GetListGet
-export def "v1-products-group-prices-tiers get-catalog-management-list" [
+export def "catalog-product-tier-price-management-v1-get-list-get" [
   sku: string
   customer_group_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -14356,7 +14356,7 @@ export def "v1-products-group-prices-tiers get-catalog-management-list" [
 #
 # DELETE /V1/products/{sku}/group-prices/{customerGroupId}/tiers/{qty}
 # operationId: catalogProductTierPriceManagementV1RemoveDelete
-export def "v1-products-group-prices-tiers delete-catalog-management" [
+export def "catalog-product-tier-price-management-v1-remove-delete" [
   sku: string
   customer_group_id: string
   qty: float
@@ -14397,7 +14397,7 @@ export def "v1-products-group-prices-tiers delete-catalog-management" [
 #
 # POST /V1/products/{sku}/group-prices/{customerGroupId}/tiers/{qty}/price/{price}
 # operationId: catalogProductTierPriceManagementV1AddPost
-export def "v1-products-group-prices-tiers-price create-catalog-management" [
+export def "catalog-product-tier-price-management-v1-add-post" [
   sku: string
   customer_group_id: string
   qty: float
@@ -14441,7 +14441,7 @@ export def "v1-products-group-prices-tiers-price create-catalog-management" [
 # POST /V1/products/{sku}/links
 # operationId: catalogProductLinkManagementV1SetProductLinksPost
 # --items item shape: {extension_attributes?: record, link_type: string, linked_product_sku: string, linked_product_type: string, position: int, sku: string}
-export def "v1-products-links update-catalog-management-create" [
+export def "catalog-product-link-management-v1-set-product-links-post" [
   sku: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -14483,7 +14483,7 @@ export def "v1-products-links update-catalog-management-create" [
 # PUT /V1/products/{sku}/links
 # operationId: catalogProductLinkRepositoryV1SavePut
 # --entity shape: {extension_attributes?: record, link_type: string, linked_product_sku: string, linked_product_type: string, position: int, sku: string}
-export def "v1-products-links update-catalog-repository-save" [
+export def "catalog-product-link-repository-v1-save-put" [
   sku: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -14524,7 +14524,7 @@ export def "v1-products-links update-catalog-repository-save" [
 #
 # GET /V1/products/{sku}/links/{type}
 # operationId: catalogProductLinkManagementV1GetLinkedItemsByTypeGet
-export def "v1-products-links get-catalog-management-linked-items-by" [
+export def "catalog-product-link-management-v1-get-linked-items-by-type-get" [
   sku: string
   type: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -14563,7 +14563,7 @@ export def "v1-products-links get-catalog-management-linked-items-by" [
 #
 # DELETE /V1/products/{sku}/links/{type}/{linkedProductSku}
 # operationId: catalogProductLinkRepositoryV1DeleteByIdDelete
-export def "v1-products-links delete-catalog-repository-by" [
+export def "catalog-product-link-repository-v1-delete-by-id-delete" [
   sku: string
   type: string
   linked_product_sku: string
@@ -14604,7 +14604,7 @@ export def "v1-products-links delete-catalog-repository-by" [
 #
 # GET /V1/products/{sku}/media
 # operationId: catalogProductAttributeMediaGalleryManagementV1GetListGet
-export def "v1-products-media get-catalog-attribute-gallery-management-list" [
+export def "catalog-product-attribute-media-gallery-management-v1-get-list-get" [
   sku: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -14642,7 +14642,7 @@ export def "v1-products-media get-catalog-attribute-gallery-management-list" [
 # POST /V1/products/{sku}/media
 # operationId: catalogProductAttributeMediaGalleryManagementV1CreatePost
 # --entry shape: {content?: record, disabled: bool, extension_attributes?: record, file?: string, id?: int, label: string, media_type: string, position: int, types: list<string>}
-export def "v1-products-media create-catalog-attribute-gallery-management" [
+export def "catalog-product-attribute-media-gallery-management-v1-create-post" [
   sku: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -14683,7 +14683,7 @@ export def "v1-products-media create-catalog-attribute-gallery-management" [
 #
 # DELETE /V1/products/{sku}/media/{entryId}
 # operationId: catalogProductAttributeMediaGalleryManagementV1RemoveDelete
-export def "v1-products-media delete-catalog-attribute-gallery-management" [
+export def "catalog-product-attribute-media-gallery-management-v1-remove-delete" [
   sku: string
   entry_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -14722,7 +14722,7 @@ export def "v1-products-media delete-catalog-attribute-gallery-management" [
 #
 # GET /V1/products/{sku}/media/{entryId}
 # operationId: catalogProductAttributeMediaGalleryManagementV1GetGet
-export def "v1-products-media get-catalog-attribute-gallery-management" [
+export def "catalog-product-attribute-media-gallery-management-v1-get-get" [
   sku: string
   entry_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -14762,7 +14762,7 @@ export def "v1-products-media get-catalog-attribute-gallery-management" [
 # PUT /V1/products/{sku}/media/{entryId}
 # operationId: catalogProductAttributeMediaGalleryManagementV1UpdatePut
 # --entry shape: {content?: record, disabled: bool, extension_attributes?: record, file?: string, id?: int, label: string, media_type: string, position: int, types: list<string>}
-export def "v1-products-media update-catalog-attribute-gallery-management" [
+export def "catalog-product-attribute-media-gallery-management-v1-update-put" [
   sku: string
   entry_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -14805,7 +14805,7 @@ export def "v1-products-media update-catalog-attribute-gallery-management" [
 #
 # GET /V1/products/{sku}/options
 # operationId: catalogProductCustomOptionRepositoryV1GetListGet
-export def "v1-products-options get-catalog-custom-repository-list" [
+export def "catalog-product-custom-option-repository-v1-get-list-get" [
   sku: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -14842,7 +14842,7 @@ export def "v1-products-options get-catalog-custom-repository-list" [
 #
 # DELETE /V1/products/{sku}/options/{optionId}
 # operationId: catalogProductCustomOptionRepositoryV1DeleteByIdentifierDelete
-export def "v1-products-options delete-catalog-custom-repository-by-identifier" [
+export def "catalog-product-custom-option-repository-v1-delete-by-identifier-delete" [
   sku: string
   option_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -14881,7 +14881,7 @@ export def "v1-products-options delete-catalog-custom-repository-by-identifier" 
 #
 # GET /V1/products/{sku}/options/{optionId}
 # operationId: catalogProductCustomOptionRepositoryV1GetGet
-export def "v1-products-options get-catalog-custom-repository" [
+export def "catalog-product-custom-option-repository-v1-get-get" [
   sku: string
   option_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -14921,7 +14921,7 @@ export def "v1-products-options get-catalog-custom-repository" [
 # POST /V1/products/{sku}/websites
 # operationId: catalogProductWebsiteLinkRepositoryV1SavePost
 # --productWebsiteLink shape: {sku: string, website_id: int}
-export def "v1-products-websites create-catalog-link-repository-save" [
+export def "catalog-product-website-link-repository-v1-save-post" [
   sku: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -14963,7 +14963,7 @@ export def "v1-products-websites create-catalog-link-repository-save" [
 # PUT /V1/products/{sku}/websites
 # operationId: catalogProductWebsiteLinkRepositoryV1SavePut
 # --productWebsiteLink shape: {sku: string, website_id: int}
-export def "v1-products-websites update-catalog-link-repository-save" [
+export def "catalog-product-website-link-repository-v1-save-put" [
   sku: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -15004,7 +15004,7 @@ export def "v1-products-websites update-catalog-link-repository-save" [
 #
 # DELETE /V1/products/{sku}/websites/{websiteId}
 # operationId: catalogProductWebsiteLinkRepositoryV1DeleteByIdDelete
-export def "v1-products-websites delete-catalog-link-repository-by" [
+export def "catalog-product-website-link-repository-v1-delete-by-id-delete" [
   sku: string
   website_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -15044,7 +15044,7 @@ export def "v1-products-websites delete-catalog-link-repository-by" [
 # POST /V1/requisition_lists
 # operationId: requisitionListRequisitionListRepositoryV1SavePost
 # --requisitionList shape: {customer_id: int, description: string, extension_attributes?: record, id: int, items: list, name: string, updated_at: string}
-export def "v1-requisition-lists create-repository-save" [
+export def "requisition-list-requisition-list-repository-v1-save-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -15083,7 +15083,7 @@ export def "v1-requisition-lists create-repository-save" [
 #
 # GET /V1/returns
 # operationId: rmaRmaManagementV1SearchGet
-export def "v1-returns list-rma-rma-management-get" [
+export def "rma-rma-management-v1-search-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -15127,7 +15127,7 @@ export def "v1-returns list-rma-rma-management-get" [
 # POST /V1/returns
 # operationId: rmaRmaManagementV1SaveRmaPost
 # --rmaDataObject shape: {comments: list, custom_attributes?: list, customer_custom_email: string, customer_id: int, date_requested: string, entity_id: int, extension_attributes?: record, increment_id: string, items: list, order_id: int, order_increment_id: string, status: string, store_id: int, tracks: list}
-export def "v1-returns create-rma-rma-management-save-rma" [
+export def "rma-rma-management-v1-save-rma-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -15167,7 +15167,7 @@ export def "v1-returns create-rma-rma-management-save-rma" [
 # DELETE /V1/returns/{id}
 # operationId: rmaRmaRepositoryV1DeleteDelete
 # --rmaDataObject shape: {comments: list, custom_attributes?: list, customer_custom_email: string, customer_id: int, date_requested: string, entity_id: int, extension_attributes?: record, increment_id: string, items: list, order_id: int, order_increment_id: string, status: string, store_id: int, tracks: list}
-export def "v1-returns delete-rma-rma-repository" [
+export def "rma-rma-repository-v1-delete-delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -15208,7 +15208,7 @@ export def "v1-returns delete-rma-rma-repository" [
 #
 # GET /V1/returns/{id}
 # operationId: rmaRmaRepositoryV1GetGet
-export def "v1-returns get-rma-rma-repository" [
+export def "rma-rma-repository-v1-get-get" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -15246,7 +15246,7 @@ export def "v1-returns get-rma-rma-repository" [
 # PUT /V1/returns/{id}
 # operationId: rmaRmaManagementV1SaveRmaPut
 # --rmaDataObject shape: {comments: list, custom_attributes?: list, customer_custom_email: string, customer_id: int, date_requested: string, entity_id: int, extension_attributes?: record, increment_id: string, items: list, order_id: int, order_increment_id: string, status: string, store_id: int, tracks: list}
-export def "v1-returns update-rma-rma-management-save-rma" [
+export def "rma-rma-management-v1-save-rma-put" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -15287,7 +15287,7 @@ export def "v1-returns update-rma-rma-management-save-rma" [
 #
 # GET /V1/returns/{id}/comments
 # operationId: rmaCommentManagementV1CommentsListGet
-export def "v1-returns-comments list-rma-management-get" [
+export def "rma-comment-management-v1-comments-list-get" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -15325,7 +15325,7 @@ export def "v1-returns-comments list-rma-management-get" [
 # POST /V1/returns/{id}/comments
 # operationId: rmaCommentManagementV1AddCommentPost
 # --data shape: {admin: bool, comment: string, created_at: string, custom_attributes?: list, customer_notified: bool, entity_id: int, extension_attributes?: record, rma_entity_id: int, status: string, visible_on_front: bool}
-export def "v1-returns-comments create-rma-management" [
+export def "rma-comment-management-v1-add-comment-post" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -15366,7 +15366,7 @@ export def "v1-returns-comments create-rma-management" [
 #
 # GET /V1/returns/{id}/labels
 # operationId: rmaTrackManagementV1GetShippingLabelPdfGet
-export def "v1-returns-labels get-rma-track-management-shipping-pdf" [
+export def "rma-track-management-v1-get-shipping-label-pdf-get" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -15403,7 +15403,7 @@ export def "v1-returns-labels get-rma-track-management-shipping-pdf" [
 #
 # GET /V1/returns/{id}/tracking-numbers
 # operationId: rmaTrackManagementV1GetTracksGet
-export def "v1-returns-tracking-numbers get-rma-track-management-tracks" [
+export def "rma-track-management-v1-get-tracks-get" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -15441,7 +15441,7 @@ export def "v1-returns-tracking-numbers get-rma-track-management-tracks" [
 # POST /V1/returns/{id}/tracking-numbers
 # operationId: rmaTrackManagementV1AddTrackPost
 # --track shape: {carrier_code: string, carrier_title: string, entity_id: int, extension_attributes?: record, rma_entity_id: int, track_number: string}
-export def "v1-returns-tracking-numbers create-rma-track-management-track" [
+export def "rma-track-management-v1-add-track-post" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -15482,7 +15482,7 @@ export def "v1-returns-tracking-numbers create-rma-track-management-track" [
 #
 # DELETE /V1/returns/{id}/tracking-numbers/{trackId}
 # operationId: rmaTrackManagementV1RemoveTrackByIdDelete
-export def "v1-returns-tracking-numbers delete-rma-track-management-track-by" [
+export def "rma-track-management-v1-remove-track-by-id-delete" [
   id: int
   track_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -15521,7 +15521,7 @@ export def "v1-returns-tracking-numbers delete-rma-track-management-track-by" [
 #
 # GET /V1/returnsAttributeMetadata
 # operationId: rmaRmaAttributesManagementV1GetAllAttributesMetadataGet
-export def "v1-returns-attribute-metadata get-rma-rma-management-list" [
+export def "rma-rma-attributes-management-v1-get-all-attributes-metadata-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -15556,7 +15556,7 @@ export def "v1-returns-attribute-metadata get-rma-rma-management-list" [
 #
 # GET /V1/returnsAttributeMetadata/custom
 # operationId: rmaRmaAttributesManagementV1GetCustomAttributesMetadataGet
-export def "v1-returns-attribute-metadata-custom get-rma-rma-management" [
+export def "rma-rma-attributes-management-v1-get-custom-attributes-metadata-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -15593,7 +15593,7 @@ export def "v1-returns-attribute-metadata-custom get-rma-rma-management" [
 #
 # GET /V1/returnsAttributeMetadata/form/{formCode}
 # operationId: rmaRmaAttributesManagementV1GetAttributesGet
-export def "v1-returns-attribute-metadata-form get-rma-rma-management" [
+export def "rma-rma-attributes-management-v1-get-attributes-get" [
   form_code: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -15630,7 +15630,7 @@ export def "v1-returns-attribute-metadata-form get-rma-rma-management" [
 #
 # GET /V1/returnsAttributeMetadata/{attributeCode}
 # operationId: rmaRmaAttributesManagementV1GetAttributeMetadataGet
-export def "v1-returns-attribute-metadata get-rma-rma-management" [
+export def "rma-rma-attributes-management-v1-get-attribute-metadata-get" [
   attribute_code: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -15667,7 +15667,7 @@ export def "v1-returns-attribute-metadata get-rma-rma-management" [
 #
 # POST /V1/reward/mine/use-reward
 # operationId: rewardRewardManagementV1SetPost
-export def "v1-reward-mine-use-reward update-management-create" [
+export def "reward-reward-management-v1-set-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -15703,7 +15703,7 @@ export def "v1-reward-mine-use-reward update-management-create" [
 # POST /V1/salesRules
 # operationId: salesRuleRuleRepositoryV1SavePost
 # --rule shape: {action_condition?: record, apply_to_shipping: bool, condition?: record, coupon_type: string, customer_group_ids: list<int>, description?: string, discount_amount: float, discount_qty?: float, discount_step: int, extension_attributes?: record, from_date?: string, is_active: bool, is_advanced: bool, is_rss: bool, name?: string, product_ids?: list<int>, rule_id?: int, simple_action?: string, simple_free_shipping?: string, sort_order: int, stop_rules_processing: bool, store_labels?: list, ... (6 more fields)}
-export def "v1-sales-rules create-repository-save" [
+export def "sales-rule-rule-repository-v1-save-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -15742,7 +15742,7 @@ export def "v1-sales-rules create-repository-save" [
 #
 # GET /V1/salesRules/search
 # operationId: salesRuleRuleRepositoryV1GetListGet
-export def "v1-sales-rules-search get-repository-list" [
+export def "sales-rule-rule-repository-v1-get-list-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -15785,7 +15785,7 @@ export def "v1-sales-rules-search get-repository-list" [
 #
 # DELETE /V1/salesRules/{ruleId}
 # operationId: salesRuleRuleRepositoryV1DeleteByIdDelete
-export def "v1-sales-rules delete-repository-by" [
+export def "sales-rule-rule-repository-v1-delete-by-id-delete" [
   rule_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -15822,7 +15822,7 @@ export def "v1-sales-rules delete-repository-by" [
 #
 # GET /V1/salesRules/{ruleId}
 # operationId: salesRuleRuleRepositoryV1GetByIdGet
-export def "v1-sales-rules get-repository-by" [
+export def "sales-rule-rule-repository-v1-get-by-id-get" [
   rule_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -15860,7 +15860,7 @@ export def "v1-sales-rules get-repository-by" [
 # PUT /V1/salesRules/{ruleId}
 # operationId: salesRuleRuleRepositoryV1SavePut
 # --rule shape: {action_condition?: record, apply_to_shipping: bool, condition?: record, coupon_type: string, customer_group_ids: list<int>, description?: string, discount_amount: float, discount_qty?: float, discount_step: int, extension_attributes?: record, from_date?: string, is_active: bool, is_advanced: bool, is_rss: bool, name?: string, product_ids?: list<int>, rule_id?: int, simple_action?: string, simple_free_shipping?: string, sort_order: int, stop_rules_processing: bool, store_labels?: list, ... (6 more fields)}
-export def "v1-sales-rules update-repository-save" [
+export def "sales-rule-rule-repository-v1-save-put" [
   rule_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -15901,7 +15901,7 @@ export def "v1-sales-rules update-repository-save" [
 #
 # GET /V1/search
 # operationId: searchV1SearchGet
-export def "v1-search get" [
+export def "search-v1-search-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -15946,7 +15946,7 @@ export def "v1-search get" [
 # POST /V1/sharedCatalog
 # operationId: sharedCatalogSharedCatalogRepositoryV1SavePost
 # --sharedCatalog shape: {created_at: string, created_by: int, customer_group_id: int, description: string, id?: int, name: string, store_id: int, tax_class_id: int, type: int}
-export def "v1-shared-catalog create-repository-save" [
+export def "shared-catalog-shared-catalog-repository-v1-save-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -15985,7 +15985,7 @@ export def "v1-shared-catalog create-repository-save" [
 #
 # GET /V1/sharedCatalog/
 # operationId: sharedCatalogSharedCatalogRepositoryV1GetListGet
-export def "v1-shared-catalog get-repository-list" [
+export def "shared-catalog-shared-catalog-repository-v1-get-list-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -16029,7 +16029,7 @@ export def "v1-shared-catalog get-repository-list" [
 # PUT /V1/sharedCatalog/{id}
 # operationId: sharedCatalogSharedCatalogRepositoryV1SavePut
 # --sharedCatalog shape: {created_at: string, created_by: int, customer_group_id: int, description: string, id?: int, name: string, store_id: int, tax_class_id: int, type: int}
-export def "v1-shared-catalog update-repository-save" [
+export def "shared-catalog-shared-catalog-repository-v1-save-put" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -16071,7 +16071,7 @@ export def "v1-shared-catalog update-repository-save" [
 # POST /V1/sharedCatalog/{id}/assignCategories
 # operationId: sharedCatalogCategoryManagementV1AssignCategoriesPost
 # --categories item shape: {available_sort_by?: list<string>, children?: string, created_at?: string, custom_attributes?: list, extension_attributes?: record, id?: int, include_in_menu?: bool, is_active?: bool, level?: int, name?: string, parent_id?: int, path?: string, position?: int, updated_at?: string}
-export def "v1-shared-catalog-assign-categories create-category-management" [
+export def "shared-catalog-category-management-v1-assign-categories-post" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -16113,7 +16113,7 @@ export def "v1-shared-catalog-assign-categories create-category-management" [
 # POST /V1/sharedCatalog/{id}/assignProducts
 # operationId: sharedCatalogProductManagementV1AssignProductsPost
 # --products item shape: {attribute_set_id?: int, created_at?: string, custom_attributes?: list, extension_attributes?: record, id?: int, media_gallery_entries?: list, name?: string, options?: list, price?: float, product_links?: list, sku: string, status?: int, tier_prices?: list, type_id?: string, updated_at?: string, visibility?: int, weight?: float}
-export def "v1-shared-catalog-assign-products create-management" [
+export def "shared-catalog-product-management-v1-assign-products-post" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -16154,7 +16154,7 @@ export def "v1-shared-catalog-assign-products create-management" [
 #
 # GET /V1/sharedCatalog/{id}/categories
 # operationId: sharedCatalogCategoryManagementV1GetCategoriesGet
-export def "v1-shared-catalog-categories get-category-management" [
+export def "shared-catalog-category-management-v1-get-categories-get" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -16191,7 +16191,7 @@ export def "v1-shared-catalog-categories get-category-management" [
 #
 # GET /V1/sharedCatalog/{id}/products
 # operationId: sharedCatalogProductManagementV1GetProductsGet
-export def "v1-shared-catalog-products get-management" [
+export def "shared-catalog-product-management-v1-get-products-get" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -16229,7 +16229,7 @@ export def "v1-shared-catalog-products get-management" [
 # POST /V1/sharedCatalog/{id}/unassignCategories
 # operationId: sharedCatalogCategoryManagementV1UnassignCategoriesPost
 # --categories item shape: {available_sort_by?: list<string>, children?: string, created_at?: string, custom_attributes?: list, extension_attributes?: record, id?: int, include_in_menu?: bool, is_active?: bool, level?: int, name?: string, parent_id?: int, path?: string, position?: int, updated_at?: string}
-export def "v1-shared-catalog-unassign-categories create-category-management" [
+export def "shared-catalog-category-management-v1-unassign-categories-post" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -16271,7 +16271,7 @@ export def "v1-shared-catalog-unassign-categories create-category-management" [
 # POST /V1/sharedCatalog/{id}/unassignProducts
 # operationId: sharedCatalogProductManagementV1UnassignProductsPost
 # --products item shape: {attribute_set_id?: int, created_at?: string, custom_attributes?: list, extension_attributes?: record, id?: int, media_gallery_entries?: list, name?: string, options?: list, price?: float, product_links?: list, sku: string, status?: int, tier_prices?: list, type_id?: string, updated_at?: string, visibility?: int, weight?: float}
-export def "v1-shared-catalog-unassign-products create-management" [
+export def "shared-catalog-product-management-v1-unassign-products-post" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -16312,7 +16312,7 @@ export def "v1-shared-catalog-unassign-products create-management" [
 #
 # DELETE /V1/sharedCatalog/{sharedCatalogId}
 # operationId: sharedCatalogSharedCatalogRepositoryV1DeleteByIdDelete
-export def "v1-shared-catalog delete-repository-by" [
+export def "shared-catalog-shared-catalog-repository-v1-delete-by-id-delete" [
   shared_catalog_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -16349,7 +16349,7 @@ export def "v1-shared-catalog delete-repository-by" [
 #
 # GET /V1/sharedCatalog/{sharedCatalogId}
 # operationId: sharedCatalogSharedCatalogRepositoryV1GetGet
-export def "v1-shared-catalog get-repository" [
+export def "shared-catalog-shared-catalog-repository-v1-get-get" [
   shared_catalog_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -16387,7 +16387,7 @@ export def "v1-shared-catalog get-repository" [
 # POST /V1/sharedCatalog/{sharedCatalogId}/assignCompanies
 # operationId: sharedCatalogCompanyManagementV1AssignCompaniesPost
 # --companies item shape: {city?: string, comment?: string, company_email?: string, company_name?: string, country_id?: string, customer_group_id: int, extension_attributes?: record, id?: int, legal_name?: string, postcode?: string, region?: string, region_id?: string, reject_reason: string, rejected_at: string, reseller_id?: string, sales_representative_id: int, status?: int, street: list<string>, super_user_id: int, telephone?: string, vat_tax_id?: string}
-export def "v1-shared-catalog-assign-companies create-company-management" [
+export def "shared-catalog-company-management-v1-assign-companies-post" [
   shared_catalog_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -16428,7 +16428,7 @@ export def "v1-shared-catalog-assign-companies create-company-management" [
 #
 # GET /V1/sharedCatalog/{sharedCatalogId}/companies
 # operationId: sharedCatalogCompanyManagementV1GetCompaniesGet
-export def "v1-shared-catalog-companies get-company-management" [
+export def "shared-catalog-company-management-v1-get-companies-get" [
   shared_catalog_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -16466,7 +16466,7 @@ export def "v1-shared-catalog-companies get-company-management" [
 # POST /V1/sharedCatalog/{sharedCatalogId}/unassignCompanies
 # operationId: sharedCatalogCompanyManagementV1UnassignCompaniesPost
 # --companies item shape: {city?: string, comment?: string, company_email?: string, company_name?: string, country_id?: string, customer_group_id: int, extension_attributes?: record, id?: int, legal_name?: string, postcode?: string, region?: string, region_id?: string, reject_reason: string, rejected_at: string, reseller_id?: string, sales_representative_id: int, status?: int, street: list<string>, super_user_id: int, telephone?: string, vat_tax_id?: string}
-export def "v1-shared-catalog-unassign-companies create-company-management" [
+export def "shared-catalog-company-management-v1-unassign-companies-post" [
   shared_catalog_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -16508,7 +16508,7 @@ export def "v1-shared-catalog-unassign-companies create-company-management" [
 # POST /V1/shipment/
 # operationId: salesShipmentRepositoryV1SavePost
 # --entity shape: {billing_address_id?: int, comments: list, created_at?: string, customer_id?: int, email_sent?: int, entity_id?: int, extension_attributes?: record, increment_id?: string, items: list, order_id: int, packages?: list, shipment_status?: int, shipping_address_id?: int, shipping_label?: string, store_id?: int, total_qty?: float, total_weight?: float, tracks: list, updated_at?: string}
-export def "v1-shipment create-sales-repository-save" [
+export def "sales-shipment-repository-v1-save-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -16548,7 +16548,7 @@ export def "v1-shipment create-sales-repository-save" [
 # POST /V1/shipment/track
 # operationId: salesShipmentTrackRepositoryV1SavePost
 # --entity shape: {carrier_code: string, created_at?: string, description: string, entity_id?: int, extension_attributes?: record, order_id: int, parent_id: int, qty: float, title: string, track_number: string, updated_at?: string, weight: float}
-export def "v1-shipment-track create-sales-repository-save" [
+export def "sales-shipment-track-repository-v1-save-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -16587,7 +16587,7 @@ export def "v1-shipment-track create-sales-repository-save" [
 #
 # DELETE /V1/shipment/track/{id}
 # operationId: salesShipmentTrackRepositoryV1DeleteByIdDelete
-export def "v1-shipment-track delete-sales-repository-by" [
+export def "sales-shipment-track-repository-v1-delete-by-id-delete" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -16624,7 +16624,7 @@ export def "v1-shipment-track delete-sales-repository-by" [
 #
 # GET /V1/shipment/{id}
 # operationId: salesShipmentRepositoryV1GetGet
-export def "v1-shipment get-sales-repository" [
+export def "sales-shipment-repository-v1-get-get" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -16661,7 +16661,7 @@ export def "v1-shipment get-sales-repository" [
 #
 # GET /V1/shipment/{id}/comments
 # operationId: salesShipmentManagementV1GetCommentsListGet
-export def "v1-shipment-comments get-sales-management-list" [
+export def "sales-shipment-management-v1-get-comments-list-get" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -16699,7 +16699,7 @@ export def "v1-shipment-comments get-sales-management-list" [
 # POST /V1/shipment/{id}/comments
 # operationId: salesShipmentCommentRepositoryV1SavePost
 # --entity shape: {comment: string, created_at?: string, entity_id?: int, extension_attributes?: record, is_customer_notified: int, is_visible_on_front: int, parent_id: int}
-export def "v1-shipment-comments create-sales-repository-save" [
+export def "sales-shipment-comment-repository-v1-save-post" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -16740,7 +16740,7 @@ export def "v1-shipment-comments create-sales-repository-save" [
 #
 # POST /V1/shipment/{id}/emails
 # operationId: salesShipmentManagementV1NotifyPost
-export def "v1-shipment-emails notify-sales-management-create" [
+export def "sales-shipment-management-v1-notify-post" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -16777,7 +16777,7 @@ export def "v1-shipment-emails notify-sales-management-create" [
 #
 # GET /V1/shipment/{id}/label
 # operationId: salesShipmentManagementV1GetLabelGet
-export def "v1-shipment-label get-sales-management" [
+export def "sales-shipment-management-v1-get-label-get" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -16814,7 +16814,7 @@ export def "v1-shipment-label get-sales-management" [
 #
 # GET /V1/shipments
 # operationId: salesShipmentRepositoryV1GetListGet
-export def "v1-shipments get-sales-repository-list" [
+export def "sales-shipment-repository-v1-get-list-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -16857,7 +16857,7 @@ export def "v1-shipments get-sales-repository-list" [
 #
 # GET /V1/stockItems/lowStock/
 # operationId: catalogInventoryStockRegistryV1GetLowStockItemsGet
-export def "v1-stock-items-low-stock get-catalog-inventory-registry" [
+export def "catalog-inventory-stock-registry-v1-get-low-stock-items-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -16897,7 +16897,7 @@ export def "v1-stock-items-low-stock get-catalog-inventory-registry" [
 #
 # GET /V1/stockItems/{productSku}
 # operationId: catalogInventoryStockRegistryV1GetStockItemBySkuGet
-export def "v1-stock-items get-catalog-inventory-registry-by-sku" [
+export def "catalog-inventory-stock-registry-v1-get-stock-item-by-sku-get" [
   product_sku: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -16936,7 +16936,7 @@ export def "v1-stock-items get-catalog-inventory-registry-by-sku" [
 #
 # GET /V1/stockStatuses/{productSku}
 # operationId: catalogInventoryStockRegistryV1GetStockStatusBySkuGet
-export def "v1-stock-statuses get-catalog-inventory-registry-status-by-sku" [
+export def "catalog-inventory-stock-registry-v1-get-stock-status-by-sku-get" [
   product_sku: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -16975,7 +16975,7 @@ export def "v1-stock-statuses get-catalog-inventory-registry-status-by-sku" [
 #
 # GET /V1/store/storeConfigs
 # operationId: storeStoreConfigManagerV1GetStoreConfigsGet
-export def "v1-store-store-configs get-manager" [
+export def "store-store-config-manager-v1-get-store-configs-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -17012,7 +17012,7 @@ export def "v1-store-store-configs get-manager" [
 #
 # GET /V1/store/storeGroups
 # operationId: storeGroupRepositoryV1GetListGet
-export def "v1-store-store-groups get-repository-list" [
+export def "store-group-repository-v1-get-list-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -17047,7 +17047,7 @@ export def "v1-store-store-groups get-repository-list" [
 #
 # GET /V1/store/storeViews
 # operationId: storeStoreRepositoryV1GetListGet
-export def "v1-store-store-views get-repository-list" [
+export def "store-store-repository-v1-get-list-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -17082,7 +17082,7 @@ export def "v1-store-store-views get-repository-list" [
 #
 # GET /V1/store/websites
 # operationId: storeWebsiteRepositoryV1GetListGet
-export def "v1-store-websites get-repository-list" [
+export def "store-website-repository-v1-get-list-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -17118,7 +17118,7 @@ export def "v1-store-websites get-repository-list" [
 # POST /V1/taxClasses
 # operationId: taxTaxClassRepositoryV1SavePost
 # --taxClass shape: {class_id?: int, class_name: string, class_type: string, extension_attributes?: record}
-export def "v1-tax-classes create-class-repository-save" [
+export def "tax-tax-class-repository-v1-save-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -17157,7 +17157,7 @@ export def "v1-tax-classes create-class-repository-save" [
 #
 # GET /V1/taxClasses/search
 # operationId: taxTaxClassRepositoryV1GetListGet
-export def "v1-tax-classes-search get-class-repository-list" [
+export def "tax-tax-class-repository-v1-get-list-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -17201,7 +17201,7 @@ export def "v1-tax-classes-search get-class-repository-list" [
 # PUT /V1/taxClasses/{classId}
 # operationId: taxTaxClassRepositoryV1SavePut
 # --taxClass shape: {class_id?: int, class_name: string, class_type: string, extension_attributes?: record}
-export def "v1-tax-classes update-class-repository-save" [
+export def "tax-tax-class-repository-v1-save-put" [
   class_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -17242,7 +17242,7 @@ export def "v1-tax-classes update-class-repository-save" [
 #
 # DELETE /V1/taxClasses/{taxClassId}
 # operationId: taxTaxClassRepositoryV1DeleteByIdDelete
-export def "v1-tax-classes delete-class-repository-by" [
+export def "tax-tax-class-repository-v1-delete-by-id-delete" [
   tax_class_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -17279,7 +17279,7 @@ export def "v1-tax-classes delete-class-repository-by" [
 #
 # GET /V1/taxClasses/{taxClassId}
 # operationId: taxTaxClassRepositoryV1GetGet
-export def "v1-tax-classes get-class-repository" [
+export def "tax-tax-class-repository-v1-get-get" [
   tax_class_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -17317,7 +17317,7 @@ export def "v1-tax-classes get-class-repository" [
 # POST /V1/taxRates
 # operationId: taxTaxRateRepositoryV1SavePost
 # --taxRate shape: {code: string, extension_attributes?: record, id?: int, rate: float, region_name?: string, tax_country_id: string, tax_postcode?: string, tax_region_id?: int, titles?: list, zip_from?: int, zip_is_range?: int, zip_to?: int}
-export def "v1-tax-rates create-repository-save" [
+export def "tax-tax-rate-repository-v1-save-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -17357,7 +17357,7 @@ export def "v1-tax-rates create-repository-save" [
 # PUT /V1/taxRates
 # operationId: taxTaxRateRepositoryV1SavePut
 # --taxRate shape: {code: string, extension_attributes?: record, id?: int, rate: float, region_name?: string, tax_country_id: string, tax_postcode?: string, tax_region_id?: int, titles?: list, zip_from?: int, zip_is_range?: int, zip_to?: int}
-export def "v1-tax-rates update-repository-save" [
+export def "tax-tax-rate-repository-v1-save-put" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -17396,7 +17396,7 @@ export def "v1-tax-rates update-repository-save" [
 #
 # GET /V1/taxRates/search
 # operationId: taxTaxRateRepositoryV1GetListGet
-export def "v1-tax-rates-search get-repository-list" [
+export def "tax-tax-rate-repository-v1-get-list-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -17439,7 +17439,7 @@ export def "v1-tax-rates-search get-repository-list" [
 #
 # DELETE /V1/taxRates/{rateId}
 # operationId: taxTaxRateRepositoryV1DeleteByIdDelete
-export def "v1-tax-rates delete-repository-by" [
+export def "tax-tax-rate-repository-v1-delete-by-id-delete" [
   rate_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -17476,7 +17476,7 @@ export def "v1-tax-rates delete-repository-by" [
 #
 # GET /V1/taxRates/{rateId}
 # operationId: taxTaxRateRepositoryV1GetGet
-export def "v1-tax-rates get-repository" [
+export def "tax-tax-rate-repository-v1-get-get" [
   rate_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -17514,7 +17514,7 @@ export def "v1-tax-rates get-repository" [
 # POST /V1/taxRules
 # operationId: taxTaxRuleRepositoryV1SavePost
 # --rule shape: {calculate_subtotal?: bool, code: string, customer_tax_class_ids: list<int>, extension_attributes?: record, id?: int, position: int, priority: int, product_tax_class_ids: list<int>, tax_rate_ids: list<int>}
-export def "v1-tax-rules create-repository-save" [
+export def "tax-tax-rule-repository-v1-save-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -17554,7 +17554,7 @@ export def "v1-tax-rules create-repository-save" [
 # PUT /V1/taxRules
 # operationId: taxTaxRuleRepositoryV1SavePut
 # --rule shape: {calculate_subtotal?: bool, code: string, customer_tax_class_ids: list<int>, extension_attributes?: record, id?: int, position: int, priority: int, product_tax_class_ids: list<int>, tax_rate_ids: list<int>}
-export def "v1-tax-rules update-repository-save" [
+export def "tax-tax-rule-repository-v1-save-put" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -17593,7 +17593,7 @@ export def "v1-tax-rules update-repository-save" [
 #
 # GET /V1/taxRules/search
 # operationId: taxTaxRuleRepositoryV1GetListGet
-export def "v1-tax-rules-search get-repository-list" [
+export def "tax-tax-rule-repository-v1-get-list-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -17636,7 +17636,7 @@ export def "v1-tax-rules-search get-repository-list" [
 #
 # DELETE /V1/taxRules/{ruleId}
 # operationId: taxTaxRuleRepositoryV1DeleteByIdDelete
-export def "v1-tax-rules delete-repository-by" [
+export def "tax-tax-rule-repository-v1-delete-by-id-delete" [
   rule_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -17673,7 +17673,7 @@ export def "v1-tax-rules delete-repository-by" [
 #
 # GET /V1/taxRules/{ruleId}
 # operationId: taxTaxRuleRepositoryV1GetGet
-export def "v1-tax-rules get-repository" [
+export def "tax-tax-rule-repository-v1-get-get" [
   rule_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -17710,7 +17710,7 @@ export def "v1-tax-rules get-repository" [
 #
 # GET /V1/team/
 # operationId: companyTeamRepositoryV1GetListGet
-export def "v1-team get-company-repository-list" [
+export def "company-team-repository-v1-get-list-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -17754,7 +17754,7 @@ export def "v1-team get-company-repository-list" [
 # POST /V1/team/{companyId}
 # operationId: companyTeamRepositoryV1CreatePost
 # --team shape: {custom_attributes?: list, description?: string, extension_attributes?: record, id?: int, name?: string}
-export def "v1-team create-company-repository" [
+export def "company-team-repository-v1-create-post" [
   company_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -17795,7 +17795,7 @@ export def "v1-team create-company-repository" [
 #
 # DELETE /V1/team/{teamId}
 # operationId: companyTeamRepositoryV1DeleteByIdDelete
-export def "v1-team delete-company-repository-by" [
+export def "company-team-repository-v1-delete-by-id-delete" [
   team_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -17832,7 +17832,7 @@ export def "v1-team delete-company-repository-by" [
 #
 # GET /V1/team/{teamId}
 # operationId: companyTeamRepositoryV1GetGet
-export def "v1-team get-company-repository" [
+export def "company-team-repository-v1-get-get" [
   team_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -17870,7 +17870,7 @@ export def "v1-team get-company-repository" [
 # PUT /V1/team/{teamId}
 # operationId: companyTeamRepositoryV1SavePut
 # --team shape: {custom_attributes?: list, description?: string, extension_attributes?: record, id?: int, name?: string}
-export def "v1-team update-company-repository-save" [
+export def "company-team-repository-v1-save-put" [
   team_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -17911,7 +17911,7 @@ export def "v1-team update-company-repository-save" [
 #
 # PUT /V1/temando/rma/{rmaId}/shipments
 # operationId: temandoShippingRmaRmaShipmentManagementV1AssignShipmentIdsPut
-export def "v1-temando-rma-shipments assign-shipping-management-update" [
+export def "temando-shipping-rma-rma-shipment-management-v1-assign-shipment-ids-put" [
   rma_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -17952,7 +17952,7 @@ export def "v1-temando-rma-shipments assign-shipping-management-update" [
 #
 # GET /V1/transactions
 # operationId: salesTransactionRepositoryV1GetListGet
-export def "v1-transactions get-sales-repository-list" [
+export def "sales-transaction-repository-v1-get-list-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -17995,7 +17995,7 @@ export def "v1-transactions get-sales-repository-list" [
 #
 # GET /V1/transactions/{id}
 # operationId: salesTransactionRepositoryV1GetGet
-export def "v1-transactions get-sales-repository" [
+export def "sales-transaction-repository-v1-get-get" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -18034,7 +18034,7 @@ export def "v1-transactions get-sales-repository" [
 # operationId: worldpayGuestPaymentInformationManagementProxyV1SavePaymentInformationAndPlaceOrderPost
 # --billingAddress shape: {city: string, company?: string, country_id: string, custom_attributes?: list, customer_address_id?: int, customer_id?: int, email: string, extension_attributes?: record, fax?: string, firstname: string, id?: int, lastname: string, middlename?: string, postcode: string, prefix?: string, region: string, region_code: string, region_id: int, same_as_billing?: int, save_in_address_book?: int, street: list<string>, suffix?: string, telephone: string, vat_id?: string}
 # --paymentMethod shape: {additional_data?: list<string>, extension_attributes?: record, method: string, po_number?: string}
-export def "v1-worldpay-guest-carts-payment-information create-management-proxy-save-and-place-order" [
+export def "worldpay-guest-payment-information-management-proxy-v1-save-payment-information-and-place-order-post" [
   cart_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

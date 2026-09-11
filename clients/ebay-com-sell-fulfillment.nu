@@ -104,7 +104,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "order list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-orders" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -128,7 +128,7 @@ export def commands []: nothing -> table {
 #
 # GET /order
 # operationId: getOrders
-export def "order list" [
+export def "get-orders" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -168,7 +168,7 @@ export def "order list" [
 #
 # GET /order/{orderId}
 # operationId: getOrder
-export def "order get" [
+export def "get-order" [
   order_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -206,7 +206,7 @@ export def "order get" [
 #
 # GET /order/{orderId}/shipping_fulfillment
 # operationId: getShippingFulfillments
-export def "order-shipping-fulfillment list" [
+export def "get-shipping-fulfillments" [
   order_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -243,7 +243,7 @@ export def "order-shipping-fulfillment list" [
 # POST /order/{orderId}/shipping_fulfillment
 # operationId: createShippingFulfillment
 # --lineItems item shape: {lineItemId?: string, quantity?: int}
-export def "order-shipping-fulfillment create" [
+export def "create-shipping-fulfillment" [
   order_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -286,7 +286,7 @@ export def "order-shipping-fulfillment create" [
 #
 # GET /order/{orderId}/shipping_fulfillment/{fulfillmentId}
 # operationId: getShippingFulfillment
-export def "order-shipping-fulfillment get" [
+export def "get-shipping-fulfillment" [
   order_id: string
   fulfillment_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -326,7 +326,7 @@ export def "order-shipping-fulfillment get" [
 # operationId: issueRefund
 # --orderLevelRefundAmount shape: {currency?: string, value?: string}
 # --refundItems item shape: {legacyReference?: record, lineItemId?: string, refundAmount?: record}
-export def "order-issue-refund create" [
+export def "issue-refund" [
   order_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -369,7 +369,7 @@ export def "order-issue-refund create" [
 #
 # GET /payment_dispute/{payment_dispute_id}
 # operationId: getPaymentDispute
-export def "payment-dispute get" [
+export def "get-payment-dispute" [
   payment_dispute_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -406,7 +406,7 @@ export def "payment-dispute get" [
 # POST /payment_dispute/{payment_dispute_id}/accept
 # operationId: acceptPaymentDispute
 # --returnAddress shape: {addressLine1?: string, addressLine2?: string, city?: string, country?: string, county?: string, fullName?: string, postalCode?: string, primaryPhone?: record, stateOrProvince?: string}
-export def "payment-dispute-accept create" [
+export def "accept-payment-dispute" [
   payment_dispute_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -447,7 +447,7 @@ export def "payment-dispute-accept create" [
 #
 # GET /payment_dispute/{payment_dispute_id}/activity
 # operationId: getActivities
-export def "payment-dispute-activity get-activities" [
+export def "get-activities" [
   payment_dispute_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -485,7 +485,7 @@ export def "payment-dispute-activity get-activities" [
 # operationId: addEvidence
 # --files item shape: {fileId?: string}
 # --lineItems item shape: {itemId?: string, lineItemId?: string}
-export def "payment-dispute-add-evidence create" [
+export def "add-evidence" [
   payment_dispute_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -528,7 +528,7 @@ export def "payment-dispute-add-evidence create" [
 # POST /payment_dispute/{payment_dispute_id}/contest
 # operationId: contestPaymentDispute
 # --returnAddress shape: {addressLine1?: string, addressLine2?: string, city?: string, country?: string, county?: string, fullName?: string, postalCode?: string, primaryPhone?: record, stateOrProvince?: string}
-export def "payment-dispute-contest create" [
+export def "contest-payment-dispute" [
   payment_dispute_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -570,7 +570,7 @@ export def "payment-dispute-contest create" [
 #
 # GET /payment_dispute/{payment_dispute_id}/fetch_evidence_content
 # operationId: fetchEvidenceContent
-export def "payment-dispute-fetch-evidence-content get" [
+export def "fetch-evidence-content" [
   payment_dispute_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -611,7 +611,7 @@ export def "payment-dispute-fetch-evidence-content get" [
 # operationId: updateEvidence
 # --files item shape: {fileId?: string}
 # --lineItems item shape: {itemId?: string, lineItemId?: string}
-export def "payment-dispute-update-evidence update" [
+export def "update-evidence" [
   payment_dispute_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -654,7 +654,7 @@ export def "payment-dispute-update-evidence update" [
 #
 # POST /payment_dispute/{payment_dispute_id}/upload_evidence_file
 # operationId: uploadEvidenceFile
-export def "payment-dispute-upload-evidence-file upload" [
+export def "upload-evidence-file" [
   payment_dispute_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -690,7 +690,7 @@ export def "payment-dispute-upload-evidence-file upload" [
 #
 # GET /payment_dispute_summary
 # operationId: getPaymentDisputeSummaries
-export def "payment-dispute-summary get-summaries" [
+export def "get-payment-dispute-summaries" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

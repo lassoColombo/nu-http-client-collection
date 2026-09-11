@@ -188,7 +188,7 @@ def action-completer-65 [] { ["ValidateTemplate"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "api get-activate-type" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-activate-type" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -212,7 +212,7 @@ export def commands []: nothing -> table {
 #
 # GET /
 # operationId: GET_ActivateType
-export def "api get-activate-type" [
+export def "get-activate-type" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -268,7 +268,7 @@ export def "api get-activate-type" [
 #
 # POST /
 # operationId: POST_ActivateType
-export def "api create-activate-type" [
+export def "post-activate-type" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -318,7 +318,7 @@ export def "api create-activate-type" [
 #
 # GET /
 # operationId: GET_BatchDescribeTypeConfigurations
-export def "api get-batch-type-configurations" [
+export def "get-batch-describe-type-configurations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -365,7 +365,7 @@ export def "api get-batch-type-configurations" [
 #
 # POST /
 # operationId: POST_BatchDescribeTypeConfigurations
-export def "api create-batch-get-type-configurations" [
+export def "post-batch-describe-type-configurations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -415,7 +415,7 @@ export def "api create-batch-get-type-configurations" [
 #
 # GET /
 # operationId: GET_CancelUpdateStack
-export def "api get-cancel-update-stack" [
+export def "get-cancel-update-stack" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -463,7 +463,7 @@ export def "api get-cancel-update-stack" [
 #
 # POST /
 # operationId: POST_CancelUpdateStack
-export def "api create-cancel-update-stack" [
+export def "post-cancel-update-stack" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -513,7 +513,7 @@ export def "api create-cancel-update-stack" [
 #
 # GET /
 # operationId: GET_ContinueUpdateRollback
-export def "api get-continue-update-rollback" [
+export def "get-continue-update-rollback" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -563,7 +563,7 @@ export def "api get-continue-update-rollback" [
 #
 # POST /
 # operationId: POST_ContinueUpdateRollback
-export def "api create-continue-update-rollback" [
+export def "post-continue-update-rollback" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -613,7 +613,7 @@ export def "api create-continue-update-rollback" [
 #
 # GET /
 # operationId: GET_CreateChangeSet
-export def "api get-create-change-update" [
+export def "get-create-change-set" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -676,7 +676,7 @@ export def "api get-create-change-update" [
 #
 # POST /
 # operationId: POST_CreateChangeSet
-export def "api create-change-update" [
+export def "post-create-change-set" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -726,7 +726,7 @@ export def "api create-change-update" [
 #
 # GET /
 # operationId: GET_CreateStack
-export def "api get-create-stack" [
+export def "get-create-stack" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -789,7 +789,7 @@ export def "api get-create-stack" [
 #
 # POST /
 # operationId: POST_CreateStack
-export def "api create-stack" [
+export def "post-create-stack" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -839,7 +839,7 @@ export def "api create-stack" [
 #
 # GET /
 # operationId: GET_CreateStackInstances
-export def "api get-create-stack-instances" [
+export def "get-create-stack-instances" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -893,7 +893,7 @@ export def "api get-create-stack-instances" [
 #
 # POST /
 # operationId: POST_CreateStackInstances
-export def "api create-stack-instances" [
+export def "post-create-stack-instances" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -943,7 +943,7 @@ export def "api create-stack-instances" [
 #
 # GET /
 # operationId: GET_CreateStackSet
-export def "api get-create-stack-update" [
+export def "get-create-stack-set" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1004,7 +1004,7 @@ export def "api get-create-stack-update" [
 #
 # POST /
 # operationId: POST_CreateStackSet
-export def "api create-stack-update" [
+export def "post-create-stack-set" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1054,7 +1054,7 @@ export def "api create-stack-update" [
 #
 # GET /
 # operationId: GET_DeactivateType
-export def "api get-deactivate-type" [
+export def "get-deactivate-type" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1103,7 +1103,7 @@ export def "api get-deactivate-type" [
 #
 # POST /
 # operationId: POST_DeactivateType
-export def "api create-deactivate-type" [
+export def "post-deactivate-type" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1153,7 +1153,7 @@ export def "api create-deactivate-type" [
 #
 # GET /
 # operationId: GET_DeleteChangeSet
-export def "api get-delete-change-update" [
+export def "get-delete-change-set" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1201,7 +1201,7 @@ export def "api get-delete-change-update" [
 #
 # POST /
 # operationId: POST_DeleteChangeSet
-export def "api create-delete-change-update" [
+export def "post-delete-change-set" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1251,7 +1251,7 @@ export def "api create-delete-change-update" [
 #
 # GET /
 # operationId: GET_DeleteStack
-export def "api get-delete-stack" [
+export def "get-delete-stack" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1301,7 +1301,7 @@ export def "api get-delete-stack" [
 #
 # POST /
 # operationId: POST_DeleteStack
-export def "api create-delete-stack" [
+export def "post-delete-stack" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1351,7 +1351,7 @@ export def "api create-delete-stack" [
 #
 # GET /
 # operationId: GET_DeleteStackInstances
-export def "api get-delete-stack-instances" [
+export def "get-delete-stack-instances" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1405,7 +1405,7 @@ export def "api get-delete-stack-instances" [
 #
 # POST /
 # operationId: POST_DeleteStackInstances
-export def "api create-delete-stack-instances" [
+export def "post-delete-stack-instances" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1455,7 +1455,7 @@ export def "api create-delete-stack-instances" [
 #
 # GET /
 # operationId: GET_DeleteStackSet
-export def "api get-delete-stack-update" [
+export def "get-delete-stack-set" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1503,7 +1503,7 @@ export def "api get-delete-stack-update" [
 #
 # POST /
 # operationId: POST_DeleteStackSet
-export def "api create-delete-stack-update" [
+export def "post-delete-stack-set" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1553,7 +1553,7 @@ export def "api create-delete-stack-update" [
 #
 # GET /
 # operationId: GET_DeregisterType
-export def "api get-deregister-type" [
+export def "get-deregister-type" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1603,7 +1603,7 @@ export def "api get-deregister-type" [
 #
 # POST /
 # operationId: POST_DeregisterType
-export def "api create-deregister-type" [
+export def "post-deregister-type" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1653,7 +1653,7 @@ export def "api create-deregister-type" [
 #
 # GET /
 # operationId: GET_DescribeAccountLimits
-export def "api get-account-limits" [
+export def "get-describe-account-limits" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1700,7 +1700,7 @@ export def "api get-account-limits" [
 #
 # POST /
 # operationId: POST_DescribeAccountLimits
-export def "api create-get-account-limits" [
+export def "post-describe-account-limits" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1751,7 +1751,7 @@ export def "api create-get-account-limits" [
 #
 # GET /
 # operationId: GET_DescribeChangeSet
-export def "api get-change-update" [
+export def "get-describe-change-set" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1800,7 +1800,7 @@ export def "api get-change-update" [
 #
 # POST /
 # operationId: POST_DescribeChangeSet
-export def "api create-get-change-update" [
+export def "post-describe-change-set" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1850,7 +1850,7 @@ export def "api create-get-change-update" [
 #
 # GET /
 # operationId: GET_DescribeChangeSetHooks
-export def "api get-change-update-hooks" [
+export def "get-describe-change-set-hooks" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1900,7 +1900,7 @@ export def "api get-change-update-hooks" [
 #
 # POST /
 # operationId: POST_DescribeChangeSetHooks
-export def "api create-get-change-update-hooks" [
+export def "post-describe-change-set-hooks" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1950,7 +1950,7 @@ export def "api create-get-change-update-hooks" [
 #
 # GET /
 # operationId: GET_DescribePublisher
-export def "api get-publisher" [
+export def "get-describe-publisher" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1997,7 +1997,7 @@ export def "api get-publisher" [
 #
 # POST /
 # operationId: POST_DescribePublisher
-export def "api create-get-publisher" [
+export def "post-describe-publisher" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2047,7 +2047,7 @@ export def "api create-get-publisher" [
 #
 # GET /
 # operationId: GET_DescribeStackDriftDetectionStatus
-export def "api get-stack-drift-detection-status" [
+export def "get-describe-stack-drift-detection-status" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2094,7 +2094,7 @@ export def "api get-stack-drift-detection-status" [
 #
 # POST /
 # operationId: POST_DescribeStackDriftDetectionStatus
-export def "api create-get-stack-drift-detection-status" [
+export def "post-describe-stack-drift-detection-status" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2144,7 +2144,7 @@ export def "api create-get-stack-drift-detection-status" [
 #
 # GET /
 # operationId: GET_DescribeStackEvents
-export def "api get-stack-events" [
+export def "get-describe-stack-events" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2192,7 +2192,7 @@ export def "api get-stack-events" [
 #
 # POST /
 # operationId: POST_DescribeStackEvents
-export def "api create-get-stack-events" [
+export def "post-describe-stack-events" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2243,7 +2243,7 @@ export def "api create-get-stack-events" [
 #
 # GET /
 # operationId: GET_DescribeStackInstance
-export def "api get-stack-instance" [
+export def "get-describe-stack-instance" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2293,7 +2293,7 @@ export def "api get-stack-instance" [
 #
 # POST /
 # operationId: POST_DescribeStackInstance
-export def "api create-get-stack-instance" [
+export def "post-describe-stack-instance" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2343,7 +2343,7 @@ export def "api create-get-stack-instance" [
 #
 # GET /
 # operationId: GET_DescribeStackResource
-export def "api get-stack-resource" [
+export def "get-describe-stack-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2391,7 +2391,7 @@ export def "api get-stack-resource" [
 #
 # POST /
 # operationId: POST_DescribeStackResource
-export def "api create-get-stack-resource" [
+export def "post-describe-stack-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2441,7 +2441,7 @@ export def "api create-get-stack-resource" [
 #
 # GET /
 # operationId: GET_DescribeStackResourceDrifts
-export def "api get-stack-resource-drifts" [
+export def "get-describe-stack-resource-drifts" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2491,7 +2491,7 @@ export def "api get-stack-resource-drifts" [
 #
 # POST /
 # operationId: POST_DescribeStackResourceDrifts
-export def "api create-get-stack-resource-drifts" [
+export def "post-describe-stack-resource-drifts" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2543,7 +2543,7 @@ export def "api create-get-stack-resource-drifts" [
 #
 # GET /
 # operationId: GET_DescribeStackResources
-export def "api get-stack-resources" [
+export def "get-describe-stack-resources" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2592,7 +2592,7 @@ export def "api get-stack-resources" [
 #
 # POST /
 # operationId: POST_DescribeStackResources
-export def "api create-get-stack-resources" [
+export def "post-describe-stack-resources" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2642,7 +2642,7 @@ export def "api create-get-stack-resources" [
 #
 # GET /
 # operationId: GET_DescribeStackSet
-export def "api get-stack-update" [
+export def "get-describe-stack-set" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2690,7 +2690,7 @@ export def "api get-stack-update" [
 #
 # POST /
 # operationId: POST_DescribeStackSet
-export def "api create-get-stack-update" [
+export def "post-describe-stack-set" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2740,7 +2740,7 @@ export def "api create-get-stack-update" [
 #
 # GET /
 # operationId: GET_DescribeStackSetOperation
-export def "api get-stack-update-operation" [
+export def "get-describe-stack-set-operation" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2789,7 +2789,7 @@ export def "api get-stack-update-operation" [
 #
 # POST /
 # operationId: POST_DescribeStackSetOperation
-export def "api create-get-stack-update-operation" [
+export def "post-describe-stack-set-operation" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2839,7 +2839,7 @@ export def "api create-get-stack-update-operation" [
 #
 # GET /
 # operationId: GET_DescribeStacks
-export def "api get-stacks" [
+export def "get-describe-stacks" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2887,7 +2887,7 @@ export def "api get-stacks" [
 #
 # POST /
 # operationId: POST_DescribeStacks
-export def "api create-get-stacks" [
+export def "post-describe-stacks" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2938,7 +2938,7 @@ export def "api create-get-stacks" [
 #
 # GET /
 # operationId: GET_DescribeType
-export def "api get-type" [
+export def "get-describe-type" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2990,7 +2990,7 @@ export def "api get-type" [
 #
 # POST /
 # operationId: POST_DescribeType
-export def "api create-get-type" [
+export def "post-describe-type" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3040,7 +3040,7 @@ export def "api create-get-type" [
 #
 # GET /
 # operationId: GET_DescribeTypeRegistration
-export def "api get-type-registration" [
+export def "get-describe-type-registration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3087,7 +3087,7 @@ export def "api get-type-registration" [
 #
 # POST /
 # operationId: POST_DescribeTypeRegistration
-export def "api create-get-type-registration" [
+export def "post-describe-type-registration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3137,7 +3137,7 @@ export def "api create-get-type-registration" [
 #
 # GET /
 # operationId: GET_DetectStackDrift
-export def "api get-detect-stack-drift" [
+export def "get-detect-stack-drift" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3185,7 +3185,7 @@ export def "api get-detect-stack-drift" [
 #
 # POST /
 # operationId: POST_DetectStackDrift
-export def "api create-detect-stack-drift" [
+export def "post-detect-stack-drift" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3235,7 +3235,7 @@ export def "api create-detect-stack-drift" [
 #
 # GET /
 # operationId: GET_DetectStackResourceDrift
-export def "api get-detect-stack-resource-drift" [
+export def "get-detect-stack-resource-drift" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3283,7 +3283,7 @@ export def "api get-detect-stack-resource-drift" [
 #
 # POST /
 # operationId: POST_DetectStackResourceDrift
-export def "api create-detect-stack-resource-drift" [
+export def "post-detect-stack-resource-drift" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3333,7 +3333,7 @@ export def "api create-detect-stack-resource-drift" [
 #
 # GET /
 # operationId: GET_DetectStackSetDrift
-export def "api get-detect-stack-update-drift" [
+export def "get-detect-stack-set-drift" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3383,7 +3383,7 @@ export def "api get-detect-stack-update-drift" [
 #
 # POST /
 # operationId: POST_DetectStackSetDrift
-export def "api create-detect-stack-update-drift" [
+export def "post-detect-stack-set-drift" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3433,7 +3433,7 @@ export def "api create-detect-stack-update-drift" [
 #
 # GET /
 # operationId: GET_EstimateTemplateCost
-export def "api get-estimate-template-cost" [
+export def "get-estimate-template-cost" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3482,7 +3482,7 @@ export def "api get-estimate-template-cost" [
 #
 # POST /
 # operationId: POST_EstimateTemplateCost
-export def "api create-estimate-template-cost" [
+export def "post-estimate-template-cost" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3532,7 +3532,7 @@ export def "api create-estimate-template-cost" [
 #
 # GET /
 # operationId: GET_ExecuteChangeSet
-export def "api get-execute-change-update" [
+export def "get-execute-change-set" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3582,7 +3582,7 @@ export def "api get-execute-change-update" [
 #
 # POST /
 # operationId: POST_ExecuteChangeSet
-export def "api create-execute-change-update" [
+export def "post-execute-change-set" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3632,7 +3632,7 @@ export def "api create-execute-change-update" [
 #
 # GET /
 # operationId: GET_GetStackPolicy
-export def "api get-stack-policy" [
+export def "get-get-stack-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3679,7 +3679,7 @@ export def "api get-stack-policy" [
 #
 # POST /
 # operationId: POST_GetStackPolicy
-export def "api create-get-stack-policy" [
+export def "post-get-stack-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3729,7 +3729,7 @@ export def "api create-get-stack-policy" [
 #
 # GET /
 # operationId: GET_GetTemplate
-export def "api get-template" [
+export def "get-get-template" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3778,7 +3778,7 @@ export def "api get-template" [
 #
 # POST /
 # operationId: POST_GetTemplate
-export def "api create-get-template" [
+export def "post-get-template" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3828,7 +3828,7 @@ export def "api create-get-template" [
 #
 # GET /
 # operationId: GET_GetTemplateSummary
-export def "api get-template-summary" [
+export def "get-get-template-summary" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3879,7 +3879,7 @@ export def "api get-template-summary" [
 #
 # POST /
 # operationId: POST_GetTemplateSummary
-export def "api create-get-template-summary" [
+export def "post-get-template-summary" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3929,7 +3929,7 @@ export def "api create-get-template-summary" [
 #
 # GET /
 # operationId: GET_ImportStacksToStackSet
-export def "api get-import-stacks-to-stack-update" [
+export def "get-import-stacks-to-stack-set" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3982,7 +3982,7 @@ export def "api get-import-stacks-to-stack-update" [
 #
 # POST /
 # operationId: POST_ImportStacksToStackSet
-export def "api create-import-stacks-to-stack-update" [
+export def "post-import-stacks-to-stack-set" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4032,7 +4032,7 @@ export def "api create-import-stacks-to-stack-update" [
 #
 # GET /
 # operationId: GET_ListChangeSets
-export def "api get-list-change-sets" [
+export def "get-list-change-sets" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4080,7 +4080,7 @@ export def "api get-list-change-sets" [
 #
 # POST /
 # operationId: POST_ListChangeSets
-export def "api create-list-change-sets" [
+export def "post-list-change-sets" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4131,7 +4131,7 @@ export def "api create-list-change-sets" [
 #
 # GET /
 # operationId: GET_ListExports
-export def "api get-list-exports" [
+export def "get-list-exports" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4178,7 +4178,7 @@ export def "api get-list-exports" [
 #
 # POST /
 # operationId: POST_ListExports
-export def "api create-list-exports" [
+export def "post-list-exports" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4229,7 +4229,7 @@ export def "api create-list-exports" [
 #
 # GET /
 # operationId: GET_ListImports
-export def "api get-list-imports" [
+export def "get-list-imports" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4277,7 +4277,7 @@ export def "api get-list-imports" [
 #
 # POST /
 # operationId: POST_ListImports
-export def "api create-list-imports" [
+export def "post-list-imports" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4328,7 +4328,7 @@ export def "api create-list-imports" [
 #
 # GET /
 # operationId: GET_ListStackInstances
-export def "api get-list-stack-instances" [
+export def "get-list-stack-instances" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4381,7 +4381,7 @@ export def "api get-list-stack-instances" [
 #
 # POST /
 # operationId: POST_ListStackInstances
-export def "api create-list-stack-instances" [
+export def "post-list-stack-instances" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4433,7 +4433,7 @@ export def "api create-list-stack-instances" [
 #
 # GET /
 # operationId: GET_ListStackResources
-export def "api get-list-stack-resources" [
+export def "get-list-stack-resources" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4481,7 +4481,7 @@ export def "api get-list-stack-resources" [
 #
 # POST /
 # operationId: POST_ListStackResources
-export def "api create-list-stack-resources" [
+export def "post-list-stack-resources" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4532,7 +4532,7 @@ export def "api create-list-stack-resources" [
 #
 # GET /
 # operationId: GET_ListStackSetOperationResults
-export def "api get-list-stack-update-operation-results" [
+export def "get-list-stack-set-operation-results" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4584,7 +4584,7 @@ export def "api get-list-stack-update-operation-results" [
 #
 # POST /
 # operationId: POST_ListStackSetOperationResults
-export def "api create-list-stack-update-operation-results" [
+export def "post-list-stack-set-operation-results" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4636,7 +4636,7 @@ export def "api create-list-stack-update-operation-results" [
 #
 # GET /
 # operationId: GET_ListStackSetOperations
-export def "api get-list-stack-update-operations" [
+export def "get-list-stack-set-operations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4686,7 +4686,7 @@ export def "api get-list-stack-update-operations" [
 #
 # POST /
 # operationId: POST_ListStackSetOperations
-export def "api create-list-stack-update-operations" [
+export def "post-list-stack-set-operations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4738,7 +4738,7 @@ export def "api create-list-stack-update-operations" [
 #
 # GET /
 # operationId: GET_ListStackSets
-export def "api get-list-stack-sets" [
+export def "get-list-stack-sets" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4788,7 +4788,7 @@ export def "api get-list-stack-sets" [
 #
 # POST /
 # operationId: POST_ListStackSets
-export def "api create-list-stack-sets" [
+export def "post-list-stack-sets" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4840,7 +4840,7 @@ export def "api create-list-stack-sets" [
 #
 # GET /
 # operationId: GET_ListStacks
-export def "api get-list-stacks" [
+export def "get-list-stacks" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4888,7 +4888,7 @@ export def "api get-list-stacks" [
 #
 # POST /
 # operationId: POST_ListStacks
-export def "api create-list-stacks" [
+export def "post-list-stacks" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4939,7 +4939,7 @@ export def "api create-list-stacks" [
 #
 # GET /
 # operationId: GET_ListTypeRegistrations
-export def "api get-list-type-registrations" [
+export def "get-list-type-registrations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4991,7 +4991,7 @@ export def "api get-list-type-registrations" [
 #
 # POST /
 # operationId: POST_ListTypeRegistrations
-export def "api create-list-type-registrations" [
+export def "post-list-type-registrations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5043,7 +5043,7 @@ export def "api create-list-type-registrations" [
 #
 # GET /
 # operationId: GET_ListTypeVersions
-export def "api get-list-type-versions" [
+export def "get-list-type-versions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5096,7 +5096,7 @@ export def "api get-list-type-versions" [
 #
 # POST /
 # operationId: POST_ListTypeVersions
-export def "api create-list-type-versions" [
+export def "post-list-type-versions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5148,7 +5148,7 @@ export def "api create-list-type-versions" [
 #
 # GET /
 # operationId: GET_ListTypes
-export def "api get-list-types" [
+export def "get-list-types" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5201,7 +5201,7 @@ export def "api get-list-types" [
 #
 # POST /
 # operationId: POST_ListTypes
-export def "api create-list-types" [
+export def "post-list-types" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5253,7 +5253,7 @@ export def "api create-list-types" [
 #
 # GET /
 # operationId: GET_PublishType
-export def "api get-publish-type" [
+export def "get-publish-type" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5303,7 +5303,7 @@ export def "api get-publish-type" [
 #
 # POST /
 # operationId: POST_PublishType
-export def "api create-publish-type" [
+export def "post-publish-type" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5353,7 +5353,7 @@ export def "api create-publish-type" [
 #
 # GET /
 # operationId: GET_RecordHandlerProgress
-export def "api get-record-handler-progress" [
+export def "get-record-handler-progress" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5406,7 +5406,7 @@ export def "api get-record-handler-progress" [
 #
 # POST /
 # operationId: POST_RecordHandlerProgress
-export def "api create-record-handler-progress" [
+export def "post-record-handler-progress" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5456,7 +5456,7 @@ export def "api create-record-handler-progress" [
 #
 # GET /
 # operationId: GET_RegisterPublisher
-export def "api get-create-publisher" [
+export def "get-register-publisher" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5504,7 +5504,7 @@ export def "api get-create-publisher" [
 #
 # POST /
 # operationId: POST_RegisterPublisher
-export def "api create-publisher" [
+export def "post-register-publisher" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5554,7 +5554,7 @@ export def "api create-publisher" [
 #
 # GET /
 # operationId: GET_RegisterType
-export def "api get-create-type" [
+export def "get-register-type" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5606,7 +5606,7 @@ export def "api get-create-type" [
 #
 # POST /
 # operationId: POST_RegisterType
-export def "api create-type" [
+export def "post-register-type" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5656,7 +5656,7 @@ export def "api create-type" [
 #
 # GET /
 # operationId: GET_RollbackStack
-export def "api get-rollback-stack" [
+export def "get-rollback-stack" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5705,7 +5705,7 @@ export def "api get-rollback-stack" [
 #
 # POST /
 # operationId: POST_RollbackStack
-export def "api create-rollback-stack" [
+export def "post-rollback-stack" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5755,7 +5755,7 @@ export def "api create-rollback-stack" [
 #
 # GET /
 # operationId: GET_SetStackPolicy
-export def "api get-update-stack-policy" [
+export def "get-set-stack-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5804,7 +5804,7 @@ export def "api get-update-stack-policy" [
 #
 # POST /
 # operationId: POST_SetStackPolicy
-export def "api create-update-stack-policy" [
+export def "post-set-stack-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5854,7 +5854,7 @@ export def "api create-update-stack-policy" [
 #
 # GET /
 # operationId: GET_SetTypeConfiguration
-export def "api get-update-type-configuration" [
+export def "get-set-type-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5905,7 +5905,7 @@ export def "api get-update-type-configuration" [
 #
 # POST /
 # operationId: POST_SetTypeConfiguration
-export def "api create-update-type-configuration" [
+export def "post-set-type-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5955,7 +5955,7 @@ export def "api create-update-type-configuration" [
 #
 # GET /
 # operationId: GET_SetTypeDefaultVersion
-export def "api get-update-type-default-version" [
+export def "get-set-type-default-version" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6005,7 +6005,7 @@ export def "api get-update-type-default-version" [
 #
 # POST /
 # operationId: POST_SetTypeDefaultVersion
-export def "api create-update-type-default-version" [
+export def "post-set-type-default-version" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6055,7 +6055,7 @@ export def "api create-update-type-default-version" [
 #
 # GET /
 # operationId: GET_SignalResource
-export def "api get-signal-resource" [
+export def "get-signal-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6105,7 +6105,7 @@ export def "api get-signal-resource" [
 #
 # POST /
 # operationId: POST_SignalResource
-export def "api create-signal-resource" [
+export def "post-signal-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6155,7 +6155,7 @@ export def "api create-signal-resource" [
 #
 # GET /
 # operationId: GET_StopStackSetOperation
-export def "api get-stop-stack-update-operation" [
+export def "get-stop-stack-set-operation" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6204,7 +6204,7 @@ export def "api get-stop-stack-update-operation" [
 #
 # POST /
 # operationId: POST_StopStackSetOperation
-export def "api create-stop-stack-update-operation" [
+export def "post-stop-stack-set-operation" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6254,7 +6254,7 @@ export def "api create-stop-stack-update-operation" [
 #
 # GET /
 # operationId: GET_TestType
-export def "api get-test-type" [
+export def "get-test-type" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6305,7 +6305,7 @@ export def "api get-test-type" [
 #
 # POST /
 # operationId: POST_TestType
-export def "api create-test-type" [
+export def "post-test-type" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6355,7 +6355,7 @@ export def "api create-test-type" [
 #
 # GET /
 # operationId: GET_UpdateStack
-export def "api get-update-stack" [
+export def "get-update-stack" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6418,7 +6418,7 @@ export def "api get-update-stack" [
 #
 # POST /
 # operationId: POST_UpdateStack
-export def "api create-update-stack" [
+export def "post-update-stack" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6468,7 +6468,7 @@ export def "api create-update-stack" [
 #
 # GET /
 # operationId: GET_UpdateStackInstances
-export def "api get-update-stack-instances" [
+export def "get-update-stack-instances" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6522,7 +6522,7 @@ export def "api get-update-stack-instances" [
 #
 # POST /
 # operationId: POST_UpdateStackInstances
-export def "api create-update-stack-instances" [
+export def "post-update-stack-instances" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6572,7 +6572,7 @@ export def "api create-update-stack-instances" [
 #
 # GET /
 # operationId: GET_UpdateStackSet
-export def "api get-update-stack-1" [
+export def "get-update-stack-set" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6637,7 +6637,7 @@ export def "api get-update-stack-1" [
 #
 # POST /
 # operationId: POST_UpdateStackSet
-export def "api create-update-stack-1" [
+export def "post-update-stack-set" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6687,7 +6687,7 @@ export def "api create-update-stack-1" [
 #
 # GET /
 # operationId: GET_UpdateTerminationProtection
-export def "api get-update-termination-protection" [
+export def "get-update-termination-protection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6735,7 +6735,7 @@ export def "api get-update-termination-protection" [
 #
 # POST /
 # operationId: POST_UpdateTerminationProtection
-export def "api create-update-termination-protection" [
+export def "post-update-termination-protection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6785,7 +6785,7 @@ export def "api create-update-termination-protection" [
 #
 # GET /
 # operationId: GET_ValidateTemplate
-export def "api get-validate-template" [
+export def "get-validate-template" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6833,7 +6833,7 @@ export def "api get-validate-template" [
 #
 # POST /
 # operationId: POST_ValidateTemplate
-export def "api create-validate-template" [
+export def "post-validate-template" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

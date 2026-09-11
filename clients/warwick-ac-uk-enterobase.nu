@@ -111,7 +111,7 @@ def auth-scheme-completer [] { ["basic" "basic-credentials"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "v2-0 get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-api-v2-0" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -134,7 +134,7 @@ export def commands []: nothing -> table {
 # Top level information about EnteroBase databases
 #
 # GET /api/v2.0
-export def "v2-0 get" [
+export def "get-api-v2-0" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -171,7 +171,7 @@ export def "v2-0 get" [
 # Login endpoint, refresh your API token
 #
 # GET /api/v2.0/login
-export def "v2-0-login get" [
+export def "get-api-v2-0-login" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -207,7 +207,7 @@ export def "v2-0-login get" [
 # Generic endpoint for lookup list of barcodes
 #
 # GET /api/v2.0/lookup
-export def "v2-0-lookup list" [
+export def "get-api-v2-0-lookup" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -242,7 +242,7 @@ export def "v2-0-lookup list" [
 # Generic endpoint for lookup of barcodes
 #
 # GET /api/v2.0/lookup/{barcode}
-export def "v2-0-lookup get" [
+export def "get-api-v2-0-lookup-barcode" [
   barcode: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -277,7 +277,7 @@ export def "v2-0-lookup get" [
 # Generic endpoint for lookup of barcodes
 #
 # POST /api/v2.0/lookup/{barcode}
-export def "v2-0-lookup create" [
+export def "post-api-v2-0-lookup-barcode" [
   barcode: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -316,7 +316,7 @@ export def "v2-0-lookup create" [
 # Genome assemblies
 #
 # GET /api/v2.0/{database}/assemblies
-export def "v2-0-assemblies list" [
+export def "get-api-v2-0-database-assemblies" [
   database: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -364,7 +364,7 @@ export def "v2-0-assemblies list" [
 # Genome assemblies
 #
 # GET /api/v2.0/{database}/assemblies/{barcode}
-export def "v2-0-assemblies get" [
+export def "get-api-v2-0-database-assemblies-barcode" [
   database: string
   barcode: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -401,7 +401,7 @@ export def "v2-0-assemblies get" [
 # Genome assemblies
 #
 # POST /api/v2.0/{database}/assemblies/{barcode}
-export def "v2-0-assemblies create" [
+export def "post-api-v2-0-database-assemblies-barcode" [
   database: string
   barcode: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -453,7 +453,7 @@ export def "v2-0-assemblies create" [
 # Genome assemblies
 #
 # PUT /api/v2.0/{database}/assemblies/{barcode}
-export def "v2-0-assemblies update" [
+export def "put-api-v2-0-database-assemblies-barcode" [
   database: string
   barcode: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -505,7 +505,7 @@ export def "v2-0-assemblies update" [
 # Genotyping schemes
 #
 # GET /api/v2.0/{database}/schemes
-export def "v2-0-schemes list" [
+export def "get-api-v2-0-database-schemes" [
   database: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -552,7 +552,7 @@ export def "v2-0-schemes list" [
 # Genotyping schemes
 #
 # GET /api/v2.0/{database}/schemes/{barcode}
-export def "v2-0-schemes get" [
+export def "get-api-v2-0-database-schemes-barcode" [
   database: string
   barcode: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -589,7 +589,7 @@ export def "v2-0-schemes get" [
 # Genotyping schemes
 #
 # POST /api/v2.0/{database}/schemes/{barcode}
-export def "v2-0-schemes create" [
+export def "post-api-v2-0-database-schemes-barcode" [
   database: string
   barcode: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -640,7 +640,7 @@ export def "v2-0-schemes create" [
 # Genotyping schemes
 #
 # PUT /api/v2.0/{database}/schemes/{barcode}
-export def "v2-0-schemes update" [
+export def "put-api-v2-0-database-schemes-barcode" [
   database: string
   barcode: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -691,7 +691,7 @@ export def "v2-0-schemes update" [
 # Strain data
 #
 # GET /api/v2.0/{database}/straindata
-export def "v2-0-straindata get" [
+export def "get-api-v2-0-database-straindata" [
   database: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -764,7 +764,7 @@ export def "v2-0-straindata get" [
 # Strain metadata
 #
 # GET /api/v2.0/{database}/strains
-export def "v2-0-strains list" [
+export def "get-api-v2-0-database-strains" [
   database: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -835,7 +835,7 @@ export def "v2-0-strains list" [
 # Strain metadata
 #
 # GET /api/v2.0/{database}/strains/{barcode}
-export def "v2-0-strains get" [
+export def "get-api-v2-0-database-strains-barcode" [
   database: string
   barcode: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -872,7 +872,7 @@ export def "v2-0-strains get" [
 # Strain metadata
 #
 # POST /api/v2.0/{database}/strains/{barcode}
-export def "v2-0-strains create" [
+export def "post-api-v2-0-database-strains-barcode" [
   database: string
   barcode: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -947,7 +947,7 @@ export def "v2-0-strains create" [
 # Strain metadata
 #
 # PUT /api/v2.0/{database}/strains/{barcode}
-export def "v2-0-strains update" [
+export def "put-api-v2-0-database-strains-barcode" [
   database: string
   barcode: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1022,7 +1022,7 @@ export def "v2-0-strains update" [
 # Strain previous metadata
 #
 # GET /api/v2.0/{database}/strainsversion
-export def "v2-0-strainsversion get" [
+export def "get-api-v2-0-database-strainsversion" [
   database: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1093,7 +1093,7 @@ export def "v2-0-strainsversion get" [
 # Traces (sequence-reads) metadata
 #
 # GET /api/v2.0/{database}/traces
-export def "v2-0-traces list" [
+export def "get-api-v2-0-database-traces" [
   database: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1135,7 +1135,7 @@ export def "v2-0-traces list" [
 # Traces (sequence-reads) metadata
 #
 # GET /api/v2.0/{database}/traces/{barcode}
-export def "v2-0-traces get" [
+export def "get-api-v2-0-database-traces-barcode" [
   database: string
   barcode: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1172,7 +1172,7 @@ export def "v2-0-traces get" [
 # Traces (sequence-reads) metadata
 #
 # POST /api/v2.0/{database}/traces/{barcode}
-export def "v2-0-traces create" [
+export def "post-api-v2-0-database-traces-barcode" [
   database: string
   barcode: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1218,7 +1218,7 @@ export def "v2-0-traces create" [
 # Traces (sequence-reads) metadata
 #
 # PUT /api/v2.0/{database}/traces/{barcode}
-export def "v2-0-traces update" [
+export def "put-api-v2-0-database-traces-barcode" [
   database: string
   barcode: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1264,7 +1264,7 @@ export def "v2-0-traces update" [
 # Alleles data
 #
 # GET /api/v2.0/{database}/{scheme}/alleles
-export def "v2-0-alleles get" [
+export def "get-api-v2-0-database-scheme-alleles" [
   database: string
   scheme: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1310,7 +1310,7 @@ export def "v2-0-alleles get" [
 # Loci
 #
 # GET /api/v2.0/{database}/{scheme}/loci
-export def "v2-0-loci get" [
+export def "get-api-v2-0-database-scheme-loci" [
   database: string
   scheme: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1355,7 +1355,7 @@ export def "v2-0-loci get" [
 # ST profile data
 #
 # GET /api/v2.0/{database}/{scheme}/sts
-export def "v2-0-sts get" [
+export def "get-api-v2-0-database-scheme-sts" [
   database: string
   scheme: string
   --base-url(-b): string@base-url-completer # API base URL

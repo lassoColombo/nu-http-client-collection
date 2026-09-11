@@ -118,7 +118,7 @@ def plan-name-completer [] { ["plus" "premium" "pro"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "categories-json get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-categories-json" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -141,7 +141,7 @@ export def commands []: nothing -> table {
 # Retrieve all Categories.
 #
 # GET /categories.json
-export def "categories-json get" [
+export def "get-categories-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -178,7 +178,7 @@ export def "categories-json get" [
 #
 # POST /categories.json
 # --category shape: {name?: string, parent_id?: int}
-export def "categories-json create" [
+export def "post-categories-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -218,7 +218,7 @@ export def "categories-json create" [
 # Count all Categories.
 #
 # GET /categories/count.json
-export def "categories-count-json get" [
+export def "get-categories-count-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -254,7 +254,7 @@ export def "categories-count-json get" [
 # Delete an existing Category.
 #
 # DELETE /categories/{id}.json
-export def "categories delete" [
+export def "delete-categories-id-json" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -292,7 +292,7 @@ export def "categories delete" [
 # Retrieve a single Category.
 #
 # GET /categories/{id}.json
-export def "categories get" [
+export def "get-categories-id-json" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -331,7 +331,7 @@ export def "categories get" [
 #
 # PUT /categories/{id}.json
 # --category shape: {name?: string, parent_id?: int}
-export def "categories update" [
+export def "put-categories-id-json" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -373,7 +373,7 @@ export def "categories update" [
 # Retrieve all Checkout Custom Fields.
 #
 # GET /checkout_custom_fields.json
-export def "checkout-custom-fields-json get" [
+export def "get-checkout-custom-fields-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -412,7 +412,7 @@ export def "checkout-custom-fields-json get" [
 #
 # POST /checkout_custom_fields.json
 # --checkout_custom_field shape: {area?: "contact"|"billing_shipping"|"other", custom_field_select_options?: list<string>, deletable?: bool, label?: string, position?: int, required?: bool, type?: "text"|"select"|"input"|"checkbox"|"date"}
-export def "checkout-custom-fields-json create" [
+export def "post-checkout-custom-fields-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -452,7 +452,7 @@ export def "checkout-custom-fields-json create" [
 # Delete an existing CheckoutCustomField.
 #
 # DELETE /checkout_custom_fields/{id}.json
-export def "checkout-custom-fields delete" [
+export def "delete-checkout-custom-fields-id-json" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -490,7 +490,7 @@ export def "checkout-custom-fields delete" [
 # Retrieve a single CheckoutCustomField.
 #
 # GET /checkout_custom_fields/{id}.json
-export def "checkout-custom-fields get" [
+export def "get-checkout-custom-fields-id-json" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -529,7 +529,7 @@ export def "checkout-custom-fields get" [
 #
 # PUT /checkout_custom_fields/{id}.json
 # --checkout_custom_field shape: {area?: "contact"|"billing_shipping"|"other", custom_field_select_options?: list<string>, deletable?: bool, label?: string, position?: int, required?: bool, type?: "text"|"select"|"input"|"checkbox"|"date"}
-export def "checkout-custom-fields update" [
+export def "put-checkout-custom-fields-id-json" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -571,7 +571,7 @@ export def "checkout-custom-fields update" [
 # Retrieve all Countries.
 #
 # GET /countries.json
-export def "countries-json get" [
+export def "get-countries-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -607,7 +607,7 @@ export def "countries-json get" [
 # Retrieve a single Country information.
 #
 # GET /countries/{country_code}.json
-export def "countries get" [
+export def "get-countries-country-code-json" [
   country_code: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -645,7 +645,7 @@ export def "countries get" [
 # Retrieve all Regions from a single Country.
 #
 # GET /countries/{country_code}/regions.json
-export def "countries-regions-json get" [
+export def "get-countries-country-code-regions-json" [
   country_code: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -683,7 +683,7 @@ export def "countries-regions-json get" [
 # Retrieve a single Region information object.
 #
 # GET /countries/{country_code}/regions/{region_code}.json
-export def "countries-regions get" [
+export def "get-countries-country-code-regions-region-code-json" [
   country_code: string
   region_code: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -723,7 +723,7 @@ export def "countries-regions get" [
 # Retrieve all Store's Custom Fields.
 #
 # GET /custom_fields.json
-export def "custom-fields-json get" [
+export def "get-custom-fields-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -760,7 +760,7 @@ export def "custom-fields-json get" [
 #
 # POST /custom_fields.json
 # --custom_field shape: {label?: string, type?: "text"|"selection"|"input", values?: list<string>}
-export def "custom-fields-json create" [
+export def "post-custom-fields-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -800,7 +800,7 @@ export def "custom-fields-json create" [
 # Delete an existing CustomField.
 #
 # DELETE /custom_fields/{id}.json
-export def "custom-fields delete" [
+export def "delete-custom-fields-id-json" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -838,7 +838,7 @@ export def "custom-fields delete" [
 # Retrieve a single CustomField.
 #
 # GET /custom_fields/{id}.json
-export def "custom-fields get" [
+export def "get-custom-fields-id-json" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -877,7 +877,7 @@ export def "custom-fields get" [
 #
 # PUT /custom_fields/{id}.json
 # --custom_field shape: {label?: string, type?: "text"|"selection"|"input", values?: list<string>}
-export def "custom-fields update" [
+export def "put-custom-fields-id-json" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -919,7 +919,7 @@ export def "custom-fields update" [
 # Retrieve all Store's Custom Fields.
 #
 # GET /custom_fields/{id}/select_options.json
-export def "custom-fields-select-options-json get" [
+export def "get-custom-fields-id-select-options-json" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -958,7 +958,7 @@ export def "custom-fields-select-options-json get" [
 #
 # POST /custom_fields/{id}/select_options.json
 # --custom_field_select_option shape: {value?: string}
-export def "custom-fields-select-options-json create" [
+export def "post-custom-fields-id-select-options-json" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1000,7 +1000,7 @@ export def "custom-fields-select-options-json create" [
 # Delete an existing CustomFieldSelectOption.
 #
 # DELETE /custom_fields/{id}/select_options/{custom_field_select_option_id}.json
-export def "custom-fields-select-options delete" [
+export def "delete-custom-fields-id-select-options-custom-field-select-option-id-json" [
   id: int
   custom_field_select_option_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -1040,7 +1040,7 @@ export def "custom-fields-select-options delete" [
 # Retrieve a single SelectOption from a CustomField.
 #
 # GET /custom_fields/{id}/select_options/{custom_field_select_option_id}.json
-export def "custom-fields-select-options get" [
+export def "get-custom-fields-id-select-options-custom-field-select-option-id-json" [
   id: int
   custom_field_select_option_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -1081,7 +1081,7 @@ export def "custom-fields-select-options get" [
 #
 # PUT /custom_fields/{id}/select_options/{custom_field_select_option_id}.json
 # --custom_field_select_option shape: {value?: string}
-export def "custom-fields-select-options update" [
+export def "put-custom-fields-id-select-options-custom-field-select-option-id-json" [
   id: int
   custom_field_select_option_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -1125,7 +1125,7 @@ export def "custom-fields-select-options update" [
 # Retrieve all Customer Categories.
 #
 # GET /customer_categories.json
-export def "customer-categories-json get" [
+export def "get-customer-categories-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1164,7 +1164,7 @@ export def "customer-categories-json get" [
 #
 # POST /customer_categories.json
 # --category shape: {name?: string}
-export def "customer-categories-json create" [
+export def "post-customer-categories-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1204,7 +1204,7 @@ export def "customer-categories-json create" [
 # Delete an existing CustomerCategory.
 #
 # DELETE /customer_categories/{id}.json
-export def "customer-categories delete" [
+export def "delete-customer-categories-id-json" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1242,7 +1242,7 @@ export def "customer-categories delete" [
 # Retrieve a single CustomerCategory.
 #
 # GET /customer_categories/{id}.json
-export def "customer-categories get" [
+export def "get-customer-categories-id-json" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1281,7 +1281,7 @@ export def "customer-categories get" [
 #
 # PUT /customer_categories/{id}.json
 # --category shape: {name?: string}
-export def "customer-categories update" [
+export def "put-customer-categories-id-json" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1324,7 +1324,7 @@ export def "customer-categories update" [
 #
 # DELETE /customer_categories/{id}/customers.json
 # --customers item shape: {email?: string, id?: int}
-export def "customer-categories-customers-json delete" [
+export def "delete-customer-categories-id-customers-json" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1366,7 +1366,7 @@ export def "customer-categories-customers-json delete" [
 # Retrieves the customers in a CustomerCategory.
 #
 # GET /customer_categories/{id}/customers.json
-export def "customer-categories-customers-json get" [
+export def "get-customer-categories-id-customers-json" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1405,7 +1405,7 @@ export def "customer-categories-customers-json get" [
 #
 # POST /customer_categories/{id}/customers.json
 # --customers item shape: {email?: string, id?: int}
-export def "customer-categories-customers-json create" [
+export def "post-customer-categories-id-customers-json" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1447,7 +1447,7 @@ export def "customer-categories-customers-json create" [
 # Retrieve all Customers.
 #
 # GET /customers.json
-export def "customers-json get" [
+export def "get-customers-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1486,7 +1486,7 @@ export def "customers-json get" [
 #
 # POST /customers.json
 # --customer shape: {billing_address?: any, customer_category?: list<int>, email?: string, password?: string, phone?: string, shipping_address?: any, status?: "approved"|"pending"|"disabled"}
-export def "customers-json create" [
+export def "post-customers-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1526,7 +1526,7 @@ export def "customers-json create" [
 # Count all Customers.
 #
 # GET /customers/count.json
-export def "customers-count-json get" [
+export def "get-customers-count-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1562,7 +1562,7 @@ export def "customers-count-json get" [
 # Retrieve a single Customer by email.
 #
 # GET /customers/email/{email}.json
-export def "customers-email get" [
+export def "get-customers-email-email-json" [
   email: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1600,7 +1600,7 @@ export def "customers-email get" [
 # Delete an existing Customer.
 #
 # DELETE /customers/{id}.json
-export def "customers delete" [
+export def "delete-customers-id-json" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1638,7 +1638,7 @@ export def "customers delete" [
 # Retrieve a single Customer by id.
 #
 # GET /customers/{id}.json
-export def "customers get" [
+export def "get-customers-id-json" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1677,7 +1677,7 @@ export def "customers get" [
 #
 # PUT /customers/{id}.json
 # --customer shape: {billing_address?: any, customer_category?: list<int>, email?: string, password?: string, phone?: string, shipping_address?: any, status?: "approved"|"pending"|"disabled"}
-export def "customers update" [
+export def "put-customers-id-json" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1719,7 +1719,7 @@ export def "customers update" [
 # Retrieves the Customer Additional Field of a Customer.
 #
 # GET /customers/{id}/fields
-export def "customers-fields list" [
+export def "get-customers-id-fields" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1758,7 +1758,7 @@ export def "customers-fields list" [
 #
 # POST /customers/{id}/fields
 # --customer_additional_field shape: {checkout_custom_field_id?: int, value?: string}
-export def "customers-fields create" [
+export def "post-customers-id-fields" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1800,7 +1800,7 @@ export def "customers-fields create" [
 # Delete a Customer Additional Field.
 #
 # DELETE /customers/{id}/fields/{field_id}
-export def "customers-fields delete" [
+export def "delete-customers-id-fields-field-id" [
   id: int
   field_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -1840,7 +1840,7 @@ export def "customers-fields delete" [
 # Retrieve a single Customer Additional Field.
 #
 # GET /customers/{id}/fields/{field_id}
-export def "customers-fields get" [
+export def "get-customers-id-fields-field-id" [
   id: int
   field_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -1881,7 +1881,7 @@ export def "customers-fields get" [
 #
 # PUT /customers/{id}/fields/{field_id}
 # --customer_additional_field shape: {checkout_custom_field_id?: int, value?: string}
-export def "customers-fields update" [
+export def "put-customers-id-fields-field-id" [
   id: int
   field_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -1925,7 +1925,7 @@ export def "customers-fields update" [
 # Retrieve all Fulfillments.
 #
 # GET /fulfillments.json
-export def "fulfillments-json get" [
+export def "get-fulfillments-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1963,7 +1963,7 @@ export def "fulfillments-json get" [
 # Count all Fulfillments.
 #
 # GET /fulfillments/count.json
-export def "fulfillments-count-json get" [
+export def "get-fulfillments-count-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1999,7 +1999,7 @@ export def "fulfillments-count-json get" [
 # Retrieve a single Fulfillment.
 #
 # GET /fulfillments/{id}.json
-export def "fulfillments get" [
+export def "get-fulfillments-id-json" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2037,7 +2037,7 @@ export def "fulfillments get" [
 # Retrieve all Hooks.
 #
 # GET /hooks.json
-export def "hooks-json get" [
+export def "get-hooks-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2076,7 +2076,7 @@ export def "hooks-json get" [
 #
 # POST /hooks.json
 # --hook shape: {event: "order_updated"|"order_pending_payment"|"order_paid"|"order_shipped"|"order_canceled"|"order_abandoned"|"product_created"|"product_updated"|"product_deleted"|"customer_created"|"customer_updated"|"customer_deleted", url: string}
-export def "hooks-json create" [
+export def "post-hooks-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2116,7 +2116,7 @@ export def "hooks-json create" [
 # Delete an existing Hook.
 #
 # DELETE /hooks/{id}.json
-export def "hooks delete" [
+export def "delete-hooks-id-json" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2154,7 +2154,7 @@ export def "hooks delete" [
 # Retrieve a single Hook.
 #
 # GET /hooks/{id}.json
-export def "hooks get" [
+export def "get-hooks-id-json" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2193,7 +2193,7 @@ export def "hooks get" [
 #
 # PUT /hooks/{id}.json
 # --hook shape: {event: "order_updated"|"order_pending_payment"|"order_paid"|"order_shipped"|"order_canceled"|"order_abandoned"|"product_created"|"product_updated"|"product_deleted"|"customer_created"|"customer_updated"|"customer_deleted", url: string}
-export def "hooks update" [
+export def "put-hooks-id-json" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2235,7 +2235,7 @@ export def "hooks update" [
 # Retrieve all the Store's JSApps.
 #
 # GET /jsapps.json
-export def "jsapps-json get" [
+export def "get-jsapps-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2272,7 +2272,7 @@ export def "jsapps-json get" [
 #
 # POST /jsapps.json
 # --app shape: {element?: string, template?: string, url?: string}
-export def "jsapps-json create" [
+export def "post-jsapps-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2312,7 +2312,7 @@ export def "jsapps-json create" [
 # Delete an existing JSApp.
 #
 # DELETE /jsapps/{code}.json
-export def "jsapps delete" [
+export def "delete-jsapps-code-json" [
   code: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2350,7 +2350,7 @@ export def "jsapps delete" [
 # Retrieve a JSApp.
 #
 # GET /jsapps/{code}.json
-export def "jsapps get" [
+export def "get-jsapps-code-json" [
   code: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2388,7 +2388,7 @@ export def "jsapps get" [
 # Retrieve the Fulfillments associated with the Order.
 #
 # GET /order/{id}/fulfillments.json
-export def "order-fulfillments-json get" [
+export def "get-order-id-fulfillments-json" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2426,7 +2426,7 @@ export def "order-fulfillments-json get" [
 # Retrieve all Orders.
 #
 # GET /orders.json
-export def "orders-json get" [
+export def "get-orders-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2465,7 +2465,7 @@ export def "orders-json get" [
 #
 # POST /orders.json
 # --order shape: {customer?: record, products?: list, shipping_method_id?: int, shipping_method_name?: string, shipping_price?: float, status?: "Abandoned"|"Canceled"|"Pending Payment"|"Paid"}
-export def "orders-json create" [
+export def "post-orders-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2505,7 +2505,7 @@ export def "orders-json create" [
 # Retrieve orders filtered by Order Id.
 #
 # GET /orders/after/{id}.json
-export def "orders-after get" [
+export def "get-orders-after-id-json" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2543,7 +2543,7 @@ export def "orders-after get" [
 # Count all Orders.
 #
 # GET /orders/count.json
-export def "orders-count-json get" [
+export def "get-orders-count-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2579,7 +2579,7 @@ export def "orders-count-json get" [
 # Retrieve orders filtered by status.
 #
 # GET /orders/status/{status}.json
-export def "orders-status get" [
+export def "get-orders-status-status-json" [
   status: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2617,7 +2617,7 @@ export def "orders-status get" [
 # Retrieve a single Order.
 #
 # GET /orders/{id}.json
-export def "orders get" [
+export def "get-orders-id-json" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2656,7 +2656,7 @@ export def "orders get" [
 #
 # PUT /orders/{id}.json
 # --order shape: {additional_fields?: list, additional_information?: string, shipment_status?: "requested"|"in_transit"|"delivered"|"failed"|"pickup_available", status?: "Abandoned"|"Canceled"|"Pending Payment"|"Paid", tracking_company?: string, tracking_number?: string, tracking_url?: string}
-export def "orders update" [
+export def "put-orders-id-json" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2698,7 +2698,7 @@ export def "orders update" [
 # Retrieve all Order History.
 #
 # GET /orders/{id}/history.json
-export def "orders-history-json get" [
+export def "get-orders-id-history-json" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2737,7 +2737,7 @@ export def "orders-history-json get" [
 #
 # POST /orders/{id}/history.json
 # --order_history shape: {message?: string}
-export def "orders-history-json create" [
+export def "post-orders-id-history-json" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2779,7 +2779,7 @@ export def "orders-history-json create" [
 # Retrieve all Pages.
 #
 # GET /pages.json
-export def "pages-json get" [
+export def "get-pages-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2818,7 +2818,7 @@ export def "pages-json get" [
 #
 # POST /pages.json
 # --page shape: {body?: string, categories?: list, image?: record, meta_description?: string, page_title?: string, permalink?: string, status?: "public"|"draft"|"hidden", template?: int, title?: string}
-export def "pages-json create" [
+export def "post-pages-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2858,7 +2858,7 @@ export def "pages-json create" [
 # Count all Pages.
 #
 # GET /pages/count.json
-export def "pages-count-json get" [
+export def "get-pages-count-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2894,7 +2894,7 @@ export def "pages-count-json get" [
 # Delete an existing Page.
 #
 # DELETE /pages/{id}.json
-export def "pages delete" [
+export def "delete-pages-id-json" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2932,7 +2932,7 @@ export def "pages delete" [
 # Retrieve a single Page by id.
 #
 # GET /pages/{id}.json
-export def "pages get" [
+export def "get-pages-id-json" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2971,7 +2971,7 @@ export def "pages get" [
 #
 # PUT /pages/{id}.json
 # --page shape: {body?: string, categories?: list, image?: record, meta_description?: string, page_title?: string, permalink?: string, status?: "public"|"draft"|"hidden", template?: int, title?: string}
-export def "pages update" [
+export def "put-pages-id-json" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3013,7 +3013,7 @@ export def "pages update" [
 # Retrieve statistics.
 #
 # GET /partners/stores.json
-export def "partners-stores-json get" [
+export def "get-partners-stores-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3052,7 +3052,7 @@ export def "partners-stores-json get" [
 # Retrieve all Store's Payment Methods.
 #
 # GET /payment_methods.json
-export def "payment-methods-json get" [
+export def "get-payment-methods-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3088,7 +3088,7 @@ export def "payment-methods-json get" [
 # Retrieve a single Payment Method.
 #
 # GET /payment_methods/{id}.json
-export def "payment-methods get" [
+export def "get-payment-methods-id-json" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3126,7 +3126,7 @@ export def "payment-methods get" [
 # Retrieve all Products.
 #
 # GET /products.json
-export def "products-json get" [
+export def "get-products-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3166,7 +3166,7 @@ export def "products-json get" [
 #
 # POST /products.json
 # --product shape: {barcode?: string, categories?: list, description?: string, diameter?: float, featured?: bool, google_product_category?: string, height?: float, length?: float, meta_description?: string, name: string, package_format?: "box"|"cylinder", page_title?: string, permalink?: string, price: float, shipping_required?: bool, sku?: string, status?: "available"|"not-available"|"disabled", stock?: int, stock_unlimited?: bool, weight?: float, width?: float}
-export def "products-json create" [
+export def "post-products-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3207,7 +3207,7 @@ export def "products-json create" [
 # Retrieves Products after the given id.
 #
 # GET /products/after/{id}.json
-export def "products-after get" [
+export def "get-products-after-id-json" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3246,7 +3246,7 @@ export def "products-after get" [
 # Retrieve Products filtered by category.
 #
 # GET /products/category/{category_id}.json
-export def "products-category get" [
+export def "get-products-category-category-id-json" [
   category_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3285,7 +3285,7 @@ export def "products-category get" [
 # Count Products filtered by category.
 #
 # GET /products/category/{category_id}/count.json
-export def "products-category-count-json get" [
+export def "get-products-category-category-id-count-json" [
   category_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3324,7 +3324,7 @@ export def "products-category-count-json get" [
 # Count all Products.
 #
 # GET /products/count.json
-export def "products-count-json get" [
+export def "get-products-count-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3360,7 +3360,7 @@ export def "products-count-json get" [
 # Retrieve a Product List from a query.
 #
 # GET /products/search.json
-export def "products-search-json get" [
+export def "get-products-search-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3399,7 +3399,7 @@ export def "products-search-json get" [
 # Retrieve Products filtered by status.
 #
 # GET /products/status/{status}.json
-export def "products-status get" [
+export def "get-products-status-status-json" [
   status: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3438,7 +3438,7 @@ export def "products-status get" [
 # Count Products filtered by status.
 #
 # GET /products/status/{status}/count.json
-export def "products-status-count-json get" [
+export def "get-products-status-status-count-json" [
   status: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3477,7 +3477,7 @@ export def "products-status-count-json get" [
 # Delete an existing Product.
 #
 # DELETE /products/{id}.json
-export def "products delete" [
+export def "delete-products-id-json" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3515,7 +3515,7 @@ export def "products delete" [
 # Retrieve a single Product.
 #
 # GET /products/{id}.json
-export def "products get" [
+export def "get-products-id-json" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3555,7 +3555,7 @@ export def "products get" [
 #
 # PUT /products/{id}.json
 # --product shape: {barcode?: string, categories?: list, description?: string, diameter?: float, featured?: bool, google_product_category?: string, height?: float, length?: float, meta_description?: string, name: string, package_format?: "box"|"cylinder", page_title?: string, permalink?: string, price: float, shipping_required?: bool, sku?: string, status?: "available"|"not-available"|"disabled", stock?: int, stock_unlimited?: bool, weight?: float, width?: float}
-export def "products update" [
+export def "put-products-id-json" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3598,7 +3598,7 @@ export def "products update" [
 # Retrieve all Product Attachments.
 #
 # GET /products/{id}/attachments.json
-export def "products-attachments-json get" [
+export def "get-products-id-attachments-json" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3637,7 +3637,7 @@ export def "products-attachments-json get" [
 #
 # POST /products/{id}/attachments.json
 # --attachment shape: {filename?: string, url?: string}
-export def "products-attachments-json create" [
+export def "post-products-id-attachments-json" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3679,7 +3679,7 @@ export def "products-attachments-json create" [
 # Count all Product Attachments.
 #
 # GET /products/{id}/attachments/count.json
-export def "products-attachments-count-json get" [
+export def "get-products-id-attachments-count-json" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3717,7 +3717,7 @@ export def "products-attachments-count-json get" [
 # Delete a Product Attachment.
 #
 # DELETE /products/{id}/attachments/{attachment_id}.json
-export def "products-attachments delete" [
+export def "delete-products-id-attachments-attachment-id-json" [
   id: int
   attachment_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -3757,7 +3757,7 @@ export def "products-attachments delete" [
 # Retrieve a single Product Attachment.
 #
 # GET /products/{id}/attachments/{attachment_id}.json
-export def "products-attachments get" [
+export def "get-products-id-attachments-attachment-id-json" [
   id: int
   attachment_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -3797,7 +3797,7 @@ export def "products-attachments get" [
 # Retrieve all Product DigitalProducts.
 #
 # GET /products/{id}/digital_products.json
-export def "products-digital-products-json get" [
+export def "get-products-id-digital-products-json" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3836,7 +3836,7 @@ export def "products-digital-products-json get" [
 #
 # POST /products/{id}/digital_products.json
 # --digital_product shape: {filename?: string, url?: string}
-export def "products-digital-products-json create" [
+export def "post-products-id-digital-products-json" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3878,7 +3878,7 @@ export def "products-digital-products-json create" [
 # Count all Product DigitalProducts.
 #
 # GET /products/{id}/digital_products/count.json
-export def "products-digital-products-count-json get" [
+export def "get-products-id-digital-products-count-json" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3916,7 +3916,7 @@ export def "products-digital-products-count-json get" [
 # Delete a Product DigitalProduct.
 #
 # DELETE /products/{id}/digital_products/{digital_product_id}.json
-export def "products-digital-products delete" [
+export def "delete-products-id-digital-products-digital-product-id-json" [
   id: int
   digital_product_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -3956,7 +3956,7 @@ export def "products-digital-products delete" [
 # Retrieve a single Product DigitalProduct.
 #
 # GET /products/{id}/digital_products/{digital_product_id}.json
-export def "products-digital-products get" [
+export def "get-products-id-digital-products-digital-product-id-json" [
   id: int
   digital_product_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -3996,7 +3996,7 @@ export def "products-digital-products get" [
 # Retrieve all Product Custom Fields
 #
 # GET /products/{id}/fields.json
-export def "products-fields-json get" [
+export def "get-products-id-fields-json" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4035,7 +4035,7 @@ export def "products-fields-json get" [
 #
 # POST /products/{id}/fields.json
 # --field shape: {id?: int, value?: string}
-export def "products-fields-json create" [
+export def "post-products-id-fields-json" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4077,7 +4077,7 @@ export def "products-fields-json create" [
 # Count all Product Custom Fields.
 #
 # GET /products/{id}/fields/count.json
-export def "products-fields-count-json get" [
+export def "get-products-id-fields-count-json" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4115,7 +4115,7 @@ export def "products-fields-count-json get" [
 # Retrieve all Product Images.
 #
 # GET /products/{id}/images.json
-export def "products-images-json get" [
+export def "get-products-id-images-json" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4154,7 +4154,7 @@ export def "products-images-json get" [
 #
 # POST /products/{id}/images.json
 # --image shape: {url?: string}
-export def "products-images-json create" [
+export def "post-products-id-images-json" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4196,7 +4196,7 @@ export def "products-images-json create" [
 # Count all Product Images.
 #
 # GET /products/{id}/images/count.json
-export def "products-images-count-json get" [
+export def "get-products-id-images-count-json" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4234,7 +4234,7 @@ export def "products-images-count-json get" [
 # Delete a Product Image.
 #
 # DELETE /products/{id}/images/{image_id}.json
-export def "products-images delete" [
+export def "delete-products-id-images-image-id-json" [
   id: int
   image_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -4274,7 +4274,7 @@ export def "products-images delete" [
 # Retrieve a single Product Image.
 #
 # GET /products/{id}/images/{image_id}.json
-export def "products-images get" [
+export def "get-products-id-images-image-id-json" [
   id: int
   image_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -4314,7 +4314,7 @@ export def "products-images get" [
 # Retrieve all Product Options.
 #
 # GET /products/{id}/options.json
-export def "products-options-json get" [
+export def "get-products-id-options-json" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4353,7 +4353,7 @@ export def "products-options-json get" [
 #
 # POST /products/{id}/options.json
 # --option shape: {name?: string, option_type?: "option"|"input"|"text"|"file", position?: int}
-export def "products-options-json create" [
+export def "post-products-id-options-json" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4395,7 +4395,7 @@ export def "products-options-json create" [
 # Count all Product Options.
 #
 # GET /products/{id}/options/count.json
-export def "products-options-count-json get" [
+export def "get-products-id-options-count-json" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4433,7 +4433,7 @@ export def "products-options-count-json get" [
 # Delete a Product Option.
 #
 # DELETE /products/{id}/options/{option_id}.json
-export def "products-options delete" [
+export def "delete-products-id-options-option-id-json" [
   id: int
   option_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -4473,7 +4473,7 @@ export def "products-options delete" [
 # Retrieve a single Product Option.
 #
 # GET /products/{id}/options/{option_id}.json
-export def "products-options get" [
+export def "get-products-id-options-option-id-json" [
   id: int
   option_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -4514,7 +4514,7 @@ export def "products-options get" [
 #
 # PUT /products/{id}/options/{option_id}.json
 # --option shape: {name?: string, option_type?: "option"|"input"|"text"|"file", position?: int}
-export def "products-options update" [
+export def "put-products-id-options-option-id-json" [
   id: int
   option_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -4558,7 +4558,7 @@ export def "products-options update" [
 # Retrieve all Product Option Values.
 #
 # GET /products/{id}/options/{option_id}/values.json
-export def "products-options-values-json get" [
+export def "get-products-id-options-option-id-values-json" [
   id: int
   option_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -4599,7 +4599,7 @@ export def "products-options-values-json get" [
 #
 # POST /products/{id}/options/{option_id}/values.json
 # --value shape: {name?: string, position?: int}
-export def "products-options-values-json create" [
+export def "post-products-id-options-option-id-values-json" [
   id: int
   option_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -4643,7 +4643,7 @@ export def "products-options-values-json create" [
 # Count all Product Option Values.
 #
 # GET /products/{id}/options/{option_id}/values/count.json
-export def "products-options-values-count-json get" [
+export def "get-products-id-options-option-id-values-count-json" [
   id: int
   option_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -4683,7 +4683,7 @@ export def "products-options-values-count-json get" [
 # Delete a Product Option Value.
 #
 # DELETE /products/{id}/options/{option_id}/values/{value_id}.json
-export def "products-options-values delete" [
+export def "delete-products-id-options-option-id-values-value-id-json" [
   id: int
   option_id: int
   value_id: int
@@ -4725,7 +4725,7 @@ export def "products-options-values delete" [
 # Retrieve a single Product Option Value.
 #
 # GET /products/{id}/options/{option_id}/values/{value_id}.json
-export def "products-options-values get" [
+export def "get-products-id-options-option-id-values-value-id-json" [
   id: int
   option_id: int
   value_id: int
@@ -4768,7 +4768,7 @@ export def "products-options-values get" [
 #
 # PUT /products/{id}/options/{option_id}/values/{value_id}.json
 # --value shape: {name?: string, position?: int}
-export def "products-options-values update" [
+export def "put-products-id-options-option-id-values-value-id-json" [
   id: int
   option_id: int
   value_id: int
@@ -4814,7 +4814,7 @@ export def "products-options-values update" [
 # Retrieve all Product Variants.
 #
 # GET /products/{id}/variants.json
-export def "products-variants-json get" [
+export def "get-products-id-variants-json" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4853,7 +4853,7 @@ export def "products-variants-json get" [
 #
 # POST /products/{id}/variants.json
 # --variant shape: {image_id?: int, options?: list, price?: float, sku?: string, stock?: int, stock_unlimited?: bool}
-export def "products-variants-json create" [
+export def "post-products-id-variants-json" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4895,7 +4895,7 @@ export def "products-variants-json create" [
 # Count all Product Variants.
 #
 # GET /products/{id}/variants/count.json
-export def "products-variants-count-json get" [
+export def "get-products-id-variants-count-json" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4933,7 +4933,7 @@ export def "products-variants-count-json get" [
 # Retrieve a single Product Variant.
 #
 # GET /products/{id}/variants/{variant_id}.json
-export def "products-variants get" [
+export def "get-products-id-variants-variant-id-json" [
   id: int
   variant_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -4974,7 +4974,7 @@ export def "products-variants get" [
 #
 # PUT /products/{id}/variants/{variant_id}.json
 # --variant shape: {image_id?: int, options?: list, price?: float, sku?: string, stock?: int, stock_unlimited?: bool}
-export def "products-variants update" [
+export def "put-products-id-variants-variant-id-json" [
   id: int
   variant_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -5018,7 +5018,7 @@ export def "products-variants update" [
 # Delete value of Product Custom Field
 #
 # DELETE /products/{product_id}/fields/{field_id}.json
-export def "products-fields delete" [
+export def "delete-products-product-id-fields-field-id-json" [
   product_id: int
   field_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -5058,7 +5058,7 @@ export def "products-fields delete" [
 # Update value of Product Custom Field
 #
 # PUT /products/{product_id}/fields/{field_id}.json
-export def "products-fields update" [
+export def "put-products-product-id-fields-field-id-json" [
   product_id: int
   field_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -5098,7 +5098,7 @@ export def "products-fields update" [
 # Retrieve all Promotions.
 #
 # GET /promotions.json
-export def "promotions-json get" [
+export def "get-promotions-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5137,7 +5137,7 @@ export def "promotions-json get" [
 #
 # POST /promotions.json
 # --promotion shape: {begins_at?: string, buys_at_least?: string, categories?: list, code?: string, condition_price?: float, condition_qty?: int, cumulative?: bool, customer_categories?: list, customers?: string, discount_amount_fix?: float, discount_amount_percent?: float, discount_target?: string, enabled?: bool, expires_at?: string, lasts?: string, max_times_used?: int, name?: string, products?: list, products_x?: list, quantity_x?: int, type?: string}
-export def "promotions-json create" [
+export def "post-promotions-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5177,7 +5177,7 @@ export def "promotions-json create" [
 # Delete an existing Promotion.
 #
 # DELETE /promotions/{id}.json
-export def "promotions delete" [
+export def "delete-promotions-id-json" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5215,7 +5215,7 @@ export def "promotions delete" [
 # Retrieve a single Promotion.
 #
 # GET /promotions/{id}.json
-export def "promotions get" [
+export def "get-promotions-id-json" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5254,7 +5254,7 @@ export def "promotions get" [
 #
 # PUT /promotions/{id}.json
 # --promotion shape: {begins_at?: string, buys_at_least?: string, categories?: list, code?: string, condition_price?: float, condition_qty?: int, cumulative?: bool, customer_categories?: list, customers?: string, discount_amount_fix?: float, discount_amount_percent?: float, discount_target?: string, enabled?: bool, expires_at?: string, lasts?: string, max_times_used?: int, name?: string, products?: list, products_x?: list, quantity_x?: int, type?: string}
-export def "promotions update" [
+export def "put-promotions-id-json" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5296,7 +5296,7 @@ export def "promotions update" [
 # Retrieve all Store's Shipping Methods.
 #
 # GET /shipping_methods.json
-export def "shipping-methods-json get" [
+export def "get-shipping-methods-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5333,7 +5333,7 @@ export def "shipping-methods-json get" [
 #
 # POST /shipping_methods.json
 # --shipping_method shape: {callback_url?: string, city?: string, fetch_services_url?: string, name?: string, postal?: string, state?: string, token?: string}
-export def "shipping-methods-json create" [
+export def "post-shipping-methods-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5373,7 +5373,7 @@ export def "shipping-methods-json create" [
 # Delete an existing Shipping Method.
 #
 # DELETE /shipping_methods/{id}.json
-export def "shipping-methods delete" [
+export def "delete-shipping-methods-id-json" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5411,7 +5411,7 @@ export def "shipping-methods delete" [
 # Retrieve a single Shipping Method.
 #
 # GET /shipping_methods/{id}.json
-export def "shipping-methods get" [
+export def "get-shipping-methods-id-json" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5450,7 +5450,7 @@ export def "shipping-methods get" [
 #
 # PUT /shipping_methods/{id}.json
 # --shipping_method shape: {callback_url?: string, city?: string, fetch_services_url?: string, name?: string, postal?: string, state?: string, token?: string}
-export def "shipping-methods update" [
+export def "put-shipping-methods-id-json" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5492,7 +5492,7 @@ export def "shipping-methods update" [
 # Retrive store creation status.
 #
 # GET /store/check_status.json
-export def "store-check-status-json get" [
+export def "get-store-check-status-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5530,7 +5530,7 @@ export def "store-check-status-json get" [
 # Create a Partnered Store
 #
 # POST /store/create.json
-export def "store-create-json create" [
+export def "post-store-create-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5576,7 +5576,7 @@ export def "store-create-json create" [
 # Retrieve Store Information.
 #
 # GET /store/info.json
-export def "store-info-json get" [
+export def "get-store-info-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5612,7 +5612,7 @@ export def "store-info-json get" [
 # Retrieve Store Languages.
 #
 # GET /store/languages.json
-export def "store-languages-json get" [
+export def "get-store-languages-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5648,7 +5648,7 @@ export def "store-languages-json get" [
 # Retrieve all Taxes.
 #
 # GET /taxes.json
-export def "taxes-json get" [
+export def "get-taxes-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5685,7 +5685,7 @@ export def "taxes-json get" [
 #
 # POST /taxes.json
 # --tax shape: {category_id?: int, country?: string, fixed?: bool, name?: string, region?: string, shipping?: bool, tax?: float}
-export def "taxes-json create" [
+export def "post-taxes-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5725,7 +5725,7 @@ export def "taxes-json create" [
 # Retrieve a single Tax information.
 #
 # GET /taxes/{id}.json
-export def "taxes get" [
+export def "get-taxes-id-json" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

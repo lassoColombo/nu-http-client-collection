@@ -116,7 +116,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-blueprint-blueprint-assignments list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "assignments-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -140,7 +140,7 @@ export def commands []: nothing -> table {
 #
 # GET /{scope}/providers/Microsoft.Blueprint/blueprintAssignments
 # operationId: Assignments_List
-export def "providers-microsoft-blueprint-blueprint-assignments list" [
+export def "assignments-list" [
   scope: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -178,7 +178,7 @@ export def "providers-microsoft-blueprint-blueprint-assignments list" [
 #
 # DELETE /{scope}/providers/Microsoft.Blueprint/blueprintAssignments/{assignmentName}
 # operationId: Assignments_Delete
-export def "providers-microsoft-blueprint-blueprint-assignments delete" [
+export def "assignments-delete" [
   scope: string
   assignment_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -218,7 +218,7 @@ export def "providers-microsoft-blueprint-blueprint-assignments delete" [
 #
 # GET /{scope}/providers/Microsoft.Blueprint/blueprintAssignments/{assignmentName}
 # operationId: Assignments_Get
-export def "providers-microsoft-blueprint-blueprint-assignments get" [
+export def "assignments-get" [
   scope: string
   assignment_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -260,7 +260,7 @@ export def "providers-microsoft-blueprint-blueprint-assignments get" [
 # operationId: Assignments_CreateOrUpdate
 # --identity shape: {principalId?: string, tenantId?: string, type: "None"|"SystemAssigned"|"UserAssigned", userAssignedIdentities?: record}
 # --properties shape: {blueprintId?: string, locks?: record, parameters: record, resourceGroups: record, status?: record, description?: string, displayName?: string}
-export def "providers-microsoft-blueprint-blueprint-assignments create-or-update" [
+export def "assignments-create-or-update" [
   scope: string
   assignment_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -306,7 +306,7 @@ export def "providers-microsoft-blueprint-blueprint-assignments create-or-update
 #
 # POST /{scope}/providers/Microsoft.Blueprint/blueprintAssignments/{assignmentName}/WhoIsBlueprint
 # operationId: Assignments_WhoIsBlueprint
-export def "providers-microsoft-blueprint-blueprint-assignments-who-is-blueprint create" [
+export def "assignments-who-is-blueprint" [
   scope: string
   assignment_name: string
   --base-url(-b): string@base-url-completer # API base URL

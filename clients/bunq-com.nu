@@ -115,7 +115,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "attachment-public create" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "create-attachment-public" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -139,7 +139,7 @@ export def commands []: nothing -> table {
 #
 # POST /attachment-public
 # operationId: CREATE_AttachmentPublic
-export def "attachment-public create" [
+export def "create-attachment-public" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -186,7 +186,7 @@ export def "attachment-public create" [
 #
 # GET /attachment-public/{attachment-publicUUID}/content
 # operationId: List_all_Content_for_AttachmentPublic
-export def "attachment-public-content list" [
+export def "list-all-content-for-attachment-public" [
   attachment_public_uuid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -231,7 +231,7 @@ export def "attachment-public-content list" [
 #
 # GET /attachment-public/{itemId}
 # operationId: READ_AttachmentPublic
-export def "attachment-public get" [
+export def "read-attachment-public" [
   item_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -276,7 +276,7 @@ export def "attachment-public get" [
 #
 # POST /avatar
 # operationId: CREATE_Avatar
-export def "avatar create" [
+export def "create-avatar" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -323,7 +323,7 @@ export def "avatar create" [
 #
 # GET /avatar/{itemId}
 # operationId: READ_Avatar
-export def "avatar get" [
+export def "read-avatar" [
   item_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -368,7 +368,7 @@ export def "avatar get" [
 #
 # GET /device
 # operationId: List_all_Device
-export def "device list" [
+export def "list-all-device" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -411,7 +411,7 @@ export def "device list" [
 #
 # GET /device-server
 # operationId: List_all_DeviceServer
-export def "device-server list" [
+export def "list-all-device-server" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -454,7 +454,7 @@ export def "device-server list" [
 #
 # POST /device-server
 # operationId: CREATE_DeviceServer
-export def "device-server create" [
+export def "create-device-server" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -503,7 +503,7 @@ export def "device-server create" [
 #
 # GET /device-server/{itemId}
 # operationId: READ_DeviceServer
-export def "device-server get" [
+export def "read-device-server" [
   item_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -548,7 +548,7 @@ export def "device-server get" [
 #
 # GET /device/{itemId}
 # operationId: READ_Device
-export def "device get" [
+export def "read-device" [
   item_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -593,7 +593,7 @@ export def "device get" [
 #
 # GET /installation
 # operationId: List_all_Installation
-export def "installation list" [
+export def "list-all-installation" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -636,7 +636,7 @@ export def "installation list" [
 #
 # POST /installation
 # operationId: CREATE_Installation
-export def "installation create" [
+export def "create-installation" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -683,7 +683,7 @@ export def "installation create" [
 #
 # GET /installation/{installationID}/server-public-key
 # operationId: List_all_ServerPublicKey_for_Installation
-export def "installation-server-public-key list" [
+export def "list-all-server-public-key-for-installation" [
   installation_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -728,7 +728,7 @@ export def "installation-server-public-key list" [
 #
 # GET /installation/{itemId}
 # operationId: READ_Installation
-export def "installation get" [
+export def "read-installation" [
   item_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -773,7 +773,7 @@ export def "installation get" [
 #
 # POST /payment-service-provider-credential
 # operationId: CREATE_PaymentServiceProviderCredential
-export def "payment-service-provider-credential create" [
+export def "create-payment-service-provider-credential" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -822,7 +822,7 @@ export def "payment-service-provider-credential create" [
 #
 # GET /payment-service-provider-credential/{itemId}
 # operationId: READ_PaymentServiceProviderCredential
-export def "payment-service-provider-credential get" [
+export def "read-payment-service-provider-credential" [
   item_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -867,7 +867,7 @@ export def "payment-service-provider-credential get" [
 #
 # GET /place-lookup/{place-lookupID}/photo/{photoID}/content
 # operationId: List_all_Content_for_PlaceLookup_Photo
-export def "place-lookup-photo-content list" [
+export def "list-all-content-for-place-lookup-photo" [
   place_lookup_id: int
   photo_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -914,7 +914,7 @@ export def "place-lookup-photo-content list" [
 #
 # POST /sandbox-user-company
 # operationId: CREATE_SandboxUserCompany
-export def "sandbox-user-company create" [
+export def "create-sandbox-user-company" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -961,7 +961,7 @@ export def "sandbox-user-company create" [
 #
 # POST /sandbox-user-person
 # operationId: CREATE_SandboxUserPerson
-export def "sandbox-user-person create" [
+export def "create-sandbox-user-person" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1008,7 +1008,7 @@ export def "sandbox-user-person create" [
 #
 # POST /server-error
 # operationId: CREATE_ServerError
-export def "server-error create" [
+export def "create-server-error" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1055,7 +1055,7 @@ export def "server-error create" [
 #
 # POST /session-server
 # operationId: CREATE_SessionServer
-export def "session-server create" [
+export def "create-session-server" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1102,7 +1102,7 @@ export def "session-server create" [
 #
 # DELETE /session/{itemId}
 # operationId: DELETE_Session
-export def "session delete" [
+export def "delete-session" [
   item_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1147,7 +1147,7 @@ export def "session delete" [
 #
 # GET /user
 # operationId: List_all_User
-export def "user list" [
+export def "list-all-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1190,7 +1190,7 @@ export def "user list" [
 #
 # GET /user-company/{itemId}
 # operationId: READ_UserCompany
-export def "user-company list" [
+export def "read-user-company" [
   item_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1248,7 +1248,7 @@ export def "user-company list" [
 # --relations item shape: {counter_label_user?: record, label_user?: record}
 # --tax_resident item shape: {country?: string, status?: string, tax_number?: string}
 # --ubo item shape: {date_of_birth?: string, name?: string, nationality?: string}
-export def "user-company update-by-item-id" [
+export def "update-user-company" [
   item_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1314,7 +1314,7 @@ export def "user-company update-by-item-id" [
 #
 # GET /user-company/{user-companyID}/name
 # operationId: List_all_Name_for_UserCompany
-export def "user-company-name list" [
+export def "list-all-name-for-user-company" [
   user_company_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1359,7 +1359,7 @@ export def "user-company-name list" [
 #
 # GET /user-payment-service-provider/{itemId}
 # operationId: READ_UserPaymentServiceProvider
-export def "user-payment-service-provider get" [
+export def "read-user-payment-service-provider" [
   item_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1404,7 +1404,7 @@ export def "user-payment-service-provider get" [
 #
 # GET /user-person/{itemId}
 # operationId: READ_UserPerson
-export def "user-person get" [
+export def "read-user-person" [
   item_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1458,7 +1458,7 @@ export def "user-person get" [
 # --notification_filters item shape: {category?: string, notification_delivery_method?: string, notification_target?: string}
 # --relations item shape: {counter_label_user?: record, label_user?: record}
 # --tax_resident item shape: {country?: string, status?: string, tax_number?: string}
-export def "user-person update" [
+export def "update-user-person" [
   item_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1533,7 +1533,7 @@ export def "user-person update" [
 #
 # GET /user/{itemId}
 # operationId: READ_User
-export def "user get" [
+export def "read-user" [
   item_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1578,7 +1578,7 @@ export def "user get" [
 #
 # GET /user/{userID}/attachment/{attachmentID}/content
 # operationId: List_all_Content_for_User_Attachment
-export def "user-attachment-content list" [
+export def "list-all-content-for-user-attachment" [
   user_id: int
   attachment_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -1625,7 +1625,7 @@ export def "user-attachment-content list" [
 #
 # GET /user/{userID}/attachment/{itemId}
 # operationId: READ_Attachment_for_User
-export def "user-attachment get" [
+export def "read-attachment-for-user" [
   user_id: int
   item_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -1672,7 +1672,7 @@ export def "user-attachment get" [
 #
 # GET /user/{userID}/billing-contract-subscription
 # operationId: List_all_BillingContractSubscription_for_User
-export def "user-billing-contract-subscription list" [
+export def "list-all-billing-contract-subscription-for-user" [
   user_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1717,7 +1717,7 @@ export def "user-billing-contract-subscription list" [
 #
 # GET /user/{userID}/bunqme-fundraiser-profile
 # operationId: List_all_BunqmeFundraiserProfile_for_User
-export def "user-bunqme-fundraiser-profile list" [
+export def "list-all-bunqme-fundraiser-profile-for-user" [
   user_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1762,7 +1762,7 @@ export def "user-bunqme-fundraiser-profile list" [
 #
 # GET /user/{userID}/bunqme-fundraiser-profile/{itemId}
 # operationId: READ_BunqmeFundraiserProfile_for_User
-export def "user-bunqme-fundraiser-profile get" [
+export def "read-bunqme-fundraiser-profile-for-user" [
   user_id: int
   item_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -1809,7 +1809,7 @@ export def "user-bunqme-fundraiser-profile get" [
 #
 # GET /user/{userID}/card
 # operationId: List_all_Card_for_User
-export def "user-card list" [
+export def "list-all-card-for-user" [
   user_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1855,7 +1855,7 @@ export def "user-card list" [
 # POST /user/{userID}/card-batch
 # operationId: CREATE_CardBatch_for_User
 # --cards item shape: {card_limit?: record, card_limit_atm?: record, country_permission?: list, id: int, monetary_account_id_fallback?: int, status?: string}
-export def "user-card-batch create" [
+export def "create-card-batch-for-user" [
   user_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1905,7 +1905,7 @@ export def "user-card-batch create" [
 # POST /user/{userID}/card-batch-replace
 # operationId: CREATE_CardBatchReplace_for_User
 # --cards item shape: {id: int, name_on_card?: string, pin_code_assignment?: list, second_line?: string}
-export def "user-card-batch-replace create" [
+export def "create-card-batch-replace-for-user" [
   user_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1956,7 +1956,7 @@ export def "user-card-batch-replace create" [
 # operationId: CREATE_CardCredit_for_User
 # --alias shape: {name?: string, service?: string, type?: string, value?: string}
 # --pin_code_assignment item shape: {monetary_account_id?: int, pin_code?: string, routing_type?: string, type?: string}
-export def "user-card-credit create" [
+export def "create-card-credit-for-user" [
   user_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2015,7 +2015,7 @@ export def "user-card-credit create" [
 # operationId: CREATE_CardDebit_for_User
 # --alias shape: {name?: string, service?: string, type?: string, value?: string}
 # --pin_code_assignment item shape: {monetary_account_id?: int, pin_code?: string, routing_type?: string, type?: string}
-export def "user-card-debit create" [
+export def "create-card-debit-for-user" [
   user_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2072,7 +2072,7 @@ export def "user-card-debit create" [
 #
 # GET /user/{userID}/card-name
 # operationId: List_all_CardName_for_User
-export def "user-card-name list" [
+export def "list-all-card-name-for-user" [
   user_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2117,7 +2117,7 @@ export def "user-card-name list" [
 #
 # GET /user/{userID}/card/{cardID}/export-statement-card
 # operationId: List_all_ExportStatementCard_for_User_Card
-export def "user-card-export-statement-card list" [
+export def "list-all-export-statement-card-for-user-card" [
   user_id: int
   card_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -2164,7 +2164,7 @@ export def "user-card-export-statement-card list" [
 #
 # GET /user/{userID}/card/{cardID}/export-statement-card-csv
 # operationId: List_all_ExportStatementCardCsv_for_User_Card
-export def "user-card-export-statement-card-csv list" [
+export def "list-all-export-statement-card-csv-for-user-card" [
   user_id: int
   card_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -2211,7 +2211,7 @@ export def "user-card-export-statement-card-csv list" [
 #
 # POST /user/{userID}/card/{cardID}/export-statement-card-csv
 # operationId: CREATE_ExportStatementCardCsv_for_User_Card
-export def "user-card-export-statement-card-csv create" [
+export def "create-export-statement-card-csv-for-user-card" [
   user_id: int
   card_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -2264,7 +2264,7 @@ export def "user-card-export-statement-card-csv create" [
 #
 # DELETE /user/{userID}/card/{cardID}/export-statement-card-csv/{itemId}
 # operationId: DELETE_ExportStatementCardCsv_for_User_Card
-export def "user-card-export-statement-card-csv delete" [
+export def "delete-export-statement-card-csv-for-user-card" [
   user_id: int
   card_id: int
   item_id: int
@@ -2313,7 +2313,7 @@ export def "user-card-export-statement-card-csv delete" [
 #
 # GET /user/{userID}/card/{cardID}/export-statement-card-csv/{itemId}
 # operationId: READ_ExportStatementCardCsv_for_User_Card
-export def "user-card-export-statement-card-csv get" [
+export def "read-export-statement-card-csv-for-user-card" [
   user_id: int
   card_id: int
   item_id: int
@@ -2362,7 +2362,7 @@ export def "user-card-export-statement-card-csv get" [
 #
 # GET /user/{userID}/card/{cardID}/export-statement-card-pdf
 # operationId: List_all_ExportStatementCardPdf_for_User_Card
-export def "user-card-export-statement-card-pdf list" [
+export def "list-all-export-statement-card-pdf-for-user-card" [
   user_id: int
   card_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -2409,7 +2409,7 @@ export def "user-card-export-statement-card-pdf list" [
 #
 # POST /user/{userID}/card/{cardID}/export-statement-card-pdf
 # operationId: CREATE_ExportStatementCardPdf_for_User_Card
-export def "user-card-export-statement-card-pdf create" [
+export def "create-export-statement-card-pdf-for-user-card" [
   user_id: int
   card_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -2461,7 +2461,7 @@ export def "user-card-export-statement-card-pdf create" [
 #
 # DELETE /user/{userID}/card/{cardID}/export-statement-card-pdf/{itemId}
 # operationId: DELETE_ExportStatementCardPdf_for_User_Card
-export def "user-card-export-statement-card-pdf delete" [
+export def "delete-export-statement-card-pdf-for-user-card" [
   user_id: int
   card_id: int
   item_id: int
@@ -2510,7 +2510,7 @@ export def "user-card-export-statement-card-pdf delete" [
 #
 # GET /user/{userID}/card/{cardID}/export-statement-card-pdf/{itemId}
 # operationId: READ_ExportStatementCardPdf_for_User_Card
-export def "user-card-export-statement-card-pdf get" [
+export def "read-export-statement-card-pdf-for-user-card" [
   user_id: int
   card_id: int
   item_id: int
@@ -2559,7 +2559,7 @@ export def "user-card-export-statement-card-pdf get" [
 #
 # GET /user/{userID}/card/{cardID}/export-statement-card/{export-statement-cardID}/content
 # operationId: List_all_Content_for_User_Card_ExportStatementCard
-export def "user-card-export-statement-card-content list" [
+export def "list-all-content-for-user-card-export-statement-card" [
   user_id: int
   card_id: int
   export_statement_card_id: int
@@ -2608,7 +2608,7 @@ export def "user-card-export-statement-card-content list" [
 #
 # GET /user/{userID}/card/{cardID}/export-statement-card/{itemId}
 # operationId: READ_ExportStatementCard_for_User_Card
-export def "user-card-export-statement-card get" [
+export def "read-export-statement-card-for-user-card" [
   user_id: int
   card_id: int
   item_id: int
@@ -2657,7 +2657,7 @@ export def "user-card-export-statement-card get" [
 #
 # GET /user/{userID}/card/{cardID}/generated-cvc2
 # operationId: List_all_GeneratedCvc2_for_User_Card
-export def "user-card-generated-cvc2 list" [
+export def "list-all-generated-cvc2-for-user-card" [
   user_id: int
   card_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -2704,7 +2704,7 @@ export def "user-card-generated-cvc2 list" [
 #
 # POST /user/{userID}/card/{cardID}/generated-cvc2
 # operationId: CREATE_GeneratedCvc2_for_User_Card
-export def "user-card-generated-cvc2 create" [
+export def "create-generated-cvc2-for-user-card" [
   user_id: int
   card_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -2755,7 +2755,7 @@ export def "user-card-generated-cvc2 create" [
 #
 # GET /user/{userID}/card/{cardID}/generated-cvc2/{itemId}
 # operationId: READ_GeneratedCvc2_for_User_Card
-export def "user-card-generated-cvc2 get" [
+export def "read-generated-cvc2-for-user-card" [
   user_id: int
   card_id: int
   item_id: int
@@ -2804,7 +2804,7 @@ export def "user-card-generated-cvc2 get" [
 #
 # PUT /user/{userID}/card/{cardID}/generated-cvc2/{itemId}
 # operationId: UPDATE_GeneratedCvc2_for_User_Card
-export def "user-card-generated-cvc2 update" [
+export def "update-generated-cvc2-for-user-card" [
   user_id: int
   card_id: int
   item_id: int
@@ -2858,7 +2858,7 @@ export def "user-card-generated-cvc2 update" [
 # POST /user/{userID}/card/{cardID}/replace
 # operationId: CREATE_Replace_for_User_Card
 # --pin_code_assignment item shape: {monetary_account_id?: int, pin_code?: string, routing_type?: string, type?: string}
-export def "user-card-replace create" [
+export def "create-replace-for-user-card" [
   user_id: int
   card_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -2912,7 +2912,7 @@ export def "user-card-replace create" [
 #
 # GET /user/{userID}/card/{itemId}
 # operationId: READ_Card_for_User
-export def "user-card get" [
+export def "read-card-for-user" [
   user_id: int
   item_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -2964,7 +2964,7 @@ export def "user-card get" [
 # --country_permission item shape: {country?: string, expiry_time?: string}
 # --pin_code_assignment item shape: {monetary_account_id?: int, pin_code?: string, routing_type?: string, type?: string}
 # --primary_account_numbers item shape: {description?: string, id?: int, monetary_account_id?: int, status?: string}
-export def "user-card update" [
+export def "update-card-for-user" [
   user_id: int
   item_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -3024,7 +3024,7 @@ export def "user-card update" [
 #
 # GET /user/{userID}/certificate-pinned
 # operationId: List_all_CertificatePinned_for_User
-export def "user-certificate-pinned list" [
+export def "list-all-certificate-pinned-for-user" [
   user_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3070,7 +3070,7 @@ export def "user-certificate-pinned list" [
 # POST /user/{userID}/certificate-pinned
 # operationId: CREATE_CertificatePinned_for_User
 # --certificate_chain item shape: {certificate?: string}
-export def "user-certificate-pinned create" [
+export def "create-certificate-pinned-for-user" [
   user_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3119,7 +3119,7 @@ export def "user-certificate-pinned create" [
 #
 # DELETE /user/{userID}/certificate-pinned/{itemId}
 # operationId: DELETE_CertificatePinned_for_User
-export def "user-certificate-pinned delete" [
+export def "delete-certificate-pinned-for-user" [
   user_id: int
   item_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -3166,7 +3166,7 @@ export def "user-certificate-pinned delete" [
 #
 # GET /user/{userID}/certificate-pinned/{itemId}
 # operationId: READ_CertificatePinned_for_User
-export def "user-certificate-pinned get" [
+export def "read-certificate-pinned-for-user" [
   user_id: int
   item_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -3213,7 +3213,7 @@ export def "user-certificate-pinned get" [
 #
 # GET /user/{userID}/challenge-request/{itemId}
 # operationId: READ_ChallengeRequest_for_User
-export def "user-challenge-request get" [
+export def "read-challenge-request-for-user" [
   user_id: int
   item_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -3260,7 +3260,7 @@ export def "user-challenge-request get" [
 #
 # PUT /user/{userID}/challenge-request/{itemId}
 # operationId: UPDATE_ChallengeRequest_for_User
-export def "user-challenge-request update" [
+export def "update-challenge-request-for-user" [
   user_id: int
   item_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -3311,7 +3311,7 @@ export def "user-challenge-request update" [
 #
 # GET /user/{userID}/chat-conversation/{chat-conversationID}/attachment/{attachmentID}/content
 # operationId: List_all_Content_for_User_ChatConversation_Attachment
-export def "user-chat-conversation-attachment-content list" [
+export def "list-all-content-for-user-chat-conversation-attachment" [
   user_id: int
   chat_conversation_id: int
   attachment_id: int
@@ -3360,7 +3360,7 @@ export def "user-chat-conversation-attachment-content list" [
 #
 # GET /user/{userID}/company
 # operationId: List_all_Company_for_User
-export def "user-company list-1" [
+export def "list-all-company-for-user" [
   user_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3409,7 +3409,7 @@ export def "user-company list-1" [
 # --address_postal shape: {city?: string, country?: string, extra?: string, house_number?: string, mailbox_name?: string, po_box?: string, postal_code?: string, street?: string}
 # --ubo item shape: {date_of_birth?: string, name?: string, nationality?: string}
 # --vat_number shape: {country?: string, value?: string}
-export def "user-company create" [
+export def "create-company-for-user" [
   user_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3468,7 +3468,7 @@ export def "user-company create" [
 #
 # GET /user/{userID}/company/{itemId}
 # operationId: READ_Company_for_User
-export def "user-company get" [
+export def "read-company-for-user" [
   user_id: int
   item_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -3519,7 +3519,7 @@ export def "user-company get" [
 # --address_postal shape: {city?: string, country?: string, extra?: string, house_number?: string, mailbox_name?: string, po_box?: string, postal_code?: string, street?: string}
 # --ubo item shape: {date_of_birth?: string, name?: string, nationality?: string}
 # --vat_number shape: {country?: string, value?: string}
-export def "user-company update-by-user-id-item-id" [
+export def "update-company-for-user" [
   user_id: int
   item_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -3582,7 +3582,7 @@ export def "user-company update-by-user-id-item-id" [
 # operationId: CREATE_ConfirmationOfFunds_for_User
 # --amount shape: {currency?: string, value?: string}
 # --pointer_iban shape: {name?: string, service?: string, type?: string, value?: string}
-export def "user-confirmation-of-funds create" [
+export def "create-confirmation-of-funds-for-user" [
   user_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3632,7 +3632,7 @@ export def "user-confirmation-of-funds create" [
 #
 # GET /user/{userID}/credential-password-ip
 # operationId: List_all_CredentialPasswordIp_for_User
-export def "user-credential-password-ip list" [
+export def "list-all-credential-password-ip-for-user" [
   user_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3677,7 +3677,7 @@ export def "user-credential-password-ip list" [
 #
 # GET /user/{userID}/credential-password-ip/{credential-password-ipID}/ip
 # operationId: List_all_Ip_for_User_CredentialPasswordIp
-export def "user-credential-password-ip-ip list" [
+export def "list-all-ip-for-user-credential-password-ip" [
   user_id: int
   credential_password_ip_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -3724,7 +3724,7 @@ export def "user-credential-password-ip-ip list" [
 #
 # POST /user/{userID}/credential-password-ip/{credential-password-ipID}/ip
 # operationId: CREATE_Ip_for_User_CredentialPasswordIp
-export def "user-credential-password-ip-ip create" [
+export def "create-ip-for-user-credential-password-ip" [
   user_id: int
   credential_password_ip_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -3776,7 +3776,7 @@ export def "user-credential-password-ip-ip create" [
 #
 # GET /user/{userID}/credential-password-ip/{credential-password-ipID}/ip/{itemId}
 # operationId: READ_Ip_for_User_CredentialPasswordIp
-export def "user-credential-password-ip-ip get" [
+export def "read-ip-for-user-credential-password-ip" [
   user_id: int
   credential_password_ip_id: int
   item_id: int
@@ -3825,7 +3825,7 @@ export def "user-credential-password-ip-ip get" [
 #
 # PUT /user/{userID}/credential-password-ip/{credential-password-ipID}/ip/{itemId}
 # operationId: UPDATE_Ip_for_User_CredentialPasswordIp
-export def "user-credential-password-ip-ip update" [
+export def "update-ip-for-user-credential-password-ip" [
   user_id: int
   credential_password_ip_id: int
   item_id: int
@@ -3879,7 +3879,7 @@ export def "user-credential-password-ip-ip update" [
 #
 # GET /user/{userID}/credential-password-ip/{itemId}
 # operationId: READ_CredentialPasswordIp_for_User
-export def "user-credential-password-ip get" [
+export def "read-credential-password-ip-for-user" [
   user_id: int
   item_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -3926,7 +3926,7 @@ export def "user-credential-password-ip get" [
 #
 # GET /user/{userID}/currency-cloud-beneficiary
 # operationId: List_all_CurrencyCloudBeneficiary_for_User
-export def "user-currency-cloud-beneficiary list" [
+export def "list-all-currency-cloud-beneficiary-for-user" [
   user_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3971,7 +3971,7 @@ export def "user-currency-cloud-beneficiary list" [
 #
 # POST /user/{userID}/currency-cloud-beneficiary
 # operationId: CREATE_CurrencyCloudBeneficiary_for_User
-export def "user-currency-cloud-beneficiary create" [
+export def "create-currency-cloud-beneficiary-for-user" [
   user_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4025,7 +4025,7 @@ export def "user-currency-cloud-beneficiary create" [
 #
 # GET /user/{userID}/currency-cloud-beneficiary-requirement
 # operationId: List_all_CurrencyCloudBeneficiaryRequirement_for_User
-export def "user-currency-cloud-beneficiary-requirement list" [
+export def "list-all-currency-cloud-beneficiary-requirement-for-user" [
   user_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4070,7 +4070,7 @@ export def "user-currency-cloud-beneficiary-requirement list" [
 #
 # GET /user/{userID}/currency-cloud-beneficiary/{itemId}
 # operationId: READ_CurrencyCloudBeneficiary_for_User
-export def "user-currency-cloud-beneficiary get" [
+export def "read-currency-cloud-beneficiary-for-user" [
   user_id: int
   item_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -4117,7 +4117,7 @@ export def "user-currency-cloud-beneficiary get" [
 #
 # GET /user/{userID}/event
 # operationId: List_all_Event_for_User
-export def "user-event list" [
+export def "list-all-event-for-user" [
   user_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4162,7 +4162,7 @@ export def "user-event list" [
 #
 # GET /user/{userID}/event/{itemId}
 # operationId: READ_Event_for_User
-export def "user-event get" [
+export def "read-event-for-user" [
   user_id: int
   item_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -4209,7 +4209,7 @@ export def "user-event get" [
 #
 # GET /user/{userID}/export-annual-overview
 # operationId: List_all_ExportAnnualOverview_for_User
-export def "user-export-annual-overview list" [
+export def "list-all-export-annual-overview-for-user" [
   user_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4254,7 +4254,7 @@ export def "user-export-annual-overview list" [
 #
 # POST /user/{userID}/export-annual-overview
 # operationId: CREATE_ExportAnnualOverview_for_User
-export def "user-export-annual-overview create" [
+export def "create-export-annual-overview-for-user" [
   user_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4303,7 +4303,7 @@ export def "user-export-annual-overview create" [
 #
 # GET /user/{userID}/export-annual-overview/{export-annual-overviewID}/content
 # operationId: List_all_Content_for_User_ExportAnnualOverview
-export def "user-export-annual-overview-content list" [
+export def "list-all-content-for-user-export-annual-overview" [
   user_id: int
   export_annual_overview_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -4350,7 +4350,7 @@ export def "user-export-annual-overview-content list" [
 #
 # DELETE /user/{userID}/export-annual-overview/{itemId}
 # operationId: DELETE_ExportAnnualOverview_for_User
-export def "user-export-annual-overview delete" [
+export def "delete-export-annual-overview-for-user" [
   user_id: int
   item_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -4397,7 +4397,7 @@ export def "user-export-annual-overview delete" [
 #
 # GET /user/{userID}/export-annual-overview/{itemId}
 # operationId: READ_ExportAnnualOverview_for_User
-export def "user-export-annual-overview get" [
+export def "read-export-annual-overview-for-user" [
   user_id: int
   item_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -4444,7 +4444,7 @@ export def "user-export-annual-overview get" [
 #
 # GET /user/{userID}/feature-announcement/{itemId}
 # operationId: READ_FeatureAnnouncement_for_User
-export def "user-feature-announcement get" [
+export def "read-feature-announcement-for-user" [
   user_id: int
   item_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -4491,7 +4491,7 @@ export def "user-feature-announcement get" [
 #
 # GET /user/{userID}/insight-preference-date
 # operationId: List_all_InsightPreferenceDate_for_User
-export def "user-insight-preference-date list" [
+export def "list-all-insight-preference-date-for-user" [
   user_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4536,7 +4536,7 @@ export def "user-insight-preference-date list" [
 #
 # GET /user/{userID}/insights
 # operationId: List_all_Insights_for_User
-export def "user-insights list" [
+export def "list-all-insights-for-user" [
   user_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4581,7 +4581,7 @@ export def "user-insights list" [
 #
 # GET /user/{userID}/insights-search
 # operationId: List_all_InsightsSearch_for_User
-export def "user-insights-search list" [
+export def "list-all-insights-search-for-user" [
   user_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4626,7 +4626,7 @@ export def "user-insights-search list" [
 #
 # GET /user/{userID}/invoice
 # operationId: List_all_Invoice_for_User
-export def "user-invoice list" [
+export def "list-all-invoice-for-user" [
   user_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4671,7 +4671,7 @@ export def "user-invoice list" [
 #
 # GET /user/{userID}/invoice/{invoiceID}/pdf-content
 # operationId: List_all_PdfContent_for_User_Invoice
-export def "user-invoice-pdf-content list" [
+export def "list-all-pdf-content-for-user-invoice" [
   user_id: int
   invoice_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -4718,7 +4718,7 @@ export def "user-invoice-pdf-content list" [
 #
 # GET /user/{userID}/invoice/{itemId}
 # operationId: READ_Invoice_for_User
-export def "user-invoice get" [
+export def "read-invoice-for-user" [
   user_id: int
   item_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -4765,7 +4765,7 @@ export def "user-invoice get" [
 #
 # GET /user/{userID}/legal-name
 # operationId: List_all_LegalName_for_User
-export def "user-legal-name list" [
+export def "list-all-legal-name-for-user" [
   user_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4810,7 +4810,7 @@ export def "user-legal-name list" [
 #
 # GET /user/{userID}/limit
 # operationId: List_all_Limit_for_User
-export def "user-limit list" [
+export def "list-all-limit-for-user" [
   user_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4855,7 +4855,7 @@ export def "user-limit list" [
 #
 # GET /user/{userID}/monetary-account
 # operationId: List_all_MonetaryAccount_for_User
-export def "user-monetary-account list" [
+export def "list-all-monetary-account-for-user" [
   user_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4900,7 +4900,7 @@ export def "user-monetary-account list" [
 #
 # GET /user/{userID}/monetary-account-bank
 # operationId: List_all_MonetaryAccountBank_for_User
-export def "user-monetary-account-bank list" [
+export def "list-all-monetary-account-bank-for-user" [
   user_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4947,7 +4947,7 @@ export def "user-monetary-account-bank list" [
 # operationId: CREATE_MonetaryAccountBank_for_User
 # --daily_limit shape: {currency?: string, value?: string}
 # --setting shape: {color?: string, default_avatar_status?: string, icon?: string, restriction_chat?: string, sdd_expiration_action?: string}
-export def "user-monetary-account-bank create" [
+export def "create-monetary-account-bank-for-user" [
   user_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5006,7 +5006,7 @@ export def "user-monetary-account-bank create" [
 #
 # GET /user/{userID}/monetary-account-bank/{itemId}
 # operationId: READ_MonetaryAccountBank_for_User
-export def "user-monetary-account-bank get" [
+export def "read-monetary-account-bank-for-user" [
   user_id: int
   item_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -5055,7 +5055,7 @@ export def "user-monetary-account-bank get" [
 # operationId: UPDATE_MonetaryAccountBank_for_User
 # --daily_limit shape: {currency?: string, value?: string}
 # --setting shape: {color?: string, default_avatar_status?: string, icon?: string, restriction_chat?: string, sdd_expiration_action?: string}
-export def "user-monetary-account-bank update" [
+export def "update-monetary-account-bank-for-user" [
   user_id: int
   item_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -5116,7 +5116,7 @@ export def "user-monetary-account-bank update" [
 #
 # GET /user/{userID}/monetary-account-external
 # operationId: List_all_MonetaryAccountExternal_for_User
-export def "user-monetary-account-external list" [
+export def "list-all-monetary-account-external-for-user" [
   user_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5161,7 +5161,7 @@ export def "user-monetary-account-external list" [
 #
 # GET /user/{userID}/monetary-account-external/{itemId}
 # operationId: READ_MonetaryAccountExternal_for_User
-export def "user-monetary-account-external get" [
+export def "read-monetary-account-external-for-user" [
   user_id: int
   item_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -5208,7 +5208,7 @@ export def "user-monetary-account-external get" [
 #
 # GET /user/{userID}/monetary-account-joint
 # operationId: List_all_MonetaryAccountJoint_for_User
-export def "user-monetary-account-joint list" [
+export def "list-all-monetary-account-joint-for-user" [
   user_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5258,7 +5258,7 @@ export def "user-monetary-account-joint list" [
 # --daily_limit shape: {currency?: string, value?: string}
 # --overdraft_limit shape: {currency?: string, value?: string}
 # --setting shape: {color?: string, default_avatar_status?: string, icon?: string, restriction_chat?: string, sdd_expiration_action?: string}
-export def "user-monetary-account-joint create" [
+export def "create-monetary-account-joint-for-user" [
   user_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5318,7 +5318,7 @@ export def "user-monetary-account-joint create" [
 #
 # GET /user/{userID}/monetary-account-joint/{itemId}
 # operationId: READ_MonetaryAccountJoint_for_User
-export def "user-monetary-account-joint get" [
+export def "read-monetary-account-joint-for-user" [
   user_id: int
   item_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -5370,7 +5370,7 @@ export def "user-monetary-account-joint get" [
 # --daily_limit shape: {currency?: string, value?: string}
 # --overdraft_limit shape: {currency?: string, value?: string}
 # --setting shape: {color?: string, default_avatar_status?: string, icon?: string, restriction_chat?: string, sdd_expiration_action?: string}
-export def "user-monetary-account-joint update" [
+export def "update-monetary-account-joint-for-user" [
   user_id: int
   item_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -5432,7 +5432,7 @@ export def "user-monetary-account-joint update" [
 #
 # GET /user/{userID}/monetary-account-savings
 # operationId: List_all_MonetaryAccountSavings_for_User
-export def "user-monetary-account-savings list" [
+export def "list-all-monetary-account-savings-for-user" [
   user_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5481,7 +5481,7 @@ export def "user-monetary-account-savings list" [
 # --daily_limit shape: {currency?: string, value?: string}
 # --savings_goal shape: {currency?: string, value?: string}
 # --setting shape: {color?: string, default_avatar_status?: string, icon?: string, restriction_chat?: string, sdd_expiration_action?: string}
-export def "user-monetary-account-savings create" [
+export def "create-monetary-account-savings-for-user" [
   user_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5540,7 +5540,7 @@ export def "user-monetary-account-savings create" [
 #
 # GET /user/{userID}/monetary-account-savings/{itemId}
 # operationId: READ_MonetaryAccountSavings_for_User
-export def "user-monetary-account-savings get" [
+export def "read-monetary-account-savings-for-user" [
   user_id: int
   item_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -5591,7 +5591,7 @@ export def "user-monetary-account-savings get" [
 # --daily_limit shape: {currency?: string, value?: string}
 # --savings_goal shape: {currency?: string, value?: string}
 # --setting shape: {color?: string, default_avatar_status?: string, icon?: string, restriction_chat?: string, sdd_expiration_action?: string}
-export def "user-monetary-account-savings update" [
+export def "update-monetary-account-savings-for-user" [
   user_id: int
   item_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -5652,7 +5652,7 @@ export def "user-monetary-account-savings update" [
 #
 # GET /user/{userID}/monetary-account/{itemId}
 # operationId: READ_MonetaryAccount_for_User
-export def "user-monetary-account get" [
+export def "read-monetary-account-for-user" [
   user_id: int
   item_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -5699,7 +5699,7 @@ export def "user-monetary-account get" [
 #
 # POST /user/{userID}/monetary-account/{monetary-accountID}/attachment
 # operationId: CREATE_Attachment_for_User_MonetaryAccount
-export def "user-monetary-account-attachment create" [
+export def "create-attachment-for-user-monetary-account" [
   user_id: int
   monetary_account_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -5750,7 +5750,7 @@ export def "user-monetary-account-attachment create" [
 #
 # GET /user/{userID}/monetary-account/{monetary-accountID}/attachment/{attachmentID}/content
 # operationId: List_all_Content_for_User_MonetaryAccount_Attachment
-export def "user-monetary-account-attachment-content list" [
+export def "list-all-content-for-user-monetary-account-attachment" [
   user_id: int
   monetary_account_id: int
   attachment_id: int
@@ -5799,7 +5799,7 @@ export def "user-monetary-account-attachment-content list" [
 #
 # GET /user/{userID}/monetary-account/{monetary-accountID}/bunqme-fundraiser-result/{bunqme-fundraiser-resultID}/note-attachment
 # operationId: List_all_NoteAttachment_for_User_MonetaryAccount_BunqmeFundraiserResult
-export def "user-monetary-account-bunqme-fundraiser-result-note-attachment list" [
+export def "list-all-note-attachment-for-user-monetary-account-bunqme-fundraiser-result" [
   user_id: int
   monetary_account_id: int
   bunqme_fundraiser_result_id: int
@@ -5848,7 +5848,7 @@ export def "user-monetary-account-bunqme-fundraiser-result-note-attachment list"
 #
 # POST /user/{userID}/monetary-account/{monetary-accountID}/bunqme-fundraiser-result/{bunqme-fundraiser-resultID}/note-attachment
 # operationId: CREATE_NoteAttachment_for_User_MonetaryAccount_BunqmeFundraiserResult
-export def "user-monetary-account-bunqme-fundraiser-result-note-attachment create" [
+export def "create-note-attachment-for-user-monetary-account-bunqme-fundraiser-result" [
   user_id: int
   monetary_account_id: int
   bunqme_fundraiser_result_id: int
@@ -5902,7 +5902,7 @@ export def "user-monetary-account-bunqme-fundraiser-result-note-attachment creat
 #
 # DELETE /user/{userID}/monetary-account/{monetary-accountID}/bunqme-fundraiser-result/{bunqme-fundraiser-resultID}/note-attachment/{itemId}
 # operationId: DELETE_NoteAttachment_for_User_MonetaryAccount_BunqmeFundraiserResult
-export def "user-monetary-account-bunqme-fundraiser-result-note-attachment delete" [
+export def "delete-note-attachment-for-user-monetary-account-bunqme-fundraiser-result" [
   user_id: int
   monetary_account_id: int
   bunqme_fundraiser_result_id: int
@@ -5953,7 +5953,7 @@ export def "user-monetary-account-bunqme-fundraiser-result-note-attachment delet
 #
 # GET /user/{userID}/monetary-account/{monetary-accountID}/bunqme-fundraiser-result/{bunqme-fundraiser-resultID}/note-attachment/{itemId}
 # operationId: READ_NoteAttachment_for_User_MonetaryAccount_BunqmeFundraiserResult
-export def "user-monetary-account-bunqme-fundraiser-result-note-attachment get" [
+export def "read-note-attachment-for-user-monetary-account-bunqme-fundraiser-result" [
   user_id: int
   monetary_account_id: int
   bunqme_fundraiser_result_id: int
@@ -6004,7 +6004,7 @@ export def "user-monetary-account-bunqme-fundraiser-result-note-attachment get" 
 #
 # PUT /user/{userID}/monetary-account/{monetary-accountID}/bunqme-fundraiser-result/{bunqme-fundraiser-resultID}/note-attachment/{itemId}
 # operationId: UPDATE_NoteAttachment_for_User_MonetaryAccount_BunqmeFundraiserResult
-export def "user-monetary-account-bunqme-fundraiser-result-note-attachment update" [
+export def "update-note-attachment-for-user-monetary-account-bunqme-fundraiser-result" [
   user_id: int
   monetary_account_id: int
   bunqme_fundraiser_result_id: int
@@ -6060,7 +6060,7 @@ export def "user-monetary-account-bunqme-fundraiser-result-note-attachment updat
 #
 # GET /user/{userID}/monetary-account/{monetary-accountID}/bunqme-fundraiser-result/{bunqme-fundraiser-resultID}/note-text
 # operationId: List_all_NoteText_for_User_MonetaryAccount_BunqmeFundraiserResult
-export def "user-monetary-account-bunqme-fundraiser-result-note-text list" [
+export def "list-all-note-text-for-user-monetary-account-bunqme-fundraiser-result" [
   user_id: int
   monetary_account_id: int
   bunqme_fundraiser_result_id: int
@@ -6109,7 +6109,7 @@ export def "user-monetary-account-bunqme-fundraiser-result-note-text list" [
 #
 # POST /user/{userID}/monetary-account/{monetary-accountID}/bunqme-fundraiser-result/{bunqme-fundraiser-resultID}/note-text
 # operationId: CREATE_NoteText_for_User_MonetaryAccount_BunqmeFundraiserResult
-export def "user-monetary-account-bunqme-fundraiser-result-note-text create" [
+export def "create-note-text-for-user-monetary-account-bunqme-fundraiser-result" [
   user_id: int
   monetary_account_id: int
   bunqme_fundraiser_result_id: int
@@ -6162,7 +6162,7 @@ export def "user-monetary-account-bunqme-fundraiser-result-note-text create" [
 #
 # DELETE /user/{userID}/monetary-account/{monetary-accountID}/bunqme-fundraiser-result/{bunqme-fundraiser-resultID}/note-text/{itemId}
 # operationId: DELETE_NoteText_for_User_MonetaryAccount_BunqmeFundraiserResult
-export def "user-monetary-account-bunqme-fundraiser-result-note-text delete" [
+export def "delete-note-text-for-user-monetary-account-bunqme-fundraiser-result" [
   user_id: int
   monetary_account_id: int
   bunqme_fundraiser_result_id: int
@@ -6213,7 +6213,7 @@ export def "user-monetary-account-bunqme-fundraiser-result-note-text delete" [
 #
 # GET /user/{userID}/monetary-account/{monetary-accountID}/bunqme-fundraiser-result/{bunqme-fundraiser-resultID}/note-text/{itemId}
 # operationId: READ_NoteText_for_User_MonetaryAccount_BunqmeFundraiserResult
-export def "user-monetary-account-bunqme-fundraiser-result-note-text get" [
+export def "read-note-text-for-user-monetary-account-bunqme-fundraiser-result" [
   user_id: int
   monetary_account_id: int
   bunqme_fundraiser_result_id: int
@@ -6264,7 +6264,7 @@ export def "user-monetary-account-bunqme-fundraiser-result-note-text get" [
 #
 # PUT /user/{userID}/monetary-account/{monetary-accountID}/bunqme-fundraiser-result/{bunqme-fundraiser-resultID}/note-text/{itemId}
 # operationId: UPDATE_NoteText_for_User_MonetaryAccount_BunqmeFundraiserResult
-export def "user-monetary-account-bunqme-fundraiser-result-note-text update" [
+export def "update-note-text-for-user-monetary-account-bunqme-fundraiser-result" [
   user_id: int
   monetary_account_id: int
   bunqme_fundraiser_result_id: int
@@ -6319,7 +6319,7 @@ export def "user-monetary-account-bunqme-fundraiser-result-note-text update" [
 #
 # GET /user/{userID}/monetary-account/{monetary-accountID}/bunqme-fundraiser-result/{itemId}
 # operationId: READ_BunqmeFundraiserResult_for_User_MonetaryAccount
-export def "user-monetary-account-bunqme-fundraiser-result get" [
+export def "read-bunqme-fundraiser-result-for-user-monetary-account" [
   user_id: int
   monetary_account_id: int
   item_id: int
@@ -6368,7 +6368,7 @@ export def "user-monetary-account-bunqme-fundraiser-result get" [
 #
 # GET /user/{userID}/monetary-account/{monetary-accountID}/bunqme-tab
 # operationId: List_all_BunqmeTab_for_User_MonetaryAccount
-export def "user-monetary-account-bunqme-tab list" [
+export def "list-all-bunqme-tab-for-user-monetary-account" [
   user_id: int
   monetary_account_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -6416,7 +6416,7 @@ export def "user-monetary-account-bunqme-tab list" [
 # POST /user/{userID}/monetary-account/{monetary-accountID}/bunqme-tab
 # operationId: CREATE_BunqmeTab_for_User_MonetaryAccount
 # --bunqme_tab_entry shape: {alias?: record, amount_inquired?: record, description?: string, redirect_url?: string}
-export def "user-monetary-account-bunqme-tab create" [
+export def "create-bunqme-tab-for-user-monetary-account" [
   user_id: int
   monetary_account_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -6468,7 +6468,7 @@ export def "user-monetary-account-bunqme-tab create" [
 #
 # GET /user/{userID}/monetary-account/{monetary-accountID}/bunqme-tab-result-response/{itemId}
 # operationId: READ_BunqmeTabResultResponse_for_User_MonetaryAccount
-export def "user-monetary-account-bunqme-tab-result-response get" [
+export def "read-bunqme-tab-result-response-for-user-monetary-account" [
   user_id: int
   monetary_account_id: int
   item_id: int
@@ -6517,7 +6517,7 @@ export def "user-monetary-account-bunqme-tab-result-response get" [
 #
 # GET /user/{userID}/monetary-account/{monetary-accountID}/bunqme-tab/{itemId}
 # operationId: READ_BunqmeTab_for_User_MonetaryAccount
-export def "user-monetary-account-bunqme-tab get" [
+export def "read-bunqme-tab-for-user-monetary-account" [
   user_id: int
   monetary_account_id: int
   item_id: int
@@ -6567,7 +6567,7 @@ export def "user-monetary-account-bunqme-tab get" [
 # PUT /user/{userID}/monetary-account/{monetary-accountID}/bunqme-tab/{itemId}
 # operationId: UPDATE_BunqmeTab_for_User_MonetaryAccount
 # --bunqme_tab_entry shape: {alias?: record, amount_inquired?: record, description?: string, redirect_url?: string}
-export def "user-monetary-account-bunqme-tab update" [
+export def "update-bunqme-tab-for-user-monetary-account" [
   user_id: int
   monetary_account_id: int
   item_id: int
@@ -6622,7 +6622,7 @@ export def "user-monetary-account-bunqme-tab update" [
 # POST /user/{userID}/monetary-account/{monetary-accountID}/currency-cloud-payment-quote
 # operationId: CREATE_CurrencyCloudPaymentQuote_for_User_MonetaryAccount
 # --pointers item shape: {name?: string, service?: string, type?: string, value?: string}
-export def "user-monetary-account-currency-cloud-payment-quote create" [
+export def "create-currency-cloud-payment-quote-for-user-monetary-account" [
   user_id: int
   monetary_account_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -6673,7 +6673,7 @@ export def "user-monetary-account-currency-cloud-payment-quote create" [
 #
 # GET /user/{userID}/monetary-account/{monetary-accountID}/currency-conversion
 # operationId: List_all_CurrencyConversion_for_User_MonetaryAccount
-export def "user-monetary-account-currency-conversion list" [
+export def "list-all-currency-conversion-for-user-monetary-account" [
   user_id: int
   monetary_account_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -6722,7 +6722,7 @@ export def "user-monetary-account-currency-conversion list" [
 # operationId: CREATE_CurrencyConversionQuote_for_User_MonetaryAccount
 # --amount shape: {currency?: string, value?: string}
 # --counterparty_alias shape: {name?: string, service?: string, type?: string, value?: string}
-export def "user-monetary-account-currency-conversion-quote create" [
+export def "create-currency-conversion-quote-for-user-monetary-account" [
   user_id: int
   monetary_account_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -6777,7 +6777,7 @@ export def "user-monetary-account-currency-conversion-quote create" [
 #
 # GET /user/{userID}/monetary-account/{monetary-accountID}/currency-conversion-quote/{itemId}
 # operationId: READ_CurrencyConversionQuote_for_User_MonetaryAccount
-export def "user-monetary-account-currency-conversion-quote get" [
+export def "read-currency-conversion-quote-for-user-monetary-account" [
   user_id: int
   monetary_account_id: int
   item_id: int
@@ -6828,7 +6828,7 @@ export def "user-monetary-account-currency-conversion-quote get" [
 # operationId: UPDATE_CurrencyConversionQuote_for_User_MonetaryAccount
 # --amount shape: {currency?: string, value?: string}
 # --counterparty_alias shape: {name?: string, service?: string, type?: string, value?: string}
-export def "user-monetary-account-currency-conversion-quote update" [
+export def "update-currency-conversion-quote-for-user-monetary-account" [
   user_id: int
   monetary_account_id: int
   item_id: int
@@ -6885,7 +6885,7 @@ export def "user-monetary-account-currency-conversion-quote update" [
 #
 # GET /user/{userID}/monetary-account/{monetary-accountID}/currency-conversion/{itemId}
 # operationId: READ_CurrencyConversion_for_User_MonetaryAccount
-export def "user-monetary-account-currency-conversion get" [
+export def "read-currency-conversion-for-user-monetary-account" [
   user_id: int
   monetary_account_id: int
   item_id: int
@@ -6934,7 +6934,7 @@ export def "user-monetary-account-currency-conversion get" [
 #
 # GET /user/{userID}/monetary-account/{monetary-accountID}/customer-statement
 # operationId: List_all_CustomerStatement_for_User_MonetaryAccount
-export def "user-monetary-account-customer-statement list" [
+export def "list-all-customer-statement-for-user-monetary-account" [
   user_id: int
   monetary_account_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -6981,7 +6981,7 @@ export def "user-monetary-account-customer-statement list" [
 #
 # POST /user/{userID}/monetary-account/{monetary-accountID}/customer-statement
 # operationId: CREATE_CustomerStatement_for_User_MonetaryAccount
-export def "user-monetary-account-customer-statement create" [
+export def "create-customer-statement-for-user-monetary-account" [
   user_id: int
   monetary_account_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -7036,7 +7036,7 @@ export def "user-monetary-account-customer-statement create" [
 #
 # GET /user/{userID}/monetary-account/{monetary-accountID}/customer-statement/{customer-statementID}/content
 # operationId: List_all_Content_for_User_MonetaryAccount_CustomerStatement
-export def "user-monetary-account-customer-statement-content list" [
+export def "list-all-content-for-user-monetary-account-customer-statement" [
   user_id: int
   monetary_account_id: int
   customer_statement_id: int
@@ -7085,7 +7085,7 @@ export def "user-monetary-account-customer-statement-content list" [
 #
 # DELETE /user/{userID}/monetary-account/{monetary-accountID}/customer-statement/{itemId}
 # operationId: DELETE_CustomerStatement_for_User_MonetaryAccount
-export def "user-monetary-account-customer-statement delete" [
+export def "delete-customer-statement-for-user-monetary-account" [
   user_id: int
   monetary_account_id: int
   item_id: int
@@ -7134,7 +7134,7 @@ export def "user-monetary-account-customer-statement delete" [
 #
 # GET /user/{userID}/monetary-account/{monetary-accountID}/customer-statement/{itemId}
 # operationId: READ_CustomerStatement_for_User_MonetaryAccount
-export def "user-monetary-account-customer-statement get" [
+export def "read-customer-statement-for-user-monetary-account" [
   user_id: int
   monetary_account_id: int
   item_id: int
@@ -7183,7 +7183,7 @@ export def "user-monetary-account-customer-statement get" [
 #
 # GET /user/{userID}/monetary-account/{monetary-accountID}/draft-payment
 # operationId: List_all_DraftPayment_for_User_MonetaryAccount
-export def "user-monetary-account-draft-payment list" [
+export def "list-all-draft-payment-for-user-monetary-account" [
   user_id: int
   monetary_account_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -7232,7 +7232,7 @@ export def "user-monetary-account-draft-payment list" [
 # operationId: CREATE_DraftPayment_for_User_MonetaryAccount
 # --entries item shape: {alias?: record, amount?: record, attachment?: list, counterparty_alias?: record, description?: string, merchant_reference?: string}
 # --schedule shape: {object?: record, recurrence_size?: int, recurrence_unit?: string, time_end?: string, time_start?: string}
-export def "user-monetary-account-draft-payment create" [
+export def "create-draft-payment-for-user-monetary-account" [
   user_id: int
   monetary_account_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -7287,7 +7287,7 @@ export def "user-monetary-account-draft-payment create" [
 #
 # GET /user/{userID}/monetary-account/{monetary-accountID}/draft-payment/{draft-paymentID}/note-attachment
 # operationId: List_all_NoteAttachment_for_User_MonetaryAccount_DraftPayment
-export def "user-monetary-account-draft-payment-note-attachment list" [
+export def "list-all-note-attachment-for-user-monetary-account-draft-payment" [
   user_id: int
   monetary_account_id: int
   draft_payment_id: int
@@ -7336,7 +7336,7 @@ export def "user-monetary-account-draft-payment-note-attachment list" [
 #
 # POST /user/{userID}/monetary-account/{monetary-accountID}/draft-payment/{draft-paymentID}/note-attachment
 # operationId: CREATE_NoteAttachment_for_User_MonetaryAccount_DraftPayment
-export def "user-monetary-account-draft-payment-note-attachment create" [
+export def "create-note-attachment-for-user-monetary-account-draft-payment" [
   user_id: int
   monetary_account_id: int
   draft_payment_id: int
@@ -7390,7 +7390,7 @@ export def "user-monetary-account-draft-payment-note-attachment create" [
 #
 # DELETE /user/{userID}/monetary-account/{monetary-accountID}/draft-payment/{draft-paymentID}/note-attachment/{itemId}
 # operationId: DELETE_NoteAttachment_for_User_MonetaryAccount_DraftPayment
-export def "user-monetary-account-draft-payment-note-attachment delete" [
+export def "delete-note-attachment-for-user-monetary-account-draft-payment" [
   user_id: int
   monetary_account_id: int
   draft_payment_id: int
@@ -7441,7 +7441,7 @@ export def "user-monetary-account-draft-payment-note-attachment delete" [
 #
 # GET /user/{userID}/monetary-account/{monetary-accountID}/draft-payment/{draft-paymentID}/note-attachment/{itemId}
 # operationId: READ_NoteAttachment_for_User_MonetaryAccount_DraftPayment
-export def "user-monetary-account-draft-payment-note-attachment get" [
+export def "read-note-attachment-for-user-monetary-account-draft-payment" [
   user_id: int
   monetary_account_id: int
   draft_payment_id: int
@@ -7492,7 +7492,7 @@ export def "user-monetary-account-draft-payment-note-attachment get" [
 #
 # PUT /user/{userID}/monetary-account/{monetary-accountID}/draft-payment/{draft-paymentID}/note-attachment/{itemId}
 # operationId: UPDATE_NoteAttachment_for_User_MonetaryAccount_DraftPayment
-export def "user-monetary-account-draft-payment-note-attachment update" [
+export def "update-note-attachment-for-user-monetary-account-draft-payment" [
   user_id: int
   monetary_account_id: int
   draft_payment_id: int
@@ -7548,7 +7548,7 @@ export def "user-monetary-account-draft-payment-note-attachment update" [
 #
 # GET /user/{userID}/monetary-account/{monetary-accountID}/draft-payment/{draft-paymentID}/note-text
 # operationId: List_all_NoteText_for_User_MonetaryAccount_DraftPayment
-export def "user-monetary-account-draft-payment-note-text list" [
+export def "list-all-note-text-for-user-monetary-account-draft-payment" [
   user_id: int
   monetary_account_id: int
   draft_payment_id: int
@@ -7597,7 +7597,7 @@ export def "user-monetary-account-draft-payment-note-text list" [
 #
 # POST /user/{userID}/monetary-account/{monetary-accountID}/draft-payment/{draft-paymentID}/note-text
 # operationId: CREATE_NoteText_for_User_MonetaryAccount_DraftPayment
-export def "user-monetary-account-draft-payment-note-text create" [
+export def "create-note-text-for-user-monetary-account-draft-payment" [
   user_id: int
   monetary_account_id: int
   draft_payment_id: int
@@ -7650,7 +7650,7 @@ export def "user-monetary-account-draft-payment-note-text create" [
 #
 # DELETE /user/{userID}/monetary-account/{monetary-accountID}/draft-payment/{draft-paymentID}/note-text/{itemId}
 # operationId: DELETE_NoteText_for_User_MonetaryAccount_DraftPayment
-export def "user-monetary-account-draft-payment-note-text delete" [
+export def "delete-note-text-for-user-monetary-account-draft-payment" [
   user_id: int
   monetary_account_id: int
   draft_payment_id: int
@@ -7701,7 +7701,7 @@ export def "user-monetary-account-draft-payment-note-text delete" [
 #
 # GET /user/{userID}/monetary-account/{monetary-accountID}/draft-payment/{draft-paymentID}/note-text/{itemId}
 # operationId: READ_NoteText_for_User_MonetaryAccount_DraftPayment
-export def "user-monetary-account-draft-payment-note-text get" [
+export def "read-note-text-for-user-monetary-account-draft-payment" [
   user_id: int
   monetary_account_id: int
   draft_payment_id: int
@@ -7752,7 +7752,7 @@ export def "user-monetary-account-draft-payment-note-text get" [
 #
 # PUT /user/{userID}/monetary-account/{monetary-accountID}/draft-payment/{draft-paymentID}/note-text/{itemId}
 # operationId: UPDATE_NoteText_for_User_MonetaryAccount_DraftPayment
-export def "user-monetary-account-draft-payment-note-text update" [
+export def "update-note-text-for-user-monetary-account-draft-payment" [
   user_id: int
   monetary_account_id: int
   draft_payment_id: int
@@ -7807,7 +7807,7 @@ export def "user-monetary-account-draft-payment-note-text update" [
 #
 # GET /user/{userID}/monetary-account/{monetary-accountID}/draft-payment/{itemId}
 # operationId: READ_DraftPayment_for_User_MonetaryAccount
-export def "user-monetary-account-draft-payment get" [
+export def "read-draft-payment-for-user-monetary-account" [
   user_id: int
   monetary_account_id: int
   item_id: int
@@ -7858,7 +7858,7 @@ export def "user-monetary-account-draft-payment get" [
 # operationId: UPDATE_DraftPayment_for_User_MonetaryAccount
 # --entries item shape: {alias?: record, amount?: record, attachment?: list, counterparty_alias?: record, description?: string, merchant_reference?: string}
 # --schedule shape: {object?: record, recurrence_size?: int, recurrence_unit?: string, time_end?: string, time_start?: string}
-export def "user-monetary-account-draft-payment update" [
+export def "update-draft-payment-for-user-monetary-account" [
   user_id: int
   monetary_account_id: int
   item_id: int
@@ -7915,7 +7915,7 @@ export def "user-monetary-account-draft-payment update" [
 #
 # POST /user/{userID}/monetary-account/{monetary-accountID}/event/{eventID}/statement
 # operationId: CREATE_Statement_for_User_MonetaryAccount_Event
-export def "user-monetary-account-event-statement create" [
+export def "create-statement-for-user-monetary-account-event" [
   user_id: int
   monetary_account_id: int
   event_id: int
@@ -7968,7 +7968,7 @@ export def "user-monetary-account-event-statement create" [
 #
 # GET /user/{userID}/monetary-account/{monetary-accountID}/event/{eventID}/statement/{itemId}
 # operationId: READ_Statement_for_User_MonetaryAccount_Event
-export def "user-monetary-account-event-statement get" [
+export def "read-statement-for-user-monetary-account-event" [
   user_id: int
   monetary_account_id: int
   event_id: int
@@ -8019,7 +8019,7 @@ export def "user-monetary-account-event-statement get" [
 #
 # GET /user/{userID}/monetary-account/{monetary-accountID}/event/{eventID}/statement/{statementID}/content
 # operationId: List_all_Content_for_User_MonetaryAccount_Event_Statement
-export def "user-monetary-account-event-statement-content list" [
+export def "list-all-content-for-user-monetary-account-event-statement" [
   user_id: int
   monetary_account_id: int
   event_id: int
@@ -8070,7 +8070,7 @@ export def "user-monetary-account-event-statement-content list" [
 #
 # GET /user/{userID}/monetary-account/{monetary-accountID}/export-rib
 # operationId: List_all_ExportRib_for_User_MonetaryAccount
-export def "user-monetary-account-export-rib list" [
+export def "list-all-export-rib-for-user-monetary-account" [
   user_id: int
   monetary_account_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -8117,7 +8117,7 @@ export def "user-monetary-account-export-rib list" [
 #
 # POST /user/{userID}/monetary-account/{monetary-accountID}/export-rib
 # operationId: CREATE_ExportRib_for_User_MonetaryAccount
-export def "user-monetary-account-export-rib create" [
+export def "create-export-rib-for-user-monetary-account" [
   user_id: int
   monetary_account_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -8168,7 +8168,7 @@ export def "user-monetary-account-export-rib create" [
 #
 # GET /user/{userID}/monetary-account/{monetary-accountID}/export-rib/{export-ribID}/content
 # operationId: List_all_Content_for_User_MonetaryAccount_ExportRib
-export def "user-monetary-account-export-rib-content list" [
+export def "list-all-content-for-user-monetary-account-export-rib" [
   user_id: int
   monetary_account_id: int
   export_rib_id: int
@@ -8217,7 +8217,7 @@ export def "user-monetary-account-export-rib-content list" [
 #
 # DELETE /user/{userID}/monetary-account/{monetary-accountID}/export-rib/{itemId}
 # operationId: DELETE_ExportRib_for_User_MonetaryAccount
-export def "user-monetary-account-export-rib delete" [
+export def "delete-export-rib-for-user-monetary-account" [
   user_id: int
   monetary_account_id: int
   item_id: int
@@ -8266,7 +8266,7 @@ export def "user-monetary-account-export-rib delete" [
 #
 # GET /user/{userID}/monetary-account/{monetary-accountID}/export-rib/{itemId}
 # operationId: READ_ExportRib_for_User_MonetaryAccount
-export def "user-monetary-account-export-rib get" [
+export def "read-export-rib-for-user-monetary-account" [
   user_id: int
   monetary_account_id: int
   item_id: int
@@ -8315,7 +8315,7 @@ export def "user-monetary-account-export-rib get" [
 #
 # GET /user/{userID}/monetary-account/{monetary-accountID}/ideal-merchant-transaction
 # operationId: List_all_IdealMerchantTransaction_for_User_MonetaryAccount
-export def "user-monetary-account-ideal-merchant-transaction list" [
+export def "list-all-ideal-merchant-transaction-for-user-monetary-account" [
   user_id: int
   monetary_account_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -8366,7 +8366,7 @@ export def "user-monetary-account-ideal-merchant-transaction list" [
 # --amount_guaranteed shape: {currency?: string, value?: string}
 # --amount_requested shape: {currency?: string, value?: string}
 # --counterparty_alias shape: {avatar?: record, bunq_me?: record, label_user?: record}
-export def "user-monetary-account-ideal-merchant-transaction create" [
+export def "create-ideal-merchant-transaction-for-user-monetary-account" [
   user_id: int
   monetary_account_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -8421,7 +8421,7 @@ export def "user-monetary-account-ideal-merchant-transaction create" [
 #
 # GET /user/{userID}/monetary-account/{monetary-accountID}/ideal-merchant-transaction/{ideal-merchant-transactionID}/note-attachment
 # operationId: List_all_NoteAttachment_for_User_MonetaryAccount_IdealMerchantTransaction
-export def "user-monetary-account-ideal-merchant-transaction-note-attachment list" [
+export def "list-all-note-attachment-for-user-monetary-account-ideal-merchant-transaction" [
   user_id: int
   monetary_account_id: int
   ideal_merchant_transaction_id: int
@@ -8470,7 +8470,7 @@ export def "user-monetary-account-ideal-merchant-transaction-note-attachment lis
 #
 # POST /user/{userID}/monetary-account/{monetary-accountID}/ideal-merchant-transaction/{ideal-merchant-transactionID}/note-attachment
 # operationId: CREATE_NoteAttachment_for_User_MonetaryAccount_IdealMerchantTransaction
-export def "user-monetary-account-ideal-merchant-transaction-note-attachment create" [
+export def "create-note-attachment-for-user-monetary-account-ideal-merchant-transaction" [
   user_id: int
   monetary_account_id: int
   ideal_merchant_transaction_id: int
@@ -8524,7 +8524,7 @@ export def "user-monetary-account-ideal-merchant-transaction-note-attachment cre
 #
 # DELETE /user/{userID}/monetary-account/{monetary-accountID}/ideal-merchant-transaction/{ideal-merchant-transactionID}/note-attachment/{itemId}
 # operationId: DELETE_NoteAttachment_for_User_MonetaryAccount_IdealMerchantTransaction
-export def "user-monetary-account-ideal-merchant-transaction-note-attachment delete" [
+export def "delete-note-attachment-for-user-monetary-account-ideal-merchant-transaction" [
   user_id: int
   monetary_account_id: int
   ideal_merchant_transaction_id: int
@@ -8575,7 +8575,7 @@ export def "user-monetary-account-ideal-merchant-transaction-note-attachment del
 #
 # GET /user/{userID}/monetary-account/{monetary-accountID}/ideal-merchant-transaction/{ideal-merchant-transactionID}/note-attachment/{itemId}
 # operationId: READ_NoteAttachment_for_User_MonetaryAccount_IdealMerchantTransaction
-export def "user-monetary-account-ideal-merchant-transaction-note-attachment get" [
+export def "read-note-attachment-for-user-monetary-account-ideal-merchant-transaction" [
   user_id: int
   monetary_account_id: int
   ideal_merchant_transaction_id: int
@@ -8626,7 +8626,7 @@ export def "user-monetary-account-ideal-merchant-transaction-note-attachment get
 #
 # PUT /user/{userID}/monetary-account/{monetary-accountID}/ideal-merchant-transaction/{ideal-merchant-transactionID}/note-attachment/{itemId}
 # operationId: UPDATE_NoteAttachment_for_User_MonetaryAccount_IdealMerchantTransaction
-export def "user-monetary-account-ideal-merchant-transaction-note-attachment update" [
+export def "update-note-attachment-for-user-monetary-account-ideal-merchant-transaction" [
   user_id: int
   monetary_account_id: int
   ideal_merchant_transaction_id: int
@@ -8682,7 +8682,7 @@ export def "user-monetary-account-ideal-merchant-transaction-note-attachment upd
 #
 # GET /user/{userID}/monetary-account/{monetary-accountID}/ideal-merchant-transaction/{ideal-merchant-transactionID}/note-text
 # operationId: List_all_NoteText_for_User_MonetaryAccount_IdealMerchantTransaction
-export def "user-monetary-account-ideal-merchant-transaction-note-text list" [
+export def "list-all-note-text-for-user-monetary-account-ideal-merchant-transaction" [
   user_id: int
   monetary_account_id: int
   ideal_merchant_transaction_id: int
@@ -8731,7 +8731,7 @@ export def "user-monetary-account-ideal-merchant-transaction-note-text list" [
 #
 # POST /user/{userID}/monetary-account/{monetary-accountID}/ideal-merchant-transaction/{ideal-merchant-transactionID}/note-text
 # operationId: CREATE_NoteText_for_User_MonetaryAccount_IdealMerchantTransaction
-export def "user-monetary-account-ideal-merchant-transaction-note-text create" [
+export def "create-note-text-for-user-monetary-account-ideal-merchant-transaction" [
   user_id: int
   monetary_account_id: int
   ideal_merchant_transaction_id: int
@@ -8784,7 +8784,7 @@ export def "user-monetary-account-ideal-merchant-transaction-note-text create" [
 #
 # DELETE /user/{userID}/monetary-account/{monetary-accountID}/ideal-merchant-transaction/{ideal-merchant-transactionID}/note-text/{itemId}
 # operationId: DELETE_NoteText_for_User_MonetaryAccount_IdealMerchantTransaction
-export def "user-monetary-account-ideal-merchant-transaction-note-text delete" [
+export def "delete-note-text-for-user-monetary-account-ideal-merchant-transaction" [
   user_id: int
   monetary_account_id: int
   ideal_merchant_transaction_id: int
@@ -8835,7 +8835,7 @@ export def "user-monetary-account-ideal-merchant-transaction-note-text delete" [
 #
 # GET /user/{userID}/monetary-account/{monetary-accountID}/ideal-merchant-transaction/{ideal-merchant-transactionID}/note-text/{itemId}
 # operationId: READ_NoteText_for_User_MonetaryAccount_IdealMerchantTransaction
-export def "user-monetary-account-ideal-merchant-transaction-note-text get" [
+export def "read-note-text-for-user-monetary-account-ideal-merchant-transaction" [
   user_id: int
   monetary_account_id: int
   ideal_merchant_transaction_id: int
@@ -8886,7 +8886,7 @@ export def "user-monetary-account-ideal-merchant-transaction-note-text get" [
 #
 # PUT /user/{userID}/monetary-account/{monetary-accountID}/ideal-merchant-transaction/{ideal-merchant-transactionID}/note-text/{itemId}
 # operationId: UPDATE_NoteText_for_User_MonetaryAccount_IdealMerchantTransaction
-export def "user-monetary-account-ideal-merchant-transaction-note-text update" [
+export def "update-note-text-for-user-monetary-account-ideal-merchant-transaction" [
   user_id: int
   monetary_account_id: int
   ideal_merchant_transaction_id: int
@@ -8941,7 +8941,7 @@ export def "user-monetary-account-ideal-merchant-transaction-note-text update" [
 #
 # GET /user/{userID}/monetary-account/{monetary-accountID}/ideal-merchant-transaction/{itemId}
 # operationId: READ_IdealMerchantTransaction_for_User_MonetaryAccount
-export def "user-monetary-account-ideal-merchant-transaction get" [
+export def "read-ideal-merchant-transaction-for-user-monetary-account" [
   user_id: int
   monetary_account_id: int
   item_id: int
@@ -8990,7 +8990,7 @@ export def "user-monetary-account-ideal-merchant-transaction get" [
 #
 # GET /user/{userID}/monetary-account/{monetary-accountID}/invoice
 # operationId: List_all_Invoice_for_User_MonetaryAccount
-export def "user-monetary-account-invoice list" [
+export def "list-all-invoice-for-user-monetary-account" [
   user_id: int
   monetary_account_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -9037,7 +9037,7 @@ export def "user-monetary-account-invoice list" [
 #
 # GET /user/{userID}/monetary-account/{monetary-accountID}/invoice/{itemId}
 # operationId: READ_Invoice_for_User_MonetaryAccount
-export def "user-monetary-account-invoice get" [
+export def "read-invoice-for-user-monetary-account" [
   user_id: int
   monetary_account_id: int
   item_id: int
@@ -9086,7 +9086,7 @@ export def "user-monetary-account-invoice get" [
 #
 # GET /user/{userID}/monetary-account/{monetary-accountID}/mastercard-action
 # operationId: List_all_MastercardAction_for_User_MonetaryAccount
-export def "user-monetary-account-mastercard-action list" [
+export def "list-all-mastercard-action-for-user-monetary-account" [
   user_id: int
   monetary_account_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -9133,7 +9133,7 @@ export def "user-monetary-account-mastercard-action list" [
 #
 # GET /user/{userID}/monetary-account/{monetary-accountID}/mastercard-action/{itemId}
 # operationId: READ_MastercardAction_for_User_MonetaryAccount
-export def "user-monetary-account-mastercard-action get" [
+export def "read-mastercard-action-for-user-monetary-account" [
   user_id: int
   monetary_account_id: int
   item_id: int
@@ -9182,7 +9182,7 @@ export def "user-monetary-account-mastercard-action get" [
 #
 # GET /user/{userID}/monetary-account/{monetary-accountID}/mastercard-action/{mastercard-actionID}/note-attachment
 # operationId: List_all_NoteAttachment_for_User_MonetaryAccount_MastercardAction
-export def "user-monetary-account-mastercard-action-note-attachment list" [
+export def "list-all-note-attachment-for-user-monetary-account-mastercard-action" [
   user_id: int
   monetary_account_id: int
   mastercard_action_id: int
@@ -9231,7 +9231,7 @@ export def "user-monetary-account-mastercard-action-note-attachment list" [
 #
 # POST /user/{userID}/monetary-account/{monetary-accountID}/mastercard-action/{mastercard-actionID}/note-attachment
 # operationId: CREATE_NoteAttachment_for_User_MonetaryAccount_MastercardAction
-export def "user-monetary-account-mastercard-action-note-attachment create" [
+export def "create-note-attachment-for-user-monetary-account-mastercard-action" [
   user_id: int
   monetary_account_id: int
   mastercard_action_id: int
@@ -9285,7 +9285,7 @@ export def "user-monetary-account-mastercard-action-note-attachment create" [
 #
 # DELETE /user/{userID}/monetary-account/{monetary-accountID}/mastercard-action/{mastercard-actionID}/note-attachment/{itemId}
 # operationId: DELETE_NoteAttachment_for_User_MonetaryAccount_MastercardAction
-export def "user-monetary-account-mastercard-action-note-attachment delete" [
+export def "delete-note-attachment-for-user-monetary-account-mastercard-action" [
   user_id: int
   monetary_account_id: int
   mastercard_action_id: int
@@ -9336,7 +9336,7 @@ export def "user-monetary-account-mastercard-action-note-attachment delete" [
 #
 # GET /user/{userID}/monetary-account/{monetary-accountID}/mastercard-action/{mastercard-actionID}/note-attachment/{itemId}
 # operationId: READ_NoteAttachment_for_User_MonetaryAccount_MastercardAction
-export def "user-monetary-account-mastercard-action-note-attachment get" [
+export def "read-note-attachment-for-user-monetary-account-mastercard-action" [
   user_id: int
   monetary_account_id: int
   mastercard_action_id: int
@@ -9387,7 +9387,7 @@ export def "user-monetary-account-mastercard-action-note-attachment get" [
 #
 # PUT /user/{userID}/monetary-account/{monetary-accountID}/mastercard-action/{mastercard-actionID}/note-attachment/{itemId}
 # operationId: UPDATE_NoteAttachment_for_User_MonetaryAccount_MastercardAction
-export def "user-monetary-account-mastercard-action-note-attachment update" [
+export def "update-note-attachment-for-user-monetary-account-mastercard-action" [
   user_id: int
   monetary_account_id: int
   mastercard_action_id: int
@@ -9443,7 +9443,7 @@ export def "user-monetary-account-mastercard-action-note-attachment update" [
 #
 # GET /user/{userID}/monetary-account/{monetary-accountID}/mastercard-action/{mastercard-actionID}/note-text
 # operationId: List_all_NoteText_for_User_MonetaryAccount_MastercardAction
-export def "user-monetary-account-mastercard-action-note-text list" [
+export def "list-all-note-text-for-user-monetary-account-mastercard-action" [
   user_id: int
   monetary_account_id: int
   mastercard_action_id: int
@@ -9492,7 +9492,7 @@ export def "user-monetary-account-mastercard-action-note-text list" [
 #
 # POST /user/{userID}/monetary-account/{monetary-accountID}/mastercard-action/{mastercard-actionID}/note-text
 # operationId: CREATE_NoteText_for_User_MonetaryAccount_MastercardAction
-export def "user-monetary-account-mastercard-action-note-text create" [
+export def "create-note-text-for-user-monetary-account-mastercard-action" [
   user_id: int
   monetary_account_id: int
   mastercard_action_id: int
@@ -9545,7 +9545,7 @@ export def "user-monetary-account-mastercard-action-note-text create" [
 #
 # DELETE /user/{userID}/monetary-account/{monetary-accountID}/mastercard-action/{mastercard-actionID}/note-text/{itemId}
 # operationId: DELETE_NoteText_for_User_MonetaryAccount_MastercardAction
-export def "user-monetary-account-mastercard-action-note-text delete" [
+export def "delete-note-text-for-user-monetary-account-mastercard-action" [
   user_id: int
   monetary_account_id: int
   mastercard_action_id: int
@@ -9596,7 +9596,7 @@ export def "user-monetary-account-mastercard-action-note-text delete" [
 #
 # GET /user/{userID}/monetary-account/{monetary-accountID}/mastercard-action/{mastercard-actionID}/note-text/{itemId}
 # operationId: READ_NoteText_for_User_MonetaryAccount_MastercardAction
-export def "user-monetary-account-mastercard-action-note-text get" [
+export def "read-note-text-for-user-monetary-account-mastercard-action" [
   user_id: int
   monetary_account_id: int
   mastercard_action_id: int
@@ -9647,7 +9647,7 @@ export def "user-monetary-account-mastercard-action-note-text get" [
 #
 # PUT /user/{userID}/monetary-account/{monetary-accountID}/mastercard-action/{mastercard-actionID}/note-text/{itemId}
 # operationId: UPDATE_NoteText_for_User_MonetaryAccount_MastercardAction
-export def "user-monetary-account-mastercard-action-note-text update" [
+export def "update-note-text-for-user-monetary-account-mastercard-action" [
   user_id: int
   monetary_account_id: int
   mastercard_action_id: int
@@ -9702,7 +9702,7 @@ export def "user-monetary-account-mastercard-action-note-text update" [
 #
 # GET /user/{userID}/monetary-account/{monetary-accountID}/mastercard-action/{mastercard-actionID}/payment
 # operationId: List_all_Payment_for_User_MonetaryAccount_MastercardAction
-export def "user-monetary-account-mastercard-action-payment list" [
+export def "list-all-payment-for-user-monetary-account-mastercard-action" [
   user_id: int
   monetary_account_id: int
   mastercard_action_id: int
@@ -9751,7 +9751,7 @@ export def "user-monetary-account-mastercard-action-payment list" [
 #
 # GET /user/{userID}/monetary-account/{monetary-accountID}/notification-filter-url
 # operationId: List_all_NotificationFilterUrl_for_User_MonetaryAccount
-export def "user-monetary-account-notification-filter-url list" [
+export def "list-all-notification-filter-url-for-user-monetary-account" [
   user_id: int
   monetary_account_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -9799,7 +9799,7 @@ export def "user-monetary-account-notification-filter-url list" [
 # POST /user/{userID}/monetary-account/{monetary-accountID}/notification-filter-url
 # operationId: CREATE_NotificationFilterUrl_for_User_MonetaryAccount
 # --notification_filters item shape: {notification_filters?: list}
-export def "user-monetary-account-notification-filter-url create" [
+export def "create-notification-filter-url-for-user-monetary-account" [
   user_id: int
   monetary_account_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -9850,7 +9850,7 @@ export def "user-monetary-account-notification-filter-url create" [
 #
 # GET /user/{userID}/monetary-account/{monetary-accountID}/payment
 # operationId: List_all_Payment_for_User_MonetaryAccount
-export def "user-monetary-account-payment list" [
+export def "list-all-payment-for-user-monetary-account" [
   user_id: int
   monetary_account_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -9906,7 +9906,7 @@ export def "user-monetary-account-payment list" [
 # --counterparty_alias shape: {avatar?: record, bunq_me?: record, label_user?: record}
 # --geolocation shape: {altitude?: int, latitude?: int, longitude?: int, radius?: int}
 # --payment_auto_allocate_instance shape: {payment_batch?: record}
-export def "user-monetary-account-payment create" [
+export def "create-payment-for-user-monetary-account" [
   user_id: int
   monetary_account_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -9968,7 +9968,7 @@ export def "user-monetary-account-payment create" [
 #
 # GET /user/{userID}/monetary-account/{monetary-accountID}/payment-auto-allocate
 # operationId: List_all_PaymentAutoAllocate_for_User_MonetaryAccount
-export def "user-monetary-account-payment-auto-allocate list" [
+export def "list-all-payment-auto-allocate-for-user-monetary-account" [
   user_id: int
   monetary_account_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -10016,7 +10016,7 @@ export def "user-monetary-account-payment-auto-allocate list" [
 # POST /user/{userID}/monetary-account/{monetary-accountID}/payment-auto-allocate
 # operationId: CREATE_PaymentAutoAllocate_for_User_MonetaryAccount
 # --definition item shape: {amount?: record, counterparty_alias?: record, description?: string, fraction?: int, type: string}
-export def "user-monetary-account-payment-auto-allocate create" [
+export def "create-payment-auto-allocate-for-user-monetary-account" [
   user_id: int
   monetary_account_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -10069,7 +10069,7 @@ export def "user-monetary-account-payment-auto-allocate create" [
 #
 # DELETE /user/{userID}/monetary-account/{monetary-accountID}/payment-auto-allocate/{itemId}
 # operationId: DELETE_PaymentAutoAllocate_for_User_MonetaryAccount
-export def "user-monetary-account-payment-auto-allocate delete" [
+export def "delete-payment-auto-allocate-for-user-monetary-account" [
   user_id: int
   monetary_account_id: int
   item_id: int
@@ -10118,7 +10118,7 @@ export def "user-monetary-account-payment-auto-allocate delete" [
 #
 # GET /user/{userID}/monetary-account/{monetary-accountID}/payment-auto-allocate/{itemId}
 # operationId: READ_PaymentAutoAllocate_for_User_MonetaryAccount
-export def "user-monetary-account-payment-auto-allocate get" [
+export def "read-payment-auto-allocate-for-user-monetary-account" [
   user_id: int
   monetary_account_id: int
   item_id: int
@@ -10168,7 +10168,7 @@ export def "user-monetary-account-payment-auto-allocate get" [
 # PUT /user/{userID}/monetary-account/{monetary-accountID}/payment-auto-allocate/{itemId}
 # operationId: UPDATE_PaymentAutoAllocate_for_User_MonetaryAccount
 # --definition item shape: {amount?: record, counterparty_alias?: record, description?: string, fraction?: int, type: string}
-export def "user-monetary-account-payment-auto-allocate update" [
+export def "update-payment-auto-allocate-for-user-monetary-account" [
   user_id: int
   monetary_account_id: int
   item_id: int
@@ -10223,7 +10223,7 @@ export def "user-monetary-account-payment-auto-allocate update" [
 #
 # GET /user/{userID}/monetary-account/{monetary-accountID}/payment-auto-allocate/{payment-auto-allocateID}/definition
 # operationId: List_all_Definition_for_User_MonetaryAccount_PaymentAutoAllocate
-export def "user-monetary-account-payment-auto-allocate-definition list" [
+export def "list-all-definition-for-user-monetary-account-payment-auto-allocate" [
   user_id: int
   monetary_account_id: int
   payment_auto_allocate_id: int
@@ -10272,7 +10272,7 @@ export def "user-monetary-account-payment-auto-allocate-definition list" [
 #
 # GET /user/{userID}/monetary-account/{monetary-accountID}/payment-auto-allocate/{payment-auto-allocateID}/instance
 # operationId: List_all_Instance_for_User_MonetaryAccount_PaymentAutoAllocate
-export def "user-monetary-account-payment-auto-allocate-instance list" [
+export def "list-all-instance-for-user-monetary-account-payment-auto-allocate" [
   user_id: int
   monetary_account_id: int
   payment_auto_allocate_id: int
@@ -10321,7 +10321,7 @@ export def "user-monetary-account-payment-auto-allocate-instance list" [
 #
 # GET /user/{userID}/monetary-account/{monetary-accountID}/payment-auto-allocate/{payment-auto-allocateID}/instance/{itemId}
 # operationId: READ_Instance_for_User_MonetaryAccount_PaymentAutoAllocate
-export def "user-monetary-account-payment-auto-allocate-instance get" [
+export def "read-instance-for-user-monetary-account-payment-auto-allocate" [
   user_id: int
   monetary_account_id: int
   payment_auto_allocate_id: int
@@ -10372,7 +10372,7 @@ export def "user-monetary-account-payment-auto-allocate-instance get" [
 #
 # GET /user/{userID}/monetary-account/{monetary-accountID}/payment-batch
 # operationId: List_all_PaymentBatch_for_User_MonetaryAccount
-export def "user-monetary-account-payment-batch list" [
+export def "list-all-payment-batch-for-user-monetary-account" [
   user_id: int
   monetary_account_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -10419,7 +10419,7 @@ export def "user-monetary-account-payment-batch list" [
 #
 # POST /user/{userID}/monetary-account/{monetary-accountID}/payment-batch
 # operationId: CREATE_PaymentBatch_for_User_MonetaryAccount
-export def "user-monetary-account-payment-batch create" [
+export def "create-payment-batch-for-user-monetary-account" [
   user_id: int
   monetary_account_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -10470,7 +10470,7 @@ export def "user-monetary-account-payment-batch create" [
 #
 # GET /user/{userID}/monetary-account/{monetary-accountID}/payment-batch/{itemId}
 # operationId: READ_PaymentBatch_for_User_MonetaryAccount
-export def "user-monetary-account-payment-batch get" [
+export def "read-payment-batch-for-user-monetary-account" [
   user_id: int
   monetary_account_id: int
   item_id: int
@@ -10519,7 +10519,7 @@ export def "user-monetary-account-payment-batch get" [
 #
 # PUT /user/{userID}/monetary-account/{monetary-accountID}/payment-batch/{itemId}
 # operationId: UPDATE_PaymentBatch_for_User_MonetaryAccount
-export def "user-monetary-account-payment-batch update" [
+export def "update-payment-batch-for-user-monetary-account" [
   user_id: int
   monetary_account_id: int
   item_id: int
@@ -10572,7 +10572,7 @@ export def "user-monetary-account-payment-batch update" [
 #
 # GET /user/{userID}/monetary-account/{monetary-accountID}/payment-batch/{payment-batchID}/note-attachment
 # operationId: List_all_NoteAttachment_for_User_MonetaryAccount_PaymentBatch
-export def "user-monetary-account-payment-batch-note-attachment list" [
+export def "list-all-note-attachment-for-user-monetary-account-payment-batch" [
   user_id: int
   monetary_account_id: int
   payment_batch_id: int
@@ -10621,7 +10621,7 @@ export def "user-monetary-account-payment-batch-note-attachment list" [
 #
 # POST /user/{userID}/monetary-account/{monetary-accountID}/payment-batch/{payment-batchID}/note-attachment
 # operationId: CREATE_NoteAttachment_for_User_MonetaryAccount_PaymentBatch
-export def "user-monetary-account-payment-batch-note-attachment create" [
+export def "create-note-attachment-for-user-monetary-account-payment-batch" [
   user_id: int
   monetary_account_id: int
   payment_batch_id: int
@@ -10675,7 +10675,7 @@ export def "user-monetary-account-payment-batch-note-attachment create" [
 #
 # DELETE /user/{userID}/monetary-account/{monetary-accountID}/payment-batch/{payment-batchID}/note-attachment/{itemId}
 # operationId: DELETE_NoteAttachment_for_User_MonetaryAccount_PaymentBatch
-export def "user-monetary-account-payment-batch-note-attachment delete" [
+export def "delete-note-attachment-for-user-monetary-account-payment-batch" [
   user_id: int
   monetary_account_id: int
   payment_batch_id: int
@@ -10726,7 +10726,7 @@ export def "user-monetary-account-payment-batch-note-attachment delete" [
 #
 # GET /user/{userID}/monetary-account/{monetary-accountID}/payment-batch/{payment-batchID}/note-attachment/{itemId}
 # operationId: READ_NoteAttachment_for_User_MonetaryAccount_PaymentBatch
-export def "user-monetary-account-payment-batch-note-attachment get" [
+export def "read-note-attachment-for-user-monetary-account-payment-batch" [
   user_id: int
   monetary_account_id: int
   payment_batch_id: int
@@ -10777,7 +10777,7 @@ export def "user-monetary-account-payment-batch-note-attachment get" [
 #
 # PUT /user/{userID}/monetary-account/{monetary-accountID}/payment-batch/{payment-batchID}/note-attachment/{itemId}
 # operationId: UPDATE_NoteAttachment_for_User_MonetaryAccount_PaymentBatch
-export def "user-monetary-account-payment-batch-note-attachment update" [
+export def "update-note-attachment-for-user-monetary-account-payment-batch" [
   user_id: int
   monetary_account_id: int
   payment_batch_id: int
@@ -10833,7 +10833,7 @@ export def "user-monetary-account-payment-batch-note-attachment update" [
 #
 # GET /user/{userID}/monetary-account/{monetary-accountID}/payment-batch/{payment-batchID}/note-text
 # operationId: List_all_NoteText_for_User_MonetaryAccount_PaymentBatch
-export def "user-monetary-account-payment-batch-note-text list" [
+export def "list-all-note-text-for-user-monetary-account-payment-batch" [
   user_id: int
   monetary_account_id: int
   payment_batch_id: int
@@ -10882,7 +10882,7 @@ export def "user-monetary-account-payment-batch-note-text list" [
 #
 # POST /user/{userID}/monetary-account/{monetary-accountID}/payment-batch/{payment-batchID}/note-text
 # operationId: CREATE_NoteText_for_User_MonetaryAccount_PaymentBatch
-export def "user-monetary-account-payment-batch-note-text create" [
+export def "create-note-text-for-user-monetary-account-payment-batch" [
   user_id: int
   monetary_account_id: int
   payment_batch_id: int
@@ -10935,7 +10935,7 @@ export def "user-monetary-account-payment-batch-note-text create" [
 #
 # DELETE /user/{userID}/monetary-account/{monetary-accountID}/payment-batch/{payment-batchID}/note-text/{itemId}
 # operationId: DELETE_NoteText_for_User_MonetaryAccount_PaymentBatch
-export def "user-monetary-account-payment-batch-note-text delete" [
+export def "delete-note-text-for-user-monetary-account-payment-batch" [
   user_id: int
   monetary_account_id: int
   payment_batch_id: int
@@ -10986,7 +10986,7 @@ export def "user-monetary-account-payment-batch-note-text delete" [
 #
 # GET /user/{userID}/monetary-account/{monetary-accountID}/payment-batch/{payment-batchID}/note-text/{itemId}
 # operationId: READ_NoteText_for_User_MonetaryAccount_PaymentBatch
-export def "user-monetary-account-payment-batch-note-text get" [
+export def "read-note-text-for-user-monetary-account-payment-batch" [
   user_id: int
   monetary_account_id: int
   payment_batch_id: int
@@ -11037,7 +11037,7 @@ export def "user-monetary-account-payment-batch-note-text get" [
 #
 # PUT /user/{userID}/monetary-account/{monetary-accountID}/payment-batch/{payment-batchID}/note-text/{itemId}
 # operationId: UPDATE_NoteText_for_User_MonetaryAccount_PaymentBatch
-export def "user-monetary-account-payment-batch-note-text update" [
+export def "update-note-text-for-user-monetary-account-payment-batch" [
   user_id: int
   monetary_account_id: int
   payment_batch_id: int
@@ -11092,7 +11092,7 @@ export def "user-monetary-account-payment-batch-note-text update" [
 #
 # GET /user/{userID}/monetary-account/{monetary-accountID}/payment/{itemId}
 # operationId: READ_Payment_for_User_MonetaryAccount
-export def "user-monetary-account-payment get" [
+export def "read-payment-for-user-monetary-account" [
   user_id: int
   monetary_account_id: int
   item_id: int
@@ -11141,7 +11141,7 @@ export def "user-monetary-account-payment get" [
 #
 # GET /user/{userID}/monetary-account/{monetary-accountID}/payment/{paymentID}/note-attachment
 # operationId: List_all_NoteAttachment_for_User_MonetaryAccount_Payment
-export def "user-monetary-account-payment-note-attachment list" [
+export def "list-all-note-attachment-for-user-monetary-account-payment" [
   user_id: int
   monetary_account_id: int
   payment_id: int
@@ -11190,7 +11190,7 @@ export def "user-monetary-account-payment-note-attachment list" [
 #
 # POST /user/{userID}/monetary-account/{monetary-accountID}/payment/{paymentID}/note-attachment
 # operationId: CREATE_NoteAttachment_for_User_MonetaryAccount_Payment
-export def "user-monetary-account-payment-note-attachment create" [
+export def "create-note-attachment-for-user-monetary-account-payment" [
   user_id: int
   monetary_account_id: int
   payment_id: int
@@ -11244,7 +11244,7 @@ export def "user-monetary-account-payment-note-attachment create" [
 #
 # DELETE /user/{userID}/monetary-account/{monetary-accountID}/payment/{paymentID}/note-attachment/{itemId}
 # operationId: DELETE_NoteAttachment_for_User_MonetaryAccount_Payment
-export def "user-monetary-account-payment-note-attachment delete" [
+export def "delete-note-attachment-for-user-monetary-account-payment" [
   user_id: int
   monetary_account_id: int
   payment_id: int
@@ -11295,7 +11295,7 @@ export def "user-monetary-account-payment-note-attachment delete" [
 #
 # GET /user/{userID}/monetary-account/{monetary-accountID}/payment/{paymentID}/note-attachment/{itemId}
 # operationId: READ_NoteAttachment_for_User_MonetaryAccount_Payment
-export def "user-monetary-account-payment-note-attachment get" [
+export def "read-note-attachment-for-user-monetary-account-payment" [
   user_id: int
   monetary_account_id: int
   payment_id: int
@@ -11346,7 +11346,7 @@ export def "user-monetary-account-payment-note-attachment get" [
 #
 # PUT /user/{userID}/monetary-account/{monetary-accountID}/payment/{paymentID}/note-attachment/{itemId}
 # operationId: UPDATE_NoteAttachment_for_User_MonetaryAccount_Payment
-export def "user-monetary-account-payment-note-attachment update" [
+export def "update-note-attachment-for-user-monetary-account-payment" [
   user_id: int
   monetary_account_id: int
   payment_id: int
@@ -11402,7 +11402,7 @@ export def "user-monetary-account-payment-note-attachment update" [
 #
 # GET /user/{userID}/monetary-account/{monetary-accountID}/payment/{paymentID}/note-text
 # operationId: List_all_NoteText_for_User_MonetaryAccount_Payment
-export def "user-monetary-account-payment-note-text list" [
+export def "list-all-note-text-for-user-monetary-account-payment" [
   user_id: int
   monetary_account_id: int
   payment_id: int
@@ -11451,7 +11451,7 @@ export def "user-monetary-account-payment-note-text list" [
 #
 # POST /user/{userID}/monetary-account/{monetary-accountID}/payment/{paymentID}/note-text
 # operationId: CREATE_NoteText_for_User_MonetaryAccount_Payment
-export def "user-monetary-account-payment-note-text create" [
+export def "create-note-text-for-user-monetary-account-payment" [
   user_id: int
   monetary_account_id: int
   payment_id: int
@@ -11504,7 +11504,7 @@ export def "user-monetary-account-payment-note-text create" [
 #
 # DELETE /user/{userID}/monetary-account/{monetary-accountID}/payment/{paymentID}/note-text/{itemId}
 # operationId: DELETE_NoteText_for_User_MonetaryAccount_Payment
-export def "user-monetary-account-payment-note-text delete" [
+export def "delete-note-text-for-user-monetary-account-payment" [
   user_id: int
   monetary_account_id: int
   payment_id: int
@@ -11555,7 +11555,7 @@ export def "user-monetary-account-payment-note-text delete" [
 #
 # GET /user/{userID}/monetary-account/{monetary-accountID}/payment/{paymentID}/note-text/{itemId}
 # operationId: READ_NoteText_for_User_MonetaryAccount_Payment
-export def "user-monetary-account-payment-note-text get" [
+export def "read-note-text-for-user-monetary-account-payment" [
   user_id: int
   monetary_account_id: int
   payment_id: int
@@ -11606,7 +11606,7 @@ export def "user-monetary-account-payment-note-text get" [
 #
 # PUT /user/{userID}/monetary-account/{monetary-accountID}/payment/{paymentID}/note-text/{itemId}
 # operationId: UPDATE_NoteText_for_User_MonetaryAccount_Payment
-export def "user-monetary-account-payment-note-text update" [
+export def "update-note-text-for-user-monetary-account-payment" [
   user_id: int
   monetary_account_id: int
   payment_id: int
@@ -11661,7 +11661,7 @@ export def "user-monetary-account-payment-note-text update" [
 #
 # GET /user/{userID}/monetary-account/{monetary-accountID}/request-inquiry
 # operationId: List_all_RequestInquiry_for_User_MonetaryAccount
-export def "user-monetary-account-request-inquiry list" [
+export def "list-all-request-inquiry-for-user-monetary-account" [
   user_id: int
   monetary_account_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -11718,7 +11718,7 @@ export def "user-monetary-account-request-inquiry list" [
 # --reference_split_the_bill shape: {BillingInvoice?: record, DraftPayment?: record, MasterCardAction?: record, Payment?: record, PaymentBatch?: record, RequestResponse?: record, ScheduleInstance?: record, TransferwisePayment?: record, WhitelistResult?: record}
 # --user_alias_created shape: {avatar?: record, country?: string, display_name?: string, uuid?: string}
 # --user_alias_revoked shape: {avatar?: record, country?: string, display_name?: string, uuid?: string}
-export def "user-monetary-account-request-inquiry create" [
+export def "create-request-inquiry-for-user-monetary-account" [
   user_id: int
   monetary_account_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -11789,7 +11789,7 @@ export def "user-monetary-account-request-inquiry create" [
 #
 # GET /user/{userID}/monetary-account/{monetary-accountID}/request-inquiry-batch
 # operationId: List_all_RequestInquiryBatch_for_User_MonetaryAccount
-export def "user-monetary-account-request-inquiry-batch list" [
+export def "list-all-request-inquiry-batch-for-user-monetary-account" [
   user_id: int
   monetary_account_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -11839,7 +11839,7 @@ export def "user-monetary-account-request-inquiry-batch list" [
 # --reference_split_the_bill shape: {BillingInvoice?: record, DraftPayment?: record, MasterCardAction?: record, Payment?: record, PaymentBatch?: record, RequestResponse?: record, ScheduleInstance?: record, TransferwisePayment?: record, WhitelistResult?: record}
 # --request_inquiries item shape: {address_billing?: record, address_shipping?: record, allow_amount_higher?: bool, allow_amount_lower?: bool, allow_bunqme: bool, amount_inquired?: record, amount_responded?: record, attachment?: list, counterparty_alias?: record, description?: string, event_id?: int, geolocation?: record, merchant_reference?: string, minimum_age?: int, redirect_url?: string, reference_split_the_bill?: record, require_address?: string, status?: string, user_alias_created?: record, user_alias_revoked?: record, ... (1 more fields)}
 # --total_amount_inquired shape: {currency?: string, value?: string}
-export def "user-monetary-account-request-inquiry-batch create" [
+export def "create-request-inquiry-batch-for-user-monetary-account" [
   user_id: int
   monetary_account_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -11894,7 +11894,7 @@ export def "user-monetary-account-request-inquiry-batch create" [
 #
 # GET /user/{userID}/monetary-account/{monetary-accountID}/request-inquiry-batch/{itemId}
 # operationId: READ_RequestInquiryBatch_for_User_MonetaryAccount
-export def "user-monetary-account-request-inquiry-batch get" [
+export def "read-request-inquiry-batch-for-user-monetary-account" [
   user_id: int
   monetary_account_id: int
   item_id: int
@@ -11946,7 +11946,7 @@ export def "user-monetary-account-request-inquiry-batch get" [
 # --reference_split_the_bill shape: {BillingInvoice?: record, DraftPayment?: record, MasterCardAction?: record, Payment?: record, PaymentBatch?: record, RequestResponse?: record, ScheduleInstance?: record, TransferwisePayment?: record, WhitelistResult?: record}
 # --request_inquiries item shape: {address_billing?: record, address_shipping?: record, allow_amount_higher?: bool, allow_amount_lower?: bool, allow_bunqme: bool, amount_inquired?: record, amount_responded?: record, attachment?: list, counterparty_alias?: record, description?: string, event_id?: int, geolocation?: record, merchant_reference?: string, minimum_age?: int, redirect_url?: string, reference_split_the_bill?: record, require_address?: string, status?: string, user_alias_created?: record, user_alias_revoked?: record, ... (1 more fields)}
 # --total_amount_inquired shape: {currency?: string, value?: string}
-export def "user-monetary-account-request-inquiry-batch update" [
+export def "update-request-inquiry-batch-for-user-monetary-account" [
   user_id: int
   monetary_account_id: int
   item_id: int
@@ -12003,7 +12003,7 @@ export def "user-monetary-account-request-inquiry-batch update" [
 #
 # GET /user/{userID}/monetary-account/{monetary-accountID}/request-inquiry-batch/{request-inquiry-batchID}/note-attachment
 # operationId: List_all_NoteAttachment_for_User_MonetaryAccount_RequestInquiryBatch
-export def "user-monetary-account-request-inquiry-batch-note-attachment list" [
+export def "list-all-note-attachment-for-user-monetary-account-request-inquiry-batch" [
   user_id: int
   monetary_account_id: int
   request_inquiry_batch_id: int
@@ -12052,7 +12052,7 @@ export def "user-monetary-account-request-inquiry-batch-note-attachment list" [
 #
 # POST /user/{userID}/monetary-account/{monetary-accountID}/request-inquiry-batch/{request-inquiry-batchID}/note-attachment
 # operationId: CREATE_NoteAttachment_for_User_MonetaryAccount_RequestInquiryBatch
-export def "user-monetary-account-request-inquiry-batch-note-attachment create" [
+export def "create-note-attachment-for-user-monetary-account-request-inquiry-batch" [
   user_id: int
   monetary_account_id: int
   request_inquiry_batch_id: int
@@ -12106,7 +12106,7 @@ export def "user-monetary-account-request-inquiry-batch-note-attachment create" 
 #
 # DELETE /user/{userID}/monetary-account/{monetary-accountID}/request-inquiry-batch/{request-inquiry-batchID}/note-attachment/{itemId}
 # operationId: DELETE_NoteAttachment_for_User_MonetaryAccount_RequestInquiryBatch
-export def "user-monetary-account-request-inquiry-batch-note-attachment delete" [
+export def "delete-note-attachment-for-user-monetary-account-request-inquiry-batch" [
   user_id: int
   monetary_account_id: int
   request_inquiry_batch_id: int
@@ -12157,7 +12157,7 @@ export def "user-monetary-account-request-inquiry-batch-note-attachment delete" 
 #
 # GET /user/{userID}/monetary-account/{monetary-accountID}/request-inquiry-batch/{request-inquiry-batchID}/note-attachment/{itemId}
 # operationId: READ_NoteAttachment_for_User_MonetaryAccount_RequestInquiryBatch
-export def "user-monetary-account-request-inquiry-batch-note-attachment get" [
+export def "read-note-attachment-for-user-monetary-account-request-inquiry-batch" [
   user_id: int
   monetary_account_id: int
   request_inquiry_batch_id: int
@@ -12208,7 +12208,7 @@ export def "user-monetary-account-request-inquiry-batch-note-attachment get" [
 #
 # PUT /user/{userID}/monetary-account/{monetary-accountID}/request-inquiry-batch/{request-inquiry-batchID}/note-attachment/{itemId}
 # operationId: UPDATE_NoteAttachment_for_User_MonetaryAccount_RequestInquiryBatch
-export def "user-monetary-account-request-inquiry-batch-note-attachment update" [
+export def "update-note-attachment-for-user-monetary-account-request-inquiry-batch" [
   user_id: int
   monetary_account_id: int
   request_inquiry_batch_id: int
@@ -12264,7 +12264,7 @@ export def "user-monetary-account-request-inquiry-batch-note-attachment update" 
 #
 # GET /user/{userID}/monetary-account/{monetary-accountID}/request-inquiry-batch/{request-inquiry-batchID}/note-text
 # operationId: List_all_NoteText_for_User_MonetaryAccount_RequestInquiryBatch
-export def "user-monetary-account-request-inquiry-batch-note-text list" [
+export def "list-all-note-text-for-user-monetary-account-request-inquiry-batch" [
   user_id: int
   monetary_account_id: int
   request_inquiry_batch_id: int
@@ -12313,7 +12313,7 @@ export def "user-monetary-account-request-inquiry-batch-note-text list" [
 #
 # POST /user/{userID}/monetary-account/{monetary-accountID}/request-inquiry-batch/{request-inquiry-batchID}/note-text
 # operationId: CREATE_NoteText_for_User_MonetaryAccount_RequestInquiryBatch
-export def "user-monetary-account-request-inquiry-batch-note-text create" [
+export def "create-note-text-for-user-monetary-account-request-inquiry-batch" [
   user_id: int
   monetary_account_id: int
   request_inquiry_batch_id: int
@@ -12366,7 +12366,7 @@ export def "user-monetary-account-request-inquiry-batch-note-text create" [
 #
 # DELETE /user/{userID}/monetary-account/{monetary-accountID}/request-inquiry-batch/{request-inquiry-batchID}/note-text/{itemId}
 # operationId: DELETE_NoteText_for_User_MonetaryAccount_RequestInquiryBatch
-export def "user-monetary-account-request-inquiry-batch-note-text delete" [
+export def "delete-note-text-for-user-monetary-account-request-inquiry-batch" [
   user_id: int
   monetary_account_id: int
   request_inquiry_batch_id: int
@@ -12417,7 +12417,7 @@ export def "user-monetary-account-request-inquiry-batch-note-text delete" [
 #
 # GET /user/{userID}/monetary-account/{monetary-accountID}/request-inquiry-batch/{request-inquiry-batchID}/note-text/{itemId}
 # operationId: READ_NoteText_for_User_MonetaryAccount_RequestInquiryBatch
-export def "user-monetary-account-request-inquiry-batch-note-text get" [
+export def "read-note-text-for-user-monetary-account-request-inquiry-batch" [
   user_id: int
   monetary_account_id: int
   request_inquiry_batch_id: int
@@ -12468,7 +12468,7 @@ export def "user-monetary-account-request-inquiry-batch-note-text get" [
 #
 # PUT /user/{userID}/monetary-account/{monetary-accountID}/request-inquiry-batch/{request-inquiry-batchID}/note-text/{itemId}
 # operationId: UPDATE_NoteText_for_User_MonetaryAccount_RequestInquiryBatch
-export def "user-monetary-account-request-inquiry-batch-note-text update" [
+export def "update-note-text-for-user-monetary-account-request-inquiry-batch" [
   user_id: int
   monetary_account_id: int
   request_inquiry_batch_id: int
@@ -12523,7 +12523,7 @@ export def "user-monetary-account-request-inquiry-batch-note-text update" [
 #
 # GET /user/{userID}/monetary-account/{monetary-accountID}/request-inquiry/{itemId}
 # operationId: READ_RequestInquiry_for_User_MonetaryAccount
-export def "user-monetary-account-request-inquiry get" [
+export def "read-request-inquiry-for-user-monetary-account" [
   user_id: int
   monetary_account_id: int
   item_id: int
@@ -12582,7 +12582,7 @@ export def "user-monetary-account-request-inquiry get" [
 # --reference_split_the_bill shape: {BillingInvoice?: record, DraftPayment?: record, MasterCardAction?: record, Payment?: record, PaymentBatch?: record, RequestResponse?: record, ScheduleInstance?: record, TransferwisePayment?: record, WhitelistResult?: record}
 # --user_alias_created shape: {avatar?: record, country?: string, display_name?: string, uuid?: string}
 # --user_alias_revoked shape: {avatar?: record, country?: string, display_name?: string, uuid?: string}
-export def "user-monetary-account-request-inquiry update" [
+export def "update-request-inquiry-for-user-monetary-account" [
   user_id: int
   monetary_account_id: int
   item_id: int
@@ -12655,7 +12655,7 @@ export def "user-monetary-account-request-inquiry update" [
 #
 # GET /user/{userID}/monetary-account/{monetary-accountID}/request-inquiry/{request-inquiryID}/note-attachment
 # operationId: List_all_NoteAttachment_for_User_MonetaryAccount_RequestInquiry
-export def "user-monetary-account-request-inquiry-note-attachment list" [
+export def "list-all-note-attachment-for-user-monetary-account-request-inquiry" [
   user_id: int
   monetary_account_id: int
   request_inquiry_id: int
@@ -12704,7 +12704,7 @@ export def "user-monetary-account-request-inquiry-note-attachment list" [
 #
 # POST /user/{userID}/monetary-account/{monetary-accountID}/request-inquiry/{request-inquiryID}/note-attachment
 # operationId: CREATE_NoteAttachment_for_User_MonetaryAccount_RequestInquiry
-export def "user-monetary-account-request-inquiry-note-attachment create" [
+export def "create-note-attachment-for-user-monetary-account-request-inquiry" [
   user_id: int
   monetary_account_id: int
   request_inquiry_id: int
@@ -12758,7 +12758,7 @@ export def "user-monetary-account-request-inquiry-note-attachment create" [
 #
 # DELETE /user/{userID}/monetary-account/{monetary-accountID}/request-inquiry/{request-inquiryID}/note-attachment/{itemId}
 # operationId: DELETE_NoteAttachment_for_User_MonetaryAccount_RequestInquiry
-export def "user-monetary-account-request-inquiry-note-attachment delete" [
+export def "delete-note-attachment-for-user-monetary-account-request-inquiry" [
   user_id: int
   monetary_account_id: int
   request_inquiry_id: int
@@ -12809,7 +12809,7 @@ export def "user-monetary-account-request-inquiry-note-attachment delete" [
 #
 # GET /user/{userID}/monetary-account/{monetary-accountID}/request-inquiry/{request-inquiryID}/note-attachment/{itemId}
 # operationId: READ_NoteAttachment_for_User_MonetaryAccount_RequestInquiry
-export def "user-monetary-account-request-inquiry-note-attachment get" [
+export def "read-note-attachment-for-user-monetary-account-request-inquiry" [
   user_id: int
   monetary_account_id: int
   request_inquiry_id: int
@@ -12860,7 +12860,7 @@ export def "user-monetary-account-request-inquiry-note-attachment get" [
 #
 # PUT /user/{userID}/monetary-account/{monetary-accountID}/request-inquiry/{request-inquiryID}/note-attachment/{itemId}
 # operationId: UPDATE_NoteAttachment_for_User_MonetaryAccount_RequestInquiry
-export def "user-monetary-account-request-inquiry-note-attachment update" [
+export def "update-note-attachment-for-user-monetary-account-request-inquiry" [
   user_id: int
   monetary_account_id: int
   request_inquiry_id: int
@@ -12916,7 +12916,7 @@ export def "user-monetary-account-request-inquiry-note-attachment update" [
 #
 # GET /user/{userID}/monetary-account/{monetary-accountID}/request-inquiry/{request-inquiryID}/note-text
 # operationId: List_all_NoteText_for_User_MonetaryAccount_RequestInquiry
-export def "user-monetary-account-request-inquiry-note-text list" [
+export def "list-all-note-text-for-user-monetary-account-request-inquiry" [
   user_id: int
   monetary_account_id: int
   request_inquiry_id: int
@@ -12965,7 +12965,7 @@ export def "user-monetary-account-request-inquiry-note-text list" [
 #
 # POST /user/{userID}/monetary-account/{monetary-accountID}/request-inquiry/{request-inquiryID}/note-text
 # operationId: CREATE_NoteText_for_User_MonetaryAccount_RequestInquiry
-export def "user-monetary-account-request-inquiry-note-text create" [
+export def "create-note-text-for-user-monetary-account-request-inquiry" [
   user_id: int
   monetary_account_id: int
   request_inquiry_id: int
@@ -13018,7 +13018,7 @@ export def "user-monetary-account-request-inquiry-note-text create" [
 #
 # DELETE /user/{userID}/monetary-account/{monetary-accountID}/request-inquiry/{request-inquiryID}/note-text/{itemId}
 # operationId: DELETE_NoteText_for_User_MonetaryAccount_RequestInquiry
-export def "user-monetary-account-request-inquiry-note-text delete" [
+export def "delete-note-text-for-user-monetary-account-request-inquiry" [
   user_id: int
   monetary_account_id: int
   request_inquiry_id: int
@@ -13069,7 +13069,7 @@ export def "user-monetary-account-request-inquiry-note-text delete" [
 #
 # GET /user/{userID}/monetary-account/{monetary-accountID}/request-inquiry/{request-inquiryID}/note-text/{itemId}
 # operationId: READ_NoteText_for_User_MonetaryAccount_RequestInquiry
-export def "user-monetary-account-request-inquiry-note-text get" [
+export def "read-note-text-for-user-monetary-account-request-inquiry" [
   user_id: int
   monetary_account_id: int
   request_inquiry_id: int
@@ -13120,7 +13120,7 @@ export def "user-monetary-account-request-inquiry-note-text get" [
 #
 # PUT /user/{userID}/monetary-account/{monetary-accountID}/request-inquiry/{request-inquiryID}/note-text/{itemId}
 # operationId: UPDATE_NoteText_for_User_MonetaryAccount_RequestInquiry
-export def "user-monetary-account-request-inquiry-note-text update" [
+export def "update-note-text-for-user-monetary-account-request-inquiry" [
   user_id: int
   monetary_account_id: int
   request_inquiry_id: int
@@ -13175,7 +13175,7 @@ export def "user-monetary-account-request-inquiry-note-text update" [
 #
 # GET /user/{userID}/monetary-account/{monetary-accountID}/request-response
 # operationId: List_all_RequestResponse_for_User_MonetaryAccount
-export def "user-monetary-account-request-response list" [
+export def "list-all-request-response-for-user-monetary-account" [
   user_id: int
   monetary_account_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -13222,7 +13222,7 @@ export def "user-monetary-account-request-response list" [
 #
 # GET /user/{userID}/monetary-account/{monetary-accountID}/request-response/{itemId}
 # operationId: READ_RequestResponse_for_User_MonetaryAccount
-export def "user-monetary-account-request-response get" [
+export def "read-request-response-for-user-monetary-account" [
   user_id: int
   monetary_account_id: int
   item_id: int
@@ -13279,7 +13279,7 @@ export def "user-monetary-account-request-response get" [
 # --counterparty_alias shape: {avatar?: record, bunq_me?: record, label_user?: record}
 # --geolocation shape: {altitude?: int, latitude?: int, longitude?: int, radius?: int}
 # --user_refund_requested shape: {avatar?: record, country?: string, display_name?: string, uuid?: string}
-export def "user-monetary-account-request-response update" [
+export def "update-request-response-for-user-monetary-account" [
   user_id: int
   monetary_account_id: int
   item_id: int
@@ -13340,7 +13340,7 @@ export def "user-monetary-account-request-response update" [
 #
 # GET /user/{userID}/monetary-account/{monetary-accountID}/request-response/{request-responseID}/note-attachment
 # operationId: List_all_NoteAttachment_for_User_MonetaryAccount_RequestResponse
-export def "user-monetary-account-request-response-note-attachment list" [
+export def "list-all-note-attachment-for-user-monetary-account-request-response" [
   user_id: int
   monetary_account_id: int
   request_response_id: int
@@ -13389,7 +13389,7 @@ export def "user-monetary-account-request-response-note-attachment list" [
 #
 # POST /user/{userID}/monetary-account/{monetary-accountID}/request-response/{request-responseID}/note-attachment
 # operationId: CREATE_NoteAttachment_for_User_MonetaryAccount_RequestResponse
-export def "user-monetary-account-request-response-note-attachment create" [
+export def "create-note-attachment-for-user-monetary-account-request-response" [
   user_id: int
   monetary_account_id: int
   request_response_id: int
@@ -13443,7 +13443,7 @@ export def "user-monetary-account-request-response-note-attachment create" [
 #
 # DELETE /user/{userID}/monetary-account/{monetary-accountID}/request-response/{request-responseID}/note-attachment/{itemId}
 # operationId: DELETE_NoteAttachment_for_User_MonetaryAccount_RequestResponse
-export def "user-monetary-account-request-response-note-attachment delete" [
+export def "delete-note-attachment-for-user-monetary-account-request-response" [
   user_id: int
   monetary_account_id: int
   request_response_id: int
@@ -13494,7 +13494,7 @@ export def "user-monetary-account-request-response-note-attachment delete" [
 #
 # GET /user/{userID}/monetary-account/{monetary-accountID}/request-response/{request-responseID}/note-attachment/{itemId}
 # operationId: READ_NoteAttachment_for_User_MonetaryAccount_RequestResponse
-export def "user-monetary-account-request-response-note-attachment get" [
+export def "read-note-attachment-for-user-monetary-account-request-response" [
   user_id: int
   monetary_account_id: int
   request_response_id: int
@@ -13545,7 +13545,7 @@ export def "user-monetary-account-request-response-note-attachment get" [
 #
 # PUT /user/{userID}/monetary-account/{monetary-accountID}/request-response/{request-responseID}/note-attachment/{itemId}
 # operationId: UPDATE_NoteAttachment_for_User_MonetaryAccount_RequestResponse
-export def "user-monetary-account-request-response-note-attachment update" [
+export def "update-note-attachment-for-user-monetary-account-request-response" [
   user_id: int
   monetary_account_id: int
   request_response_id: int
@@ -13601,7 +13601,7 @@ export def "user-monetary-account-request-response-note-attachment update" [
 #
 # GET /user/{userID}/monetary-account/{monetary-accountID}/request-response/{request-responseID}/note-text
 # operationId: List_all_NoteText_for_User_MonetaryAccount_RequestResponse
-export def "user-monetary-account-request-response-note-text list" [
+export def "list-all-note-text-for-user-monetary-account-request-response" [
   user_id: int
   monetary_account_id: int
   request_response_id: int
@@ -13650,7 +13650,7 @@ export def "user-monetary-account-request-response-note-text list" [
 #
 # POST /user/{userID}/monetary-account/{monetary-accountID}/request-response/{request-responseID}/note-text
 # operationId: CREATE_NoteText_for_User_MonetaryAccount_RequestResponse
-export def "user-monetary-account-request-response-note-text create" [
+export def "create-note-text-for-user-monetary-account-request-response" [
   user_id: int
   monetary_account_id: int
   request_response_id: int
@@ -13703,7 +13703,7 @@ export def "user-monetary-account-request-response-note-text create" [
 #
 # DELETE /user/{userID}/monetary-account/{monetary-accountID}/request-response/{request-responseID}/note-text/{itemId}
 # operationId: DELETE_NoteText_for_User_MonetaryAccount_RequestResponse
-export def "user-monetary-account-request-response-note-text delete" [
+export def "delete-note-text-for-user-monetary-account-request-response" [
   user_id: int
   monetary_account_id: int
   request_response_id: int
@@ -13754,7 +13754,7 @@ export def "user-monetary-account-request-response-note-text delete" [
 #
 # GET /user/{userID}/monetary-account/{monetary-accountID}/request-response/{request-responseID}/note-text/{itemId}
 # operationId: READ_NoteText_for_User_MonetaryAccount_RequestResponse
-export def "user-monetary-account-request-response-note-text get" [
+export def "read-note-text-for-user-monetary-account-request-response" [
   user_id: int
   monetary_account_id: int
   request_response_id: int
@@ -13805,7 +13805,7 @@ export def "user-monetary-account-request-response-note-text get" [
 #
 # PUT /user/{userID}/monetary-account/{monetary-accountID}/request-response/{request-responseID}/note-text/{itemId}
 # operationId: UPDATE_NoteText_for_User_MonetaryAccount_RequestResponse
-export def "user-monetary-account-request-response-note-text update" [
+export def "update-note-text-for-user-monetary-account-request-response" [
   user_id: int
   monetary_account_id: int
   request_response_id: int
@@ -13860,7 +13860,7 @@ export def "user-monetary-account-request-response-note-text update" [
 #
 # GET /user/{userID}/monetary-account/{monetary-accountID}/schedule
 # operationId: List_all_Schedule_for_User_MonetaryAccount
-export def "user-monetary-account-schedule list" [
+export def "list-all-schedule-for-user-monetary-account" [
   user_id: int
   monetary_account_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -13907,7 +13907,7 @@ export def "user-monetary-account-schedule list" [
 #
 # GET /user/{userID}/monetary-account/{monetary-accountID}/schedule-payment
 # operationId: List_all_SchedulePayment_for_User_MonetaryAccount
-export def "user-monetary-account-schedule-payment list" [
+export def "list-all-schedule-payment-for-user-monetary-account" [
   user_id: int
   monetary_account_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -13956,7 +13956,7 @@ export def "user-monetary-account-schedule-payment list" [
 # operationId: CREATE_SchedulePayment_for_User_MonetaryAccount
 # --payment shape: {alias?: record, allow_bunqto?: bool, amount?: record, attachment?: list, counterparty_alias?: record, description?: string, merchant_reference?: string}
 # --schedule shape: {object?: record, recurrence_size?: int, recurrence_unit?: string, time_end?: string, time_start?: string}
-export def "user-monetary-account-schedule-payment create" [
+export def "create-schedule-payment-for-user-monetary-account" [
   user_id: int
   monetary_account_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -14010,7 +14010,7 @@ export def "user-monetary-account-schedule-payment create" [
 # operationId: CREATE_SchedulePaymentBatch_for_User_MonetaryAccount
 # --payments item shape: {alias?: record, allow_bunqto?: bool, amount?: record, attachment?: list, counterparty_alias?: record, description?: string, merchant_reference?: string}
 # --schedule shape: {object?: record, recurrence_size?: int, recurrence_unit?: string, time_end?: string, time_start?: string}
-export def "user-monetary-account-schedule-payment-batch create" [
+export def "create-schedule-payment-batch-for-user-monetary-account" [
   user_id: int
   monetary_account_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -14062,7 +14062,7 @@ export def "user-monetary-account-schedule-payment-batch create" [
 #
 # DELETE /user/{userID}/monetary-account/{monetary-accountID}/schedule-payment-batch/{itemId}
 # operationId: DELETE_SchedulePaymentBatch_for_User_MonetaryAccount
-export def "user-monetary-account-schedule-payment-batch delete" [
+export def "delete-schedule-payment-batch-for-user-monetary-account" [
   user_id: int
   monetary_account_id: int
   item_id: int
@@ -14111,7 +14111,7 @@ export def "user-monetary-account-schedule-payment-batch delete" [
 #
 # GET /user/{userID}/monetary-account/{monetary-accountID}/schedule-payment-batch/{itemId}
 # operationId: READ_SchedulePaymentBatch_for_User_MonetaryAccount
-export def "user-monetary-account-schedule-payment-batch get" [
+export def "read-schedule-payment-batch-for-user-monetary-account" [
   user_id: int
   monetary_account_id: int
   item_id: int
@@ -14162,7 +14162,7 @@ export def "user-monetary-account-schedule-payment-batch get" [
 # operationId: UPDATE_SchedulePaymentBatch_for_User_MonetaryAccount
 # --payments item shape: {alias?: record, allow_bunqto?: bool, amount?: record, attachment?: list, counterparty_alias?: record, description?: string, merchant_reference?: string}
 # --schedule shape: {object?: record, recurrence_size?: int, recurrence_unit?: string, time_end?: string, time_start?: string}
-export def "user-monetary-account-schedule-payment-batch update" [
+export def "update-schedule-payment-batch-for-user-monetary-account" [
   user_id: int
   monetary_account_id: int
   item_id: int
@@ -14216,7 +14216,7 @@ export def "user-monetary-account-schedule-payment-batch update" [
 #
 # GET /user/{userID}/monetary-account/{monetary-accountID}/schedule-payment-batch/{schedule-payment-batchID}/note-attachment
 # operationId: List_all_NoteAttachment_for_User_MonetaryAccount_SchedulePaymentBatch
-export def "user-monetary-account-schedule-payment-batch-note-attachment list" [
+export def "list-all-note-attachment-for-user-monetary-account-schedule-payment-batch" [
   user_id: int
   monetary_account_id: int
   schedule_payment_batch_id: int
@@ -14265,7 +14265,7 @@ export def "user-monetary-account-schedule-payment-batch-note-attachment list" [
 #
 # POST /user/{userID}/monetary-account/{monetary-accountID}/schedule-payment-batch/{schedule-payment-batchID}/note-attachment
 # operationId: CREATE_NoteAttachment_for_User_MonetaryAccount_SchedulePaymentBatch
-export def "user-monetary-account-schedule-payment-batch-note-attachment create" [
+export def "create-note-attachment-for-user-monetary-account-schedule-payment-batch" [
   user_id: int
   monetary_account_id: int
   schedule_payment_batch_id: int
@@ -14319,7 +14319,7 @@ export def "user-monetary-account-schedule-payment-batch-note-attachment create"
 #
 # DELETE /user/{userID}/monetary-account/{monetary-accountID}/schedule-payment-batch/{schedule-payment-batchID}/note-attachment/{itemId}
 # operationId: DELETE_NoteAttachment_for_User_MonetaryAccount_SchedulePaymentBatch
-export def "user-monetary-account-schedule-payment-batch-note-attachment delete" [
+export def "delete-note-attachment-for-user-monetary-account-schedule-payment-batch" [
   user_id: int
   monetary_account_id: int
   schedule_payment_batch_id: int
@@ -14370,7 +14370,7 @@ export def "user-monetary-account-schedule-payment-batch-note-attachment delete"
 #
 # GET /user/{userID}/monetary-account/{monetary-accountID}/schedule-payment-batch/{schedule-payment-batchID}/note-attachment/{itemId}
 # operationId: READ_NoteAttachment_for_User_MonetaryAccount_SchedulePaymentBatch
-export def "user-monetary-account-schedule-payment-batch-note-attachment get" [
+export def "read-note-attachment-for-user-monetary-account-schedule-payment-batch" [
   user_id: int
   monetary_account_id: int
   schedule_payment_batch_id: int
@@ -14421,7 +14421,7 @@ export def "user-monetary-account-schedule-payment-batch-note-attachment get" [
 #
 # PUT /user/{userID}/monetary-account/{monetary-accountID}/schedule-payment-batch/{schedule-payment-batchID}/note-attachment/{itemId}
 # operationId: UPDATE_NoteAttachment_for_User_MonetaryAccount_SchedulePaymentBatch
-export def "user-monetary-account-schedule-payment-batch-note-attachment update" [
+export def "update-note-attachment-for-user-monetary-account-schedule-payment-batch" [
   user_id: int
   monetary_account_id: int
   schedule_payment_batch_id: int
@@ -14477,7 +14477,7 @@ export def "user-monetary-account-schedule-payment-batch-note-attachment update"
 #
 # GET /user/{userID}/monetary-account/{monetary-accountID}/schedule-payment-batch/{schedule-payment-batchID}/note-text
 # operationId: List_all_NoteText_for_User_MonetaryAccount_SchedulePaymentBatch
-export def "user-monetary-account-schedule-payment-batch-note-text list" [
+export def "list-all-note-text-for-user-monetary-account-schedule-payment-batch" [
   user_id: int
   monetary_account_id: int
   schedule_payment_batch_id: int
@@ -14526,7 +14526,7 @@ export def "user-monetary-account-schedule-payment-batch-note-text list" [
 #
 # POST /user/{userID}/monetary-account/{monetary-accountID}/schedule-payment-batch/{schedule-payment-batchID}/note-text
 # operationId: CREATE_NoteText_for_User_MonetaryAccount_SchedulePaymentBatch
-export def "user-monetary-account-schedule-payment-batch-note-text create" [
+export def "create-note-text-for-user-monetary-account-schedule-payment-batch" [
   user_id: int
   monetary_account_id: int
   schedule_payment_batch_id: int
@@ -14579,7 +14579,7 @@ export def "user-monetary-account-schedule-payment-batch-note-text create" [
 #
 # DELETE /user/{userID}/monetary-account/{monetary-accountID}/schedule-payment-batch/{schedule-payment-batchID}/note-text/{itemId}
 # operationId: DELETE_NoteText_for_User_MonetaryAccount_SchedulePaymentBatch
-export def "user-monetary-account-schedule-payment-batch-note-text delete" [
+export def "delete-note-text-for-user-monetary-account-schedule-payment-batch" [
   user_id: int
   monetary_account_id: int
   schedule_payment_batch_id: int
@@ -14630,7 +14630,7 @@ export def "user-monetary-account-schedule-payment-batch-note-text delete" [
 #
 # GET /user/{userID}/monetary-account/{monetary-accountID}/schedule-payment-batch/{schedule-payment-batchID}/note-text/{itemId}
 # operationId: READ_NoteText_for_User_MonetaryAccount_SchedulePaymentBatch
-export def "user-monetary-account-schedule-payment-batch-note-text get" [
+export def "read-note-text-for-user-monetary-account-schedule-payment-batch" [
   user_id: int
   monetary_account_id: int
   schedule_payment_batch_id: int
@@ -14681,7 +14681,7 @@ export def "user-monetary-account-schedule-payment-batch-note-text get" [
 #
 # PUT /user/{userID}/monetary-account/{monetary-accountID}/schedule-payment-batch/{schedule-payment-batchID}/note-text/{itemId}
 # operationId: UPDATE_NoteText_for_User_MonetaryAccount_SchedulePaymentBatch
-export def "user-monetary-account-schedule-payment-batch-note-text update" [
+export def "update-note-text-for-user-monetary-account-schedule-payment-batch" [
   user_id: int
   monetary_account_id: int
   schedule_payment_batch_id: int
@@ -14736,7 +14736,7 @@ export def "user-monetary-account-schedule-payment-batch-note-text update" [
 #
 # DELETE /user/{userID}/monetary-account/{monetary-accountID}/schedule-payment/{itemId}
 # operationId: DELETE_SchedulePayment_for_User_MonetaryAccount
-export def "user-monetary-account-schedule-payment delete" [
+export def "delete-schedule-payment-for-user-monetary-account" [
   user_id: int
   monetary_account_id: int
   item_id: int
@@ -14785,7 +14785,7 @@ export def "user-monetary-account-schedule-payment delete" [
 #
 # GET /user/{userID}/monetary-account/{monetary-accountID}/schedule-payment/{itemId}
 # operationId: READ_SchedulePayment_for_User_MonetaryAccount
-export def "user-monetary-account-schedule-payment get" [
+export def "read-schedule-payment-for-user-monetary-account" [
   user_id: int
   monetary_account_id: int
   item_id: int
@@ -14836,7 +14836,7 @@ export def "user-monetary-account-schedule-payment get" [
 # operationId: UPDATE_SchedulePayment_for_User_MonetaryAccount
 # --payment shape: {alias?: record, allow_bunqto?: bool, amount?: record, attachment?: list, counterparty_alias?: record, description?: string, merchant_reference?: string}
 # --schedule shape: {object?: record, recurrence_size?: int, recurrence_unit?: string, time_end?: string, time_start?: string}
-export def "user-monetary-account-schedule-payment update" [
+export def "update-schedule-payment-for-user-monetary-account" [
   user_id: int
   monetary_account_id: int
   item_id: int
@@ -14890,7 +14890,7 @@ export def "user-monetary-account-schedule-payment update" [
 #
 # GET /user/{userID}/monetary-account/{monetary-accountID}/schedule-payment/{schedule-paymentID}/note-attachment
 # operationId: List_all_NoteAttachment_for_User_MonetaryAccount_SchedulePayment
-export def "user-monetary-account-schedule-payment-note-attachment list" [
+export def "list-all-note-attachment-for-user-monetary-account-schedule-payment" [
   user_id: int
   monetary_account_id: int
   schedule_payment_id: int
@@ -14939,7 +14939,7 @@ export def "user-monetary-account-schedule-payment-note-attachment list" [
 #
 # POST /user/{userID}/monetary-account/{monetary-accountID}/schedule-payment/{schedule-paymentID}/note-attachment
 # operationId: CREATE_NoteAttachment_for_User_MonetaryAccount_SchedulePayment
-export def "user-monetary-account-schedule-payment-note-attachment create" [
+export def "create-note-attachment-for-user-monetary-account-schedule-payment" [
   user_id: int
   monetary_account_id: int
   schedule_payment_id: int
@@ -14993,7 +14993,7 @@ export def "user-monetary-account-schedule-payment-note-attachment create" [
 #
 # DELETE /user/{userID}/monetary-account/{monetary-accountID}/schedule-payment/{schedule-paymentID}/note-attachment/{itemId}
 # operationId: DELETE_NoteAttachment_for_User_MonetaryAccount_SchedulePayment
-export def "user-monetary-account-schedule-payment-note-attachment delete" [
+export def "delete-note-attachment-for-user-monetary-account-schedule-payment" [
   user_id: int
   monetary_account_id: int
   schedule_payment_id: int
@@ -15044,7 +15044,7 @@ export def "user-monetary-account-schedule-payment-note-attachment delete" [
 #
 # GET /user/{userID}/monetary-account/{monetary-accountID}/schedule-payment/{schedule-paymentID}/note-attachment/{itemId}
 # operationId: READ_NoteAttachment_for_User_MonetaryAccount_SchedulePayment
-export def "user-monetary-account-schedule-payment-note-attachment get" [
+export def "read-note-attachment-for-user-monetary-account-schedule-payment" [
   user_id: int
   monetary_account_id: int
   schedule_payment_id: int
@@ -15095,7 +15095,7 @@ export def "user-monetary-account-schedule-payment-note-attachment get" [
 #
 # PUT /user/{userID}/monetary-account/{monetary-accountID}/schedule-payment/{schedule-paymentID}/note-attachment/{itemId}
 # operationId: UPDATE_NoteAttachment_for_User_MonetaryAccount_SchedulePayment
-export def "user-monetary-account-schedule-payment-note-attachment update" [
+export def "update-note-attachment-for-user-monetary-account-schedule-payment" [
   user_id: int
   monetary_account_id: int
   schedule_payment_id: int
@@ -15151,7 +15151,7 @@ export def "user-monetary-account-schedule-payment-note-attachment update" [
 #
 # GET /user/{userID}/monetary-account/{monetary-accountID}/schedule-payment/{schedule-paymentID}/note-text
 # operationId: List_all_NoteText_for_User_MonetaryAccount_SchedulePayment
-export def "user-monetary-account-schedule-payment-note-text list" [
+export def "list-all-note-text-for-user-monetary-account-schedule-payment" [
   user_id: int
   monetary_account_id: int
   schedule_payment_id: int
@@ -15200,7 +15200,7 @@ export def "user-monetary-account-schedule-payment-note-text list" [
 #
 # POST /user/{userID}/monetary-account/{monetary-accountID}/schedule-payment/{schedule-paymentID}/note-text
 # operationId: CREATE_NoteText_for_User_MonetaryAccount_SchedulePayment
-export def "user-monetary-account-schedule-payment-note-text create" [
+export def "create-note-text-for-user-monetary-account-schedule-payment" [
   user_id: int
   monetary_account_id: int
   schedule_payment_id: int
@@ -15253,7 +15253,7 @@ export def "user-monetary-account-schedule-payment-note-text create" [
 #
 # DELETE /user/{userID}/monetary-account/{monetary-accountID}/schedule-payment/{schedule-paymentID}/note-text/{itemId}
 # operationId: DELETE_NoteText_for_User_MonetaryAccount_SchedulePayment
-export def "user-monetary-account-schedule-payment-note-text delete" [
+export def "delete-note-text-for-user-monetary-account-schedule-payment" [
   user_id: int
   monetary_account_id: int
   schedule_payment_id: int
@@ -15304,7 +15304,7 @@ export def "user-monetary-account-schedule-payment-note-text delete" [
 #
 # GET /user/{userID}/monetary-account/{monetary-accountID}/schedule-payment/{schedule-paymentID}/note-text/{itemId}
 # operationId: READ_NoteText_for_User_MonetaryAccount_SchedulePayment
-export def "user-monetary-account-schedule-payment-note-text get" [
+export def "read-note-text-for-user-monetary-account-schedule-payment" [
   user_id: int
   monetary_account_id: int
   schedule_payment_id: int
@@ -15355,7 +15355,7 @@ export def "user-monetary-account-schedule-payment-note-text get" [
 #
 # PUT /user/{userID}/monetary-account/{monetary-accountID}/schedule-payment/{schedule-paymentID}/note-text/{itemId}
 # operationId: UPDATE_NoteText_for_User_MonetaryAccount_SchedulePayment
-export def "user-monetary-account-schedule-payment-note-text update" [
+export def "update-note-text-for-user-monetary-account-schedule-payment" [
   user_id: int
   monetary_account_id: int
   schedule_payment_id: int
@@ -15410,7 +15410,7 @@ export def "user-monetary-account-schedule-payment-note-text update" [
 #
 # GET /user/{userID}/monetary-account/{monetary-accountID}/schedule/{itemId}
 # operationId: READ_Schedule_for_User_MonetaryAccount
-export def "user-monetary-account-schedule get" [
+export def "read-schedule-for-user-monetary-account" [
   user_id: int
   monetary_account_id: int
   item_id: int
@@ -15459,7 +15459,7 @@ export def "user-monetary-account-schedule get" [
 #
 # GET /user/{userID}/monetary-account/{monetary-accountID}/schedule/{scheduleID}/schedule-instance
 # operationId: List_all_ScheduleInstance_for_User_MonetaryAccount_Schedule
-export def "user-monetary-account-schedule-schedule-instance list" [
+export def "list-all-schedule-instance-for-user-monetary-account-schedule" [
   user_id: int
   monetary_account_id: int
   schedule_id: int
@@ -15508,7 +15508,7 @@ export def "user-monetary-account-schedule-schedule-instance list" [
 #
 # GET /user/{userID}/monetary-account/{monetary-accountID}/schedule/{scheduleID}/schedule-instance/{itemId}
 # operationId: READ_ScheduleInstance_for_User_MonetaryAccount_Schedule
-export def "user-monetary-account-schedule-schedule-instance get" [
+export def "read-schedule-instance-for-user-monetary-account-schedule" [
   user_id: int
   monetary_account_id: int
   schedule_id: int
@@ -15561,7 +15561,7 @@ export def "user-monetary-account-schedule-schedule-instance get" [
 # operationId: UPDATE_ScheduleInstance_for_User_MonetaryAccount_Schedule
 # --result_object shape: {Payment?: record, PaymentBatch?: record}
 # --scheduled_object shape: {Payment?: record, PaymentBatch?: record}
-export def "user-monetary-account-schedule-schedule-instance update" [
+export def "update-schedule-instance-for-user-monetary-account-schedule" [
   user_id: int
   monetary_account_id: int
   schedule_id: int
@@ -15618,7 +15618,7 @@ export def "user-monetary-account-schedule-schedule-instance update" [
 #
 # GET /user/{userID}/monetary-account/{monetary-accountID}/schedule/{scheduleID}/schedule-instance/{schedule-instanceID}/note-attachment
 # operationId: List_all_NoteAttachment_for_User_MonetaryAccount_Schedule_ScheduleInstance
-export def "user-monetary-account-schedule-schedule-instance-note-attachment list" [
+export def "list-all-note-attachment-for-user-monetary-account-schedule-schedule-instance" [
   user_id: int
   monetary_account_id: int
   schedule_id: int
@@ -15669,7 +15669,7 @@ export def "user-monetary-account-schedule-schedule-instance-note-attachment lis
 #
 # POST /user/{userID}/monetary-account/{monetary-accountID}/schedule/{scheduleID}/schedule-instance/{schedule-instanceID}/note-attachment
 # operationId: CREATE_NoteAttachment_for_User_MonetaryAccount_Schedule_ScheduleInstance
-export def "user-monetary-account-schedule-schedule-instance-note-attachment create" [
+export def "create-note-attachment-for-user-monetary-account-schedule-schedule-instance" [
   user_id: int
   monetary_account_id: int
   schedule_id: int
@@ -15725,7 +15725,7 @@ export def "user-monetary-account-schedule-schedule-instance-note-attachment cre
 #
 # DELETE /user/{userID}/monetary-account/{monetary-accountID}/schedule/{scheduleID}/schedule-instance/{schedule-instanceID}/note-attachment/{itemId}
 # operationId: DELETE_NoteAttachment_for_User_MonetaryAccount_Schedule_ScheduleInstance
-export def "user-monetary-account-schedule-schedule-instance-note-attachment delete" [
+export def "delete-note-attachment-for-user-monetary-account-schedule-schedule-instance" [
   user_id: int
   monetary_account_id: int
   schedule_id: int
@@ -15778,7 +15778,7 @@ export def "user-monetary-account-schedule-schedule-instance-note-attachment del
 #
 # GET /user/{userID}/monetary-account/{monetary-accountID}/schedule/{scheduleID}/schedule-instance/{schedule-instanceID}/note-attachment/{itemId}
 # operationId: READ_NoteAttachment_for_User_MonetaryAccount_Schedule_ScheduleInstance
-export def "user-monetary-account-schedule-schedule-instance-note-attachment get" [
+export def "read-note-attachment-for-user-monetary-account-schedule-schedule-instance" [
   user_id: int
   monetary_account_id: int
   schedule_id: int
@@ -15831,7 +15831,7 @@ export def "user-monetary-account-schedule-schedule-instance-note-attachment get
 #
 # PUT /user/{userID}/monetary-account/{monetary-accountID}/schedule/{scheduleID}/schedule-instance/{schedule-instanceID}/note-attachment/{itemId}
 # operationId: UPDATE_NoteAttachment_for_User_MonetaryAccount_Schedule_ScheduleInstance
-export def "user-monetary-account-schedule-schedule-instance-note-attachment update" [
+export def "update-note-attachment-for-user-monetary-account-schedule-schedule-instance" [
   user_id: int
   monetary_account_id: int
   schedule_id: int
@@ -15889,7 +15889,7 @@ export def "user-monetary-account-schedule-schedule-instance-note-attachment upd
 #
 # GET /user/{userID}/monetary-account/{monetary-accountID}/schedule/{scheduleID}/schedule-instance/{schedule-instanceID}/note-text
 # operationId: List_all_NoteText_for_User_MonetaryAccount_Schedule_ScheduleInstance
-export def "user-monetary-account-schedule-schedule-instance-note-text list" [
+export def "list-all-note-text-for-user-monetary-account-schedule-schedule-instance" [
   user_id: int
   monetary_account_id: int
   schedule_id: int
@@ -15940,7 +15940,7 @@ export def "user-monetary-account-schedule-schedule-instance-note-text list" [
 #
 # POST /user/{userID}/monetary-account/{monetary-accountID}/schedule/{scheduleID}/schedule-instance/{schedule-instanceID}/note-text
 # operationId: CREATE_NoteText_for_User_MonetaryAccount_Schedule_ScheduleInstance
-export def "user-monetary-account-schedule-schedule-instance-note-text create" [
+export def "create-note-text-for-user-monetary-account-schedule-schedule-instance" [
   user_id: int
   monetary_account_id: int
   schedule_id: int
@@ -15995,7 +15995,7 @@ export def "user-monetary-account-schedule-schedule-instance-note-text create" [
 #
 # DELETE /user/{userID}/monetary-account/{monetary-accountID}/schedule/{scheduleID}/schedule-instance/{schedule-instanceID}/note-text/{itemId}
 # operationId: DELETE_NoteText_for_User_MonetaryAccount_Schedule_ScheduleInstance
-export def "user-monetary-account-schedule-schedule-instance-note-text delete" [
+export def "delete-note-text-for-user-monetary-account-schedule-schedule-instance" [
   user_id: int
   monetary_account_id: int
   schedule_id: int
@@ -16048,7 +16048,7 @@ export def "user-monetary-account-schedule-schedule-instance-note-text delete" [
 #
 # GET /user/{userID}/monetary-account/{monetary-accountID}/schedule/{scheduleID}/schedule-instance/{schedule-instanceID}/note-text/{itemId}
 # operationId: READ_NoteText_for_User_MonetaryAccount_Schedule_ScheduleInstance
-export def "user-monetary-account-schedule-schedule-instance-note-text get" [
+export def "read-note-text-for-user-monetary-account-schedule-schedule-instance" [
   user_id: int
   monetary_account_id: int
   schedule_id: int
@@ -16101,7 +16101,7 @@ export def "user-monetary-account-schedule-schedule-instance-note-text get" [
 #
 # PUT /user/{userID}/monetary-account/{monetary-accountID}/schedule/{scheduleID}/schedule-instance/{schedule-instanceID}/note-text/{itemId}
 # operationId: UPDATE_NoteText_for_User_MonetaryAccount_Schedule_ScheduleInstance
-export def "user-monetary-account-schedule-schedule-instance-note-text update" [
+export def "update-note-text-for-user-monetary-account-schedule-schedule-instance" [
   user_id: int
   monetary_account_id: int
   schedule_id: int
@@ -16158,7 +16158,7 @@ export def "user-monetary-account-schedule-schedule-instance-note-text update" [
 #
 # GET /user/{userID}/monetary-account/{monetary-accountID}/share-invite-monetary-account-inquiry
 # operationId: List_all_ShareInviteMonetaryAccountInquiry_for_User_MonetaryAccount
-export def "user-monetary-account-share-invite-monetary-account-inquiry list" [
+export def "list-all-share-invite-monetary-account-inquiry-for-user-monetary-account" [
   user_id: int
   monetary_account_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -16210,7 +16210,7 @@ export def "user-monetary-account-share-invite-monetary-account-inquiry list" [
 # --share_detail shape: {draft_payment?: record, payment?: record, read_only?: record}
 # --user_alias_created shape: {avatar?: record, country?: string, display_name?: string, uuid?: string}
 # --user_alias_revoked shape: {avatar?: record, country?: string, display_name?: string, uuid?: string}
-export def "user-monetary-account-share-invite-monetary-account-inquiry create" [
+export def "create-share-invite-monetary-account-inquiry-for-user-monetary-account" [
   user_id: int
   monetary_account_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -16272,7 +16272,7 @@ export def "user-monetary-account-share-invite-monetary-account-inquiry create" 
 #
 # GET /user/{userID}/monetary-account/{monetary-accountID}/share-invite-monetary-account-inquiry/{itemId}
 # operationId: READ_ShareInviteMonetaryAccountInquiry_for_User_MonetaryAccount
-export def "user-monetary-account-share-invite-monetary-account-inquiry get" [
+export def "read-share-invite-monetary-account-inquiry-for-user-monetary-account" [
   user_id: int
   monetary_account_id: int
   item_id: int
@@ -16326,7 +16326,7 @@ export def "user-monetary-account-share-invite-monetary-account-inquiry get" [
 # --share_detail shape: {draft_payment?: record, payment?: record, read_only?: record}
 # --user_alias_created shape: {avatar?: record, country?: string, display_name?: string, uuid?: string}
 # --user_alias_revoked shape: {avatar?: record, country?: string, display_name?: string, uuid?: string}
-export def "user-monetary-account-share-invite-monetary-account-inquiry update" [
+export def "update-share-invite-monetary-account-inquiry-for-user-monetary-account" [
   user_id: int
   monetary_account_id: int
   item_id: int
@@ -16390,7 +16390,7 @@ export def "user-monetary-account-share-invite-monetary-account-inquiry update" 
 #
 # GET /user/{userID}/monetary-account/{monetary-accountID}/sofort-merchant-transaction
 # operationId: List_all_SofortMerchantTransaction_for_User_MonetaryAccount
-export def "user-monetary-account-sofort-merchant-transaction list" [
+export def "list-all-sofort-merchant-transaction-for-user-monetary-account" [
   user_id: int
   monetary_account_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -16437,7 +16437,7 @@ export def "user-monetary-account-sofort-merchant-transaction list" [
 #
 # GET /user/{userID}/monetary-account/{monetary-accountID}/sofort-merchant-transaction/{itemId}
 # operationId: READ_SofortMerchantTransaction_for_User_MonetaryAccount
-export def "user-monetary-account-sofort-merchant-transaction get" [
+export def "read-sofort-merchant-transaction-for-user-monetary-account" [
   user_id: int
   monetary_account_id: int
   item_id: int
@@ -16486,7 +16486,7 @@ export def "user-monetary-account-sofort-merchant-transaction get" [
 #
 # GET /user/{userID}/monetary-account/{monetary-accountID}/sofort-merchant-transaction/{sofort-merchant-transactionID}/note-attachment
 # operationId: List_all_NoteAttachment_for_User_MonetaryAccount_SofortMerchantTransaction
-export def "user-monetary-account-sofort-merchant-transaction-note-attachment list" [
+export def "list-all-note-attachment-for-user-monetary-account-sofort-merchant-transaction" [
   user_id: int
   monetary_account_id: int
   sofort_merchant_transaction_id: int
@@ -16535,7 +16535,7 @@ export def "user-monetary-account-sofort-merchant-transaction-note-attachment li
 #
 # POST /user/{userID}/monetary-account/{monetary-accountID}/sofort-merchant-transaction/{sofort-merchant-transactionID}/note-attachment
 # operationId: CREATE_NoteAttachment_for_User_MonetaryAccount_SofortMerchantTransaction
-export def "user-monetary-account-sofort-merchant-transaction-note-attachment create" [
+export def "create-note-attachment-for-user-monetary-account-sofort-merchant-transaction" [
   user_id: int
   monetary_account_id: int
   sofort_merchant_transaction_id: int
@@ -16589,7 +16589,7 @@ export def "user-monetary-account-sofort-merchant-transaction-note-attachment cr
 #
 # DELETE /user/{userID}/monetary-account/{monetary-accountID}/sofort-merchant-transaction/{sofort-merchant-transactionID}/note-attachment/{itemId}
 # operationId: DELETE_NoteAttachment_for_User_MonetaryAccount_SofortMerchantTransaction
-export def "user-monetary-account-sofort-merchant-transaction-note-attachment delete" [
+export def "delete-note-attachment-for-user-monetary-account-sofort-merchant-transaction" [
   user_id: int
   monetary_account_id: int
   sofort_merchant_transaction_id: int
@@ -16640,7 +16640,7 @@ export def "user-monetary-account-sofort-merchant-transaction-note-attachment de
 #
 # GET /user/{userID}/monetary-account/{monetary-accountID}/sofort-merchant-transaction/{sofort-merchant-transactionID}/note-attachment/{itemId}
 # operationId: READ_NoteAttachment_for_User_MonetaryAccount_SofortMerchantTransaction
-export def "user-monetary-account-sofort-merchant-transaction-note-attachment get" [
+export def "read-note-attachment-for-user-monetary-account-sofort-merchant-transaction" [
   user_id: int
   monetary_account_id: int
   sofort_merchant_transaction_id: int
@@ -16691,7 +16691,7 @@ export def "user-monetary-account-sofort-merchant-transaction-note-attachment ge
 #
 # PUT /user/{userID}/monetary-account/{monetary-accountID}/sofort-merchant-transaction/{sofort-merchant-transactionID}/note-attachment/{itemId}
 # operationId: UPDATE_NoteAttachment_for_User_MonetaryAccount_SofortMerchantTransaction
-export def "user-monetary-account-sofort-merchant-transaction-note-attachment update" [
+export def "update-note-attachment-for-user-monetary-account-sofort-merchant-transaction" [
   user_id: int
   monetary_account_id: int
   sofort_merchant_transaction_id: int
@@ -16747,7 +16747,7 @@ export def "user-monetary-account-sofort-merchant-transaction-note-attachment up
 #
 # GET /user/{userID}/monetary-account/{monetary-accountID}/sofort-merchant-transaction/{sofort-merchant-transactionID}/note-text
 # operationId: List_all_NoteText_for_User_MonetaryAccount_SofortMerchantTransaction
-export def "user-monetary-account-sofort-merchant-transaction-note-text list" [
+export def "list-all-note-text-for-user-monetary-account-sofort-merchant-transaction" [
   user_id: int
   monetary_account_id: int
   sofort_merchant_transaction_id: int
@@ -16796,7 +16796,7 @@ export def "user-monetary-account-sofort-merchant-transaction-note-text list" [
 #
 # POST /user/{userID}/monetary-account/{monetary-accountID}/sofort-merchant-transaction/{sofort-merchant-transactionID}/note-text
 # operationId: CREATE_NoteText_for_User_MonetaryAccount_SofortMerchantTransaction
-export def "user-monetary-account-sofort-merchant-transaction-note-text create" [
+export def "create-note-text-for-user-monetary-account-sofort-merchant-transaction" [
   user_id: int
   monetary_account_id: int
   sofort_merchant_transaction_id: int
@@ -16849,7 +16849,7 @@ export def "user-monetary-account-sofort-merchant-transaction-note-text create" 
 #
 # DELETE /user/{userID}/monetary-account/{monetary-accountID}/sofort-merchant-transaction/{sofort-merchant-transactionID}/note-text/{itemId}
 # operationId: DELETE_NoteText_for_User_MonetaryAccount_SofortMerchantTransaction
-export def "user-monetary-account-sofort-merchant-transaction-note-text delete" [
+export def "delete-note-text-for-user-monetary-account-sofort-merchant-transaction" [
   user_id: int
   monetary_account_id: int
   sofort_merchant_transaction_id: int
@@ -16900,7 +16900,7 @@ export def "user-monetary-account-sofort-merchant-transaction-note-text delete" 
 #
 # GET /user/{userID}/monetary-account/{monetary-accountID}/sofort-merchant-transaction/{sofort-merchant-transactionID}/note-text/{itemId}
 # operationId: READ_NoteText_for_User_MonetaryAccount_SofortMerchantTransaction
-export def "user-monetary-account-sofort-merchant-transaction-note-text get" [
+export def "read-note-text-for-user-monetary-account-sofort-merchant-transaction" [
   user_id: int
   monetary_account_id: int
   sofort_merchant_transaction_id: int
@@ -16951,7 +16951,7 @@ export def "user-monetary-account-sofort-merchant-transaction-note-text get" [
 #
 # PUT /user/{userID}/monetary-account/{monetary-accountID}/sofort-merchant-transaction/{sofort-merchant-transactionID}/note-text/{itemId}
 # operationId: UPDATE_NoteText_for_User_MonetaryAccount_SofortMerchantTransaction
-export def "user-monetary-account-sofort-merchant-transaction-note-text update" [
+export def "update-note-text-for-user-monetary-account-sofort-merchant-transaction" [
   user_id: int
   monetary_account_id: int
   sofort_merchant_transaction_id: int
@@ -17006,7 +17006,7 @@ export def "user-monetary-account-sofort-merchant-transaction-note-text update" 
 #
 # GET /user/{userID}/monetary-account/{monetary-accountID}/switch-service-payment/{itemId}
 # operationId: READ_SwitchServicePayment_for_User_MonetaryAccount
-export def "user-monetary-account-switch-service-payment get" [
+export def "read-switch-service-payment-for-user-monetary-account" [
   user_id: int
   monetary_account_id: int
   item_id: int
@@ -17055,7 +17055,7 @@ export def "user-monetary-account-switch-service-payment get" [
 #
 # GET /user/{userID}/monetary-account/{monetary-accountID}/switch-service-payment/{switch-service-paymentID}/note-attachment
 # operationId: List_all_NoteAttachment_for_User_MonetaryAccount_SwitchServicePayment
-export def "user-monetary-account-switch-service-payment-note-attachment list" [
+export def "list-all-note-attachment-for-user-monetary-account-switch-service-payment" [
   user_id: int
   monetary_account_id: int
   switch_service_payment_id: int
@@ -17104,7 +17104,7 @@ export def "user-monetary-account-switch-service-payment-note-attachment list" [
 #
 # POST /user/{userID}/monetary-account/{monetary-accountID}/switch-service-payment/{switch-service-paymentID}/note-attachment
 # operationId: CREATE_NoteAttachment_for_User_MonetaryAccount_SwitchServicePayment
-export def "user-monetary-account-switch-service-payment-note-attachment create" [
+export def "create-note-attachment-for-user-monetary-account-switch-service-payment" [
   user_id: int
   monetary_account_id: int
   switch_service_payment_id: int
@@ -17158,7 +17158,7 @@ export def "user-monetary-account-switch-service-payment-note-attachment create"
 #
 # DELETE /user/{userID}/monetary-account/{monetary-accountID}/switch-service-payment/{switch-service-paymentID}/note-attachment/{itemId}
 # operationId: DELETE_NoteAttachment_for_User_MonetaryAccount_SwitchServicePayment
-export def "user-monetary-account-switch-service-payment-note-attachment delete" [
+export def "delete-note-attachment-for-user-monetary-account-switch-service-payment" [
   user_id: int
   monetary_account_id: int
   switch_service_payment_id: int
@@ -17209,7 +17209,7 @@ export def "user-monetary-account-switch-service-payment-note-attachment delete"
 #
 # GET /user/{userID}/monetary-account/{monetary-accountID}/switch-service-payment/{switch-service-paymentID}/note-attachment/{itemId}
 # operationId: READ_NoteAttachment_for_User_MonetaryAccount_SwitchServicePayment
-export def "user-monetary-account-switch-service-payment-note-attachment get" [
+export def "read-note-attachment-for-user-monetary-account-switch-service-payment" [
   user_id: int
   monetary_account_id: int
   switch_service_payment_id: int
@@ -17260,7 +17260,7 @@ export def "user-monetary-account-switch-service-payment-note-attachment get" [
 #
 # PUT /user/{userID}/monetary-account/{monetary-accountID}/switch-service-payment/{switch-service-paymentID}/note-attachment/{itemId}
 # operationId: UPDATE_NoteAttachment_for_User_MonetaryAccount_SwitchServicePayment
-export def "user-monetary-account-switch-service-payment-note-attachment update" [
+export def "update-note-attachment-for-user-monetary-account-switch-service-payment" [
   user_id: int
   monetary_account_id: int
   switch_service_payment_id: int
@@ -17316,7 +17316,7 @@ export def "user-monetary-account-switch-service-payment-note-attachment update"
 #
 # GET /user/{userID}/monetary-account/{monetary-accountID}/switch-service-payment/{switch-service-paymentID}/note-text
 # operationId: List_all_NoteText_for_User_MonetaryAccount_SwitchServicePayment
-export def "user-monetary-account-switch-service-payment-note-text list" [
+export def "list-all-note-text-for-user-monetary-account-switch-service-payment" [
   user_id: int
   monetary_account_id: int
   switch_service_payment_id: int
@@ -17365,7 +17365,7 @@ export def "user-monetary-account-switch-service-payment-note-text list" [
 #
 # POST /user/{userID}/monetary-account/{monetary-accountID}/switch-service-payment/{switch-service-paymentID}/note-text
 # operationId: CREATE_NoteText_for_User_MonetaryAccount_SwitchServicePayment
-export def "user-monetary-account-switch-service-payment-note-text create" [
+export def "create-note-text-for-user-monetary-account-switch-service-payment" [
   user_id: int
   monetary_account_id: int
   switch_service_payment_id: int
@@ -17418,7 +17418,7 @@ export def "user-monetary-account-switch-service-payment-note-text create" [
 #
 # DELETE /user/{userID}/monetary-account/{monetary-accountID}/switch-service-payment/{switch-service-paymentID}/note-text/{itemId}
 # operationId: DELETE_NoteText_for_User_MonetaryAccount_SwitchServicePayment
-export def "user-monetary-account-switch-service-payment-note-text delete" [
+export def "delete-note-text-for-user-monetary-account-switch-service-payment" [
   user_id: int
   monetary_account_id: int
   switch_service_payment_id: int
@@ -17469,7 +17469,7 @@ export def "user-monetary-account-switch-service-payment-note-text delete" [
 #
 # GET /user/{userID}/monetary-account/{monetary-accountID}/switch-service-payment/{switch-service-paymentID}/note-text/{itemId}
 # operationId: READ_NoteText_for_User_MonetaryAccount_SwitchServicePayment
-export def "user-monetary-account-switch-service-payment-note-text get" [
+export def "read-note-text-for-user-monetary-account-switch-service-payment" [
   user_id: int
   monetary_account_id: int
   switch_service_payment_id: int
@@ -17520,7 +17520,7 @@ export def "user-monetary-account-switch-service-payment-note-text get" [
 #
 # PUT /user/{userID}/monetary-account/{monetary-accountID}/switch-service-payment/{switch-service-paymentID}/note-text/{itemId}
 # operationId: UPDATE_NoteText_for_User_MonetaryAccount_SwitchServicePayment
-export def "user-monetary-account-switch-service-payment-note-text update" [
+export def "update-note-text-for-user-monetary-account-switch-service-payment" [
   user_id: int
   monetary_account_id: int
   switch_service_payment_id: int
@@ -17575,7 +17575,7 @@ export def "user-monetary-account-switch-service-payment-note-text update" [
 #
 # GET /user/{userID}/monetary-account/{monetary-accountID}/translink-transaction
 # operationId: List_all_TranslinkTransaction_for_User_MonetaryAccount
-export def "user-monetary-account-translink-transaction list" [
+export def "list-all-translink-transaction-for-user-monetary-account" [
   user_id: int
   monetary_account_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -17623,7 +17623,7 @@ export def "user-monetary-account-translink-transaction list" [
 # POST /user/{userID}/monetary-account/{monetary-accountID}/translink-transaction
 # operationId: CREATE_TranslinkTransaction_for_User_MonetaryAccount
 # --payments item shape: {address_billing?: record, address_shipping?: record, alias?: record, allow_bunqto?: bool, amount?: record, attachment?: list, balance_after_mutation?: record, counterparty_alias?: record, description?: string, geolocation?: record, merchant_reference?: string, payment_auto_allocate_instance?: record}
-export def "user-monetary-account-translink-transaction create" [
+export def "create-translink-transaction-for-user-monetary-account" [
   user_id: int
   monetary_account_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -17677,7 +17677,7 @@ export def "user-monetary-account-translink-transaction create" [
 #
 # GET /user/{userID}/monetary-account/{monetary-accountID}/translink-transaction/{itemId}
 # operationId: READ_TranslinkTransaction_for_User_MonetaryAccount
-export def "user-monetary-account-translink-transaction get" [
+export def "read-translink-transaction-for-user-monetary-account" [
   user_id: int
   monetary_account_id: int
   item_id: int
@@ -17726,7 +17726,7 @@ export def "user-monetary-account-translink-transaction get" [
 #
 # GET /user/{userID}/monetary-account/{monetary-accountID}/whitelist-sdd
 # operationId: List_all_WhitelistSdd_for_User_MonetaryAccount
-export def "user-monetary-account-whitelist-sdd list" [
+export def "list-all-whitelist-sdd-for-user-monetary-account" [
   user_id: int
   monetary_account_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -17773,7 +17773,7 @@ export def "user-monetary-account-whitelist-sdd list" [
 #
 # GET /user/{userID}/monetary-account/{monetary-accountID}/whitelist-sdd/{itemId}
 # operationId: READ_WhitelistSdd_for_User_MonetaryAccount
-export def "user-monetary-account-whitelist-sdd get" [
+export def "read-whitelist-sdd-for-user-monetary-account" [
   user_id: int
   monetary_account_id: int
   item_id: int
@@ -17822,7 +17822,7 @@ export def "user-monetary-account-whitelist-sdd get" [
 #
 # GET /user/{userID}/monetary-account/{monetary-accountID}/whitelist/{whitelistID}/whitelist-result/{whitelist-resultID}/note-attachment
 # operationId: List_all_NoteAttachment_for_User_MonetaryAccount_Whitelist_WhitelistResult
-export def "user-monetary-account-whitelist-whitelist-result-note-attachment list" [
+export def "list-all-note-attachment-for-user-monetary-account-whitelist-whitelist-result" [
   user_id: int
   monetary_account_id: int
   whitelist_id: int
@@ -17873,7 +17873,7 @@ export def "user-monetary-account-whitelist-whitelist-result-note-attachment lis
 #
 # POST /user/{userID}/monetary-account/{monetary-accountID}/whitelist/{whitelistID}/whitelist-result/{whitelist-resultID}/note-attachment
 # operationId: CREATE_NoteAttachment_for_User_MonetaryAccount_Whitelist_WhitelistResult
-export def "user-monetary-account-whitelist-whitelist-result-note-attachment create" [
+export def "create-note-attachment-for-user-monetary-account-whitelist-whitelist-result" [
   user_id: int
   monetary_account_id: int
   whitelist_id: int
@@ -17929,7 +17929,7 @@ export def "user-monetary-account-whitelist-whitelist-result-note-attachment cre
 #
 # DELETE /user/{userID}/monetary-account/{monetary-accountID}/whitelist/{whitelistID}/whitelist-result/{whitelist-resultID}/note-attachment/{itemId}
 # operationId: DELETE_NoteAttachment_for_User_MonetaryAccount_Whitelist_WhitelistResult
-export def "user-monetary-account-whitelist-whitelist-result-note-attachment delete" [
+export def "delete-note-attachment-for-user-monetary-account-whitelist-whitelist-result" [
   user_id: int
   monetary_account_id: int
   whitelist_id: int
@@ -17982,7 +17982,7 @@ export def "user-monetary-account-whitelist-whitelist-result-note-attachment del
 #
 # GET /user/{userID}/monetary-account/{monetary-accountID}/whitelist/{whitelistID}/whitelist-result/{whitelist-resultID}/note-attachment/{itemId}
 # operationId: READ_NoteAttachment_for_User_MonetaryAccount_Whitelist_WhitelistResult
-export def "user-monetary-account-whitelist-whitelist-result-note-attachment get" [
+export def "read-note-attachment-for-user-monetary-account-whitelist-whitelist-result" [
   user_id: int
   monetary_account_id: int
   whitelist_id: int
@@ -18035,7 +18035,7 @@ export def "user-monetary-account-whitelist-whitelist-result-note-attachment get
 #
 # PUT /user/{userID}/monetary-account/{monetary-accountID}/whitelist/{whitelistID}/whitelist-result/{whitelist-resultID}/note-attachment/{itemId}
 # operationId: UPDATE_NoteAttachment_for_User_MonetaryAccount_Whitelist_WhitelistResult
-export def "user-monetary-account-whitelist-whitelist-result-note-attachment update" [
+export def "update-note-attachment-for-user-monetary-account-whitelist-whitelist-result" [
   user_id: int
   monetary_account_id: int
   whitelist_id: int
@@ -18093,7 +18093,7 @@ export def "user-monetary-account-whitelist-whitelist-result-note-attachment upd
 #
 # GET /user/{userID}/monetary-account/{monetary-accountID}/whitelist/{whitelistID}/whitelist-result/{whitelist-resultID}/note-text
 # operationId: List_all_NoteText_for_User_MonetaryAccount_Whitelist_WhitelistResult
-export def "user-monetary-account-whitelist-whitelist-result-note-text list" [
+export def "list-all-note-text-for-user-monetary-account-whitelist-whitelist-result" [
   user_id: int
   monetary_account_id: int
   whitelist_id: int
@@ -18144,7 +18144,7 @@ export def "user-monetary-account-whitelist-whitelist-result-note-text list" [
 #
 # POST /user/{userID}/monetary-account/{monetary-accountID}/whitelist/{whitelistID}/whitelist-result/{whitelist-resultID}/note-text
 # operationId: CREATE_NoteText_for_User_MonetaryAccount_Whitelist_WhitelistResult
-export def "user-monetary-account-whitelist-whitelist-result-note-text create" [
+export def "create-note-text-for-user-monetary-account-whitelist-whitelist-result" [
   user_id: int
   monetary_account_id: int
   whitelist_id: int
@@ -18199,7 +18199,7 @@ export def "user-monetary-account-whitelist-whitelist-result-note-text create" [
 #
 # DELETE /user/{userID}/monetary-account/{monetary-accountID}/whitelist/{whitelistID}/whitelist-result/{whitelist-resultID}/note-text/{itemId}
 # operationId: DELETE_NoteText_for_User_MonetaryAccount_Whitelist_WhitelistResult
-export def "user-monetary-account-whitelist-whitelist-result-note-text delete" [
+export def "delete-note-text-for-user-monetary-account-whitelist-whitelist-result" [
   user_id: int
   monetary_account_id: int
   whitelist_id: int
@@ -18252,7 +18252,7 @@ export def "user-monetary-account-whitelist-whitelist-result-note-text delete" [
 #
 # GET /user/{userID}/monetary-account/{monetary-accountID}/whitelist/{whitelistID}/whitelist-result/{whitelist-resultID}/note-text/{itemId}
 # operationId: READ_NoteText_for_User_MonetaryAccount_Whitelist_WhitelistResult
-export def "user-monetary-account-whitelist-whitelist-result-note-text get" [
+export def "read-note-text-for-user-monetary-account-whitelist-whitelist-result" [
   user_id: int
   monetary_account_id: int
   whitelist_id: int
@@ -18305,7 +18305,7 @@ export def "user-monetary-account-whitelist-whitelist-result-note-text get" [
 #
 # PUT /user/{userID}/monetary-account/{monetary-accountID}/whitelist/{whitelistID}/whitelist-result/{whitelist-resultID}/note-text/{itemId}
 # operationId: UPDATE_NoteText_for_User_MonetaryAccount_Whitelist_WhitelistResult
-export def "user-monetary-account-whitelist-whitelist-result-note-text update" [
+export def "update-note-text-for-user-monetary-account-whitelist-whitelist-result" [
   user_id: int
   monetary_account_id: int
   whitelist_id: int
@@ -18362,7 +18362,7 @@ export def "user-monetary-account-whitelist-whitelist-result-note-text update" [
 #
 # GET /user/{userID}/notification-filter-email
 # operationId: List_all_NotificationFilterEmail_for_User
-export def "user-notification-filter-email list" [
+export def "list-all-notification-filter-email-for-user" [
   user_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -18408,7 +18408,7 @@ export def "user-notification-filter-email list" [
 # POST /user/{userID}/notification-filter-email
 # operationId: CREATE_NotificationFilterEmail_for_User
 # --notification_filters item shape: {notification_filters?: list}
-export def "user-notification-filter-email create" [
+export def "create-notification-filter-email-for-user" [
   user_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -18457,7 +18457,7 @@ export def "user-notification-filter-email create" [
 #
 # GET /user/{userID}/notification-filter-push
 # operationId: List_all_NotificationFilterPush_for_User
-export def "user-notification-filter-push list" [
+export def "list-all-notification-filter-push-for-user" [
   user_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -18503,7 +18503,7 @@ export def "user-notification-filter-push list" [
 # POST /user/{userID}/notification-filter-push
 # operationId: CREATE_NotificationFilterPush_for_User
 # --notification_filters item shape: {notification_filters?: list}
-export def "user-notification-filter-push create" [
+export def "create-notification-filter-push-for-user" [
   user_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -18552,7 +18552,7 @@ export def "user-notification-filter-push create" [
 #
 # GET /user/{userID}/notification-filter-url
 # operationId: List_all_NotificationFilterUrl_for_User
-export def "user-notification-filter-url list" [
+export def "list-all-notification-filter-url-for-user" [
   user_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -18598,7 +18598,7 @@ export def "user-notification-filter-url list" [
 # POST /user/{userID}/notification-filter-url
 # operationId: CREATE_NotificationFilterUrl_for_User
 # --notification_filters item shape: {notification_filters?: list}
-export def "user-notification-filter-url create" [
+export def "create-notification-filter-url-for-user" [
   user_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -18647,7 +18647,7 @@ export def "user-notification-filter-url create" [
 #
 # GET /user/{userID}/oauth-client
 # operationId: List_all_OauthClient_for_User
-export def "user-oauth-client list" [
+export def "list-all-oauth-client-for-user" [
   user_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -18692,7 +18692,7 @@ export def "user-oauth-client list" [
 #
 # POST /user/{userID}/oauth-client
 # operationId: CREATE_OauthClient_for_User
-export def "user-oauth-client create" [
+export def "create-oauth-client-for-user" [
   user_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -18741,7 +18741,7 @@ export def "user-oauth-client create" [
 #
 # GET /user/{userID}/oauth-client/{itemId}
 # operationId: READ_OauthClient_for_User
-export def "user-oauth-client get" [
+export def "read-oauth-client-for-user" [
   user_id: int
   item_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -18788,7 +18788,7 @@ export def "user-oauth-client get" [
 #
 # PUT /user/{userID}/oauth-client/{itemId}
 # operationId: UPDATE_OauthClient_for_User
-export def "user-oauth-client update" [
+export def "update-oauth-client-for-user" [
   user_id: int
   item_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -18839,7 +18839,7 @@ export def "user-oauth-client update" [
 #
 # GET /user/{userID}/oauth-client/{oauth-clientID}/callback-url
 # operationId: List_all_CallbackUrl_for_User_OauthClient
-export def "user-oauth-client-callback-url list" [
+export def "list-all-callback-url-for-user-oauth-client" [
   user_id: int
   oauth_client_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -18886,7 +18886,7 @@ export def "user-oauth-client-callback-url list" [
 #
 # POST /user/{userID}/oauth-client/{oauth-clientID}/callback-url
 # operationId: CREATE_CallbackUrl_for_User_OauthClient
-export def "user-oauth-client-callback-url create" [
+export def "create-callback-url-for-user-oauth-client" [
   user_id: int
   oauth_client_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -18937,7 +18937,7 @@ export def "user-oauth-client-callback-url create" [
 #
 # DELETE /user/{userID}/oauth-client/{oauth-clientID}/callback-url/{itemId}
 # operationId: DELETE_CallbackUrl_for_User_OauthClient
-export def "user-oauth-client-callback-url delete" [
+export def "delete-callback-url-for-user-oauth-client" [
   user_id: int
   oauth_client_id: int
   item_id: int
@@ -18986,7 +18986,7 @@ export def "user-oauth-client-callback-url delete" [
 #
 # GET /user/{userID}/oauth-client/{oauth-clientID}/callback-url/{itemId}
 # operationId: READ_CallbackUrl_for_User_OauthClient
-export def "user-oauth-client-callback-url get" [
+export def "read-callback-url-for-user-oauth-client" [
   user_id: int
   oauth_client_id: int
   item_id: int
@@ -19035,7 +19035,7 @@ export def "user-oauth-client-callback-url get" [
 #
 # PUT /user/{userID}/oauth-client/{oauth-clientID}/callback-url/{itemId}
 # operationId: UPDATE_CallbackUrl_for_User_OauthClient
-export def "user-oauth-client-callback-url update" [
+export def "update-callback-url-for-user-oauth-client" [
   user_id: int
   oauth_client_id: int
   item_id: int
@@ -19088,7 +19088,7 @@ export def "user-oauth-client-callback-url update" [
 #
 # GET /user/{userID}/payment-auto-allocate
 # operationId: List_all_PaymentAutoAllocate_for_User
-export def "user-payment-auto-allocate list" [
+export def "list-all-payment-auto-allocate-for-user" [
   user_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -19133,7 +19133,7 @@ export def "user-payment-auto-allocate list" [
 #
 # GET /user/{userID}/payment-service-provider-draft-payment
 # operationId: List_all_PaymentServiceProviderDraftPayment_for_User
-export def "user-payment-service-provider-draft-payment list" [
+export def "list-all-payment-service-provider-draft-payment-for-user" [
   user_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -19179,7 +19179,7 @@ export def "user-payment-service-provider-draft-payment list" [
 # POST /user/{userID}/payment-service-provider-draft-payment
 # operationId: CREATE_PaymentServiceProviderDraftPayment_for_User
 # --amount shape: {currency?: string, value?: string}
-export def "user-payment-service-provider-draft-payment create" [
+export def "create-payment-service-provider-draft-payment-for-user" [
   user_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -19234,7 +19234,7 @@ export def "user-payment-service-provider-draft-payment create" [
 #
 # GET /user/{userID}/payment-service-provider-draft-payment/{itemId}
 # operationId: READ_PaymentServiceProviderDraftPayment_for_User
-export def "user-payment-service-provider-draft-payment get" [
+export def "read-payment-service-provider-draft-payment-for-user" [
   user_id: int
   item_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -19282,7 +19282,7 @@ export def "user-payment-service-provider-draft-payment get" [
 # PUT /user/{userID}/payment-service-provider-draft-payment/{itemId}
 # operationId: UPDATE_PaymentServiceProviderDraftPayment_for_User
 # --amount shape: {currency?: string, value?: string}
-export def "user-payment-service-provider-draft-payment update" [
+export def "update-payment-service-provider-draft-payment-for-user" [
   user_id: int
   item_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -19339,7 +19339,7 @@ export def "user-payment-service-provider-draft-payment update" [
 #
 # GET /user/{userID}/registry/{registryID}/registry-settlement
 # operationId: List_all_RegistrySettlement_for_User_Registry
-export def "user-registry-registry-settlement list" [
+export def "list-all-registry-settlement-for-user-registry" [
   user_id: int
   registry_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -19386,7 +19386,7 @@ export def "user-registry-registry-settlement list" [
 #
 # POST /user/{userID}/registry/{registryID}/registry-settlement
 # operationId: CREATE_RegistrySettlement_for_User_Registry
-export def "user-registry-registry-settlement create" [
+export def "create-registry-settlement-for-user-registry" [
   user_id: int
   registry_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -19437,7 +19437,7 @@ export def "user-registry-registry-settlement create" [
 #
 # GET /user/{userID}/registry/{registryID}/registry-settlement/{itemId}
 # operationId: READ_RegistrySettlement_for_User_Registry
-export def "user-registry-registry-settlement get" [
+export def "read-registry-settlement-for-user-registry" [
   user_id: int
   registry_id: int
   item_id: int
@@ -19486,7 +19486,7 @@ export def "user-registry-registry-settlement get" [
 #
 # GET /user/{userID}/reward
 # operationId: List_all_Reward_for_User
-export def "user-reward list" [
+export def "list-all-reward-for-user" [
   user_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -19531,7 +19531,7 @@ export def "user-reward list" [
 #
 # GET /user/{userID}/reward-recipient
 # operationId: List_all_RewardRecipient_for_User
-export def "user-reward-recipient list" [
+export def "list-all-reward-recipient-for-user" [
   user_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -19576,7 +19576,7 @@ export def "user-reward-recipient list" [
 #
 # GET /user/{userID}/reward-recipient/{itemId}
 # operationId: READ_RewardRecipient_for_User
-export def "user-reward-recipient get" [
+export def "read-reward-recipient-for-user" [
   user_id: int
   item_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -19623,7 +19623,7 @@ export def "user-reward-recipient get" [
 #
 # GET /user/{userID}/reward-sender
 # operationId: List_all_RewardSender_for_User
-export def "user-reward-sender list" [
+export def "list-all-reward-sender-for-user" [
   user_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -19668,7 +19668,7 @@ export def "user-reward-sender list" [
 #
 # GET /user/{userID}/reward-sender/{itemId}
 # operationId: READ_RewardSender_for_User
-export def "user-reward-sender get" [
+export def "read-reward-sender-for-user" [
   user_id: int
   item_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -19715,7 +19715,7 @@ export def "user-reward-sender get" [
 #
 # GET /user/{userID}/reward/{itemId}
 # operationId: READ_Reward_for_User
-export def "user-reward get" [
+export def "read-reward-for-user" [
   user_id: int
   item_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -19762,7 +19762,7 @@ export def "user-reward get" [
 #
 # GET /user/{userID}/schedule
 # operationId: List_all_Schedule_for_User
-export def "user-schedule list" [
+export def "list-all-schedule-for-user" [
   user_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -19807,7 +19807,7 @@ export def "user-schedule list" [
 #
 # GET /user/{userID}/share-invite-monetary-account-response
 # operationId: List_all_ShareInviteMonetaryAccountResponse_for_User
-export def "user-share-invite-monetary-account-response list" [
+export def "list-all-share-invite-monetary-account-response-for-user" [
   user_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -19852,7 +19852,7 @@ export def "user-share-invite-monetary-account-response list" [
 #
 # GET /user/{userID}/share-invite-monetary-account-response/{itemId}
 # operationId: READ_ShareInviteMonetaryAccountResponse_for_User
-export def "user-share-invite-monetary-account-response get" [
+export def "read-share-invite-monetary-account-response-for-user" [
   user_id: int
   item_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -19903,7 +19903,7 @@ export def "user-share-invite-monetary-account-response get" [
 # --relation_user shape: {counter_label_user?: record, label_user?: record}
 # --share_detail shape: {draft_payment?: record, payment?: record, read_only?: record}
 # --user_alias_cancelled shape: {avatar?: record, country?: string, display_name?: string, uuid?: string}
-export def "user-share-invite-monetary-account-response update" [
+export def "update-share-invite-monetary-account-response-for-user" [
   user_id: int
   item_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -19959,7 +19959,7 @@ export def "user-share-invite-monetary-account-response update" [
 #
 # POST /user/{userID}/token-qr-request-ideal
 # operationId: CREATE_TokenQrRequestIdeal_for_User
-export def "user-token-qr-request-ideal create" [
+export def "create-token-qr-request-ideal-for-user" [
   user_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -20008,7 +20008,7 @@ export def "user-token-qr-request-ideal create" [
 #
 # POST /user/{userID}/token-qr-request-sofort
 # operationId: CREATE_TokenQrRequestSofort_for_User
-export def "user-token-qr-request-sofort create" [
+export def "create-token-qr-request-sofort-for-user" [
   user_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -20057,7 +20057,7 @@ export def "user-token-qr-request-sofort create" [
 #
 # GET /user/{userID}/transferwise-currency
 # operationId: List_all_TransferwiseCurrency_for_User
-export def "user-transferwise-currency list" [
+export def "list-all-transferwise-currency-for-user" [
   user_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -20105,7 +20105,7 @@ export def "user-transferwise-currency list" [
 # --amount_fee shape: {currency?: string, value?: string}
 # --amount_source shape: {currency?: string, value?: string}
 # --amount_target shape: {currency?: string, value?: string}
-export def "user-transferwise-quote create" [
+export def "create-transferwise-quote-for-user" [
   user_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -20160,7 +20160,7 @@ export def "user-transferwise-quote create" [
 # operationId: CREATE_TransferwiseQuoteTemporary_for_User
 # --amount_source shape: {currency?: string, value?: string}
 # --amount_target shape: {currency?: string, value?: string}
-export def "user-transferwise-quote-temporary create" [
+export def "create-transferwise-quote-temporary-for-user" [
   user_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -20212,7 +20212,7 @@ export def "user-transferwise-quote-temporary create" [
 #
 # GET /user/{userID}/transferwise-quote-temporary/{itemId}
 # operationId: READ_TransferwiseQuoteTemporary_for_User
-export def "user-transferwise-quote-temporary get" [
+export def "read-transferwise-quote-temporary-for-user" [
   user_id: int
   item_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -20259,7 +20259,7 @@ export def "user-transferwise-quote-temporary get" [
 #
 # GET /user/{userID}/transferwise-quote/{itemId}
 # operationId: READ_TransferwiseQuote_for_User
-export def "user-transferwise-quote get" [
+export def "read-transferwise-quote-for-user" [
   user_id: int
   item_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -20306,7 +20306,7 @@ export def "user-transferwise-quote get" [
 #
 # GET /user/{userID}/transferwise-quote/{transferwise-quoteID}/transferwise-recipient
 # operationId: List_all_TransferwiseRecipient_for_User_TransferwiseQuote
-export def "user-transferwise-quote-transferwise-recipient list" [
+export def "list-all-transferwise-recipient-for-user-transferwise-quote" [
   user_id: int
   transferwise_quote_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -20354,7 +20354,7 @@ export def "user-transferwise-quote-transferwise-recipient list" [
 # POST /user/{userID}/transferwise-quote/{transferwise-quoteID}/transferwise-recipient
 # operationId: CREATE_TransferwiseRecipient_for_User_TransferwiseQuote
 # --detail item shape: {group?: record, key: string, value: string}
-export def "user-transferwise-quote-transferwise-recipient create" [
+export def "create-transferwise-recipient-for-user-transferwise-quote" [
   user_id: int
   transferwise_quote_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -20408,7 +20408,7 @@ export def "user-transferwise-quote-transferwise-recipient create" [
 #
 # GET /user/{userID}/transferwise-quote/{transferwise-quoteID}/transferwise-recipient-requirement
 # operationId: List_all_TransferwiseRecipientRequirement_for_User_TransferwiseQuote
-export def "user-transferwise-quote-transferwise-recipient-requirement list" [
+export def "list-all-transferwise-recipient-requirement-for-user-transferwise-quote" [
   user_id: int
   transferwise_quote_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -20456,7 +20456,7 @@ export def "user-transferwise-quote-transferwise-recipient-requirement list" [
 # POST /user/{userID}/transferwise-quote/{transferwise-quoteID}/transferwise-recipient-requirement
 # operationId: CREATE_TransferwiseRecipientRequirement_for_User_TransferwiseQuote
 # --detail item shape: {group?: record, key: string, value: string}
-export def "user-transferwise-quote-transferwise-recipient-requirement create" [
+export def "create-transferwise-recipient-requirement-for-user-transferwise-quote" [
   user_id: int
   transferwise_quote_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -20510,7 +20510,7 @@ export def "user-transferwise-quote-transferwise-recipient-requirement create" [
 #
 # DELETE /user/{userID}/transferwise-quote/{transferwise-quoteID}/transferwise-recipient/{itemId}
 # operationId: DELETE_TransferwiseRecipient_for_User_TransferwiseQuote
-export def "user-transferwise-quote-transferwise-recipient delete" [
+export def "delete-transferwise-recipient-for-user-transferwise-quote" [
   user_id: int
   transferwise_quote_id: int
   item_id: int
@@ -20559,7 +20559,7 @@ export def "user-transferwise-quote-transferwise-recipient delete" [
 #
 # GET /user/{userID}/transferwise-quote/{transferwise-quoteID}/transferwise-recipient/{itemId}
 # operationId: READ_TransferwiseRecipient_for_User_TransferwiseQuote
-export def "user-transferwise-quote-transferwise-recipient get" [
+export def "read-transferwise-recipient-for-user-transferwise-quote" [
   user_id: int
   transferwise_quote_id: int
   item_id: int
@@ -20608,7 +20608,7 @@ export def "user-transferwise-quote-transferwise-recipient get" [
 #
 # GET /user/{userID}/transferwise-quote/{transferwise-quoteID}/transferwise-transfer
 # operationId: List_all_TransferwiseTransfer_for_User_TransferwiseQuote
-export def "user-transferwise-quote-transferwise-transfer list" [
+export def "list-all-transferwise-transfer-for-user-transferwise-quote" [
   user_id: int
   transferwise_quote_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -20660,7 +20660,7 @@ export def "user-transferwise-quote-transferwise-transfer list" [
 # --amount_target shape: {currency?: string, value?: string}
 # --counterparty_alias shape: {avatar?: record, bunq_me?: record, label_user?: record}
 # --quote shape: {amount_fee?: record, amount_source?: record, amount_target?: record, currency_source: string, currency_target: string}
-export def "user-transferwise-quote-transferwise-transfer create" [
+export def "create-transferwise-transfer-for-user-transferwise-quote" [
   user_id: int
   transferwise_quote_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -20718,7 +20718,7 @@ export def "user-transferwise-quote-transferwise-transfer create" [
 # POST /user/{userID}/transferwise-quote/{transferwise-quoteID}/transferwise-transfer-requirement
 # operationId: CREATE_TransferwiseTransferRequirement_for_User_TransferwiseQuote
 # --detail item shape: {group?: record, key: string, value: string}
-export def "user-transferwise-quote-transferwise-transfer-requirement create" [
+export def "create-transferwise-transfer-requirement-for-user-transferwise-quote" [
   user_id: int
   transferwise_quote_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -20770,7 +20770,7 @@ export def "user-transferwise-quote-transferwise-transfer-requirement create" [
 #
 # GET /user/{userID}/transferwise-quote/{transferwise-quoteID}/transferwise-transfer/{itemId}
 # operationId: READ_TransferwiseTransfer_for_User_TransferwiseQuote
-export def "user-transferwise-quote-transferwise-transfer get" [
+export def "read-transferwise-transfer-for-user-transferwise-quote" [
   user_id: int
   transferwise_quote_id: int
   item_id: int
@@ -20819,7 +20819,7 @@ export def "user-transferwise-quote-transferwise-transfer get" [
 #
 # GET /user/{userID}/transferwise-user
 # operationId: List_all_TransferwiseUser_for_User
-export def "user-transferwise-user list" [
+export def "list-all-transferwise-user-for-user" [
   user_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -20864,7 +20864,7 @@ export def "user-transferwise-user list" [
 #
 # POST /user/{userID}/transferwise-user
 # operationId: CREATE_TransferwiseUser_for_User
-export def "user-transferwise-user create" [
+export def "create-transferwise-user-for-user" [
   user_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -20913,7 +20913,7 @@ export def "user-transferwise-user create" [
 #
 # GET /user/{userID}/tree-progress
 # operationId: List_all_TreeProgress_for_User
-export def "user-tree-progress list" [
+export def "list-all-tree-progress-for-user" [
   user_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -20958,7 +20958,7 @@ export def "user-tree-progress list" [
 #
 # GET /user/{userID}/whitelist-sdd
 # operationId: List_all_WhitelistSdd_for_User
-export def "user-whitelist-sdd list" [
+export def "list-all-whitelist-sdd-for-user" [
   user_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -21003,7 +21003,7 @@ export def "user-whitelist-sdd list" [
 #
 # GET /user/{userID}/whitelist-sdd-one-off
 # operationId: List_all_WhitelistSddOneOff_for_User
-export def "user-whitelist-sdd-one-off list" [
+export def "list-all-whitelist-sdd-one-off-for-user" [
   user_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -21049,7 +21049,7 @@ export def "user-whitelist-sdd-one-off list" [
 # POST /user/{userID}/whitelist-sdd-one-off
 # operationId: CREATE_WhitelistSddOneOff_for_User
 # --maximum_amount_per_month shape: {currency?: string, value?: string}
-export def "user-whitelist-sdd-one-off create" [
+export def "create-whitelist-sdd-one-off-for-user" [
   user_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -21100,7 +21100,7 @@ export def "user-whitelist-sdd-one-off create" [
 #
 # DELETE /user/{userID}/whitelist-sdd-one-off/{itemId}
 # operationId: DELETE_WhitelistSddOneOff_for_User
-export def "user-whitelist-sdd-one-off delete" [
+export def "delete-whitelist-sdd-one-off-for-user" [
   user_id: int
   item_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -21147,7 +21147,7 @@ export def "user-whitelist-sdd-one-off delete" [
 #
 # GET /user/{userID}/whitelist-sdd-one-off/{itemId}
 # operationId: READ_WhitelistSddOneOff_for_User
-export def "user-whitelist-sdd-one-off get" [
+export def "read-whitelist-sdd-one-off-for-user" [
   user_id: int
   item_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -21195,7 +21195,7 @@ export def "user-whitelist-sdd-one-off get" [
 # PUT /user/{userID}/whitelist-sdd-one-off/{itemId}
 # operationId: UPDATE_WhitelistSddOneOff_for_User
 # --maximum_amount_per_month shape: {currency?: string, value?: string}
-export def "user-whitelist-sdd-one-off update" [
+export def "update-whitelist-sdd-one-off-for-user" [
   user_id: int
   item_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -21248,7 +21248,7 @@ export def "user-whitelist-sdd-one-off update" [
 #
 # GET /user/{userID}/whitelist-sdd-recurring
 # operationId: List_all_WhitelistSddRecurring_for_User
-export def "user-whitelist-sdd-recurring list" [
+export def "list-all-whitelist-sdd-recurring-for-user" [
   user_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -21294,7 +21294,7 @@ export def "user-whitelist-sdd-recurring list" [
 # POST /user/{userID}/whitelist-sdd-recurring
 # operationId: CREATE_WhitelistSddRecurring_for_User
 # --maximum_amount_per_month shape: {currency?: string, value?: string}
-export def "user-whitelist-sdd-recurring create" [
+export def "create-whitelist-sdd-recurring-for-user" [
   user_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -21345,7 +21345,7 @@ export def "user-whitelist-sdd-recurring create" [
 #
 # DELETE /user/{userID}/whitelist-sdd-recurring/{itemId}
 # operationId: DELETE_WhitelistSddRecurring_for_User
-export def "user-whitelist-sdd-recurring delete" [
+export def "delete-whitelist-sdd-recurring-for-user" [
   user_id: int
   item_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -21392,7 +21392,7 @@ export def "user-whitelist-sdd-recurring delete" [
 #
 # GET /user/{userID}/whitelist-sdd-recurring/{itemId}
 # operationId: READ_WhitelistSddRecurring_for_User
-export def "user-whitelist-sdd-recurring get" [
+export def "read-whitelist-sdd-recurring-for-user" [
   user_id: int
   item_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -21440,7 +21440,7 @@ export def "user-whitelist-sdd-recurring get" [
 # PUT /user/{userID}/whitelist-sdd-recurring/{itemId}
 # operationId: UPDATE_WhitelistSddRecurring_for_User
 # --maximum_amount_per_month shape: {currency?: string, value?: string}
-export def "user-whitelist-sdd-recurring update" [
+export def "update-whitelist-sdd-recurring-for-user" [
   user_id: int
   item_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -21493,7 +21493,7 @@ export def "user-whitelist-sdd-recurring update" [
 #
 # GET /user/{userID}/whitelist-sdd/{itemId}
 # operationId: READ_WhitelistSdd_for_User
-export def "user-whitelist-sdd get" [
+export def "read-whitelist-sdd-for-user" [
   user_id: int
   item_id: int
   --base-url(-b): string@base-url-completer # API base URL

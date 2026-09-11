@@ -104,7 +104,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resource-groups-providers-microsoft-sql-servers-databases-service-tier-advisors list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "service-tier-advisors-list-by-database" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -128,7 +128,7 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/servers/{serverName}/databases/{databaseName}/serviceTierAdvisors
 # operationId: ServiceTierAdvisors_ListByDatabase
-export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databases-service-tier-advisors list" [
+export def "service-tier-advisors-list-by-database" [
   subscription_id: string
   resource_group_name: string
   server_name: string
@@ -172,7 +172,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databa
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/servers/{serverName}/databases/{databaseName}/serviceTierAdvisors/{serviceTierAdvisorName}
 # operationId: ServiceTierAdvisors_Get
-export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databases-service-tier-advisors get" [
+export def "service-tier-advisors-get" [
   subscription_id: string
   resource_group_name: string
   server_name: string
@@ -218,7 +218,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databa
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/servers/{serverName}/databases/{databaseName}/transparentDataEncryption/{transparentDataEncryptionName}
 # operationId: TransparentDataEncryptions_Get
-export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databases-transparent-data-encryption get" [
+export def "transparent-data-encryptions-get" [
   subscription_id: string
   resource_group_name: string
   server_name: string
@@ -265,7 +265,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databa
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/servers/{serverName}/databases/{databaseName}/transparentDataEncryption/{transparentDataEncryptionName}
 # operationId: TransparentDataEncryptions_CreateOrUpdate
 # --properties shape: {status?: "Enabled"|"Disabled"}
-export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databases-transparent-data-encryption create-or-update" [
+export def "transparent-data-encryptions-create-or-update" [
   subscription_id: string
   resource_group_name: string
   server_name: string
@@ -315,7 +315,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databa
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/servers/{serverName}/databases/{databaseName}/transparentDataEncryption/{transparentDataEncryptionName}/operationResults
 # operationId: TransparentDataEncryptionActivities_ListByConfiguration
-export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databases-transparent-data-encryption-operation-results list-activities-by-configuration" [
+export def "transparent-data-encryption-activities-list-by-configuration" [
   subscription_id: string
   resource_group_name: string
   server_name: string
@@ -361,7 +361,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databa
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/servers/{serverName}/elasticPools/{elasticPoolName}/elasticPoolActivity
 # operationId: ElasticPoolActivities_ListByElasticPool
-export def "subscriptions-resource-groups-providers-microsoft-sql-servers-elastic-pools-elastic-pool-activity list-activities" [
+export def "elastic-pool-activities-list-by-elastic-pool" [
   subscription_id: string
   resource_group_name: string
   server_name: string
@@ -405,7 +405,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-servers-elasti
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/servers/{serverName}/elasticPools/{elasticPoolName}/elasticPoolDatabaseActivity
 # operationId: ElasticPoolDatabaseActivities_ListByElasticPool
-export def "subscriptions-resource-groups-providers-microsoft-sql-servers-elastic-pools-elastic-pool-database-activity list-activities" [
+export def "elastic-pool-database-activities-list-by-elastic-pool" [
   subscription_id: string
   resource_group_name: string
   server_name: string

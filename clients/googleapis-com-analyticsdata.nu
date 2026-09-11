@@ -118,7 +118,7 @@ def compatibility-filter-completer [] { ["COMPATIBILITY_UNSPECIFIED" "COMPATIBLE
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "v1beta get-metadata" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "analyticsdata-properties-get-metadata" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -142,7 +142,7 @@ export def commands []: nothing -> table {
 #
 # GET /v1beta/{name}
 # operationId: analyticsdata.properties.getMetadata
-export def "v1beta get-metadata" [
+export def "analyticsdata-properties-get-metadata" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -191,7 +191,7 @@ export def "v1beta get-metadata" [
 # POST /v1beta/{property}:batchRunPivotReports
 # operationId: analyticsdata.properties.batchRunPivotReports
 # --requests item shape: {cohortSpec?: record, currencyCode?: string, dateRanges?: list, dimensionFilter?: record, dimensions?: list, keepEmptyRows?: bool, metricFilter?: record, metrics?: list, pivots?: list, property?: string, returnPropertyQuota?: bool}
-export def "v1beta create-batch-run-pivot-reports" [
+export def "analyticsdata-properties-batch-run-pivot-reports" [
   property: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -244,7 +244,7 @@ export def "v1beta create-batch-run-pivot-reports" [
 # POST /v1beta/{property}:batchRunReports
 # operationId: analyticsdata.properties.batchRunReports
 # --requests item shape: {cohortSpec?: record, currencyCode?: string, dateRanges?: list, dimensionFilter?: record, dimensions?: list, keepEmptyRows?: bool, limit?: string, metricAggregations?: list<string>, metricFilter?: record, metrics?: list, offset?: string, orderBys?: list, property?: string, returnPropertyQuota?: bool}
-export def "v1beta create-batch-run-reports" [
+export def "analyticsdata-properties-batch-run-reports" [
   property: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -300,7 +300,7 @@ export def "v1beta create-batch-run-reports" [
 # --dimensions item shape: {dimensionExpression?: record, name?: string}
 # --metricFilter shape: {andGroup?: record, filter?: record, notExpression?: record, orGroup?: record}
 # --metrics item shape: {expression?: string, invisible?: bool, name?: string}
-export def "v1beta check-compatibility" [
+export def "analyticsdata-properties-check-compatibility" [
   property: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -363,7 +363,7 @@ export def "v1beta check-compatibility" [
 # --metricFilter shape: {andGroup?: record, filter?: record, notExpression?: record, orGroup?: record}
 # --metrics item shape: {expression?: string, invisible?: bool, name?: string}
 # --pivots item shape: {fieldNames?: list<string>, limit?: string, metricAggregations?: list<string>, offset?: string, orderBys?: list}
-export def "v1beta create-run-pivot-report" [
+export def "analyticsdata-properties-run-pivot-report" [
   property: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -431,7 +431,7 @@ export def "v1beta create-run-pivot-report" [
 # --metrics item shape: {expression?: string, invisible?: bool, name?: string}
 # --minuteRanges item shape: {endMinutesAgo?: int, name?: string, startMinutesAgo?: int}
 # --orderBys item shape: {desc?: bool, dimension?: record, metric?: record, pivot?: record}
-export def "v1beta create-run-realtime-report" [
+export def "analyticsdata-properties-run-realtime-report" [
   property: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -498,7 +498,7 @@ export def "v1beta create-run-realtime-report" [
 # --metricFilter shape: {andGroup?: record, filter?: record, notExpression?: record, orGroup?: record}
 # --metrics item shape: {expression?: string, invisible?: bool, name?: string}
 # --orderBys item shape: {desc?: bool, dimension?: record, metric?: record, pivot?: record}
-export def "v1beta create-run-report" [
+export def "analyticsdata-properties-run-report" [
   property: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)

@@ -125,7 +125,7 @@ def requested-job-status-completer [] { ["Cancelled" "Ready"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "accesspoint create-access-point" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "create-access-point" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -149,7 +149,7 @@ export def commands []: nothing -> table {
 #
 # PUT /v20180820/accesspoint/{name}
 # operationId: CreateAccessPoint
-export def "accesspoint create-access-point" [
+export def "create-access-point" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -199,7 +199,7 @@ export def "accesspoint create-access-point" [
 #
 # DELETE /v20180820/accesspoint/{name}
 # operationId: DeleteAccessPoint
-export def "accesspoint delete-access-point" [
+export def "delete-access-point" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -245,7 +245,7 @@ export def "accesspoint delete-access-point" [
 #
 # GET /v20180820/accesspoint/{name}
 # operationId: GetAccessPoint
-export def "accesspoint get-access-point" [
+export def "get-access-point" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -291,7 +291,7 @@ export def "accesspoint get-access-point" [
 #
 # PUT /v20180820/accesspointforobjectlambda/{name}
 # operationId: CreateAccessPointForObjectLambda
-export def "accesspointforobjectlambda create-access-point-for-object-lambda" [
+export def "create-access-point-for-object-lambda" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -341,7 +341,7 @@ export def "accesspointforobjectlambda create-access-point-for-object-lambda" [
 #
 # DELETE /v20180820/accesspointforobjectlambda/{name}
 # operationId: DeleteAccessPointForObjectLambda
-export def "accesspointforobjectlambda delete-access-point-for-object-lambda" [
+export def "delete-access-point-for-object-lambda" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -387,7 +387,7 @@ export def "accesspointforobjectlambda delete-access-point-for-object-lambda" [
 #
 # GET /v20180820/accesspointforobjectlambda/{name}
 # operationId: GetAccessPointForObjectLambda
-export def "accesspointforobjectlambda get-access-point-for-object-lambda" [
+export def "get-access-point-for-object-lambda" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -433,7 +433,7 @@ export def "accesspointforobjectlambda get-access-point-for-object-lambda" [
 #
 # PUT /v20180820/bucket/{name}
 # operationId: CreateBucket
-export def "bucket create" [
+export def "create-bucket" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -490,7 +490,7 @@ export def "bucket create" [
 #
 # POST /v20180820/jobs
 # operationId: CreateJob
-export def "jobs create" [
+export def "create-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -538,7 +538,7 @@ export def "jobs create" [
 #
 # GET /v20180820/jobs
 # operationId: ListJobs
-export def "jobs list" [
+export def "list-jobs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -588,7 +588,7 @@ export def "jobs list" [
 #
 # POST /v20180820/async-requests/mrap/create
 # operationId: CreateMultiRegionAccessPoint
-export def "async-requests-mrap-create create-multi-region-access-point" [
+export def "create-multi-region-access-point" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -636,7 +636,7 @@ export def "async-requests-mrap-create create-multi-region-access-point" [
 #
 # DELETE /v20180820/accesspoint/{name}/policy
 # operationId: DeleteAccessPointPolicy
-export def "accesspoint-policy delete-access-point" [
+export def "delete-access-point-policy" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -682,7 +682,7 @@ export def "accesspoint-policy delete-access-point" [
 #
 # GET /v20180820/accesspoint/{name}/policy
 # operationId: GetAccessPointPolicy
-export def "accesspoint-policy get-access-point" [
+export def "get-access-point-policy" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -728,7 +728,7 @@ export def "accesspoint-policy get-access-point" [
 #
 # PUT /v20180820/accesspoint/{name}/policy
 # operationId: PutAccessPointPolicy
-export def "accesspoint-policy update-access-point" [
+export def "put-access-point-policy" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -778,7 +778,7 @@ export def "accesspoint-policy update-access-point" [
 #
 # DELETE /v20180820/accesspointforobjectlambda/{name}/policy
 # operationId: DeleteAccessPointPolicyForObjectLambda
-export def "accesspointforobjectlambda-policy delete-access-point-for-object-lambda" [
+export def "delete-access-point-policy-for-object-lambda" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -824,7 +824,7 @@ export def "accesspointforobjectlambda-policy delete-access-point-for-object-lam
 #
 # GET /v20180820/accesspointforobjectlambda/{name}/policy
 # operationId: GetAccessPointPolicyForObjectLambda
-export def "accesspointforobjectlambda-policy get-access-point-for-object-lambda" [
+export def "get-access-point-policy-for-object-lambda" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -870,7 +870,7 @@ export def "accesspointforobjectlambda-policy get-access-point-for-object-lambda
 #
 # PUT /v20180820/accesspointforobjectlambda/{name}/policy
 # operationId: PutAccessPointPolicyForObjectLambda
-export def "accesspointforobjectlambda-policy update-access-point-for-object-lambda" [
+export def "put-access-point-policy-for-object-lambda" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -920,7 +920,7 @@ export def "accesspointforobjectlambda-policy update-access-point-for-object-lam
 #
 # DELETE /v20180820/bucket/{name}
 # operationId: DeleteBucket
-export def "bucket delete" [
+export def "delete-bucket" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -966,7 +966,7 @@ export def "bucket delete" [
 #
 # GET /v20180820/bucket/{name}
 # operationId: GetBucket
-export def "bucket get" [
+export def "get-bucket" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1012,7 +1012,7 @@ export def "bucket get" [
 #
 # DELETE /v20180820/bucket/{name}/lifecycleconfiguration
 # operationId: DeleteBucketLifecycleConfiguration
-export def "bucket-lifecycleconfiguration delete-lifecycle-configuration" [
+export def "delete-bucket-lifecycle-configuration" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1058,7 +1058,7 @@ export def "bucket-lifecycleconfiguration delete-lifecycle-configuration" [
 #
 # GET /v20180820/bucket/{name}/lifecycleconfiguration
 # operationId: GetBucketLifecycleConfiguration
-export def "bucket-lifecycleconfiguration get-lifecycle-configuration" [
+export def "get-bucket-lifecycle-configuration" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1104,7 +1104,7 @@ export def "bucket-lifecycleconfiguration get-lifecycle-configuration" [
 #
 # PUT /v20180820/bucket/{name}/lifecycleconfiguration
 # operationId: PutBucketLifecycleConfiguration
-export def "bucket-lifecycleconfiguration update-lifecycle-configuration" [
+export def "put-bucket-lifecycle-configuration" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1154,7 +1154,7 @@ export def "bucket-lifecycleconfiguration update-lifecycle-configuration" [
 #
 # DELETE /v20180820/bucket/{name}/policy
 # operationId: DeleteBucketPolicy
-export def "bucket-policy delete" [
+export def "delete-bucket-policy" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1200,7 +1200,7 @@ export def "bucket-policy delete" [
 #
 # GET /v20180820/bucket/{name}/policy
 # operationId: GetBucketPolicy
-export def "bucket-policy get" [
+export def "get-bucket-policy" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1246,7 +1246,7 @@ export def "bucket-policy get" [
 #
 # PUT /v20180820/bucket/{name}/policy
 # operationId: PutBucketPolicy
-export def "bucket-policy update" [
+export def "put-bucket-policy" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1297,7 +1297,7 @@ export def "bucket-policy update" [
 #
 # DELETE /v20180820/bucket/{name}/replication
 # operationId: DeleteBucketReplication
-export def "bucket-replication delete" [
+export def "delete-bucket-replication" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1343,7 +1343,7 @@ export def "bucket-replication delete" [
 #
 # GET /v20180820/bucket/{name}/replication
 # operationId: GetBucketReplication
-export def "bucket-replication get" [
+export def "get-bucket-replication" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1389,7 +1389,7 @@ export def "bucket-replication get" [
 #
 # PUT /v20180820/bucket/{name}/replication
 # operationId: PutBucketReplication
-export def "bucket-replication update" [
+export def "put-bucket-replication" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1439,7 +1439,7 @@ export def "bucket-replication update" [
 #
 # DELETE /v20180820/bucket/{name}/tagging
 # operationId: DeleteBucketTagging
-export def "bucket-tagging delete" [
+export def "delete-bucket-tagging" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1485,7 +1485,7 @@ export def "bucket-tagging delete" [
 #
 # GET /v20180820/bucket/{name}/tagging
 # operationId: GetBucketTagging
-export def "bucket-tagging get" [
+export def "get-bucket-tagging" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1531,7 +1531,7 @@ export def "bucket-tagging get" [
 #
 # PUT /v20180820/bucket/{name}/tagging
 # operationId: PutBucketTagging
-export def "bucket-tagging update" [
+export def "put-bucket-tagging" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1581,7 +1581,7 @@ export def "bucket-tagging update" [
 #
 # DELETE /v20180820/jobs/{id}/tagging
 # operationId: DeleteJobTagging
-export def "jobs-tagging delete" [
+export def "delete-job-tagging" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1627,7 +1627,7 @@ export def "jobs-tagging delete" [
 #
 # GET /v20180820/jobs/{id}/tagging
 # operationId: GetJobTagging
-export def "jobs-tagging get" [
+export def "get-job-tagging" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1673,7 +1673,7 @@ export def "jobs-tagging get" [
 #
 # PUT /v20180820/jobs/{id}/tagging
 # operationId: PutJobTagging
-export def "jobs-tagging update" [
+export def "put-job-tagging" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1723,7 +1723,7 @@ export def "jobs-tagging update" [
 #
 # POST /v20180820/async-requests/mrap/delete
 # operationId: DeleteMultiRegionAccessPoint
-export def "async-requests-mrap-delete delete-multi-region-access-point" [
+export def "delete-multi-region-access-point" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1771,7 +1771,7 @@ export def "async-requests-mrap-delete delete-multi-region-access-point" [
 #
 # DELETE /v20180820/configuration/publicAccessBlock
 # operationId: DeletePublicAccessBlock
-export def "configuration-public-access-block delete" [
+export def "delete-public-access-block" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1815,7 +1815,7 @@ export def "configuration-public-access-block delete" [
 #
 # GET /v20180820/configuration/publicAccessBlock
 # operationId: GetPublicAccessBlock
-export def "configuration-public-access-block get" [
+export def "get-public-access-block" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1859,7 +1859,7 @@ export def "configuration-public-access-block get" [
 #
 # PUT /v20180820/configuration/publicAccessBlock
 # operationId: PutPublicAccessBlock
-export def "configuration-public-access-block update" [
+export def "put-public-access-block" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1907,7 +1907,7 @@ export def "configuration-public-access-block update" [
 #
 # DELETE /v20180820/storagelens/{storagelensid}
 # operationId: DeleteStorageLensConfiguration
-export def "storagelens delete-storage-lens-configuration" [
+export def "delete-storage-lens-configuration" [
   storagelensid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1953,7 +1953,7 @@ export def "storagelens delete-storage-lens-configuration" [
 #
 # GET /v20180820/storagelens/{storagelensid}
 # operationId: GetStorageLensConfiguration
-export def "storagelens get-storage-lens-configuration" [
+export def "get-storage-lens-configuration" [
   storagelensid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1999,7 +1999,7 @@ export def "storagelens get-storage-lens-configuration" [
 #
 # PUT /v20180820/storagelens/{storagelensid}
 # operationId: PutStorageLensConfiguration
-export def "storagelens update-storage-lens-configuration" [
+export def "put-storage-lens-configuration" [
   storagelensid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2049,7 +2049,7 @@ export def "storagelens update-storage-lens-configuration" [
 #
 # DELETE /v20180820/storagelens/{storagelensid}/tagging
 # operationId: DeleteStorageLensConfigurationTagging
-export def "storagelens-tagging delete-storage-lens-configuration" [
+export def "delete-storage-lens-configuration-tagging" [
   storagelensid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2095,7 +2095,7 @@ export def "storagelens-tagging delete-storage-lens-configuration" [
 #
 # GET /v20180820/storagelens/{storagelensid}/tagging
 # operationId: GetStorageLensConfigurationTagging
-export def "storagelens-tagging get-storage-lens-configuration" [
+export def "get-storage-lens-configuration-tagging" [
   storagelensid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2141,7 +2141,7 @@ export def "storagelens-tagging get-storage-lens-configuration" [
 #
 # PUT /v20180820/storagelens/{storagelensid}/tagging
 # operationId: PutStorageLensConfigurationTagging
-export def "storagelens-tagging update-storage-lens-configuration" [
+export def "put-storage-lens-configuration-tagging" [
   storagelensid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2191,7 +2191,7 @@ export def "storagelens-tagging update-storage-lens-configuration" [
 #
 # GET /v20180820/jobs/{id}
 # operationId: DescribeJob
-export def "jobs get" [
+export def "describe-job" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2237,7 +2237,7 @@ export def "jobs get" [
 #
 # GET /v20180820/async-requests/mrap/{request_token}
 # operationId: DescribeMultiRegionAccessPointOperation
-export def "async-requests-mrap get-multi-region-access-point-operation" [
+export def "describe-multi-region-access-point-operation" [
   request_token: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2283,7 +2283,7 @@ export def "async-requests-mrap get-multi-region-access-point-operation" [
 #
 # GET /v20180820/accesspointforobjectlambda/{name}/configuration
 # operationId: GetAccessPointConfigurationForObjectLambda
-export def "accesspointforobjectlambda-configuration get-access-point-for-object-lambda" [
+export def "get-access-point-configuration-for-object-lambda" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2329,7 +2329,7 @@ export def "accesspointforobjectlambda-configuration get-access-point-for-object
 #
 # PUT /v20180820/accesspointforobjectlambda/{name}/configuration
 # operationId: PutAccessPointConfigurationForObjectLambda
-export def "accesspointforobjectlambda-configuration update-access-point-for-object-lambda" [
+export def "put-access-point-configuration-for-object-lambda" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2379,7 +2379,7 @@ export def "accesspointforobjectlambda-configuration update-access-point-for-obj
 #
 # GET /v20180820/accesspoint/{name}/policyStatus
 # operationId: GetAccessPointPolicyStatus
-export def "accesspoint-policy-status get-access-point" [
+export def "get-access-point-policy-status" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2425,7 +2425,7 @@ export def "accesspoint-policy-status get-access-point" [
 #
 # GET /v20180820/accesspointforobjectlambda/{name}/policyStatus
 # operationId: GetAccessPointPolicyStatusForObjectLambda
-export def "accesspointforobjectlambda-policy-status get-access-point-for-object-lambda" [
+export def "get-access-point-policy-status-for-object-lambda" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2471,7 +2471,7 @@ export def "accesspointforobjectlambda-policy-status get-access-point-for-object
 #
 # GET /v20180820/bucket/{name}/versioning
 # operationId: GetBucketVersioning
-export def "bucket-versioning get" [
+export def "get-bucket-versioning" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2517,7 +2517,7 @@ export def "bucket-versioning get" [
 #
 # PUT /v20180820/bucket/{name}/versioning
 # operationId: PutBucketVersioning
-export def "bucket-versioning update" [
+export def "put-bucket-versioning" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2568,7 +2568,7 @@ export def "bucket-versioning update" [
 #
 # GET /v20180820/mrap/instances/{name}
 # operationId: GetMultiRegionAccessPoint
-export def "mrap-instances get-multi-region-access-point" [
+export def "get-multi-region-access-point" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2614,7 +2614,7 @@ export def "mrap-instances get-multi-region-access-point" [
 #
 # GET /v20180820/mrap/instances/{name}/policy
 # operationId: GetMultiRegionAccessPointPolicy
-export def "mrap-instances-policy get-multi-region-access-point" [
+export def "get-multi-region-access-point-policy" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2660,7 +2660,7 @@ export def "mrap-instances-policy get-multi-region-access-point" [
 #
 # GET /v20180820/mrap/instances/{name}/policystatus
 # operationId: GetMultiRegionAccessPointPolicyStatus
-export def "mrap-instances-policystatus get-multi-region-access-point-policy-status" [
+export def "get-multi-region-access-point-policy-status" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2706,7 +2706,7 @@ export def "mrap-instances-policystatus get-multi-region-access-point-policy-sta
 #
 # GET /v20180820/mrap/instances/{mrap}/routes
 # operationId: GetMultiRegionAccessPointRoutes
-export def "mrap-instances-routes get-multi-region-access-point" [
+export def "get-multi-region-access-point-routes" [
   mrap: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2752,7 +2752,7 @@ export def "mrap-instances-routes get-multi-region-access-point" [
 #
 # PATCH /v20180820/mrap/instances/{mrap}/routes
 # operationId: SubmitMultiRegionAccessPointRoutes
-export def "mrap-instances-routes submit-multi-region-access-point" [
+export def "submit-multi-region-access-point-routes" [
   mrap: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2802,7 +2802,7 @@ export def "mrap-instances-routes submit-multi-region-access-point" [
 #
 # GET /v20180820/accesspoint
 # operationId: ListAccessPoints
-export def "accesspoint list-access-points" [
+export def "list-access-points" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2852,7 +2852,7 @@ export def "accesspoint list-access-points" [
 #
 # GET /v20180820/accesspointforobjectlambda
 # operationId: ListAccessPointsForObjectLambda
-export def "accesspointforobjectlambda list-access-points-for-object-lambda" [
+export def "list-access-points-for-object-lambda" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2901,7 +2901,7 @@ export def "accesspointforobjectlambda list-access-points-for-object-lambda" [
 #
 # GET /v20180820/mrap/instances
 # operationId: ListMultiRegionAccessPoints
-export def "mrap-instances list-multi-region-access-points" [
+export def "list-multi-region-access-points" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2950,7 +2950,7 @@ export def "mrap-instances list-multi-region-access-points" [
 #
 # GET /v20180820/bucket
 # operationId: ListRegionalBuckets
-export def "bucket list-regional" [
+export def "list-regional-buckets" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3000,7 +3000,7 @@ export def "bucket list-regional" [
 #
 # GET /v20180820/storagelens
 # operationId: ListStorageLensConfigurations
-export def "storagelens list-storage-lens-configurations" [
+export def "list-storage-lens-configurations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3047,7 +3047,7 @@ export def "storagelens list-storage-lens-configurations" [
 #
 # POST /v20180820/async-requests/mrap/put-policy
 # operationId: PutMultiRegionAccessPointPolicy
-export def "async-requests-mrap-put-policy update-multi-region-access-point" [
+export def "put-multi-region-access-point-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3095,7 +3095,7 @@ export def "async-requests-mrap-put-policy update-multi-region-access-point" [
 #
 # POST /v20180820/jobs/{id}/priority
 # operationId: UpdateJobPriority
-export def "jobs-priority update" [
+export def "update-job-priority" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3143,7 +3143,7 @@ export def "jobs-priority update" [
 #
 # POST /v20180820/jobs/{id}/status
 # operationId: UpdateJobStatus
-export def "jobs-status update" [
+export def "update-job-status" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

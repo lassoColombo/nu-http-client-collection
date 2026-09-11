@@ -130,7 +130,7 @@ def tier-completer [] { ["BASIC_HDD" "BASIC_SSD" "ENTERPRISE" "HIGH_SCALE_SSD" "
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "projects delete" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "file-projects-locations-operations-delete" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -154,7 +154,7 @@ export def commands []: nothing -> table {
 #
 # DELETE /v1/{name}
 # operationId: file.projects.locations.operations.delete
-export def "projects delete" [
+export def "file-projects-locations-operations-delete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -203,7 +203,7 @@ export def "projects delete" [
 #
 # GET /v1/{name}
 # operationId: file.projects.locations.operations.get
-export def "projects get" [
+export def "file-projects-locations-operations-get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -251,7 +251,7 @@ export def "projects get" [
 #
 # PATCH /v1/{name}
 # operationId: file.projects.locations.instances.snapshots.patch
-export def "projects update" [
+export def "file-projects-locations-instances-snapshots-patch" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -305,7 +305,7 @@ export def "projects update" [
 #
 # GET /v1/{name}/locations
 # operationId: file.projects.locations.list
-export def "locations list" [
+export def "file-projects-locations-list" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -357,7 +357,7 @@ export def "locations list" [
 #
 # GET /v1/{name}/operations
 # operationId: file.projects.locations.operations.list
-export def "operations list" [
+export def "file-projects-locations-operations-list" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -408,7 +408,7 @@ export def "operations list" [
 #
 # POST /v1/{name}:cancel
 # operationId: file.projects.locations.operations.cancel
-export def "projects cancel" [
+export def "file-projects-locations-operations-cancel" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -460,7 +460,7 @@ export def "projects cancel" [
 #
 # POST /v1/{name}:restore
 # operationId: file.projects.locations.instances.restore
-export def "projects create-restore" [
+export def "file-projects-locations-instances-restore" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -513,7 +513,7 @@ export def "projects create-restore" [
 #
 # POST /v1/{name}:revert
 # operationId: file.projects.locations.instances.revert
-export def "projects create-revert" [
+export def "file-projects-locations-instances-revert" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -565,7 +565,7 @@ export def "projects create-revert" [
 #
 # GET /v1/{parent}/backups
 # operationId: file.projects.locations.backups.list
-export def "backups list" [
+export def "file-projects-locations-backups-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -617,7 +617,7 @@ export def "backups list" [
 #
 # POST /v1/{parent}/backups
 # operationId: file.projects.locations.backups.create
-export def "backups create" [
+export def "file-projects-locations-backups-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -674,7 +674,7 @@ export def "backups create" [
 #
 # GET /v1/{parent}/instances
 # operationId: file.projects.locations.instances.list
-export def "instances list" [
+export def "file-projects-locations-instances-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -728,7 +728,7 @@ export def "instances list" [
 # operationId: file.projects.locations.instances.create
 # --fileShares item shape: {capacityGb?: string, name?: string, nfsExportOptions?: list, sourceBackup?: string}
 # --networks item shape: {connectMode?: "CONNECT_MODE_UNSPECIFIED"|"DIRECT_PEERING"|"PRIVATE_SERVICE_ACCESS", modes?: list<string>, network?: string, reservedIpRange?: string}
-export def "instances create" [
+export def "file-projects-locations-instances-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -787,7 +787,7 @@ export def "instances create" [
 #
 # GET /v1/{parent}/snapshots
 # operationId: file.projects.locations.instances.snapshots.list
-export def "snapshots list" [
+export def "file-projects-locations-instances-snapshots-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -839,7 +839,7 @@ export def "snapshots list" [
 #
 # POST /v1/{parent}/snapshots
 # operationId: file.projects.locations.instances.snapshots.create
-export def "snapshots create" [
+export def "file-projects-locations-instances-snapshots-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)

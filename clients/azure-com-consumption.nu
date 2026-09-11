@@ -113,7 +113,7 @@ def metric-completer [] { ["actualcost" "amortizedcost" "usage"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-billing-billing-accounts-providers-microsoft-billing-billing-periods-providers-microsoft-consumption-balances get-for" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "balances-get-for-billing-period-by-billing-account" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -138,7 +138,7 @@ export def commands []: nothing -> table {
 # GET /providers/Microsoft.Billing/billingAccounts/{billingAccountId}/providers/Microsoft.Billing/billingPeriods/{billingPeriodName}/providers/Microsoft.Consumption/balances
 # Docs: https://docs.microsoft.com/en-us/rest/api/consumption/
 # operationId: Balances_GetForBillingPeriodByBillingAccount
-export def "providers-microsoft-billing-billing-accounts-providers-microsoft-billing-billing-periods-providers-microsoft-consumption-balances get-for" [
+export def "balances-get-for-billing-period-by-billing-account" [
   billing_account_id: string
   billing_period_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -179,7 +179,7 @@ export def "providers-microsoft-billing-billing-accounts-providers-microsoft-bil
 # GET /providers/Microsoft.Billing/billingAccounts/{billingAccountId}/providers/Microsoft.Consumption/balances
 # Docs: https://docs.microsoft.com/en-us/rest/api/consumption/
 # operationId: Balances_GetByBillingAccount
-export def "providers-microsoft-billing-billing-accounts-providers-microsoft-consumption-balances get" [
+export def "balances-get-by-billing-account" [
   billing_account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -218,7 +218,7 @@ export def "providers-microsoft-billing-billing-accounts-providers-microsoft-con
 # GET /providers/Microsoft.Billing/billingAccounts/{billingAccountId}/providers/Microsoft.Consumption/reservationDetails
 # Docs: https://docs.microsoft.com/en-us/rest/api/consumption/
 # operationId: ReservationsDetails_ListByBillingAccountId
-export def "providers-microsoft-billing-billing-accounts-providers-microsoft-consumption-reservation-details list" [
+export def "reservations-details-list-by-billing-account-id" [
   billing_account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -258,7 +258,7 @@ export def "providers-microsoft-billing-billing-accounts-providers-microsoft-con
 # GET /providers/Microsoft.Billing/billingAccounts/{billingAccountId}/providers/Microsoft.Consumption/reservationSummaries
 # Docs: https://docs.microsoft.com/en-us/rest/api/consumption/
 # operationId: ReservationsSummaries_ListByBillingAccountId
-export def "providers-microsoft-billing-billing-accounts-providers-microsoft-consumption-reservation-summaries list" [
+export def "reservations-summaries-list-by-billing-account-id" [
   billing_account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -299,7 +299,7 @@ export def "providers-microsoft-billing-billing-accounts-providers-microsoft-con
 # GET /providers/Microsoft.Billing/billingAccounts/{billingAccountId}/providers/Microsoft.Consumption/reservationTransactions
 # Docs: https://docs.microsoft.com/en-us/rest/api/consumption/
 # operationId: ReservationTransactions_ListByBillingAccountId
-export def "providers-microsoft-billing-billing-accounts-providers-microsoft-consumption-reservation-transactions list" [
+export def "reservation-transactions-list-by-billing-account-id" [
   billing_account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -339,7 +339,7 @@ export def "providers-microsoft-billing-billing-accounts-providers-microsoft-con
 # GET /providers/Microsoft.Billing/billingAccounts/{billingAccountId}/providers/microsoft.consumption/ReservationRecommendations
 # Docs: https://docs.microsoft.com/en-us/rest/api/consumption/
 # operationId: ReservationRecommendations_ListByBillingAccountId
-export def "providers-microsoft-billing-billing-accounts-providers-microsoft-consumption-reservation-recommendations list" [
+export def "reservation-recommendations-list-by-billing-account-id" [
   billing_account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -379,7 +379,7 @@ export def "providers-microsoft-billing-billing-accounts-providers-microsoft-con
 # GET /providers/Microsoft.Capacity/reservationorders/{reservationOrderId}/providers/Microsoft.Consumption/reservationDetails
 # Docs: https://docs.microsoft.com/en-us/rest/api/consumption/
 # operationId: ReservationsDetails_ListByReservationOrder
-export def "providers-microsoft-capacity-reservationorders-providers-microsoft-consumption-reservation-details list-by-order" [
+export def "reservations-details-list-by-reservation-order" [
   reservation_order_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -419,7 +419,7 @@ export def "providers-microsoft-capacity-reservationorders-providers-microsoft-c
 # GET /providers/Microsoft.Capacity/reservationorders/{reservationOrderId}/providers/Microsoft.Consumption/reservationSummaries
 # Docs: https://docs.microsoft.com/en-us/rest/api/consumption/
 # operationId: ReservationsSummaries_ListByReservationOrder
-export def "providers-microsoft-capacity-reservationorders-providers-microsoft-consumption-reservation-summaries list-by-order" [
+export def "reservations-summaries-list-by-reservation-order" [
   reservation_order_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -460,7 +460,7 @@ export def "providers-microsoft-capacity-reservationorders-providers-microsoft-c
 # GET /providers/Microsoft.Capacity/reservationorders/{reservationOrderId}/reservations/{reservationId}/providers/Microsoft.Consumption/reservationDetails
 # Docs: https://docs.microsoft.com/en-us/rest/api/consumption/
 # operationId: ReservationsDetails_ListByReservationOrderAndReservation
-export def "providers-microsoft-capacity-reservationorders-reservations-providers-microsoft-consumption-reservation-details list-by-order-and" [
+export def "reservations-details-list-by-reservation-order-and-reservation" [
   reservation_order_id: string
   reservation_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -502,7 +502,7 @@ export def "providers-microsoft-capacity-reservationorders-reservations-provider
 # GET /providers/Microsoft.Capacity/reservationorders/{reservationOrderId}/reservations/{reservationId}/providers/Microsoft.Consumption/reservationSummaries
 # Docs: https://docs.microsoft.com/en-us/rest/api/consumption/
 # operationId: ReservationsSummaries_ListByReservationOrderAndReservation
-export def "providers-microsoft-capacity-reservationorders-reservations-providers-microsoft-consumption-reservation-summaries list-by-order-and" [
+export def "reservations-summaries-list-by-reservation-order-and-reservation" [
   reservation_order_id: string
   reservation_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -544,7 +544,7 @@ export def "providers-microsoft-capacity-reservationorders-reservations-provider
 #
 # GET /providers/Microsoft.Consumption/operations
 # operationId: Operations_List
-export def "providers-microsoft-consumption-operations list" [
+export def "operations-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -581,7 +581,7 @@ export def "providers-microsoft-consumption-operations list" [
 # GET /providers/Microsoft.Management/managementGroups/{managementGroupId}/providers/Microsoft.Billing/billingPeriods/{billingPeriodName}/Microsoft.Consumption/aggregatedcost
 # Docs: https://docs.microsoft.com/en-us/rest/api/consumption/
 # operationId: AggregatedCost_GetForBillingPeriodByManagementGroup
-export def "providers-microsoft-management-management-groups-providers-microsoft-billing-billing-periods-microsoft-consumption-aggregatedcost get-aggregated-cost-for" [
+export def "aggregated-cost-get-for-billing-period-by-management-group" [
   management_group_id: string
   billing_period_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -622,7 +622,7 @@ export def "providers-microsoft-management-management-groups-providers-microsoft
 # GET /providers/Microsoft.Management/managementGroups/{managementGroupId}/providers/Microsoft.Consumption/aggregatedcost
 # Docs: https://docs.microsoft.com/en-us/rest/api/consumption/
 # operationId: AggregatedCost_GetByManagementGroup
-export def "providers-microsoft-management-management-groups-providers-microsoft-consumption-aggregatedcost get-aggregated-cost" [
+export def "aggregated-cost-get-by-management-group" [
   management_group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -662,7 +662,7 @@ export def "providers-microsoft-management-management-groups-providers-microsoft
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Billing/billingPeriods/{billingPeriodName}/providers/Microsoft.Consumption/pricesheets/default
 # Docs: https://docs.microsoft.com/en-us/rest/api/consumption/
 # operationId: PriceSheet_GetByBillingPeriod
-export def "subscriptions-providers-microsoft-billing-billing-periods-providers-microsoft-consumption-pricesheets-default get-price-sheet" [
+export def "price-sheet-get-by-billing-period" [
   subscription_id: string
   billing_period_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -706,7 +706,7 @@ export def "subscriptions-providers-microsoft-billing-billing-periods-providers-
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Consumption/forecasts
 # Docs: https://docs.microsoft.com/en-us/rest/api/consumption/
 # operationId: Forecasts_List
-export def "subscriptions-providers-microsoft-consumption-forecasts list" [
+export def "forecasts-list" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -746,7 +746,7 @@ export def "subscriptions-providers-microsoft-consumption-forecasts list" [
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Consumption/pricesheets/default
 # Docs: https://docs.microsoft.com/en-us/rest/api/consumption/
 # operationId: PriceSheet_Get
-export def "subscriptions-providers-microsoft-consumption-pricesheets-default get-price-sheet" [
+export def "price-sheet-get" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -788,7 +788,7 @@ export def "subscriptions-providers-microsoft-consumption-pricesheets-default ge
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Consumption/reservationRecommendations
 # Docs: https://docs.microsoft.com/en-us/rest/api/consumption/
 # operationId: ReservationRecommendations_List
-export def "subscriptions-providers-microsoft-consumption-reservation-recommendations list" [
+export def "reservation-recommendations-list" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -828,7 +828,7 @@ export def "subscriptions-providers-microsoft-consumption-reservation-recommenda
 # GET /{scope}/providers/Microsoft.Consumption/budgets
 # Docs: https://docs.microsoft.com/en-us/rest/api/consumption/
 # operationId: Budgets_List
-export def "providers-microsoft-consumption-budgets list" [
+export def "budgets-list" [
   scope: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -867,7 +867,7 @@ export def "providers-microsoft-consumption-budgets list" [
 # DELETE /{scope}/providers/Microsoft.Consumption/budgets/{budgetName}
 # Docs: https://docs.microsoft.com/en-us/rest/api/consumption/
 # operationId: Budgets_Delete
-export def "providers-microsoft-consumption-budgets delete" [
+export def "budgets-delete" [
   scope: string
   budget_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -908,7 +908,7 @@ export def "providers-microsoft-consumption-budgets delete" [
 # GET /{scope}/providers/Microsoft.Consumption/budgets/{budgetName}
 # Docs: https://docs.microsoft.com/en-us/rest/api/consumption/
 # operationId: Budgets_Get
-export def "providers-microsoft-consumption-budgets get" [
+export def "budgets-get" [
   scope: string
   budget_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -950,7 +950,7 @@ export def "providers-microsoft-consumption-budgets get" [
 # Docs: https://docs.microsoft.com/en-us/rest/api/consumption/
 # operationId: Budgets_CreateOrUpdate
 # --properties shape: {amount: float, category: "Cost"|"Usage", currentSpend?: any, filters?: any, notifications?: record, timeGrain: "Monthly"|"Quarterly"|"Annually"|"BillingMonth"|"BillingQuarter"|"BillingAnnual", timePeriod: any}
-export def "providers-microsoft-consumption-budgets create-or-update" [
+export def "budgets-create-or-update" [
   scope: string
   budget_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -996,7 +996,7 @@ export def "providers-microsoft-consumption-budgets create-or-update" [
 # GET /{scope}/providers/Microsoft.Consumption/charges
 # Docs: https://docs.microsoft.com/en-us/rest/api/consumption/
 # operationId: Charges_ListByScope
-export def "providers-microsoft-consumption-charges list" [
+export def "charges-list-by-scope" [
   scope: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1036,7 +1036,7 @@ export def "providers-microsoft-consumption-charges list" [
 # GET /{scope}/providers/Microsoft.Consumption/marketplaces
 # Docs: https://docs.microsoft.com/en-us/rest/api/consumption/
 # operationId: Marketplaces_List
-export def "providers-microsoft-consumption-marketplaces list" [
+export def "marketplaces-list" [
   scope: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1078,7 +1078,7 @@ export def "providers-microsoft-consumption-marketplaces list" [
 # GET /{scope}/providers/Microsoft.Consumption/tags
 # Docs: https://docs.microsoft.com/en-us/rest/api/consumption/
 # operationId: Tags_Get
-export def "providers-microsoft-consumption-tags get" [
+export def "tags-get" [
   scope: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1117,7 +1117,7 @@ export def "providers-microsoft-consumption-tags get" [
 # GET /{scope}/providers/Microsoft.Consumption/usageDetails
 # Docs: https://docs.microsoft.com/en-us/rest/api/consumption/
 # operationId: UsageDetails_List
-export def "providers-microsoft-consumption-usage-details list" [
+export def "usage-details-list" [
   scope: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

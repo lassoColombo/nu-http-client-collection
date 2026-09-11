@@ -302,7 +302,7 @@ def x-amz-target-completer-201 [] { ["AWSGlue.UpdateWorkflow"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "api create-batch-partition" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "batch-create-partition" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -326,7 +326,7 @@ export def commands []: nothing -> table {
 #
 # POST /
 # operationId: BatchCreatePartition
-export def "api create-batch-partition" [
+export def "batch-create-partition" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -377,7 +377,7 @@ export def "api create-batch-partition" [
 #
 # POST /
 # operationId: BatchDeleteConnection
-export def "api delete-batch-connection" [
+export def "batch-delete-connection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -426,7 +426,7 @@ export def "api delete-batch-connection" [
 #
 # POST /
 # operationId: BatchDeletePartition
-export def "api delete-batch-partition" [
+export def "batch-delete-partition" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -477,7 +477,7 @@ export def "api delete-batch-partition" [
 #
 # POST /
 # operationId: BatchDeleteTable
-export def "api delete-batch-table" [
+export def "batch-delete-table" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -528,7 +528,7 @@ export def "api delete-batch-table" [
 #
 # POST /
 # operationId: BatchDeleteTableVersion
-export def "api delete-batch-table-version" [
+export def "batch-delete-table-version" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -579,7 +579,7 @@ export def "api delete-batch-table-version" [
 #
 # POST /
 # operationId: BatchGetBlueprints
-export def "api get-batch-blueprints" [
+export def "batch-get-blueprints" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -629,7 +629,7 @@ export def "api get-batch-blueprints" [
 #
 # POST /
 # operationId: BatchGetCrawlers
-export def "api get-batch-crawlers" [
+export def "batch-get-crawlers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -677,7 +677,7 @@ export def "api get-batch-crawlers" [
 #
 # POST /
 # operationId: BatchGetCustomEntityTypes
-export def "api get-batch-custom-entity-types" [
+export def "batch-get-custom-entity-types" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -725,7 +725,7 @@ export def "api get-batch-custom-entity-types" [
 #
 # POST /
 # operationId: BatchGetDataQualityResult
-export def "api get-batch-data-quality-result" [
+export def "batch-get-data-quality-result" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -773,7 +773,7 @@ export def "api get-batch-data-quality-result" [
 #
 # POST /
 # operationId: BatchGetDevEndpoints
-export def "api get-batch-dev-endpoints" [
+export def "batch-get-dev-endpoints" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -821,7 +821,7 @@ export def "api get-batch-dev-endpoints" [
 #
 # POST /
 # operationId: BatchGetJobs
-export def "api get-batch-jobs" [
+export def "batch-get-jobs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -869,7 +869,7 @@ export def "api get-batch-jobs" [
 #
 # POST /
 # operationId: BatchGetPartition
-export def "api get-batch-partition" [
+export def "batch-get-partition" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -920,7 +920,7 @@ export def "api get-batch-partition" [
 #
 # POST /
 # operationId: BatchGetTriggers
-export def "api get-batch-triggers" [
+export def "batch-get-triggers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -968,7 +968,7 @@ export def "api get-batch-triggers" [
 #
 # POST /
 # operationId: BatchGetWorkflows
-export def "api get-batch-workflows" [
+export def "batch-get-workflows" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1017,7 +1017,7 @@ export def "api get-batch-workflows" [
 #
 # POST /
 # operationId: BatchStopJobRun
-export def "api stop-batch-job-run" [
+export def "batch-stop-job-run" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1066,7 +1066,7 @@ export def "api stop-batch-job-run" [
 #
 # POST /
 # operationId: BatchUpdatePartition
-export def "api update-batch-partition" [
+export def "batch-update-partition" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1117,7 +1117,7 @@ export def "api update-batch-partition" [
 #
 # POST /
 # operationId: CancelDataQualityRuleRecommendationRun
-export def "api cancel-data-quality-rule-recommendation-run" [
+export def "cancel-data-quality-rule-recommendation-run" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1165,7 +1165,7 @@ export def "api cancel-data-quality-rule-recommendation-run" [
 #
 # POST /
 # operationId: CancelDataQualityRulesetEvaluationRun
-export def "api cancel-data-quality-ruleset-evaluation-run" [
+export def "cancel-data-quality-ruleset-evaluation-run" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1213,7 +1213,7 @@ export def "api cancel-data-quality-ruleset-evaluation-run" [
 #
 # POST /
 # operationId: CancelMLTaskRun
-export def "api cancel-ml-task-run" [
+export def "cancel-ml-task-run" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1262,7 +1262,7 @@ export def "api cancel-ml-task-run" [
 #
 # POST /
 # operationId: CancelStatement
-export def "api cancel-statement" [
+export def "cancel-statement" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1312,7 +1312,7 @@ export def "api cancel-statement" [
 #
 # POST /
 # operationId: CheckSchemaVersionValidity
-export def "api check-schema-version-validity" [
+export def "check-schema-version-validity" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1361,7 +1361,7 @@ export def "api check-schema-version-validity" [
 #
 # POST /
 # operationId: CreateBlueprint
-export def "api create-blueprint" [
+export def "create-blueprint" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1412,7 +1412,7 @@ export def "api create-blueprint" [
 #
 # POST /
 # operationId: CreateClassifier
-export def "api create-classifier" [
+export def "create-classifier" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1463,7 +1463,7 @@ export def "api create-classifier" [
 #
 # POST /
 # operationId: CreateConnection
-export def "api create-connection" [
+export def "create-connection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1513,7 +1513,7 @@ export def "api create-connection" [
 #
 # POST /
 # operationId: CreateCrawler
-export def "api create-crawler" [
+export def "create-crawler" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1575,7 +1575,7 @@ export def "api create-crawler" [
 #
 # POST /
 # operationId: CreateCustomEntityType
-export def "api create-custom-entity-type" [
+export def "create-custom-entity-type" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1625,7 +1625,7 @@ export def "api create-custom-entity-type" [
 #
 # POST /
 # operationId: CreateDataQualityRuleset
-export def "api create-data-quality-ruleset" [
+export def "create-data-quality-ruleset" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1678,7 +1678,7 @@ export def "api create-data-quality-ruleset" [
 #
 # POST /
 # operationId: CreateDatabase
-export def "api create-database" [
+export def "create-database" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1728,7 +1728,7 @@ export def "api create-database" [
 #
 # POST /
 # operationId: CreateDevEndpoint
-export def "api create-dev-endpoint" [
+export def "create-dev-endpoint" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1790,7 +1790,7 @@ export def "api create-dev-endpoint" [
 #
 # POST /
 # operationId: CreateJob
-export def "api create-job" [
+export def "create-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1859,7 +1859,7 @@ export def "api create-job" [
 #
 # POST /
 # operationId: CreateMLTransform
-export def "api create-ml-transform" [
+export def "create-ml-transform" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1919,7 +1919,7 @@ export def "api create-ml-transform" [
 #
 # POST /
 # operationId: CreatePartition
-export def "api create-partition" [
+export def "create-partition" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1970,7 +1970,7 @@ export def "api create-partition" [
 #
 # POST /
 # operationId: CreatePartitionIndex
-export def "api create-partition-index" [
+export def "create-partition-index" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2021,7 +2021,7 @@ export def "api create-partition-index" [
 #
 # POST /
 # operationId: CreateRegistry
-export def "api create-registry" [
+export def "create-registry" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2071,7 +2071,7 @@ export def "api create-registry" [
 #
 # POST /
 # operationId: CreateSchema
-export def "api create-schema" [
+export def "create-schema" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2125,7 +2125,7 @@ export def "api create-schema" [
 #
 # POST /
 # operationId: CreateScript
-export def "api create-script" [
+export def "create-script" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2175,7 +2175,7 @@ export def "api create-script" [
 #
 # POST /
 # operationId: CreateSecurityConfiguration
-export def "api create-security-configuration" [
+export def "create-security-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2224,7 +2224,7 @@ export def "api create-security-configuration" [
 #
 # POST /
 # operationId: CreateSession
-export def "api create-session" [
+export def "create-session" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2286,7 +2286,7 @@ export def "api create-session" [
 #
 # POST /
 # operationId: CreateTable
-export def "api create-table" [
+export def "create-table" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2338,7 +2338,7 @@ export def "api create-table" [
 #
 # POST /
 # operationId: CreateTrigger
-export def "api create-trigger" [
+export def "create-trigger" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2395,7 +2395,7 @@ export def "api create-trigger" [
 #
 # POST /
 # operationId: CreateUserDefinedFunction
-export def "api create-user-defined-function" [
+export def "create-user-defined-function" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2445,7 +2445,7 @@ export def "api create-user-defined-function" [
 #
 # POST /
 # operationId: CreateWorkflow
-export def "api create-workflow" [
+export def "create-workflow" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2497,7 +2497,7 @@ export def "api create-workflow" [
 #
 # POST /
 # operationId: DeleteBlueprint
-export def "api delete-blueprint" [
+export def "delete-blueprint" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2545,7 +2545,7 @@ export def "api delete-blueprint" [
 #
 # POST /
 # operationId: DeleteClassifier
-export def "api delete-classifier" [
+export def "delete-classifier" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2593,7 +2593,7 @@ export def "api delete-classifier" [
 #
 # POST /
 # operationId: DeleteColumnStatisticsForPartition
-export def "api delete-column-statistics-for-partition" [
+export def "delete-column-statistics-for-partition" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2645,7 +2645,7 @@ export def "api delete-column-statistics-for-partition" [
 #
 # POST /
 # operationId: DeleteColumnStatisticsForTable
-export def "api delete-column-statistics-for-table" [
+export def "delete-column-statistics-for-table" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2696,7 +2696,7 @@ export def "api delete-column-statistics-for-table" [
 #
 # POST /
 # operationId: DeleteConnection
-export def "api delete-connection" [
+export def "delete-connection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2745,7 +2745,7 @@ export def "api delete-connection" [
 #
 # POST /
 # operationId: DeleteCrawler
-export def "api delete-crawler" [
+export def "delete-crawler" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2793,7 +2793,7 @@ export def "api delete-crawler" [
 #
 # POST /
 # operationId: DeleteCustomEntityType
-export def "api delete-custom-entity-type" [
+export def "delete-custom-entity-type" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2841,7 +2841,7 @@ export def "api delete-custom-entity-type" [
 #
 # POST /
 # operationId: DeleteDataQualityRuleset
-export def "api delete-data-quality-ruleset" [
+export def "delete-data-quality-ruleset" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2889,7 +2889,7 @@ export def "api delete-data-quality-ruleset" [
 #
 # POST /
 # operationId: DeleteDatabase
-export def "api delete-database" [
+export def "delete-database" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2938,7 +2938,7 @@ export def "api delete-database" [
 #
 # POST /
 # operationId: DeleteDevEndpoint
-export def "api delete-dev-endpoint" [
+export def "delete-dev-endpoint" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2986,7 +2986,7 @@ export def "api delete-dev-endpoint" [
 #
 # POST /
 # operationId: DeleteJob
-export def "api delete-job" [
+export def "delete-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3034,7 +3034,7 @@ export def "api delete-job" [
 #
 # POST /
 # operationId: DeleteMLTransform
-export def "api delete-ml-transform" [
+export def "delete-ml-transform" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3082,7 +3082,7 @@ export def "api delete-ml-transform" [
 #
 # POST /
 # operationId: DeletePartition
-export def "api delete-partition" [
+export def "delete-partition" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3133,7 +3133,7 @@ export def "api delete-partition" [
 #
 # POST /
 # operationId: DeletePartitionIndex
-export def "api delete-partition-index" [
+export def "delete-partition-index" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3184,7 +3184,7 @@ export def "api delete-partition-index" [
 #
 # POST /
 # operationId: DeleteRegistry
-export def "api delete-registry" [
+export def "delete-registry" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3232,7 +3232,7 @@ export def "api delete-registry" [
 #
 # POST /
 # operationId: DeleteResourcePolicy
-export def "api delete-resource-policy" [
+export def "delete-resource-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3281,7 +3281,7 @@ export def "api delete-resource-policy" [
 #
 # POST /
 # operationId: DeleteSchema
-export def "api delete-schema" [
+export def "delete-schema" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3329,7 +3329,7 @@ export def "api delete-schema" [
 #
 # POST /
 # operationId: DeleteSchemaVersions
-export def "api delete-schema-versions" [
+export def "delete-schema-versions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3378,7 +3378,7 @@ export def "api delete-schema-versions" [
 #
 # POST /
 # operationId: DeleteSecurityConfiguration
-export def "api delete-security-configuration" [
+export def "delete-security-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3426,7 +3426,7 @@ export def "api delete-security-configuration" [
 #
 # POST /
 # operationId: DeleteSession
-export def "api delete-session" [
+export def "delete-session" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3475,7 +3475,7 @@ export def "api delete-session" [
 #
 # POST /
 # operationId: DeleteTable
-export def "api delete-table" [
+export def "delete-table" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3526,7 +3526,7 @@ export def "api delete-table" [
 #
 # POST /
 # operationId: DeleteTableVersion
-export def "api delete-table-version" [
+export def "delete-table-version" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3577,7 +3577,7 @@ export def "api delete-table-version" [
 #
 # POST /
 # operationId: DeleteTrigger
-export def "api delete-trigger" [
+export def "delete-trigger" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3625,7 +3625,7 @@ export def "api delete-trigger" [
 #
 # POST /
 # operationId: DeleteUserDefinedFunction
-export def "api delete-user-defined-function" [
+export def "delete-user-defined-function" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3675,7 +3675,7 @@ export def "api delete-user-defined-function" [
 #
 # POST /
 # operationId: DeleteWorkflow
-export def "api delete-workflow" [
+export def "delete-workflow" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3723,7 +3723,7 @@ export def "api delete-workflow" [
 #
 # POST /
 # operationId: GetBlueprint
-export def "api get-blueprint" [
+export def "get-blueprint" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3773,7 +3773,7 @@ export def "api get-blueprint" [
 #
 # POST /
 # operationId: GetBlueprintRun
-export def "api get-blueprint-run" [
+export def "get-blueprint-run" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3822,7 +3822,7 @@ export def "api get-blueprint-run" [
 #
 # POST /
 # operationId: GetBlueprintRuns
-export def "api get-blueprint-runs" [
+export def "get-blueprint-runs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3875,7 +3875,7 @@ export def "api get-blueprint-runs" [
 #
 # POST /
 # operationId: GetCatalogImportStatus
-export def "api get-catalog-import-status" [
+export def "get-catalog-import-status" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3923,7 +3923,7 @@ export def "api get-catalog-import-status" [
 #
 # POST /
 # operationId: GetClassifier
-export def "api get-classifier" [
+export def "get-classifier" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3971,7 +3971,7 @@ export def "api get-classifier" [
 #
 # POST /
 # operationId: GetClassifiers
-export def "api get-classifiers" [
+export def "get-classifiers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4023,7 +4023,7 @@ export def "api get-classifiers" [
 #
 # POST /
 # operationId: GetColumnStatisticsForPartition
-export def "api get-column-statistics-for-partition" [
+export def "get-column-statistics-for-partition" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4075,7 +4075,7 @@ export def "api get-column-statistics-for-partition" [
 #
 # POST /
 # operationId: GetColumnStatisticsForTable
-export def "api get-column-statistics-for-table" [
+export def "get-column-statistics-for-table" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4126,7 +4126,7 @@ export def "api get-column-statistics-for-table" [
 #
 # POST /
 # operationId: GetConnection
-export def "api get-connection" [
+export def "get-connection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4176,7 +4176,7 @@ export def "api get-connection" [
 #
 # POST /
 # operationId: GetConnections
-export def "api get-connections" [
+export def "get-connections" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4231,7 +4231,7 @@ export def "api get-connections" [
 #
 # POST /
 # operationId: GetCrawler
-export def "api get-crawler" [
+export def "get-crawler" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4279,7 +4279,7 @@ export def "api get-crawler" [
 #
 # POST /
 # operationId: GetCrawlerMetrics
-export def "api get-crawler-metrics" [
+export def "get-crawler-metrics" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4332,7 +4332,7 @@ export def "api get-crawler-metrics" [
 #
 # POST /
 # operationId: GetCrawlers
-export def "api get-crawlers" [
+export def "get-crawlers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4384,7 +4384,7 @@ export def "api get-crawlers" [
 #
 # POST /
 # operationId: GetCustomEntityType
-export def "api get-custom-entity-type" [
+export def "get-custom-entity-type" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4432,7 +4432,7 @@ export def "api get-custom-entity-type" [
 #
 # POST /
 # operationId: GetDataCatalogEncryptionSettings
-export def "api get-data-catalog-encryption-settings" [
+export def "get-data-catalog-encryption-settings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4480,7 +4480,7 @@ export def "api get-data-catalog-encryption-settings" [
 #
 # POST /
 # operationId: GetDataQualityResult
-export def "api get-data-quality-result" [
+export def "get-data-quality-result" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4528,7 +4528,7 @@ export def "api get-data-quality-result" [
 #
 # POST /
 # operationId: GetDataQualityRuleRecommendationRun
-export def "api get-data-quality-rule-recommendation-run" [
+export def "get-data-quality-rule-recommendation-run" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4576,7 +4576,7 @@ export def "api get-data-quality-rule-recommendation-run" [
 #
 # POST /
 # operationId: GetDataQualityRuleset
-export def "api get-data-quality-ruleset" [
+export def "get-data-quality-ruleset" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4624,7 +4624,7 @@ export def "api get-data-quality-ruleset" [
 #
 # POST /
 # operationId: GetDataQualityRulesetEvaluationRun
-export def "api get-data-quality-ruleset-evaluation-run" [
+export def "get-data-quality-ruleset-evaluation-run" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4672,7 +4672,7 @@ export def "api get-data-quality-ruleset-evaluation-run" [
 #
 # POST /
 # operationId: GetDatabase
-export def "api get-database" [
+export def "get-database" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4721,7 +4721,7 @@ export def "api get-database" [
 #
 # POST /
 # operationId: GetDatabases
-export def "api get-databases" [
+export def "get-databases" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4775,7 +4775,7 @@ export def "api get-databases" [
 #
 # POST /
 # operationId: GetDataflowGraph
-export def "api get-dataflow-graph" [
+export def "get-dataflow-graph" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4823,7 +4823,7 @@ export def "api get-dataflow-graph" [
 #
 # POST /
 # operationId: GetDevEndpoint
-export def "api get-dev-endpoint" [
+export def "get-dev-endpoint" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4871,7 +4871,7 @@ export def "api get-dev-endpoint" [
 #
 # POST /
 # operationId: GetDevEndpoints
-export def "api get-dev-endpoints" [
+export def "get-dev-endpoints" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4923,7 +4923,7 @@ export def "api get-dev-endpoints" [
 #
 # POST /
 # operationId: GetJob
-export def "api get-job" [
+export def "get-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4971,7 +4971,7 @@ export def "api get-job" [
 #
 # POST /
 # operationId: GetJobBookmark
-export def "api get-job-bookmark" [
+export def "get-job-bookmark" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5020,7 +5020,7 @@ export def "api get-job-bookmark" [
 #
 # POST /
 # operationId: GetJobRun
-export def "api get-job-run" [
+export def "get-job-run" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5070,7 +5070,7 @@ export def "api get-job-run" [
 #
 # POST /
 # operationId: GetJobRuns
-export def "api get-job-runs" [
+export def "get-job-runs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5123,7 +5123,7 @@ export def "api get-job-runs" [
 #
 # POST /
 # operationId: GetJobs
-export def "api get-jobs" [
+export def "get-jobs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5175,7 +5175,7 @@ export def "api get-jobs" [
 #
 # POST /
 # operationId: GetMLTaskRun
-export def "api get-ml-task-run" [
+export def "get-ml-task-run" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5224,7 +5224,7 @@ export def "api get-ml-task-run" [
 #
 # POST /
 # operationId: GetMLTaskRuns
-export def "api get-ml-task-runs" [
+export def "get-ml-task-runs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5279,7 +5279,7 @@ export def "api get-ml-task-runs" [
 #
 # POST /
 # operationId: GetMLTransform
-export def "api get-ml-transform" [
+export def "get-ml-transform" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5327,7 +5327,7 @@ export def "api get-ml-transform" [
 #
 # POST /
 # operationId: GetMLTransforms
-export def "api get-ml-transforms" [
+export def "get-ml-transforms" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5381,7 +5381,7 @@ export def "api get-ml-transforms" [
 #
 # POST /
 # operationId: GetMapping
-export def "api get-mapping" [
+export def "get-mapping" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5431,7 +5431,7 @@ export def "api get-mapping" [
 #
 # POST /
 # operationId: GetPartition
-export def "api get-partition" [
+export def "get-partition" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5482,7 +5482,7 @@ export def "api get-partition" [
 #
 # POST /
 # operationId: GetPartitionIndexes
-export def "api get-partition-indexes" [
+export def "get-partition-indexes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5535,7 +5535,7 @@ export def "api get-partition-indexes" [
 #
 # POST /
 # operationId: GetPartitions
-export def "api get-partitions" [
+export def "get-partitions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5595,7 +5595,7 @@ export def "api get-partitions" [
 #
 # POST /
 # operationId: GetPlan
-export def "api get-plan" [
+export def "get-plan" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5648,7 +5648,7 @@ export def "api get-plan" [
 #
 # POST /
 # operationId: GetRegistry
-export def "api get-registry" [
+export def "get-registry" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5696,7 +5696,7 @@ export def "api get-registry" [
 #
 # POST /
 # operationId: GetResourcePolicies
-export def "api get-resource-policies" [
+export def "get-resource-policies" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5748,7 +5748,7 @@ export def "api get-resource-policies" [
 #
 # POST /
 # operationId: GetResourcePolicy
-export def "api get-resource-policy" [
+export def "get-resource-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5796,7 +5796,7 @@ export def "api get-resource-policy" [
 #
 # POST /
 # operationId: GetSchema
-export def "api get-schema" [
+export def "get-schema" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5844,7 +5844,7 @@ export def "api get-schema" [
 #
 # POST /
 # operationId: GetSchemaByDefinition
-export def "api get-schema-by-definition" [
+export def "get-schema-by-definition" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5893,7 +5893,7 @@ export def "api get-schema-by-definition" [
 #
 # POST /
 # operationId: GetSchemaVersion
-export def "api get-schema-version" [
+export def "get-schema-version" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5943,7 +5943,7 @@ export def "api get-schema-version" [
 #
 # POST /
 # operationId: GetSchemaVersionsDiff
-export def "api get-schema-versions-diff" [
+export def "get-schema-versions-diff" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5994,7 +5994,7 @@ export def "api get-schema-versions-diff" [
 #
 # POST /
 # operationId: GetSecurityConfiguration
-export def "api get-security-configuration" [
+export def "get-security-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6042,7 +6042,7 @@ export def "api get-security-configuration" [
 #
 # POST /
 # operationId: GetSecurityConfigurations
-export def "api get-security-configurations" [
+export def "get-security-configurations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6094,7 +6094,7 @@ export def "api get-security-configurations" [
 #
 # POST /
 # operationId: GetSession
-export def "api get-session" [
+export def "get-session" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6143,7 +6143,7 @@ export def "api get-session" [
 #
 # POST /
 # operationId: GetStatement
-export def "api get-statement" [
+export def "get-statement" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6193,7 +6193,7 @@ export def "api get-statement" [
 #
 # POST /
 # operationId: GetTable
-export def "api get-table" [
+export def "get-table" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6245,7 +6245,7 @@ export def "api get-table" [
 #
 # POST /
 # operationId: GetTableVersion
-export def "api get-table-version" [
+export def "get-table-version" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6296,7 +6296,7 @@ export def "api get-table-version" [
 #
 # POST /
 # operationId: GetTableVersions
-export def "api get-table-versions" [
+export def "get-table-versions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6351,7 +6351,7 @@ export def "api get-table-versions" [
 #
 # POST /
 # operationId: GetTables
-export def "api get-tables" [
+export def "get-tables" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6408,7 +6408,7 @@ export def "api get-tables" [
 #
 # POST /
 # operationId: GetTags
-export def "api get-tags" [
+export def "get-tags" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6456,7 +6456,7 @@ export def "api get-tags" [
 #
 # POST /
 # operationId: GetTrigger
-export def "api get-trigger" [
+export def "get-trigger" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6504,7 +6504,7 @@ export def "api get-trigger" [
 #
 # POST /
 # operationId: GetTriggers
-export def "api get-triggers" [
+export def "get-triggers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6557,7 +6557,7 @@ export def "api get-triggers" [
 #
 # POST /
 # operationId: GetUnfilteredPartitionMetadata
-export def "api get-unfiltered-partition-metadata" [
+export def "get-unfiltered-partition-metadata" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6610,7 +6610,7 @@ export def "api get-unfiltered-partition-metadata" [
 #
 # POST /
 # operationId: GetUnfilteredPartitionsMetadata
-export def "api get-unfiltered-partitions-metadata" [
+export def "get-unfiltered-partitions-metadata" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6669,7 +6669,7 @@ export def "api get-unfiltered-partitions-metadata" [
 #
 # POST /
 # operationId: GetUnfilteredTableMetadata
-export def "api get-unfiltered-table-metadata" [
+export def "get-unfiltered-table-metadata" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6721,7 +6721,7 @@ export def "api get-unfiltered-table-metadata" [
 #
 # POST /
 # operationId: GetUserDefinedFunction
-export def "api get-user-defined-function" [
+export def "get-user-defined-function" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6771,7 +6771,7 @@ export def "api get-user-defined-function" [
 #
 # POST /
 # operationId: GetUserDefinedFunctions
-export def "api get-user-defined-functions" [
+export def "get-user-defined-functions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6826,7 +6826,7 @@ export def "api get-user-defined-functions" [
 #
 # POST /
 # operationId: GetWorkflow
-export def "api get-workflow" [
+export def "get-workflow" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6875,7 +6875,7 @@ export def "api get-workflow" [
 #
 # POST /
 # operationId: GetWorkflowRun
-export def "api get-workflow-run" [
+export def "get-workflow-run" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6925,7 +6925,7 @@ export def "api get-workflow-run" [
 #
 # POST /
 # operationId: GetWorkflowRunProperties
-export def "api get-workflow-run-properties" [
+export def "get-workflow-run-properties" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6974,7 +6974,7 @@ export def "api get-workflow-run-properties" [
 #
 # POST /
 # operationId: GetWorkflowRuns
-export def "api get-workflow-runs" [
+export def "get-workflow-runs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7028,7 +7028,7 @@ export def "api get-workflow-runs" [
 #
 # POST /
 # operationId: ImportCatalogToGlue
-export def "api import-catalog-to-glue" [
+export def "import-catalog-to-glue" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7076,7 +7076,7 @@ export def "api import-catalog-to-glue" [
 #
 # POST /
 # operationId: ListBlueprints
-export def "api list-blueprints" [
+export def "list-blueprints" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7129,7 +7129,7 @@ export def "api list-blueprints" [
 #
 # POST /
 # operationId: ListCrawlers
-export def "api list-crawlers" [
+export def "list-crawlers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7182,7 +7182,7 @@ export def "api list-crawlers" [
 #
 # POST /
 # operationId: ListCrawls
-export def "api list-crawls" [
+export def "list-crawls" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7233,7 +7233,7 @@ export def "api list-crawls" [
 #
 # POST /
 # operationId: ListCustomEntityTypes
-export def "api list-custom-entity-types" [
+export def "list-custom-entity-types" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7285,7 +7285,7 @@ export def "api list-custom-entity-types" [
 #
 # POST /
 # operationId: ListDataQualityResults
-export def "api list-data-quality-results" [
+export def "list-data-quality-results" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7338,7 +7338,7 @@ export def "api list-data-quality-results" [
 #
 # POST /
 # operationId: ListDataQualityRuleRecommendationRuns
-export def "api list-data-quality-rule-recommendation-runs" [
+export def "list-data-quality-rule-recommendation-runs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7391,7 +7391,7 @@ export def "api list-data-quality-rule-recommendation-runs" [
 #
 # POST /
 # operationId: ListDataQualityRulesetEvaluationRuns
-export def "api list-data-quality-ruleset-evaluation-runs" [
+export def "list-data-quality-ruleset-evaluation-runs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7444,7 +7444,7 @@ export def "api list-data-quality-ruleset-evaluation-runs" [
 #
 # POST /
 # operationId: ListDataQualityRulesets
-export def "api list-data-quality-rulesets" [
+export def "list-data-quality-rulesets" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7498,7 +7498,7 @@ export def "api list-data-quality-rulesets" [
 #
 # POST /
 # operationId: ListDevEndpoints
-export def "api list-dev-endpoints" [
+export def "list-dev-endpoints" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7551,7 +7551,7 @@ export def "api list-dev-endpoints" [
 #
 # POST /
 # operationId: ListJobs
-export def "api list-jobs" [
+export def "list-jobs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7604,7 +7604,7 @@ export def "api list-jobs" [
 #
 # POST /
 # operationId: ListMLTransforms
-export def "api list-ml-transforms" [
+export def "list-ml-transforms" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7659,7 +7659,7 @@ export def "api list-ml-transforms" [
 #
 # POST /
 # operationId: ListRegistries
-export def "api list-registries" [
+export def "list-registries" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7711,7 +7711,7 @@ export def "api list-registries" [
 #
 # POST /
 # operationId: ListSchemaVersions
-export def "api list-schema-versions" [
+export def "list-schema-versions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7764,7 +7764,7 @@ export def "api list-schema-versions" [
 #
 # POST /
 # operationId: ListSchemas
-export def "api list-schemas" [
+export def "list-schemas" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7817,7 +7817,7 @@ export def "api list-schemas" [
 #
 # POST /
 # operationId: ListSessions
-export def "api list-sessions" [
+export def "list-sessions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7871,7 +7871,7 @@ export def "api list-sessions" [
 #
 # POST /
 # operationId: ListStatements
-export def "api list-statements" [
+export def "list-statements" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7921,7 +7921,7 @@ export def "api list-statements" [
 #
 # POST /
 # operationId: ListTriggers
-export def "api list-triggers" [
+export def "list-triggers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7975,7 +7975,7 @@ export def "api list-triggers" [
 #
 # POST /
 # operationId: ListWorkflows
-export def "api list-workflows" [
+export def "list-workflows" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8027,7 +8027,7 @@ export def "api list-workflows" [
 #
 # POST /
 # operationId: PutDataCatalogEncryptionSettings
-export def "api update-data-catalog-encryption-settings" [
+export def "put-data-catalog-encryption-settings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8076,7 +8076,7 @@ export def "api update-data-catalog-encryption-settings" [
 #
 # POST /
 # operationId: PutResourcePolicy
-export def "api update-resource-policy" [
+export def "put-resource-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8128,7 +8128,7 @@ export def "api update-resource-policy" [
 #
 # POST /
 # operationId: PutSchemaVersionMetadata
-export def "api update-schema-version-metadata" [
+export def "put-schema-version-metadata" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8179,7 +8179,7 @@ export def "api update-schema-version-metadata" [
 #
 # POST /
 # operationId: PutWorkflowRunProperties
-export def "api update-workflow-run-properties" [
+export def "put-workflow-run-properties" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8229,7 +8229,7 @@ export def "api update-workflow-run-properties" [
 #
 # POST /
 # operationId: QuerySchemaVersionMetadata
-export def "api list-schema-version-metadata" [
+export def "query-schema-version-metadata" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8282,7 +8282,7 @@ export def "api list-schema-version-metadata" [
 #
 # POST /
 # operationId: RegisterSchemaVersion
-export def "api create-schema-version" [
+export def "register-schema-version" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8331,7 +8331,7 @@ export def "api create-schema-version" [
 #
 # POST /
 # operationId: RemoveSchemaVersionMetadata
-export def "api delete-schema-version-metadata" [
+export def "remove-schema-version-metadata" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8382,7 +8382,7 @@ export def "api delete-schema-version-metadata" [
 #
 # POST /
 # operationId: ResetJobBookmark
-export def "api reset-job-bookmark" [
+export def "reset-job-bookmark" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8431,7 +8431,7 @@ export def "api reset-job-bookmark" [
 #
 # POST /
 # operationId: ResumeWorkflowRun
-export def "api create-resume-workflow-run" [
+export def "resume-workflow-run" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8481,7 +8481,7 @@ export def "api create-resume-workflow-run" [
 #
 # POST /
 # operationId: RunStatement
-export def "api create-run-statement" [
+export def "run-statement" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8531,7 +8531,7 @@ export def "api create-run-statement" [
 #
 # POST /
 # operationId: SearchTables
-export def "api list-tables" [
+export def "search-tables" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8588,7 +8588,7 @@ export def "api list-tables" [
 #
 # POST /
 # operationId: StartBlueprintRun
-export def "api start-blueprint-run" [
+export def "start-blueprint-run" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8638,7 +8638,7 @@ export def "api start-blueprint-run" [
 #
 # POST /
 # operationId: StartCrawler
-export def "api start-crawler" [
+export def "start-crawler" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8686,7 +8686,7 @@ export def "api start-crawler" [
 #
 # POST /
 # operationId: StartCrawlerSchedule
-export def "api start-crawler-schedule" [
+export def "start-crawler-schedule" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8734,7 +8734,7 @@ export def "api start-crawler-schedule" [
 #
 # POST /
 # operationId: StartDataQualityRuleRecommendationRun
-export def "api start-data-quality-rule-recommendation-run" [
+export def "start-data-quality-rule-recommendation-run" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8787,7 +8787,7 @@ export def "api start-data-quality-rule-recommendation-run" [
 #
 # POST /
 # operationId: StartDataQualityRulesetEvaluationRun
-export def "api start-data-quality-ruleset-evaluation-run" [
+export def "start-data-quality-ruleset-evaluation-run" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8841,7 +8841,7 @@ export def "api start-data-quality-ruleset-evaluation-run" [
 #
 # POST /
 # operationId: StartExportLabelsTaskRun
-export def "api start-export-labels-task-run" [
+export def "start-export-labels-task-run" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8890,7 +8890,7 @@ export def "api start-export-labels-task-run" [
 #
 # POST /
 # operationId: StartImportLabelsTaskRun
-export def "api start-import-labels-task-run" [
+export def "start-import-labels-task-run" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8940,7 +8940,7 @@ export def "api start-import-labels-task-run" [
 #
 # POST /
 # operationId: StartJobRun
-export def "api start-job-run" [
+export def "start-job-run" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8998,7 +8998,7 @@ export def "api start-job-run" [
 #
 # POST /
 # operationId: StartMLEvaluationTaskRun
-export def "api start-ml-evaluation-task-run" [
+export def "start-ml-evaluation-task-run" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9046,7 +9046,7 @@ export def "api start-ml-evaluation-task-run" [
 #
 # POST /
 # operationId: StartMLLabelingSetGenerationTaskRun
-export def "api start-ml-labeling-update-generation-task-run" [
+export def "start-ml-labeling-set-generation-task-run" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9095,7 +9095,7 @@ export def "api start-ml-labeling-update-generation-task-run" [
 #
 # POST /
 # operationId: StartTrigger
-export def "api start-trigger" [
+export def "start-trigger" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9143,7 +9143,7 @@ export def "api start-trigger" [
 #
 # POST /
 # operationId: StartWorkflowRun
-export def "api start-workflow-run" [
+export def "start-workflow-run" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9192,7 +9192,7 @@ export def "api start-workflow-run" [
 #
 # POST /
 # operationId: StopCrawler
-export def "api stop-crawler" [
+export def "stop-crawler" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9240,7 +9240,7 @@ export def "api stop-crawler" [
 #
 # POST /
 # operationId: StopCrawlerSchedule
-export def "api stop-crawler-schedule" [
+export def "stop-crawler-schedule" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9288,7 +9288,7 @@ export def "api stop-crawler-schedule" [
 #
 # POST /
 # operationId: StopSession
-export def "api stop-session" [
+export def "stop-session" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9337,7 +9337,7 @@ export def "api stop-session" [
 #
 # POST /
 # operationId: StopTrigger
-export def "api stop-trigger" [
+export def "stop-trigger" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9385,7 +9385,7 @@ export def "api stop-trigger" [
 #
 # POST /
 # operationId: StopWorkflowRun
-export def "api stop-workflow-run" [
+export def "stop-workflow-run" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9434,7 +9434,7 @@ export def "api stop-workflow-run" [
 #
 # POST /
 # operationId: TagResource
-export def "api tag-resource" [
+export def "tag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9483,7 +9483,7 @@ export def "api tag-resource" [
 #
 # POST /
 # operationId: UntagResource
-export def "api untag-resource" [
+export def "untag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9532,7 +9532,7 @@ export def "api untag-resource" [
 #
 # POST /
 # operationId: UpdateBlueprint
-export def "api update-blueprint" [
+export def "update-blueprint" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9582,7 +9582,7 @@ export def "api update-blueprint" [
 #
 # POST /
 # operationId: UpdateClassifier
-export def "api update-classifier" [
+export def "update-classifier" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9633,7 +9633,7 @@ export def "api update-classifier" [
 #
 # POST /
 # operationId: UpdateColumnStatisticsForPartition
-export def "api update-column-statistics-for-partition" [
+export def "update-column-statistics-for-partition" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9685,7 +9685,7 @@ export def "api update-column-statistics-for-partition" [
 #
 # POST /
 # operationId: UpdateColumnStatisticsForTable
-export def "api update-column-statistics-for-table" [
+export def "update-column-statistics-for-table" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9736,7 +9736,7 @@ export def "api update-column-statistics-for-table" [
 #
 # POST /
 # operationId: UpdateConnection
-export def "api update-connection" [
+export def "update-connection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9786,7 +9786,7 @@ export def "api update-connection" [
 #
 # POST /
 # operationId: UpdateCrawler
-export def "api update-crawler" [
+export def "update-crawler" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9847,7 +9847,7 @@ export def "api update-crawler" [
 #
 # POST /
 # operationId: UpdateCrawlerSchedule
-export def "api update-crawler-schedule" [
+export def "update-crawler-schedule" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9896,7 +9896,7 @@ export def "api update-crawler-schedule" [
 #
 # POST /
 # operationId: UpdateDataQualityRuleset
-export def "api update-data-quality-ruleset" [
+export def "update-data-quality-ruleset" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9946,7 +9946,7 @@ export def "api update-data-quality-ruleset" [
 #
 # POST /
 # operationId: UpdateDatabase
-export def "api update-database" [
+export def "update-database" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9996,7 +9996,7 @@ export def "api update-database" [
 #
 # POST /
 # operationId: UpdateDevEndpoint
-export def "api update-dev-endpoint" [
+export def "update-dev-endpoint" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10051,7 +10051,7 @@ export def "api update-dev-endpoint" [
 #
 # POST /
 # operationId: UpdateJob
-export def "api update-job" [
+export def "update-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10100,7 +10100,7 @@ export def "api update-job" [
 #
 # POST /
 # operationId: UpdateJobFromSourceControl
-export def "api update-job-from-source-control" [
+export def "update-job-from-source-control" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10156,7 +10156,7 @@ export def "api update-job-from-source-control" [
 #
 # POST /
 # operationId: UpdateMLTransform
-export def "api update-ml-transform" [
+export def "update-ml-transform" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10214,7 +10214,7 @@ export def "api update-ml-transform" [
 #
 # POST /
 # operationId: UpdatePartition
-export def "api update-partition" [
+export def "update-partition" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10266,7 +10266,7 @@ export def "api update-partition" [
 #
 # POST /
 # operationId: UpdateRegistry
-export def "api update-registry" [
+export def "update-registry" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10315,7 +10315,7 @@ export def "api update-registry" [
 #
 # POST /
 # operationId: UpdateSchema
-export def "api update-schema" [
+export def "update-schema" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10366,7 +10366,7 @@ export def "api update-schema" [
 #
 # POST /
 # operationId: UpdateSourceControlFromJob
-export def "api update-source-control-from-job" [
+export def "update-source-control-from-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10422,7 +10422,7 @@ export def "api update-source-control-from-job" [
 #
 # POST /
 # operationId: UpdateTable
-export def "api update-table" [
+export def "update-table" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10475,7 +10475,7 @@ export def "api update-table" [
 #
 # POST /
 # operationId: UpdateTrigger
-export def "api update-trigger" [
+export def "update-trigger" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10524,7 +10524,7 @@ export def "api update-trigger" [
 #
 # POST /
 # operationId: UpdateUserDefinedFunction
-export def "api update-user-defined-function" [
+export def "update-user-defined-function" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10575,7 +10575,7 @@ export def "api update-user-defined-function" [
 #
 # POST /
 # operationId: UpdateWorkflow
-export def "api update-workflow" [
+export def "update-workflow" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

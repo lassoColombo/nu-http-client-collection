@@ -124,7 +124,7 @@ def type-completer [] { ["All" "Error" "Success" "Warning"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-providers-microsoft-sql-locations-sync-database-ids list-groups" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "sync-groups-list-sync-database-ids" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -148,7 +148,7 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Sql/locations/{locationName}/syncDatabaseIds
 # operationId: SyncGroups_ListSyncDatabaseIds
-export def "subscriptions-providers-microsoft-sql-locations-sync-database-ids list-groups" [
+export def "sync-groups-list-sync-database-ids" [
   subscription_id: string
   location_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -188,7 +188,7 @@ export def "subscriptions-providers-microsoft-sql-locations-sync-database-ids li
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/servers/{serverName}/databases/{databaseName}/syncGroups
 # operationId: SyncGroups_ListByDatabase
-export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databases-sync-groups list" [
+export def "sync-groups-list-by-database" [
   subscription_id: string
   resource_group_name: string
   server_name: string
@@ -232,7 +232,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databa
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/servers/{serverName}/databases/{databaseName}/syncGroups/{syncGroupName}
 # operationId: SyncGroups_Delete
-export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databases-sync-groups delete" [
+export def "sync-groups-delete" [
   subscription_id: string
   resource_group_name: string
   server_name: string
@@ -278,7 +278,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databa
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/servers/{serverName}/databases/{databaseName}/syncGroups/{syncGroupName}
 # operationId: SyncGroups_Get
-export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databases-sync-groups get" [
+export def "sync-groups-get" [
   subscription_id: string
   resource_group_name: string
   server_name: string
@@ -325,7 +325,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databa
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/servers/{serverName}/databases/{databaseName}/syncGroups/{syncGroupName}
 # operationId: SyncGroups_Update
 # --properties shape: {conflictResolutionPolicy?: "HubWin"|"MemberWin", hubDatabasePassword?: string, hubDatabaseUserName?: string, interval?: int, schema?: record, syncDatabaseId?: string}
-export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databases-sync-groups update" [
+export def "sync-groups-update" [
   subscription_id: string
   resource_group_name: string
   server_name: string
@@ -376,7 +376,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databa
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/servers/{serverName}/databases/{databaseName}/syncGroups/{syncGroupName}
 # operationId: SyncGroups_CreateOrUpdate
 # --properties shape: {conflictResolutionPolicy?: "HubWin"|"MemberWin", hubDatabasePassword?: string, hubDatabaseUserName?: string, interval?: int, schema?: record, syncDatabaseId?: string}
-export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databases-sync-groups create-or-update" [
+export def "sync-groups-create-or-update" [
   subscription_id: string
   resource_group_name: string
   server_name: string
@@ -426,7 +426,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databa
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/servers/{serverName}/databases/{databaseName}/syncGroups/{syncGroupName}/cancelSync
 # operationId: SyncGroups_CancelSync
-export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databases-sync-groups-cancel-sync sync" [
+export def "sync-groups-cancel-sync" [
   subscription_id: string
   resource_group_name: string
   server_name: string
@@ -472,7 +472,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databa
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/servers/{serverName}/databases/{databaseName}/syncGroups/{syncGroupName}/hubSchemas
 # operationId: SyncGroups_ListHubSchemas
-export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databases-sync-groups-hub-schemas list" [
+export def "sync-groups-list-hub-schemas" [
   subscription_id: string
   resource_group_name: string
   server_name: string
@@ -518,7 +518,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databa
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/servers/{serverName}/databases/{databaseName}/syncGroups/{syncGroupName}/logs
 # operationId: SyncGroups_ListLogs
-export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databases-sync-groups-logs list" [
+export def "sync-groups-list-logs" [
   subscription_id: string
   resource_group_name: string
   server_name: string
@@ -568,7 +568,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databa
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/servers/{serverName}/databases/{databaseName}/syncGroups/{syncGroupName}/refreshHubSchema
 # operationId: SyncGroups_RefreshHubSchema
-export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databases-sync-groups-refresh-hub-schema sync" [
+export def "sync-groups-refresh-hub-schema" [
   subscription_id: string
   resource_group_name: string
   server_name: string
@@ -614,7 +614,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databa
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/servers/{serverName}/databases/{databaseName}/syncGroups/{syncGroupName}/triggerSync
 # operationId: SyncGroups_TriggerSync
-export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databases-sync-groups-trigger-sync sync" [
+export def "sync-groups-trigger-sync" [
   subscription_id: string
   resource_group_name: string
   server_name: string

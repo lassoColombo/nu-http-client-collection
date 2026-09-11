@@ -124,7 +124,7 @@ def scope-completer [] { ["company" "public"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "file-storage-drive-groups list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "drive-groups-all" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -148,7 +148,7 @@ export def commands []: nothing -> table {
 #
 # GET /file-storage/drive-groups
 # operationId: driveGroupsAll
-export def "file-storage-drive-groups list" [
+export def "drive-groups-all" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -193,7 +193,7 @@ export def "file-storage-drive-groups list" [
 #
 # POST /file-storage/drive-groups
 # operationId: driveGroupsAdd
-export def "file-storage-drive-groups create" [
+export def "drive-groups-add" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -240,7 +240,7 @@ export def "file-storage-drive-groups create" [
 #
 # DELETE /file-storage/drive-groups/{id}
 # operationId: driveGroupsDelete
-export def "file-storage-drive-groups delete" [
+export def "drive-groups-delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -283,7 +283,7 @@ export def "file-storage-drive-groups delete" [
 #
 # GET /file-storage/drive-groups/{id}
 # operationId: driveGroupsOne
-export def "file-storage-drive-groups get-one" [
+export def "drive-groups-one" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -327,7 +327,7 @@ export def "file-storage-drive-groups get-one" [
 #
 # PATCH /file-storage/drive-groups/{id}
 # operationId: driveGroupsUpdate
-export def "file-storage-drive-groups update" [
+export def "drive-groups-update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -376,7 +376,7 @@ export def "file-storage-drive-groups update" [
 #
 # GET /file-storage/drives
 # operationId: drivesAll
-export def "file-storage-drives list" [
+export def "drives-all" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -421,7 +421,7 @@ export def "file-storage-drives list" [
 #
 # POST /file-storage/drives
 # operationId: drivesAdd
-export def "file-storage-drives create" [
+export def "drives-add" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -467,7 +467,7 @@ export def "file-storage-drives create" [
 #
 # DELETE /file-storage/drives/{id}
 # operationId: drivesDelete
-export def "file-storage-drives delete" [
+export def "drives-delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -510,7 +510,7 @@ export def "file-storage-drives delete" [
 #
 # GET /file-storage/drives/{id}
 # operationId: drivesOne
-export def "file-storage-drives get-one" [
+export def "drives-one" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -554,7 +554,7 @@ export def "file-storage-drives get-one" [
 #
 # PATCH /file-storage/drives/{id}
 # operationId: drivesUpdate
-export def "file-storage-drives update" [
+export def "drives-update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -602,7 +602,7 @@ export def "file-storage-drives update" [
 #
 # GET /file-storage/files
 # operationId: filesAll
-export def "file-storage-files list" [
+export def "files-all" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -649,7 +649,7 @@ export def "file-storage-files list" [
 #
 # POST /file-storage/files
 # operationId: filesUpload
-export def "file-storage-files upload" [
+export def "files-upload" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -695,7 +695,7 @@ export def "file-storage-files upload" [
 #
 # POST /file-storage/files/search
 # operationId: filesSearch
-export def "file-storage-files-search list" [
+export def "files-search" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -742,7 +742,7 @@ export def "file-storage-files-search list" [
 #
 # DELETE /file-storage/files/{id}
 # operationId: filesDelete
-export def "file-storage-files delete" [
+export def "files-delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -785,7 +785,7 @@ export def "file-storage-files delete" [
 #
 # GET /file-storage/files/{id}
 # operationId: filesOne
-export def "file-storage-files get-one" [
+export def "files-one" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -829,7 +829,7 @@ export def "file-storage-files get-one" [
 #
 # PATCH /file-storage/files/{id}
 # operationId: filesUpdate
-export def "file-storage-files update" [
+export def "files-update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -878,7 +878,7 @@ export def "file-storage-files update" [
 #
 # GET /file-storage/files/{id}/download
 # operationId: filesDownload
-export def "file-storage-files-download download" [
+export def "files-download" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -921,7 +921,7 @@ export def "file-storage-files-download download" [
 #
 # POST /file-storage/folders
 # operationId: foldersAdd
-export def "file-storage-folders create" [
+export def "folders-add" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -970,7 +970,7 @@ export def "file-storage-folders create" [
 #
 # DELETE /file-storage/folders/{id}
 # operationId: foldersDelete
-export def "file-storage-folders delete" [
+export def "folders-delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1013,7 +1013,7 @@ export def "file-storage-folders delete" [
 #
 # GET /file-storage/folders/{id}
 # operationId: foldersOne
-export def "file-storage-folders get-one" [
+export def "folders-one" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1057,7 +1057,7 @@ export def "file-storage-folders get-one" [
 #
 # PATCH /file-storage/folders/{id}
 # operationId: foldersUpdate
-export def "file-storage-folders update" [
+export def "folders-update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1106,7 +1106,7 @@ export def "file-storage-folders update" [
 #
 # POST /file-storage/folders/{id}/copy
 # operationId: foldersCopy
-export def "file-storage-folders-copy copy" [
+export def "folders-copy" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1155,7 +1155,7 @@ export def "file-storage-folders-copy copy" [
 #
 # GET /file-storage/shared-links
 # operationId: sharedLinksAll
-export def "file-storage-shared-links list" [
+export def "shared-links-all" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1200,7 +1200,7 @@ export def "file-storage-shared-links list" [
 # POST /file-storage/shared-links
 # operationId: sharedLinksAdd
 # --target shape: {name?: string}
-export def "file-storage-shared-links create" [
+export def "shared-links-add" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1248,7 +1248,7 @@ export def "file-storage-shared-links create" [
 #
 # DELETE /file-storage/shared-links/{id}
 # operationId: sharedLinksDelete
-export def "file-storage-shared-links delete" [
+export def "shared-links-delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1291,7 +1291,7 @@ export def "file-storage-shared-links delete" [
 #
 # GET /file-storage/shared-links/{id}
 # operationId: sharedLinksOne
-export def "file-storage-shared-links get-one" [
+export def "shared-links-one" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1336,7 +1336,7 @@ export def "file-storage-shared-links get-one" [
 # PATCH /file-storage/shared-links/{id}
 # operationId: sharedLinksUpdate
 # --target shape: {name?: string}
-export def "file-storage-shared-links update" [
+export def "shared-links-update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1386,7 +1386,7 @@ export def "file-storage-shared-links update" [
 #
 # POST /file-storage/upload-sessions
 # operationId: uploadSessionsAdd
-export def "file-storage-upload-sessions create" [
+export def "upload-sessions-add" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1434,7 +1434,7 @@ export def "file-storage-upload-sessions create" [
 #
 # DELETE /file-storage/upload-sessions/{id}
 # operationId: uploadSessionsDelete
-export def "file-storage-upload-sessions delete" [
+export def "upload-sessions-delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1477,7 +1477,7 @@ export def "file-storage-upload-sessions delete" [
 #
 # GET /file-storage/upload-sessions/{id}
 # operationId: uploadSessionsOne
-export def "file-storage-upload-sessions upload-one" [
+export def "upload-sessions-one" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1521,7 +1521,7 @@ export def "file-storage-upload-sessions upload-one" [
 #
 # PUT /file-storage/upload-sessions/{id}
 # operationId: uploadSessionsUpload
-export def "file-storage-upload-sessions upload" [
+export def "upload-sessions-upload" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1570,7 +1570,7 @@ export def "file-storage-upload-sessions upload" [
 #
 # POST /file-storage/upload-sessions/{id}/finish
 # operationId: uploadSessionsFinish
-export def "file-storage-upload-sessions-finish upload" [
+export def "upload-sessions-finish" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

@@ -112,7 +112,7 @@ def container-provider-type-completer [] { ["EKS"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "virtualclusters-jobruns cancel-job-run" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "cancel-job-run" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -136,7 +136,7 @@ export def commands []: nothing -> table {
 #
 # DELETE /virtualclusters/{virtualClusterId}/jobruns/{jobRunId}
 # operationId: CancelJobRun
-export def "virtualclusters-jobruns cancel-job-run" [
+export def "cancel-job-run" [
   virtual_cluster_id: string
   job_run_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -183,7 +183,7 @@ export def "virtualclusters-jobruns cancel-job-run" [
 #
 # GET /virtualclusters/{virtualClusterId}/jobruns/{jobRunId}
 # operationId: DescribeJobRun
-export def "virtualclusters-jobruns get-job-run" [
+export def "describe-job-run" [
   virtual_cluster_id: string
   job_run_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -231,7 +231,7 @@ export def "virtualclusters-jobruns get-job-run" [
 # POST /jobtemplates
 # operationId: CreateJobTemplate
 # --jobTemplateData shape: {executionRoleArn?: any, releaseLabel?: any, configurationOverrides?: any, jobDriver?: record, parameterConfiguration?: any, jobTags?: any}
-export def "jobtemplates create-job-template" [
+export def "create-job-template" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -282,7 +282,7 @@ export def "jobtemplates create-job-template" [
 #
 # GET /jobtemplates
 # operationId: ListJobTemplates
-export def "jobtemplates list-job-templates" [
+export def "list-job-templates" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -331,7 +331,7 @@ export def "jobtemplates list-job-templates" [
 # POST /virtualclusters/{virtualClusterId}/endpoints
 # operationId: CreateManagedEndpoint
 # --configurationOverrides shape: {applicationConfiguration?: any, monitoringConfiguration?: any}
-export def "virtualclusters-endpoints create-managed" [
+export def "create-managed-endpoint" [
   virtual_cluster_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -387,7 +387,7 @@ export def "virtualclusters-endpoints create-managed" [
 #
 # GET /virtualclusters/{virtualClusterId}/endpoints
 # operationId: ListManagedEndpoints
-export def "virtualclusters-endpoints list-managed" [
+export def "list-managed-endpoints" [
   virtual_cluster_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -440,7 +440,7 @@ export def "virtualclusters-endpoints list-managed" [
 # POST /virtualclusters
 # operationId: CreateVirtualCluster
 # --containerProvider shape: {type?: any, id?: any, info?: any}
-export def "virtualclusters create-virtual" [
+export def "create-virtual-cluster" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -490,7 +490,7 @@ export def "virtualclusters create-virtual" [
 #
 # GET /virtualclusters
 # operationId: ListVirtualClusters
-export def "virtualclusters list-virtual-clusters" [
+export def "list-virtual-clusters" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -541,7 +541,7 @@ export def "virtualclusters list-virtual-clusters" [
 #
 # DELETE /jobtemplates/{templateId}
 # operationId: DeleteJobTemplate
-export def "jobtemplates delete-job-template" [
+export def "delete-job-template" [
   template_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -586,7 +586,7 @@ export def "jobtemplates delete-job-template" [
 #
 # GET /jobtemplates/{templateId}
 # operationId: DescribeJobTemplate
-export def "jobtemplates get-job-template" [
+export def "describe-job-template" [
   template_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -631,7 +631,7 @@ export def "jobtemplates get-job-template" [
 #
 # DELETE /virtualclusters/{virtualClusterId}/endpoints/{endpointId}
 # operationId: DeleteManagedEndpoint
-export def "virtualclusters-endpoints delete-managed" [
+export def "delete-managed-endpoint" [
   virtual_cluster_id: string
   endpoint_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -678,7 +678,7 @@ export def "virtualclusters-endpoints delete-managed" [
 #
 # GET /virtualclusters/{virtualClusterId}/endpoints/{endpointId}
 # operationId: DescribeManagedEndpoint
-export def "virtualclusters-endpoints get-managed" [
+export def "describe-managed-endpoint" [
   virtual_cluster_id: string
   endpoint_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -725,7 +725,7 @@ export def "virtualclusters-endpoints get-managed" [
 #
 # DELETE /virtualclusters/{virtualClusterId}
 # operationId: DeleteVirtualCluster
-export def "virtualclusters delete-virtual" [
+export def "delete-virtual-cluster" [
   virtual_cluster_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -770,7 +770,7 @@ export def "virtualclusters delete-virtual" [
 #
 # GET /virtualclusters/{virtualClusterId}
 # operationId: DescribeVirtualCluster
-export def "virtualclusters get-virtual" [
+export def "describe-virtual-cluster" [
   virtual_cluster_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -815,7 +815,7 @@ export def "virtualclusters get-virtual" [
 #
 # GET /virtualclusters/{virtualClusterId}/jobruns
 # operationId: ListJobRuns
-export def "virtualclusters-jobruns list-job-runs" [
+export def "list-job-runs" [
   virtual_cluster_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -870,7 +870,7 @@ export def "virtualclusters-jobruns list-job-runs" [
 # --jobDriver shape: {sparkSubmitJobDriver?: any, sparkSqlJobDriver?: any}
 # --configurationOverrides shape: {applicationConfiguration?: any, monitoringConfiguration?: any}
 # --retryPolicyConfiguration shape: {maxAttempts?: any}
-export def "virtualclusters-jobruns start-job-run" [
+export def "start-job-run" [
   virtual_cluster_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -928,7 +928,7 @@ export def "virtualclusters-jobruns start-job-run" [
 #
 # GET /tags/{resourceArn}
 # operationId: ListTagsForResource
-export def "tags list-for-resource" [
+export def "list-tags-for-resource" [
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -973,7 +973,7 @@ export def "tags list-for-resource" [
 #
 # POST /tags/{resourceArn}
 # operationId: TagResource
-export def "tags tag-resource" [
+export def "tag-resource" [
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1022,7 +1022,7 @@ export def "tags tag-resource" [
 #
 # DELETE /tags/{resourceArn}
 # operationId: UntagResource
-export def "tags untag-resource" [
+export def "untag-resource" [
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

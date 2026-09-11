@@ -115,7 +115,7 @@ def compute-travel-time-for-completer [] { ["all" "none"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "routing-calculate-reachable-range get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-routing-version-number-calculate-reachable-range-origin-content-type" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -138,7 +138,7 @@ export def commands []: nothing -> table {
 # Reachable Range
 #
 # GET /routing/{versionNumber}/calculateReachableRange/{origin}/{contentType}
-export def "routing-calculate-reachable-range get" [
+export def "get-routing-version-number-calculate-reachable-range-origin-content-type" [
   version_number: int
   origin: string
   content_type: string
@@ -210,7 +210,7 @@ export def "routing-calculate-reachable-range get" [
 #
 # POST /routing/{versionNumber}/calculateReachableRange/{origin}/{contentType}
 # --avoidAreas shape: {rectangles?: list}
-export def "routing-calculate-reachable-range create" [
+export def "post-routing-version-number-calculate-reachable-range-origin-content-type" [
   version_number: int
   origin: string
   content_type: string
@@ -287,7 +287,7 @@ export def "routing-calculate-reachable-range create" [
 # Calculate Route
 #
 # GET /routing/{versionNumber}/calculateRoute/{locations}/{contentType}
-export def "routing-calculate-route get" [
+export def "get-routing-version-number-calculate-route-locations-content-type" [
   version_number: int
   locations: string
   content_type: string
@@ -368,7 +368,7 @@ export def "routing-calculate-route get" [
 # POST /routing/{versionNumber}/calculateRoute/{locations}/{contentType}
 # --avoidAreas shape: {rectangles?: list}
 # --supportingPoints item shape: {latitude?: string, longitude?: string}
-export def "routing-calculate-route create" [
+export def "post-routing-version-number-calculate-route-locations-content-type" [
   version_number: int
   locations: string
   content_type: string

@@ -100,7 +100,7 @@ def unified-api-completer [] { ["accounting" "ats" "calendar" "crm" "csp" "custo
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "connector-apis list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "apis-all" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -124,7 +124,7 @@ export def commands []: nothing -> table {
 #
 # GET /connector/apis
 # operationId: apisAll
-export def "connector-apis list" [
+export def "apis-all" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -165,7 +165,7 @@ export def "connector-apis list" [
 #
 # GET /connector/apis/{id}
 # operationId: apisOne
-export def "connector-apis get-one" [
+export def "apis-one" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -204,7 +204,7 @@ export def "connector-apis get-one" [
 #
 # GET /connector/apis/{id}/resources/{resource_id}
 # operationId: apiResourcesOne
-export def "connector-apis-resources get-one" [
+export def "api-resources-one" [
   id: string
   resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -245,7 +245,7 @@ export def "connector-apis-resources get-one" [
 #
 # GET /connector/apis/{id}/resources/{resource_id}/coverage
 # operationId: apiResourceCoverageOne
-export def "connector-apis-resources-coverage get-one" [
+export def "api-resource-coverage-one" [
   id: string
   resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -286,7 +286,7 @@ export def "connector-apis-resources-coverage get-one" [
 #
 # GET /connector/connectors
 # operationId: connectorsAll
-export def "connector-connectors list" [
+export def "connectors-all" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -327,7 +327,7 @@ export def "connector-connectors list" [
 #
 # GET /connector/connectors/{id}
 # operationId: connectorsOne
-export def "connector-connectors get-one" [
+export def "connectors-one" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -366,7 +366,7 @@ export def "connector-connectors get-one" [
 #
 # GET /connector/connectors/{id}/docs/{doc_id}
 # operationId: connectorDocsOne
-export def "connector-connectors-docs get-one" [
+export def "connector-docs-one" [
   id: string
   doc_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -407,7 +407,7 @@ export def "connector-connectors-docs get-one" [
 #
 # GET /connector/connectors/{id}/resources/{resource_id}
 # operationId: connectorResourcesOne
-export def "connector-connectors-resources get-one" [
+export def "connector-resources-one" [
   id: string
   resource_id: string
   --base-url(-b): string@base-url-completer # API base URL

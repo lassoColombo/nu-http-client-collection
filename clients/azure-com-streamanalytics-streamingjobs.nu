@@ -124,7 +124,7 @@ def output-start-mode-completer [] { ["CustomTime" "JobStartTime" "LastOutputEve
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-stream-analytics-operations list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "operations-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -148,7 +148,7 @@ export def commands []: nothing -> table {
 #
 # GET /providers/Microsoft.StreamAnalytics/operations
 # operationId: Operations_List
-export def "providers-microsoft-stream-analytics-operations list" [
+export def "operations-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -184,7 +184,7 @@ export def "providers-microsoft-stream-analytics-operations list" [
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.StreamAnalytics/streamingjobs
 # operationId: StreamingJobs_List
-export def "subscriptions-providers-microsoft-stream-analytics-streamingjobs list-streaming-jobs" [
+export def "streaming-jobs-list" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -223,7 +223,7 @@ export def "subscriptions-providers-microsoft-stream-analytics-streamingjobs lis
 #
 # GET /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.StreamAnalytics/streamingjobs
 # operationId: StreamingJobs_ListByResourceGroup
-export def "subscriptions-resourcegroups-providers-microsoft-stream-analytics-streamingjobs list-streaming-jobs-by-resource-group" [
+export def "streaming-jobs-list-by-resource-group" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -264,7 +264,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-stream-analytics-st
 #
 # DELETE /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.StreamAnalytics/streamingjobs/{jobName}
 # operationId: StreamingJobs_Delete
-export def "subscriptions-resourcegroups-providers-microsoft-stream-analytics-streamingjobs delete-streaming-jobs" [
+export def "streaming-jobs-delete" [
   subscription_id: string
   resource_group_name: string
   job_name: string
@@ -306,7 +306,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-stream-analytics-st
 #
 # GET /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.StreamAnalytics/streamingjobs/{jobName}
 # operationId: StreamingJobs_Get
-export def "subscriptions-resourcegroups-providers-microsoft-stream-analytics-streamingjobs get-streaming-jobs" [
+export def "streaming-jobs-get" [
   subscription_id: string
   resource_group_name: string
   job_name: string
@@ -350,7 +350,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-stream-analytics-st
 # PATCH /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.StreamAnalytics/streamingjobs/{jobName}
 # operationId: StreamingJobs_Update
 # --properties shape: {compatibilityLevel?: "1.0", dataLocale?: string, eventsLateArrivalMaxDelayInSeconds?: int, eventsOutOfOrderMaxDelayInSeconds?: int, eventsOutOfOrderPolicy?: "Adjust"|"Drop", functions?: list, inputs?: list, outputErrorPolicy?: "Stop"|"Drop", outputStartMode?: "JobStartTime"|"CustomTime"|"LastOutputEventTime", outputStartTime?: string, outputs?: list, sku?: any, transformation?: any}
-export def "subscriptions-resourcegroups-providers-microsoft-stream-analytics-streamingjobs update-streaming-jobs" [
+export def "streaming-jobs-update" [
   subscription_id: string
   resource_group_name: string
   job_name: string
@@ -402,7 +402,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-stream-analytics-st
 # PUT /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.StreamAnalytics/streamingjobs/{jobName}
 # operationId: StreamingJobs_CreateOrReplace
 # --properties shape: {compatibilityLevel?: "1.0", dataLocale?: string, eventsLateArrivalMaxDelayInSeconds?: int, eventsOutOfOrderMaxDelayInSeconds?: int, eventsOutOfOrderPolicy?: "Adjust"|"Drop", functions?: list, inputs?: list, outputErrorPolicy?: "Stop"|"Drop", outputStartMode?: "JobStartTime"|"CustomTime"|"LastOutputEventTime", outputStartTime?: string, outputs?: list, sku?: any, transformation?: any}
-export def "subscriptions-resourcegroups-providers-microsoft-stream-analytics-streamingjobs create-streaming-jobs-or-update" [
+export def "streaming-jobs-create-or-replace" [
   subscription_id: string
   resource_group_name: string
   job_name: string
@@ -454,7 +454,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-stream-analytics-st
 #
 # POST /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.StreamAnalytics/streamingjobs/{jobName}/start
 # operationId: StreamingJobs_Start
-export def "subscriptions-resourcegroups-providers-microsoft-stream-analytics-streamingjobs-start start-streaming-jobs" [
+export def "streaming-jobs-start" [
   subscription_id: string
   resource_group_name: string
   job_name: string
@@ -501,7 +501,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-stream-analytics-st
 #
 # POST /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.StreamAnalytics/streamingjobs/{jobName}/stop
 # operationId: StreamingJobs_Stop
-export def "subscriptions-resourcegroups-providers-microsoft-stream-analytics-streamingjobs-stop stop-streaming-jobs" [
+export def "streaming-jobs-stop" [
   subscription_id: string
   resource_group_name: string
   job_name: string

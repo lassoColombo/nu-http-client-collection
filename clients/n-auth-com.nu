@@ -117,7 +117,7 @@ def auth-scheme-completer [] { ["x-apikey" "x-su"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "apikeys get-keys" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-api-keys" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -141,7 +141,7 @@ export def commands []: nothing -> table {
 #
 # GET /apikeys/
 # operationId: getApiKeys
-export def "apikeys get-keys" [
+export def "get-api-keys" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -175,7 +175,7 @@ export def "apikeys get-keys" [
 #
 # POST /apikeys/
 # operationId: createApiKey
-export def "apikeys create-key" [
+export def "create-api-key" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -211,7 +211,7 @@ export def "apikeys create-key" [
 #
 # DELETE /attributes/
 # operationId: deleteGlobalAttributes
-export def "attributes delete-global" [
+export def "delete-global-attributes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -245,7 +245,7 @@ export def "attributes delete-global" [
 #
 # GET /attributes/
 # operationId: getGlobalAttributes
-export def "attributes get-global" [
+export def "get-global-attributes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -279,7 +279,7 @@ export def "attributes get-global" [
 #
 # POST /attributes/
 # operationId: setGlobalAttributes
-export def "attributes update-global" [
+export def "set-global-attributes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -317,7 +317,7 @@ export def "attributes update-global" [
 #
 # PUT /attributes/
 # operationId: updateGlobalAttributes
-export def "attributes update-global-1" [
+export def "update-global-attributes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -355,7 +355,7 @@ export def "attributes update-global-1" [
 #
 # DELETE /attributes/{attributekey}
 # operationId: deleteGlobalAttribute
-export def "attributes delete-global-by-attributekey" [
+export def "delete-global-attribute" [
   attributekey: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -391,7 +391,7 @@ export def "attributes delete-global-by-attributekey" [
 #
 # GET /servers/
 # operationId: getServers
-export def "servers list" [
+export def "get-servers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -428,7 +428,7 @@ export def "servers list" [
 #
 # POST /servers/
 # operationId: createServer
-export def "servers create" [
+export def "create-server" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -482,7 +482,7 @@ export def "servers create" [
 #
 # GET /servers/{serverid}/
 # operationId: getServer
-export def "servers get" [
+export def "get-server" [
   serverid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -518,7 +518,7 @@ export def "servers get" [
 #
 # PUT /servers/{serverid}/
 # operationId: updateServer
-export def "servers update" [
+export def "update-server" [
   serverid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -574,7 +574,7 @@ export def "servers update" [
 #
 # GET /servers/{serverid}/accounts/
 # operationId: getAllAccounts
-export def "servers-accounts get-list" [
+export def "get-all-accounts" [
   serverid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -615,7 +615,7 @@ export def "servers-accounts get-list" [
 #
 # DELETE /servers/{serverid}/accounts/{accountid}/
 # operationId: deleteAccount
-export def "servers-accounts delete" [
+export def "delete-account" [
   serverid: string
   accountid: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -653,7 +653,7 @@ export def "servers-accounts delete" [
 #
 # GET /servers/{serverid}/accounts/{accountid}/
 # operationId: getAccount
-export def "servers-accounts get" [
+export def "get-account" [
   serverid: string
   accountid: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -691,7 +691,7 @@ export def "servers-accounts get" [
 #
 # PUT /servers/{serverid}/accounts/{accountid}/
 # operationId: updateAccount
-export def "servers-accounts update" [
+export def "update-account" [
   serverid: string
   accountid: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -733,7 +733,7 @@ export def "servers-accounts update" [
 # operationId: provokeLoginOnAccount
 # --announceinfo shape: {info?: record, ip?: string, logo?: string, useragent?: string}
 # --sessioninfo shape: {info?: record, ip?: string, logo?: string, useragent?: string}
-export def "servers-accounts-provokelogin create-provoke-login" [
+export def "provoke-login-on-account" [
   serverid: string
   accountid: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -779,7 +779,7 @@ export def "servers-accounts-provokelogin create-provoke-login" [
 #
 # PUT /servers/{serverid}/accounts/{accountid}/user
 # operationId: updateAccountUser
-export def "servers-accounts-user update" [
+export def "update-account-user" [
   serverid: string
   accountid: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -819,7 +819,7 @@ export def "servers-accounts-user update" [
 #
 # DELETE /servers/{serverid}/attributes/
 # operationId: deleteServerAttributes
-export def "servers-attributes delete-by-serverid" [
+export def "delete-server-attributes" [
   serverid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -855,7 +855,7 @@ export def "servers-attributes delete-by-serverid" [
 #
 # GET /servers/{serverid}/attributes/
 # operationId: getServerAttributes
-export def "servers-attributes get" [
+export def "get-server-attributes" [
   serverid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -891,7 +891,7 @@ export def "servers-attributes get" [
 #
 # POST /servers/{serverid}/attributes/
 # operationId: setServerAttributes
-export def "servers-attributes update-by-serverid" [
+export def "set-server-attributes" [
   serverid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -931,7 +931,7 @@ export def "servers-attributes update-by-serverid" [
 #
 # PUT /servers/{serverid}/attributes/
 # operationId: updateServerAttributes
-export def "servers-attributes update-by-serverid-1" [
+export def "update-server-attributes" [
   serverid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -971,7 +971,7 @@ export def "servers-attributes update-by-serverid-1" [
 #
 # DELETE /servers/{serverid}/attributes/{attributekey}
 # operationId: deleteServerAttribute
-export def "servers-attributes delete-by-serverid-attributekey" [
+export def "delete-server-attribute" [
   serverid: string
   attributekey: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1009,7 +1009,7 @@ export def "servers-attributes delete-by-serverid-attributekey" [
 #
 # GET /servers/{serverid}/permissions/
 # operationId: getAllPermissions
-export def "servers-permissions get-list" [
+export def "get-all-permissions" [
   serverid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1045,7 +1045,7 @@ export def "servers-permissions get-list" [
 #
 # DELETE /servers/{serverid}/permissions/{roleid}
 # operationId: revokePermissions
-export def "servers-permissions delete" [
+export def "revoke-permissions" [
   serverid: string
   roleid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1083,7 +1083,7 @@ export def "servers-permissions delete" [
 #
 # GET /servers/{serverid}/permissions/{roleid}
 # operationId: getPermissions
-export def "servers-permissions get" [
+export def "get-permissions" [
   serverid: string
   roleid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1121,7 +1121,7 @@ export def "servers-permissions get" [
 #
 # POST /servers/{serverid}/permissions/{roleid}
 # operationId: grantPermissions
-export def "servers-permissions create-grant" [
+export def "grant-permissions" [
   serverid: string
   roleid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1163,7 +1163,7 @@ export def "servers-permissions create-grant" [
 #
 # DELETE /servers/{serverid}/privilegedattributes/
 # operationId: deleteServerPrivilegedAttributes
-export def "servers-privilegedattributes delete-privileged-attributes" [
+export def "delete-server-privileged-attributes" [
   serverid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1199,7 +1199,7 @@ export def "servers-privilegedattributes delete-privileged-attributes" [
 #
 # GET /servers/{serverid}/privilegedattributes/
 # operationId: getServerPrivilegedAttributes
-export def "servers-privilegedattributes get-privileged-attributes" [
+export def "get-server-privileged-attributes" [
   serverid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1235,7 +1235,7 @@ export def "servers-privilegedattributes get-privileged-attributes" [
 #
 # POST /servers/{serverid}/privilegedattributes/
 # operationId: setServerPrivilegedAttributes
-export def "servers-privilegedattributes update-privileged-attributes-by-serverid" [
+export def "set-server-privileged-attributes" [
   serverid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1275,7 +1275,7 @@ export def "servers-privilegedattributes update-privileged-attributes-by-serveri
 #
 # PUT /servers/{serverid}/privilegedattributes/
 # operationId: updateServerPrivilegedAttributes
-export def "servers-privilegedattributes update-privileged-attributes-by-serverid-1" [
+export def "update-server-privileged-attributes" [
   serverid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1315,7 +1315,7 @@ export def "servers-privilegedattributes update-privileged-attributes-by-serveri
 #
 # DELETE /servers/{serverid}/privilegedattributes/{attributekey}
 # operationId: deleteServerPrivilegedAttribute
-export def "servers-privilegedattributes delete-privileged-attribute" [
+export def "delete-server-privileged-attribute" [
   serverid: string
   attributekey: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1353,7 +1353,7 @@ export def "servers-privilegedattributes delete-privileged-attribute" [
 #
 # GET /servers/{serverid}/sessions/
 # operationId: getSession
-export def "servers-sessions get" [
+export def "get-session" [
   serverid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1392,7 +1392,7 @@ export def "servers-sessions get" [
 #
 # GET /servers/{serverid}/sessions/html/enrol
 # operationId: getHtmlEnrol
-export def "servers-sessions-html-enrol get" [
+export def "get-html-enrol" [
   serverid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1435,7 +1435,7 @@ export def "servers-sessions-html-enrol get" [
 # GET /servers/{serverid}/sessions/html/footer
 # operationId: getHtmlFooter
 # --sessions item shape: {serverid: string, sessionid: string}
-export def "servers-sessions-html-footer get" [
+export def "get-html-footer" [
   serverid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1476,7 +1476,7 @@ export def "servers-sessions-html-footer get" [
 # operationId: getHtmlLogin
 # --announceinfo shape: {info?: record, ip?: string, logo?: string, useragent?: string}
 # --sessioninfo shape: {info?: record, ip?: string, logo?: string, useragent?: string}
-export def "servers-sessions-html-login get" [
+export def "get-html-login" [
   serverid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1515,7 +1515,7 @@ export def "servers-sessions-html-login get" [
 #
 # POST /servers/{serverid}/sessions/logout
 # operationId: logout
-export def "servers-sessions-logout create" [
+export def "logout" [
   serverid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1556,7 +1556,7 @@ export def "servers-sessions-logout create" [
 # operationId: provokeLogin
 # --announceinfo shape: {info?: record, ip?: string, logo?: string, useragent?: string}
 # --sessioninfo shape: {info?: record, ip?: string, logo?: string, useragent?: string}
-export def "servers-sessions-provokelogin create-provoke-login" [
+export def "provoke-login" [
   serverid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1600,7 +1600,7 @@ export def "servers-sessions-provokelogin create-provoke-login" [
 #
 # GET /servers/{serverid}/sessions/qr/enrol
 # operationId: getQrEnrol
-export def "servers-sessions-qr-enrol get" [
+export def "get-qr-enrol" [
   serverid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1646,7 +1646,7 @@ export def "servers-sessions-qr-enrol get" [
 # operationId: getQrLogin
 # --announceinfo shape: {info?: record, ip?: string, logo?: string, useragent?: string}
 # --sessioninfo shape: {info?: record, ip?: string, logo?: string, useragent?: string}
-export def "servers-sessions-qr-login get" [
+export def "get-qr-login" [
   serverid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1688,7 +1688,7 @@ export def "servers-sessions-qr-login get" [
 #
 # POST /servers/{serverid}/sessions/registeruser
 # operationId: registerUser
-export def "servers-sessions-registeruser create-user" [
+export def "register-user" [
   serverid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1729,7 +1729,7 @@ export def "servers-sessions-registeruser create-user" [
 #
 # POST /servers/{serverid}/sessions/transactions
 # operationId: createTransaction
-export def "servers-sessions-transactions create" [
+export def "create-transaction" [
   serverid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1774,7 +1774,7 @@ export def "servers-sessions-transactions create" [
 #
 # GET /servers/{serverid}/transactions/{transactionid}
 # operationId: getTransactionResult
-export def "servers-transactions get-result" [
+export def "get-transaction-result" [
   serverid: string
   transactionid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1812,7 +1812,7 @@ export def "servers-transactions get-result" [
 #
 # GET /servers/{serverid}/users/
 # operationId: getUsers
-export def "servers-users get" [
+export def "get-users" [
   serverid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1854,7 +1854,7 @@ export def "servers-users get" [
 #
 # DELETE /servers/{serverid}/users/{userid}/
 # operationId: deleteUser
-export def "servers-users delete" [
+export def "delete-user" [
   serverid: string
   userid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1892,7 +1892,7 @@ export def "servers-users delete" [
 #
 # DELETE /servers/{serverid}/users/{userid}/accounts
 # operationId: deleteUserAccounts
-export def "servers-users-accounts delete" [
+export def "delete-user-accounts" [
   serverid: string
   userid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1930,7 +1930,7 @@ export def "servers-users-accounts delete" [
 #
 # GET /servers/{serverid}/users/{userid}/accounts
 # operationId: getUser
-export def "servers-users-accounts get" [
+export def "get-user" [
   serverid: string
   userid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1972,7 +1972,7 @@ export def "servers-users-accounts get" [
 #
 # DELETE /servers/{serverid}/users/{userid}/attributes/
 # operationId: deleteUserAttributes
-export def "servers-users-attributes delete-by-serverid-userid" [
+export def "delete-user-attributes" [
   serverid: string
   userid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2010,7 +2010,7 @@ export def "servers-users-attributes delete-by-serverid-userid" [
 #
 # GET /servers/{serverid}/users/{userid}/attributes/
 # operationId: getUserAttributes
-export def "servers-users-attributes get" [
+export def "get-user-attributes" [
   serverid: string
   userid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2048,7 +2048,7 @@ export def "servers-users-attributes get" [
 #
 # POST /servers/{serverid}/users/{userid}/attributes/
 # operationId: setUserAttributes
-export def "servers-users-attributes update-by-serverid-userid" [
+export def "set-user-attributes" [
   serverid: string
   userid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2090,7 +2090,7 @@ export def "servers-users-attributes update-by-serverid-userid" [
 #
 # PUT /servers/{serverid}/users/{userid}/attributes/
 # operationId: updateUserAttributes
-export def "servers-users-attributes update-by-serverid-userid-1" [
+export def "update-user-attributes" [
   serverid: string
   userid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2132,7 +2132,7 @@ export def "servers-users-attributes update-by-serverid-userid-1" [
 #
 # DELETE /servers/{serverid}/users/{userid}/attributes/{attributekey}
 # operationId: deleteUserAttribute
-export def "servers-users-attributes delete-by-serverid-userid-attributekey" [
+export def "delete-user-attribute" [
   serverid: string
   userid: string
   attributekey: string
@@ -2174,7 +2174,7 @@ export def "servers-users-attributes delete-by-serverid-userid-attributekey" [
 # operationId: provokeLoginOnUser
 # --announceinfo shape: {info?: record, ip?: string, logo?: string, useragent?: string}
 # --sessioninfo shape: {info?: record, ip?: string, logo?: string, useragent?: string}
-export def "servers-users-provokelogin create-provoke-login" [
+export def "provoke-login-on-user" [
   serverid: string
   userid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2220,7 +2220,7 @@ export def "servers-users-provokelogin create-provoke-login" [
 #
 # GET /servers/{serverid}/users/{userid}/role/
 # operationId: getUserRole
-export def "servers-users-role get" [
+export def "get-user-role" [
   serverid: string
   userid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2258,7 +2258,7 @@ export def "servers-users-role get" [
 #
 # POST /servers/{serverid}/users/{userid}/role/
 # operationId: getOrCreateUserRole
-export def "servers-users-role get-or-create" [
+export def "get-or-create-user-role" [
   serverid: string
   userid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2296,7 +2296,7 @@ export def "servers-users-role get-or-create" [
 #
 # GET /servers/{serverid}/vash
 # operationId: getServerVash
-export def "servers-vash get" [
+export def "get-server-vash" [
   serverid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

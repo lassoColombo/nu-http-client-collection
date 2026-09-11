@@ -122,7 +122,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-d-bfor-postgre-sql-operations list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "operations-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -146,7 +146,7 @@ export def commands []: nothing -> table {
 #
 # GET /providers/Microsoft.DBforPostgreSQL/operations
 # operationId: Operations_List
-export def "providers-microsoft-d-bfor-postgre-sql-operations list" [
+export def "operations-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -182,7 +182,7 @@ export def "providers-microsoft-d-bfor-postgre-sql-operations list" [
 #
 # POST /subscriptions/{subscriptionId}/providers/Microsoft.DBforPostgreSQL/checkNameAvailability
 # operationId: CheckNameAvailability_Execute
-export def "subscriptions-providers-microsoft-d-bfor-postgre-sql-check-name-availability check-execute" [
+export def "check-name-availability-execute" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -225,7 +225,7 @@ export def "subscriptions-providers-microsoft-d-bfor-postgre-sql-check-name-avai
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.DBforPostgreSQL/locations/{locationName}/performanceTiers
 # operationId: LocationBasedPerformanceTier_List
-export def "subscriptions-providers-microsoft-d-bfor-postgre-sql-locations-performance-tiers list-based" [
+export def "location-based-performance-tier-list" [
   subscription_id: string
   location_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -265,7 +265,7 @@ export def "subscriptions-providers-microsoft-d-bfor-postgre-sql-locations-perfo
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.DBforPostgreSQL/servers
 # operationId: Servers_List
-export def "subscriptions-providers-microsoft-d-bfor-postgre-sql-servers list" [
+export def "servers-list" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -303,7 +303,7 @@ export def "subscriptions-providers-microsoft-d-bfor-postgre-sql-servers list" [
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DBforPostgreSQL/servers
 # operationId: Servers_ListByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-d-bfor-postgre-sql-servers list" [
+export def "servers-list-by-resource-group" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -343,7 +343,7 @@ export def "subscriptions-resource-groups-providers-microsoft-d-bfor-postgre-sql
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DBforPostgreSQL/servers/{serverName}
 # operationId: Servers_Delete
-export def "subscriptions-resource-groups-providers-microsoft-d-bfor-postgre-sql-servers delete" [
+export def "servers-delete" [
   subscription_id: string
   resource_group_name: string
   server_name: string
@@ -385,7 +385,7 @@ export def "subscriptions-resource-groups-providers-microsoft-d-bfor-postgre-sql
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DBforPostgreSQL/servers/{serverName}
 # operationId: Servers_Get
-export def "subscriptions-resource-groups-providers-microsoft-d-bfor-postgre-sql-servers get" [
+export def "servers-get" [
   subscription_id: string
   resource_group_name: string
   server_name: string
@@ -429,7 +429,7 @@ export def "subscriptions-resource-groups-providers-microsoft-d-bfor-postgre-sql
 # operationId: Servers_Update
 # --properties shape: {administratorLoginPassword?: string, replicationRole?: string, sslEnforcement?: "Enabled"|"Disabled", storageProfile?: any, version?: "9.5"|"9.6"|"10"|"10.0"|"10.2"|"11"}
 # --sku shape: {capacity?: int, family?: string, name?: string, size?: string, tier?: "Basic"|"GeneralPurpose"|"MemoryOptimized"}
-export def "subscriptions-resource-groups-providers-microsoft-d-bfor-postgre-sql-servers update" [
+export def "servers-update" [
   subscription_id: string
   resource_group_name: string
   server_name: string
@@ -479,7 +479,7 @@ export def "subscriptions-resource-groups-providers-microsoft-d-bfor-postgre-sql
 # operationId: Servers_Create
 # --properties shape: {createMode: "Default"|"PointInTimeRestore"|"GeoRestore"|"Replica", sslEnforcement?: "Enabled"|"Disabled", storageProfile?: any, version?: "9.5"|"9.6"|"10"|"10.0"|"10.2"|"11"}
 # --sku shape: {capacity?: int, family?: string, name?: string, size?: string, tier?: "Basic"|"GeneralPurpose"|"MemoryOptimized"}
-export def "subscriptions-resource-groups-providers-microsoft-d-bfor-postgre-sql-servers create" [
+export def "servers-create" [
   subscription_id: string
   resource_group_name: string
   server_name: string
@@ -528,7 +528,7 @@ export def "subscriptions-resource-groups-providers-microsoft-d-bfor-postgre-sql
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DBforPostgreSQL/servers/{serverName}/Administrators/activeDirectory
 # operationId: ServerAdministrators_Delete
-export def "subscriptions-resource-groups-providers-microsoft-d-bfor-postgre-sql-servers-administrators-active-directory delete" [
+export def "server-administrators-delete" [
   subscription_id: string
   resource_group_name: string
   server_name: string
@@ -570,7 +570,7 @@ export def "subscriptions-resource-groups-providers-microsoft-d-bfor-postgre-sql
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DBforPostgreSQL/servers/{serverName}/Administrators/activeDirectory
 # operationId: ServerAdministrators_Get
-export def "subscriptions-resource-groups-providers-microsoft-d-bfor-postgre-sql-servers-administrators-active-directory get" [
+export def "server-administrators-get" [
   subscription_id: string
   resource_group_name: string
   server_name: string
@@ -613,7 +613,7 @@ export def "subscriptions-resource-groups-providers-microsoft-d-bfor-postgre-sql
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DBforPostgreSQL/servers/{serverName}/Administrators/activeDirectory
 # operationId: ServerAdministrators_CreateOrUpdate
 # --properties shape: {administratorType: "ActiveDirectory", login: string, sid: string, tenantId: string}
-export def "subscriptions-resource-groups-providers-microsoft-d-bfor-postgre-sql-servers-administrators-active-directory create-or-update" [
+export def "server-administrators-create-or-update" [
   subscription_id: string
   resource_group_name: string
   server_name: string
@@ -659,7 +659,7 @@ export def "subscriptions-resource-groups-providers-microsoft-d-bfor-postgre-sql
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DBforPostgreSQL/servers/{serverName}/Replicas
 # operationId: Replicas_ListByServer
-export def "subscriptions-resource-groups-providers-microsoft-d-bfor-postgre-sql-servers-replicas list" [
+export def "replicas-list-by-server" [
   subscription_id: string
   resource_group_name: string
   server_name: string
@@ -701,7 +701,7 @@ export def "subscriptions-resource-groups-providers-microsoft-d-bfor-postgre-sql
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DBforPostgreSQL/servers/{serverName}/administrators
 # operationId: ServerAdministrators_ListByServer
-export def "subscriptions-resource-groups-providers-microsoft-d-bfor-postgre-sql-servers-administrators list" [
+export def "server-administrators-list-by-server" [
   subscription_id: string
   resource_group_name: string
   server_name: string
@@ -743,7 +743,7 @@ export def "subscriptions-resource-groups-providers-microsoft-d-bfor-postgre-sql
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DBforPostgreSQL/servers/{serverName}/configurations
 # operationId: Configurations_ListByServer
-export def "subscriptions-resource-groups-providers-microsoft-d-bfor-postgre-sql-servers-configurations list" [
+export def "configurations-list-by-server" [
   subscription_id: string
   resource_group_name: string
   server_name: string
@@ -785,7 +785,7 @@ export def "subscriptions-resource-groups-providers-microsoft-d-bfor-postgre-sql
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DBforPostgreSQL/servers/{serverName}/configurations/{configurationName}
 # operationId: Configurations_Get
-export def "subscriptions-resource-groups-providers-microsoft-d-bfor-postgre-sql-servers-configurations get" [
+export def "configurations-get" [
   subscription_id: string
   resource_group_name: string
   server_name: string
@@ -830,7 +830,7 @@ export def "subscriptions-resource-groups-providers-microsoft-d-bfor-postgre-sql
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DBforPostgreSQL/servers/{serverName}/configurations/{configurationName}
 # operationId: Configurations_CreateOrUpdate
 # --properties shape: {source?: string, value?: string}
-export def "subscriptions-resource-groups-providers-microsoft-d-bfor-postgre-sql-servers-configurations create-or-update" [
+export def "configurations-create-or-update" [
   subscription_id: string
   resource_group_name: string
   server_name: string
@@ -878,7 +878,7 @@ export def "subscriptions-resource-groups-providers-microsoft-d-bfor-postgre-sql
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DBforPostgreSQL/servers/{serverName}/databases
 # operationId: Databases_ListByServer
-export def "subscriptions-resource-groups-providers-microsoft-d-bfor-postgre-sql-servers-databases list" [
+export def "databases-list-by-server" [
   subscription_id: string
   resource_group_name: string
   server_name: string
@@ -920,7 +920,7 @@ export def "subscriptions-resource-groups-providers-microsoft-d-bfor-postgre-sql
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DBforPostgreSQL/servers/{serverName}/databases/{databaseName}
 # operationId: Databases_Delete
-export def "subscriptions-resource-groups-providers-microsoft-d-bfor-postgre-sql-servers-databases delete" [
+export def "databases-delete" [
   subscription_id: string
   resource_group_name: string
   server_name: string
@@ -964,7 +964,7 @@ export def "subscriptions-resource-groups-providers-microsoft-d-bfor-postgre-sql
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DBforPostgreSQL/servers/{serverName}/databases/{databaseName}
 # operationId: Databases_Get
-export def "subscriptions-resource-groups-providers-microsoft-d-bfor-postgre-sql-servers-databases get" [
+export def "databases-get" [
   subscription_id: string
   resource_group_name: string
   server_name: string
@@ -1009,7 +1009,7 @@ export def "subscriptions-resource-groups-providers-microsoft-d-bfor-postgre-sql
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DBforPostgreSQL/servers/{serverName}/databases/{databaseName}
 # operationId: Databases_CreateOrUpdate
 # --properties shape: {charset?: string, collation?: string}
-export def "subscriptions-resource-groups-providers-microsoft-d-bfor-postgre-sql-servers-databases create-or-update" [
+export def "databases-create-or-update" [
   subscription_id: string
   resource_group_name: string
   server_name: string
@@ -1057,7 +1057,7 @@ export def "subscriptions-resource-groups-providers-microsoft-d-bfor-postgre-sql
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DBforPostgreSQL/servers/{serverName}/firewallRules
 # operationId: FirewallRules_ListByServer
-export def "subscriptions-resource-groups-providers-microsoft-d-bfor-postgre-sql-servers-firewall-rules list" [
+export def "firewall-rules-list-by-server" [
   subscription_id: string
   resource_group_name: string
   server_name: string
@@ -1099,7 +1099,7 @@ export def "subscriptions-resource-groups-providers-microsoft-d-bfor-postgre-sql
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DBforPostgreSQL/servers/{serverName}/firewallRules/{firewallRuleName}
 # operationId: FirewallRules_Delete
-export def "subscriptions-resource-groups-providers-microsoft-d-bfor-postgre-sql-servers-firewall-rules delete" [
+export def "firewall-rules-delete" [
   subscription_id: string
   resource_group_name: string
   server_name: string
@@ -1143,7 +1143,7 @@ export def "subscriptions-resource-groups-providers-microsoft-d-bfor-postgre-sql
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DBforPostgreSQL/servers/{serverName}/firewallRules/{firewallRuleName}
 # operationId: FirewallRules_Get
-export def "subscriptions-resource-groups-providers-microsoft-d-bfor-postgre-sql-servers-firewall-rules get" [
+export def "firewall-rules-get" [
   subscription_id: string
   resource_group_name: string
   server_name: string
@@ -1188,7 +1188,7 @@ export def "subscriptions-resource-groups-providers-microsoft-d-bfor-postgre-sql
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DBforPostgreSQL/servers/{serverName}/firewallRules/{firewallRuleName}
 # operationId: FirewallRules_CreateOrUpdate
 # --properties shape: {endIpAddress: string, startIpAddress: string}
-export def "subscriptions-resource-groups-providers-microsoft-d-bfor-postgre-sql-servers-firewall-rules create-or-update" [
+export def "firewall-rules-create-or-update" [
   subscription_id: string
   resource_group_name: string
   server_name: string
@@ -1236,7 +1236,7 @@ export def "subscriptions-resource-groups-providers-microsoft-d-bfor-postgre-sql
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DBforPostgreSQL/servers/{serverName}/logFiles
 # operationId: LogFiles_ListByServer
-export def "subscriptions-resource-groups-providers-microsoft-d-bfor-postgre-sql-servers-log-files list" [
+export def "log-files-list-by-server" [
   subscription_id: string
   resource_group_name: string
   server_name: string
@@ -1278,7 +1278,7 @@ export def "subscriptions-resource-groups-providers-microsoft-d-bfor-postgre-sql
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DBforPostgreSQL/servers/{serverName}/restart
 # operationId: Servers_Restart
-export def "subscriptions-resource-groups-providers-microsoft-d-bfor-postgre-sql-servers-restart restart" [
+export def "servers-restart" [
   subscription_id: string
   resource_group_name: string
   server_name: string
@@ -1320,7 +1320,7 @@ export def "subscriptions-resource-groups-providers-microsoft-d-bfor-postgre-sql
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DBforPostgreSQL/servers/{serverName}/securityAlertPolicies/{securityAlertPolicyName}
 # operationId: ServerSecurityAlertPolicies_Get
-export def "subscriptions-resource-groups-providers-microsoft-d-bfor-postgre-sql-servers-security-alert-policies get" [
+export def "server-security-alert-policies-get" [
   subscription_id: string
   resource_group_name: string
   server_name: string
@@ -1365,7 +1365,7 @@ export def "subscriptions-resource-groups-providers-microsoft-d-bfor-postgre-sql
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DBforPostgreSQL/servers/{serverName}/securityAlertPolicies/{securityAlertPolicyName}
 # operationId: ServerSecurityAlertPolicies_CreateOrUpdate
 # --properties shape: {disabledAlerts?: list<string>, emailAccountAdmins?: bool, emailAddresses?: list<string>, retentionDays?: int, state: "Enabled"|"Disabled", storageAccountAccessKey?: string, storageEndpoint?: string}
-export def "subscriptions-resource-groups-providers-microsoft-d-bfor-postgre-sql-servers-security-alert-policies create-or-update" [
+export def "server-security-alert-policies-create-or-update" [
   subscription_id: string
   resource_group_name: string
   server_name: string
@@ -1413,7 +1413,7 @@ export def "subscriptions-resource-groups-providers-microsoft-d-bfor-postgre-sql
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DBforPostgreSQL/servers/{serverName}/virtualNetworkRules
 # operationId: VirtualNetworkRules_ListByServer
-export def "subscriptions-resource-groups-providers-microsoft-d-bfor-postgre-sql-servers-virtual-network-rules list" [
+export def "virtual-network-rules-list-by-server" [
   subscription_id: string
   resource_group_name: string
   server_name: string
@@ -1455,7 +1455,7 @@ export def "subscriptions-resource-groups-providers-microsoft-d-bfor-postgre-sql
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DBforPostgreSQL/servers/{serverName}/virtualNetworkRules/{virtualNetworkRuleName}
 # operationId: VirtualNetworkRules_Delete
-export def "subscriptions-resource-groups-providers-microsoft-d-bfor-postgre-sql-servers-virtual-network-rules delete" [
+export def "virtual-network-rules-delete" [
   subscription_id: string
   resource_group_name: string
   server_name: string
@@ -1499,7 +1499,7 @@ export def "subscriptions-resource-groups-providers-microsoft-d-bfor-postgre-sql
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DBforPostgreSQL/servers/{serverName}/virtualNetworkRules/{virtualNetworkRuleName}
 # operationId: VirtualNetworkRules_Get
-export def "subscriptions-resource-groups-providers-microsoft-d-bfor-postgre-sql-servers-virtual-network-rules get" [
+export def "virtual-network-rules-get" [
   subscription_id: string
   resource_group_name: string
   server_name: string
@@ -1544,7 +1544,7 @@ export def "subscriptions-resource-groups-providers-microsoft-d-bfor-postgre-sql
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DBforPostgreSQL/servers/{serverName}/virtualNetworkRules/{virtualNetworkRuleName}
 # operationId: VirtualNetworkRules_CreateOrUpdate
 # --properties shape: {ignoreMissingVnetServiceEndpoint?: bool, virtualNetworkSubnetId: string}
-export def "subscriptions-resource-groups-providers-microsoft-d-bfor-postgre-sql-servers-virtual-network-rules create-or-update" [
+export def "virtual-network-rules-create-or-update" [
   subscription_id: string
   resource_group_name: string
   server_name: string

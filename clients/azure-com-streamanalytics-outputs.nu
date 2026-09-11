@@ -122,7 +122,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resourcegroups-providers-microsoft-stream-analytics-streamingjobs-outputs list-by-streaming-job" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "outputs-list-by-streaming-job" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -146,7 +146,7 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.StreamAnalytics/streamingjobs/{jobName}/outputs
 # operationId: Outputs_ListByStreamingJob
-export def "subscriptions-resourcegroups-providers-microsoft-stream-analytics-streamingjobs-outputs list-by-streaming-job" [
+export def "outputs-list-by-streaming-job" [
   subscription_id: string
   resource_group_name: string
   job_name: string
@@ -189,7 +189,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-stream-analytics-st
 #
 # DELETE /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.StreamAnalytics/streamingjobs/{jobName}/outputs/{outputName}
 # operationId: Outputs_Delete
-export def "subscriptions-resourcegroups-providers-microsoft-stream-analytics-streamingjobs-outputs delete" [
+export def "outputs-delete" [
   subscription_id: string
   resource_group_name: string
   job_name: string
@@ -233,7 +233,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-stream-analytics-st
 #
 # GET /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.StreamAnalytics/streamingjobs/{jobName}/outputs/{outputName}
 # operationId: Outputs_Get
-export def "subscriptions-resourcegroups-providers-microsoft-stream-analytics-streamingjobs-outputs get" [
+export def "outputs-get" [
   subscription_id: string
   resource_group_name: string
   job_name: string
@@ -278,7 +278,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-stream-analytics-st
 # PATCH /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.StreamAnalytics/streamingjobs/{jobName}/outputs/{outputName}
 # operationId: Outputs_Update
 # --properties shape: {datasource?: any, diagnostics?: any, serialization?: any}
-export def "subscriptions-resourcegroups-providers-microsoft-stream-analytics-streamingjobs-outputs update" [
+export def "outputs-update" [
   subscription_id: string
   resource_group_name: string
   job_name: string
@@ -331,7 +331,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-stream-analytics-st
 # PUT /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.StreamAnalytics/streamingjobs/{jobName}/outputs/{outputName}
 # operationId: Outputs_CreateOrReplace
 # --properties shape: {datasource?: any, diagnostics?: any, serialization?: any}
-export def "subscriptions-resourcegroups-providers-microsoft-stream-analytics-streamingjobs-outputs create-or-update" [
+export def "outputs-create-or-replace" [
   subscription_id: string
   resource_group_name: string
   job_name: string
@@ -385,7 +385,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-stream-analytics-st
 # POST /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.StreamAnalytics/streamingjobs/{jobName}/outputs/{outputName}/test
 # operationId: Outputs_Test
 # --properties shape: {datasource?: any, diagnostics?: any, serialization?: any}
-export def "subscriptions-resourcegroups-providers-microsoft-stream-analytics-streamingjobs-outputs-test test" [
+export def "outputs-test" [
   subscription_id: string
   resource_group_name: string
   job_name: string

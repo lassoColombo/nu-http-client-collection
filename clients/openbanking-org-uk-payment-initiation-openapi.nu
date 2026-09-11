@@ -104,7 +104,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "domestic-payment-consents create" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "create-domestic-payment-consents" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -130,7 +130,7 @@ export def commands []: nothing -> table {
 # operationId: CreateDomesticPaymentConsents
 # --Data shape: {Authorisation?: record, Initiation: record, ReadRefundAccount?: "No"|"Yes", SCASupportData?: record}
 # --Risk shape: {DeliveryAddress?: record, MerchantCategoryCode?: string, MerchantCustomerIdentification?: string, PaymentContextCode?: "BillPayment"|"EcommerceGoods"|"EcommerceServices"|"Other"|"PartyToParty"}
-export def "domestic-payment-consents create" [
+export def "create-domestic-payment-consents" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -178,7 +178,7 @@ export def "domestic-payment-consents create" [
 #
 # GET /domestic-payment-consents/{ConsentId}
 # operationId: GetDomesticPaymentConsentsConsentId
-export def "domestic-payment-consents get" [
+export def "get-domestic-payment-consents-consent-id" [
   consent_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -221,7 +221,7 @@ export def "domestic-payment-consents get" [
 #
 # GET /domestic-payment-consents/{ConsentId}/funds-confirmation
 # operationId: GetDomesticPaymentConsentsConsentIdFundsConfirmation
-export def "domestic-payment-consents-funds-confirmation get" [
+export def "get-domestic-payment-consents-consent-id-funds-confirmation" [
   consent_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -266,7 +266,7 @@ export def "domestic-payment-consents-funds-confirmation get" [
 # operationId: CreateDomesticPayments
 # --Data shape: {ConsentId: string, Initiation: record}
 # --Risk shape: {DeliveryAddress?: record, MerchantCategoryCode?: string, MerchantCustomerIdentification?: string, PaymentContextCode?: "BillPayment"|"EcommerceGoods"|"EcommerceServices"|"Other"|"PartyToParty"}
-export def "domestic-payments create" [
+export def "create-domestic-payments" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -314,7 +314,7 @@ export def "domestic-payments create" [
 #
 # GET /domestic-payments/{DomesticPaymentId}
 # operationId: GetDomesticPaymentsDomesticPaymentId
-export def "domestic-payments get" [
+export def "get-domestic-payments-domestic-payment-id" [
   domestic_payment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -357,7 +357,7 @@ export def "domestic-payments get" [
 #
 # GET /domestic-payments/{DomesticPaymentId}/payment-details
 # operationId: GetDomesticPaymentsDomesticPaymentIdPaymentDetails
-export def "domestic-payments-payment-details get" [
+export def "get-domestic-payments-domestic-payment-id-payment-details" [
   domestic_payment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -402,7 +402,7 @@ export def "domestic-payments-payment-details get" [
 # operationId: CreateDomesticScheduledPaymentConsents
 # --Data shape: {Authorisation?: record, Initiation: record, Permission: "Create", ReadRefundAccount?: "No"|"Yes", SCASupportData?: record}
 # --Risk shape: {DeliveryAddress?: record, MerchantCategoryCode?: string, MerchantCustomerIdentification?: string, PaymentContextCode?: "BillPayment"|"EcommerceGoods"|"EcommerceServices"|"Other"|"PartyToParty"}
-export def "domestic-scheduled-payment-consents create" [
+export def "create-domestic-scheduled-payment-consents" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -450,7 +450,7 @@ export def "domestic-scheduled-payment-consents create" [
 #
 # GET /domestic-scheduled-payment-consents/{ConsentId}
 # operationId: GetDomesticScheduledPaymentConsentsConsentId
-export def "domestic-scheduled-payment-consents get" [
+export def "get-domestic-scheduled-payment-consents-consent-id" [
   consent_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -495,7 +495,7 @@ export def "domestic-scheduled-payment-consents get" [
 # operationId: CreateDomesticScheduledPayments
 # --Data shape: {ConsentId: string, Initiation: record}
 # --Risk shape: {DeliveryAddress?: record, MerchantCategoryCode?: string, MerchantCustomerIdentification?: string, PaymentContextCode?: "BillPayment"|"EcommerceGoods"|"EcommerceServices"|"Other"|"PartyToParty"}
-export def "domestic-scheduled-payments create" [
+export def "create-domestic-scheduled-payments" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -543,7 +543,7 @@ export def "domestic-scheduled-payments create" [
 #
 # GET /domestic-scheduled-payments/{DomesticScheduledPaymentId}
 # operationId: GetDomesticScheduledPaymentsDomesticScheduledPaymentId
-export def "domestic-scheduled-payments get" [
+export def "get-domestic-scheduled-payments-domestic-scheduled-payment-id" [
   domestic_scheduled_payment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -586,7 +586,7 @@ export def "domestic-scheduled-payments get" [
 #
 # GET /domestic-scheduled-payments/{DomesticScheduledPaymentId}/payment-details
 # operationId: GetDomesticScheduledPaymentsDomesticScheduledPaymentIdPaymentDetails
-export def "domestic-scheduled-payments-payment-details get" [
+export def "get-domestic-scheduled-payments-domestic-scheduled-payment-id-payment-details" [
   domestic_scheduled_payment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -631,7 +631,7 @@ export def "domestic-scheduled-payments-payment-details get" [
 # operationId: CreateDomesticStandingOrderConsents
 # --Data shape: {Authorisation?: record, Initiation: record, Permission: "Create", ReadRefundAccount?: "No"|"Yes", SCASupportData?: record}
 # --Risk shape: {DeliveryAddress?: record, MerchantCategoryCode?: string, MerchantCustomerIdentification?: string, PaymentContextCode?: "BillPayment"|"EcommerceGoods"|"EcommerceServices"|"Other"|"PartyToParty"}
-export def "domestic-standing-order-consents create" [
+export def "create-domestic-standing-order-consents" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -679,7 +679,7 @@ export def "domestic-standing-order-consents create" [
 #
 # GET /domestic-standing-order-consents/{ConsentId}
 # operationId: GetDomesticStandingOrderConsentsConsentId
-export def "domestic-standing-order-consents get" [
+export def "get-domestic-standing-order-consents-consent-id" [
   consent_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -724,7 +724,7 @@ export def "domestic-standing-order-consents get" [
 # operationId: CreateDomesticStandingOrders
 # --Data shape: {ConsentId: string, Initiation: record}
 # --Risk shape: {DeliveryAddress?: record, MerchantCategoryCode?: string, MerchantCustomerIdentification?: string, PaymentContextCode?: "BillPayment"|"EcommerceGoods"|"EcommerceServices"|"Other"|"PartyToParty"}
-export def "domestic-standing-orders create" [
+export def "create-domestic-standing-orders" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -772,7 +772,7 @@ export def "domestic-standing-orders create" [
 #
 # GET /domestic-standing-orders/{DomesticStandingOrderId}
 # operationId: GetDomesticStandingOrdersDomesticStandingOrderId
-export def "domestic-standing-orders get" [
+export def "get-domestic-standing-orders-domestic-standing-order-id" [
   domestic_standing_order_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -815,7 +815,7 @@ export def "domestic-standing-orders get" [
 #
 # GET /domestic-standing-orders/{DomesticStandingOrderId}/payment-details
 # operationId: GetDomesticStandingOrdersDomesticStandingOrderIdPaymentDetails
-export def "domestic-standing-orders-payment-details get" [
+export def "get-domestic-standing-orders-domestic-standing-order-id-payment-details" [
   domestic_standing_order_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -859,7 +859,7 @@ export def "domestic-standing-orders-payment-details get" [
 # POST /file-payment-consents
 # operationId: CreateFilePaymentConsents
 # --Data shape: {Authorisation?: record, Initiation: record, SCASupportData?: record}
-export def "file-payment-consents create" [
+export def "create-file-payment-consents" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -906,7 +906,7 @@ export def "file-payment-consents create" [
 #
 # GET /file-payment-consents/{ConsentId}
 # operationId: GetFilePaymentConsentsConsentId
-export def "file-payment-consents get" [
+export def "get-file-payment-consents-consent-id" [
   consent_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -949,7 +949,7 @@ export def "file-payment-consents get" [
 #
 # GET /file-payment-consents/{ConsentId}/file
 # operationId: GetFilePaymentConsentsConsentIdFile
-export def "file-payment-consents-file get" [
+export def "get-file-payment-consents-consent-id-file" [
   consent_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -992,7 +992,7 @@ export def "file-payment-consents-file get" [
 #
 # POST /file-payment-consents/{ConsentId}/file
 # operationId: CreateFilePaymentConsentsConsentIdFile
-export def "file-payment-consents-file create" [
+export def "create-file-payment-consents-consent-id-file" [
   consent_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1042,7 +1042,7 @@ export def "file-payment-consents-file create" [
 # POST /file-payments
 # operationId: CreateFilePayments
 # --Data shape: {ConsentId: string, Initiation: record}
-export def "file-payments create" [
+export def "create-file-payments" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1089,7 +1089,7 @@ export def "file-payments create" [
 #
 # GET /file-payments/{FilePaymentId}
 # operationId: GetFilePaymentsFilePaymentId
-export def "file-payments get" [
+export def "get-file-payments-file-payment-id" [
   file_payment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1132,7 +1132,7 @@ export def "file-payments get" [
 #
 # GET /file-payments/{FilePaymentId}/payment-details
 # operationId: GetFilePaymentsFilePaymentIdPaymentDetails
-export def "file-payments-payment-details get" [
+export def "get-file-payments-file-payment-id-payment-details" [
   file_payment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1175,7 +1175,7 @@ export def "file-payments-payment-details get" [
 #
 # GET /file-payments/{FilePaymentId}/report-file
 # operationId: GetFilePaymentsFilePaymentIdReportFile
-export def "file-payments-report-file get" [
+export def "get-file-payments-file-payment-id-report-file" [
   file_payment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1220,7 +1220,7 @@ export def "file-payments-report-file get" [
 # operationId: CreateInternationalPaymentConsents
 # --Data shape: {Authorisation?: record, Initiation: record, ReadRefundAccount?: "No"|"Yes", SCASupportData?: record}
 # --Risk shape: {DeliveryAddress?: record, MerchantCategoryCode?: string, MerchantCustomerIdentification?: string, PaymentContextCode?: "BillPayment"|"EcommerceGoods"|"EcommerceServices"|"Other"|"PartyToParty"}
-export def "international-payment-consents create" [
+export def "create-international-payment-consents" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1268,7 +1268,7 @@ export def "international-payment-consents create" [
 #
 # GET /international-payment-consents/{ConsentId}
 # operationId: GetInternationalPaymentConsentsConsentId
-export def "international-payment-consents get" [
+export def "get-international-payment-consents-consent-id" [
   consent_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1311,7 +1311,7 @@ export def "international-payment-consents get" [
 #
 # GET /international-payment-consents/{ConsentId}/funds-confirmation
 # operationId: GetInternationalPaymentConsentsConsentIdFundsConfirmation
-export def "international-payment-consents-funds-confirmation get" [
+export def "get-international-payment-consents-consent-id-funds-confirmation" [
   consent_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1356,7 +1356,7 @@ export def "international-payment-consents-funds-confirmation get" [
 # operationId: CreateInternationalPayments
 # --Data shape: {ConsentId: string, Initiation: record}
 # --Risk shape: {DeliveryAddress?: record, MerchantCategoryCode?: string, MerchantCustomerIdentification?: string, PaymentContextCode?: "BillPayment"|"EcommerceGoods"|"EcommerceServices"|"Other"|"PartyToParty"}
-export def "international-payments create" [
+export def "create-international-payments" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1404,7 +1404,7 @@ export def "international-payments create" [
 #
 # GET /international-payments/{InternationalPaymentId}
 # operationId: GetInternationalPaymentsInternationalPaymentId
-export def "international-payments get" [
+export def "get-international-payments-international-payment-id" [
   international_payment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1447,7 +1447,7 @@ export def "international-payments get" [
 #
 # GET /international-payments/{InternationalPaymentId}/payment-details
 # operationId: GetInternationalPaymentsInternationalPaymentIdPaymentDetails
-export def "international-payments-payment-details get" [
+export def "get-international-payments-international-payment-id-payment-details" [
   international_payment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1492,7 +1492,7 @@ export def "international-payments-payment-details get" [
 # operationId: CreateInternationalScheduledPaymentConsents
 # --Data shape: {Authorisation?: record, Initiation: record, Permission: "Create", ReadRefundAccount?: "No"|"Yes", SCASupportData?: record}
 # --Risk shape: {DeliveryAddress?: record, MerchantCategoryCode?: string, MerchantCustomerIdentification?: string, PaymentContextCode?: "BillPayment"|"EcommerceGoods"|"EcommerceServices"|"Other"|"PartyToParty"}
-export def "international-scheduled-payment-consents create" [
+export def "create-international-scheduled-payment-consents" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1540,7 +1540,7 @@ export def "international-scheduled-payment-consents create" [
 #
 # GET /international-scheduled-payment-consents/{ConsentId}
 # operationId: GetInternationalScheduledPaymentConsentsConsentId
-export def "international-scheduled-payment-consents get" [
+export def "get-international-scheduled-payment-consents-consent-id" [
   consent_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1583,7 +1583,7 @@ export def "international-scheduled-payment-consents get" [
 #
 # GET /international-scheduled-payment-consents/{ConsentId}/funds-confirmation
 # operationId: GetInternationalScheduledPaymentConsentsConsentIdFundsConfirmation
-export def "international-scheduled-payment-consents-funds-confirmation get" [
+export def "get-international-scheduled-payment-consents-consent-id-funds-confirmation" [
   consent_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1628,7 +1628,7 @@ export def "international-scheduled-payment-consents-funds-confirmation get" [
 # operationId: CreateInternationalScheduledPayments
 # --Data shape: {ConsentId: string, Initiation: record}
 # --Risk shape: {DeliveryAddress?: record, MerchantCategoryCode?: string, MerchantCustomerIdentification?: string, PaymentContextCode?: "BillPayment"|"EcommerceGoods"|"EcommerceServices"|"Other"|"PartyToParty"}
-export def "international-scheduled-payments create" [
+export def "create-international-scheduled-payments" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1676,7 +1676,7 @@ export def "international-scheduled-payments create" [
 #
 # GET /international-scheduled-payments/{InternationalScheduledPaymentId}
 # operationId: GetInternationalScheduledPaymentsInternationalScheduledPaymentId
-export def "international-scheduled-payments get" [
+export def "get-international-scheduled-payments-international-scheduled-payment-id" [
   international_scheduled_payment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1719,7 +1719,7 @@ export def "international-scheduled-payments get" [
 #
 # GET /international-scheduled-payments/{InternationalScheduledPaymentId}/payment-details
 # operationId: GetInternationalScheduledPaymentsInternationalScheduledPaymentIdPaymentDetails
-export def "international-scheduled-payments-payment-details get" [
+export def "get-international-scheduled-payments-international-scheduled-payment-id-payment-details" [
   international_scheduled_payment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1764,7 +1764,7 @@ export def "international-scheduled-payments-payment-details get" [
 # operationId: CreateInternationalStandingOrderConsents
 # --Data shape: {Authorisation?: record, Initiation: record, Permission: "Create", ReadRefundAccount?: "No"|"Yes", SCASupportData?: record}
 # --Risk shape: {DeliveryAddress?: record, MerchantCategoryCode?: string, MerchantCustomerIdentification?: string, PaymentContextCode?: "BillPayment"|"EcommerceGoods"|"EcommerceServices"|"Other"|"PartyToParty"}
-export def "international-standing-order-consents create" [
+export def "create-international-standing-order-consents" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1812,7 +1812,7 @@ export def "international-standing-order-consents create" [
 #
 # GET /international-standing-order-consents/{ConsentId}
 # operationId: GetInternationalStandingOrderConsentsConsentId
-export def "international-standing-order-consents get" [
+export def "get-international-standing-order-consents-consent-id" [
   consent_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1857,7 +1857,7 @@ export def "international-standing-order-consents get" [
 # operationId: CreateInternationalStandingOrders
 # --Data shape: {ConsentId: string, Initiation: record}
 # --Risk shape: {DeliveryAddress?: record, MerchantCategoryCode?: string, MerchantCustomerIdentification?: string, PaymentContextCode?: "BillPayment"|"EcommerceGoods"|"EcommerceServices"|"Other"|"PartyToParty"}
-export def "international-standing-orders create" [
+export def "create-international-standing-orders" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1905,7 +1905,7 @@ export def "international-standing-orders create" [
 #
 # GET /international-standing-orders/{InternationalStandingOrderPaymentId}
 # operationId: GetInternationalStandingOrdersInternationalStandingOrderPaymentId
-export def "international-standing-orders get-payment" [
+export def "get-international-standing-orders-international-standing-order-payment-id" [
   international_standing_order_payment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1948,7 +1948,7 @@ export def "international-standing-orders get-payment" [
 #
 # GET /international-standing-orders/{InternationalStandingOrderPaymentId}/payment-details
 # operationId: GetInternationalStandingOrdersInternationalStandingOrderPaymentIdPaymentDetails
-export def "international-standing-orders-payment-details get" [
+export def "get-international-standing-orders-international-standing-order-payment-id-payment-details" [
   international_standing_order_payment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

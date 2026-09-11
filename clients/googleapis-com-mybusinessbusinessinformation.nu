@@ -119,7 +119,7 @@ def view-completer [] { ["BASIC" "CATEGORY_VIEW_UNSPECIFIED" "FULL"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "attributes list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "mybusinessbusinessinformation-attributes-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -143,7 +143,7 @@ export def commands []: nothing -> table {
 #
 # GET /v1/attributes
 # operationId: mybusinessbusinessinformation.attributes.list
-export def "attributes list" [
+export def "mybusinessbusinessinformation-attributes-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -196,7 +196,7 @@ export def "attributes list" [
 #
 # GET /v1/categories
 # operationId: mybusinessbusinessinformation.categories.list
-export def "categories list" [
+export def "mybusinessbusinessinformation-categories-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -248,7 +248,7 @@ export def "categories list" [
 #
 # GET /v1/categories:batchGet
 # operationId: mybusinessbusinessinformation.categories.batchGet
-export def "categories-batch-get get" [
+export def "mybusinessbusinessinformation-categories-batch-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -298,7 +298,7 @@ export def "categories-batch-get get" [
 #
 # GET /v1/chains:search
 # operationId: mybusinessbusinessinformation.chains.search
-export def "chains-search list" [
+export def "mybusinessbusinessinformation-chains-search" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -347,7 +347,7 @@ export def "chains-search list" [
 # POST /v1/googleLocations:search
 # operationId: mybusinessbusinessinformation.googleLocations.search
 # --location shape: {adWordsLocationExtensions?: record, categories?: record, labels?: list<string>, languageCode?: string, latlng?: record, metadata?: record, moreHours?: list, name?: string, openInfo?: record, phoneNumbers?: record, profile?: record, regularHours?: record, relationshipData?: record, serviceArea?: record, serviceItems?: list, specialHours?: record, storeCode?: string, storefrontAddress?: record, title?: string, websiteUri?: string}
-export def "google-locations-search list" [
+export def "mybusinessbusinessinformation-google-locations-search" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -399,7 +399,7 @@ export def "google-locations-search list" [
 #
 # DELETE /v1/{name}
 # operationId: mybusinessbusinessinformation.locations.delete
-export def "locations delete" [
+export def "mybusinessbusinessinformation-locations-delete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -447,7 +447,7 @@ export def "locations delete" [
 #
 # GET /v1/{name}
 # operationId: mybusinessbusinessinformation.locations.getAttributes
-export def "locations get-attributes" [
+export def "mybusinessbusinessinformation-locations-get-attributes" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -496,7 +496,7 @@ export def "locations get-attributes" [
 # PATCH /v1/{name}
 # operationId: mybusinessbusinessinformation.locations.updateAttributes
 # --attributes item shape: {name?: string, repeatedEnumValue?: record, uriValues?: list, values?: list}
-export def "locations update-attributes" [
+export def "mybusinessbusinessinformation-locations-update-attributes" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -550,7 +550,7 @@ export def "locations update-attributes" [
 #
 # POST /v1/{name}:associate
 # operationId: mybusinessbusinessinformation.locations.associate
-export def "locations create-associate" [
+export def "mybusinessbusinessinformation-locations-associate" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -602,7 +602,7 @@ export def "locations create-associate" [
 #
 # POST /v1/{name}:clearLocationAssociation
 # operationId: mybusinessbusinessinformation.locations.clearLocationAssociation
-export def "locations create-clear-association" [
+export def "mybusinessbusinessinformation-locations-clear-location-association" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -654,7 +654,7 @@ export def "locations create-clear-association" [
 #
 # GET /v1/{name}:getGoogleUpdated
 # operationId: mybusinessbusinessinformation.locations.attributes.getGoogleUpdated
-export def "locations get-google-updated" [
+export def "mybusinessbusinessinformation-locations-attributes-get-google-updated" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -703,7 +703,7 @@ export def "locations get-google-updated" [
 #
 # GET /v1/{parent}/locations
 # operationId: mybusinessbusinessinformation.accounts.locations.list
-export def "locations list" [
+export def "mybusinessbusinessinformation-accounts-locations-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -769,7 +769,7 @@ export def "locations list" [
 # --serviceItems item shape: {freeFormServiceItem?: record, price?: record, structuredServiceItem?: record}
 # --specialHours shape: {specialHourPeriods?: list}
 # --storefrontAddress shape: {addressLines?: list<string>, administrativeArea?: string, languageCode?: string, locality?: string, organization?: string, postalCode?: string, recipients?: list<string>, regionCode?: string, revision?: int, sortingCode?: string, sublocality?: string}
-export def "locations create" [
+export def "mybusinessbusinessinformation-accounts-locations-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

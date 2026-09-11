@@ -112,7 +112,7 @@ def x-amz-target-completer-11 [] { ["Firehose_20150804.UpdateDestination"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "api create-delivery-stream" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "create-delivery-stream" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -136,7 +136,7 @@ export def commands []: nothing -> table {
 #
 # POST /
 # operationId: CreateDeliveryStream
-export def "api create-delivery-stream" [
+export def "create-delivery-stream" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -196,7 +196,7 @@ export def "api create-delivery-stream" [
 #
 # POST /
 # operationId: DeleteDeliveryStream
-export def "api delete-delivery-stream" [
+export def "delete-delivery-stream" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -245,7 +245,7 @@ export def "api delete-delivery-stream" [
 #
 # POST /
 # operationId: DescribeDeliveryStream
-export def "api get-delivery-stream" [
+export def "describe-delivery-stream" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -295,7 +295,7 @@ export def "api get-delivery-stream" [
 #
 # POST /
 # operationId: ListDeliveryStreams
-export def "api list-delivery-streams" [
+export def "list-delivery-streams" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -345,7 +345,7 @@ export def "api list-delivery-streams" [
 #
 # POST /
 # operationId: ListTagsForDeliveryStream
-export def "api list-tags-for-delivery-stream" [
+export def "list-tags-for-delivery-stream" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -395,7 +395,7 @@ export def "api list-tags-for-delivery-stream" [
 #
 # POST /
 # operationId: PutRecord
-export def "api update-record" [
+export def "put-record" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -444,7 +444,7 @@ export def "api update-record" [
 #
 # POST /
 # operationId: PutRecordBatch
-export def "api update-record-batch" [
+export def "put-record-batch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -493,7 +493,7 @@ export def "api update-record-batch" [
 #
 # POST /
 # operationId: StartDeliveryStreamEncryption
-export def "api start-delivery-stream-encryption" [
+export def "start-delivery-stream-encryption" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -542,7 +542,7 @@ export def "api start-delivery-stream-encryption" [
 #
 # POST /
 # operationId: StopDeliveryStreamEncryption
-export def "api stop-delivery-stream-encryption" [
+export def "stop-delivery-stream-encryption" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -590,7 +590,7 @@ export def "api stop-delivery-stream-encryption" [
 #
 # POST /
 # operationId: TagDeliveryStream
-export def "api tag-delivery-stream" [
+export def "tag-delivery-stream" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -639,7 +639,7 @@ export def "api tag-delivery-stream" [
 #
 # POST /
 # operationId: UntagDeliveryStream
-export def "api untag-delivery-stream" [
+export def "untag-delivery-stream" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -688,7 +688,7 @@ export def "api untag-delivery-stream" [
 #
 # POST /
 # operationId: UpdateDestination
-export def "api update-destination" [
+export def "update-destination" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

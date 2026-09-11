@@ -129,7 +129,7 @@ def alt-completer [] { ["json" "media" "proto"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "v1alpha1-claims-search list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "factchecktools-claims-search" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -153,7 +153,7 @@ export def commands []: nothing -> table {
 #
 # GET /v1alpha1/claims:search
 # operationId: factchecktools.claims.search
-export def "v1alpha1-claims-search list" [
+export def "factchecktools-claims-search" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -206,7 +206,7 @@ export def "v1alpha1-claims-search list" [
 #
 # GET /v1alpha1/pages
 # operationId: factchecktools.pages.list
-export def "v1alpha1-pages list" [
+export def "factchecktools-pages-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -259,7 +259,7 @@ export def "v1alpha1-pages list" [
 # operationId: factchecktools.pages.create
 # --claimReviewAuthor shape: {imageUrl?: string, name?: string}
 # --claimReviewMarkups item shape: {claimAppearances?: list<string>, claimAuthor?: record, claimDate?: string, claimFirstAppearance?: string, claimLocation?: string, claimReviewed?: string, rating?: record, url?: string}
-export def "v1alpha1-pages create" [
+export def "factchecktools-pages-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -314,7 +314,7 @@ export def "v1alpha1-pages create" [
 #
 # DELETE /v1alpha1/{name}
 # operationId: factchecktools.pages.delete
-export def "v1alpha1 delete" [
+export def "factchecktools-pages-delete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -362,7 +362,7 @@ export def "v1alpha1 delete" [
 #
 # GET /v1alpha1/{name}
 # operationId: factchecktools.pages.get
-export def "v1alpha1 get" [
+export def "factchecktools-pages-get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -412,7 +412,7 @@ export def "v1alpha1 get" [
 # operationId: factchecktools.pages.update
 # --claimReviewAuthor shape: {imageUrl?: string, name?: string}
 # --claimReviewMarkups item shape: {claimAppearances?: list<string>, claimAuthor?: record, claimDate?: string, claimFirstAppearance?: string, claimLocation?: string, claimReviewed?: string, rating?: record, url?: string}
-export def "v1alpha1 update" [
+export def "factchecktools-pages-update" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)

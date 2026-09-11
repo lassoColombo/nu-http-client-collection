@@ -123,7 +123,7 @@ def validate-policy-resource-type-completer [] { ["AWS::IAM::AssumeRolePolicyDoc
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "archive-rule archive-apply" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "apply-archive-rule" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -147,7 +147,7 @@ export def commands []: nothing -> table {
 #
 # PUT /archive-rule
 # operationId: ApplyArchiveRule
-export def "archive-rule archive-apply" [
+export def "apply-archive-rule" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -196,7 +196,7 @@ export def "archive-rule archive-apply" [
 #
 # PUT /policy/generation/{jobId}
 # operationId: CancelPolicyGeneration
-export def "policy-generation cancel" [
+export def "cancel-policy-generation" [
   job_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -241,7 +241,7 @@ export def "policy-generation cancel" [
 #
 # GET /policy/generation/{jobId}
 # operationId: GetGeneratedPolicy
-export def "policy-generation get-generated" [
+export def "get-generated-policy" [
   job_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -289,7 +289,7 @@ export def "policy-generation get-generated" [
 #
 # PUT /access-preview
 # operationId: CreateAccessPreview
-export def "access-preview create" [
+export def "create-access-preview" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -339,7 +339,7 @@ export def "access-preview create" [
 # PUT /analyzer
 # operationId: CreateAnalyzer
 # --archiveRules item shape: {ruleName: any, filter: any}
-export def "analyzer create" [
+export def "create-analyzer" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -390,7 +390,7 @@ export def "analyzer create" [
 #
 # GET /analyzer
 # operationId: ListAnalyzers
-export def "analyzer list" [
+export def "list-analyzers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -437,7 +437,7 @@ export def "analyzer list" [
 #
 # PUT /analyzer/{analyzerName}/archive-rule
 # operationId: CreateArchiveRule
-export def "analyzer-archive-rule create" [
+export def "create-archive-rule" [
   analyzer_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -488,7 +488,7 @@ export def "analyzer-archive-rule create" [
 #
 # GET /analyzer/{analyzerName}/archive-rule
 # operationId: ListArchiveRules
-export def "analyzer-archive-rule list" [
+export def "list-archive-rules" [
   analyzer_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -536,7 +536,7 @@ export def "analyzer-archive-rule list" [
 #
 # DELETE /analyzer/{analyzerName}
 # operationId: DeleteAnalyzer
-export def "analyzer delete" [
+export def "delete-analyzer" [
   analyzer_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -583,7 +583,7 @@ export def "analyzer delete" [
 #
 # GET /analyzer/{analyzerName}
 # operationId: GetAnalyzer
-export def "analyzer get" [
+export def "get-analyzer" [
   analyzer_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -628,7 +628,7 @@ export def "analyzer get" [
 #
 # DELETE /analyzer/{analyzerName}/archive-rule/{ruleName}
 # operationId: DeleteArchiveRule
-export def "analyzer-archive-rule delete" [
+export def "delete-archive-rule" [
   analyzer_name: string
   rule_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -677,7 +677,7 @@ export def "analyzer-archive-rule delete" [
 #
 # GET /analyzer/{analyzerName}/archive-rule/{ruleName}
 # operationId: GetArchiveRule
-export def "analyzer-archive-rule get" [
+export def "get-archive-rule" [
   analyzer_name: string
   rule_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -724,7 +724,7 @@ export def "analyzer-archive-rule get" [
 #
 # PUT /analyzer/{analyzerName}/archive-rule/{ruleName}
 # operationId: UpdateArchiveRule
-export def "analyzer-archive-rule update" [
+export def "update-archive-rule" [
   analyzer_name: string
   rule_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -776,7 +776,7 @@ export def "analyzer-archive-rule update" [
 #
 # GET /access-preview/{accessPreviewId}
 # operationId: GetAccessPreview
-export def "access-preview get" [
+export def "get-access-preview" [
   access_preview_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -823,7 +823,7 @@ export def "access-preview get" [
 #
 # GET /analyzed-resource
 # operationId: GetAnalyzedResource
-export def "analyzed-resource get" [
+export def "get-analyzed-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -869,7 +869,7 @@ export def "analyzed-resource get" [
 #
 # GET /finding/{id}
 # operationId: GetFinding
-export def "finding get" [
+export def "get-finding" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -916,7 +916,7 @@ export def "finding get" [
 #
 # POST /access-preview/{accessPreviewId}
 # operationId: ListAccessPreviewFindings
-export def "access-preview list-findings" [
+export def "list-access-preview-findings" [
   access_preview_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -971,7 +971,7 @@ export def "access-preview list-findings" [
 #
 # GET /access-preview
 # operationId: ListAccessPreviews
-export def "access-preview list" [
+export def "list-access-previews" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1018,7 +1018,7 @@ export def "access-preview list" [
 #
 # POST /analyzed-resource
 # operationId: ListAnalyzedResources
-export def "analyzed-resource list" [
+export def "list-analyzed-resources" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1072,7 +1072,7 @@ export def "analyzed-resource list" [
 # POST /finding
 # operationId: ListFindings
 # --sort shape: {attributeName?: any, orderBy?: any}
-export def "finding list" [
+export def "list-findings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1126,7 +1126,7 @@ export def "finding list" [
 #
 # PUT /finding
 # operationId: UpdateFindings
-export def "finding update" [
+export def "update-findings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1177,7 +1177,7 @@ export def "finding update" [
 #
 # GET /policy/generation
 # operationId: ListPolicyGenerations
-export def "policy-generation list" [
+export def "list-policy-generations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1226,7 +1226,7 @@ export def "policy-generation list" [
 # operationId: StartPolicyGeneration
 # --policyGenerationDetails shape: {principalArn?: any}
 # --cloudTrailDetails shape: {trails?: any, accessRole?: any, startTime?: any, endTime?: any}
-export def "policy-generation start" [
+export def "start-policy-generation" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1275,7 +1275,7 @@ export def "policy-generation start" [
 #
 # GET /tags/{resourceArn}
 # operationId: ListTagsForResource
-export def "tags list-for-resource" [
+export def "list-tags-for-resource" [
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1320,7 +1320,7 @@ export def "tags list-for-resource" [
 #
 # POST /tags/{resourceArn}
 # operationId: TagResource
-export def "tags tag-resource" [
+export def "tag-resource" [
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1369,7 +1369,7 @@ export def "tags tag-resource" [
 #
 # POST /resource/scan
 # operationId: StartResourceScan
-export def "resource-scan start" [
+export def "start-resource-scan" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1418,7 +1418,7 @@ export def "resource-scan start" [
 #
 # DELETE /tags/{resourceArn}
 # operationId: UntagResource
-export def "tags untag-resource" [
+export def "untag-resource" [
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1465,7 +1465,7 @@ export def "tags untag-resource" [
 #
 # POST /policy/validation
 # operationId: ValidatePolicy
-export def "policy-validation validate" [
+export def "validate-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

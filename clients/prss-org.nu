@@ -141,7 +141,7 @@ def format-completer [] { ["radiodns"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "broadcastservices list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-api-v2-broadcastservices" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -164,7 +164,7 @@ export def commands []: nothing -> table {
 # Gets broadcast services matching the given criteria.
 #
 # GET /api/v2/broadcastservices
-export def "broadcastservices list" [
+export def "get-api-v2-broadcastservices" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -201,7 +201,7 @@ export def "broadcastservices list" [
 # Returns the broadcast service matching the given ID.
 #
 # GET /api/v2/broadcastservices/{id}
-export def "broadcastservices get" [
+export def "get-api-v2-broadcastservices-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -236,7 +236,7 @@ export def "broadcastservices get" [
 # Upload a file.
 #
 # POST /api/v2/cddrive/files/content
-export def "cddrive-files-content create" [
+export def "post-api-v2-cddrive-files-content" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -280,7 +280,7 @@ export def "cddrive-files-content create" [
 # Delete a file.
 #
 # DELETE /api/v2/cddrive/files/{file-id}
-export def "cddrive-files delete" [
+export def "delete-api-v2-cddrive-files-file-id" [
   file_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -315,7 +315,7 @@ export def "cddrive-files delete" [
 # Get file information.
 #
 # GET /api/v2/cddrive/files/{file-id}
-export def "cddrive-files get" [
+export def "get-api-v2-cddrive-files-file-id" [
   file_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -350,7 +350,7 @@ export def "cddrive-files get" [
 # UNDER DEVELOPMENT - Download a file.
 #
 # GET /api/v2/cddrive/files/{file-id}/content
-export def "cddrive-files-content get" [
+export def "get-api-v2-cddrive-files-file-id-content" [
   file_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -388,7 +388,7 @@ export def "cddrive-files-content get" [
 # Create a folder.
 #
 # POST /api/v2/cddrive/folders
-export def "cddrive-folders create" [
+export def "post-api-v2-cddrive-folders" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -427,7 +427,7 @@ export def "cddrive-folders create" [
 # UNDER DEVELOPMENT - Delete a folder.
 #
 # DELETE /api/v2/cddrive/folders/{folder-id}
-export def "cddrive-folders delete" [
+export def "delete-api-v2-cddrive-folders-folder-id" [
   folder_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -464,7 +464,7 @@ export def "cddrive-folders delete" [
 # UNDER DEVELOPMENT - Get folder information.
 #
 # GET /api/v2/cddrive/folders/{folder-id}
-export def "cddrive-folders get" [
+export def "get-api-v2-cddrive-folders-folder-id" [
   folder_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -499,7 +499,7 @@ export def "cddrive-folders get" [
 # Get the items in the folder.
 #
 # GET /api/v2/cddrive/folders/{folder-id}/items
-export def "cddrive-folders-items get" [
+export def "get-api-v2-cddrive-folders-folder-id-items" [
   folder_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -537,7 +537,7 @@ export def "cddrive-folders-items get" [
 # Gets episodes matching the given criteria.
 #
 # GET /api/v2/episodes
-export def "episodes list" [
+export def "get-api-v2-episodes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -578,7 +578,7 @@ export def "episodes list" [
 # Returns the episode matching the given ID.
 #
 # GET /api/v2/episodes/{id}
-export def "episodes get" [
+export def "get-api-v2-episodes-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -617,7 +617,7 @@ export def "episodes get" [
 # Docs: /api/epg-cd-mapping.html — Find RadioDns to ContentDepot Mapping here
 # --program shape: {airDate: string, title: string}
 @deprecated
-export def "metapub-program-information-batch create" [
+export def "post-api-v2-metapub-program-information-batch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -659,7 +659,7 @@ export def "metapub-program-information-batch create" [
 # GET /api/v2/metapub/program-information/batch/{batch-id}
 # DEPRECATED
 @deprecated
-export def "metapub-program-information-batch get" [
+export def "get-api-v2-metapub-program-information-batch-batch-id" [
   batch_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -694,7 +694,7 @@ export def "metapub-program-information-batch get" [
 # Returns the pieces matching the query parameters.
 #
 # GET /api/v2/pieces
-export def "pieces list" [
+export def "get-api-v2-pieces" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -729,7 +729,7 @@ export def "pieces list" [
 # Create a new piece.
 #
 # POST /api/v2/pieces
-export def "pieces create" [
+export def "post-api-v2-pieces" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -777,7 +777,7 @@ export def "pieces create" [
 # Deletes the piece with the given ID.
 #
 # DELETE /api/v2/pieces/{id}
-export def "pieces delete" [
+export def "delete-api-v2-pieces-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -812,7 +812,7 @@ export def "pieces delete" [
 # Returns the piece matching the given ID.
 #
 # GET /api/v2/pieces/{id}
-export def "pieces get" [
+export def "get-api-v2-pieces-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -847,7 +847,7 @@ export def "pieces get" [
 # Optimized free-text search for programs using various filters.
 #
 # GET /api/v2/programs/search
-export def "programs-search get" [
+export def "get-api-v2-programs-search" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -884,7 +884,7 @@ export def "programs-search get" [
 # Returns the program matching the given ID.
 #
 # GET /api/v2/programs/{id}
-export def "programs get" [
+export def "get-api-v2-programs-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -919,7 +919,7 @@ export def "programs get" [
 # Returns the segments matching the query parameters.
 #
 # GET /api/v2/segments
-export def "segments list" [
+export def "get-api-v2-segments" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -958,7 +958,7 @@ export def "segments list" [
 # Creates a new segment.
 #
 # POST /api/v2/segments
-export def "segments create" [
+export def "post-api-v2-segments" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1000,7 +1000,7 @@ export def "segments create" [
 # Deletes the segment with the given ID.
 #
 # DELETE /api/v2/segments/{id}
-export def "segments delete" [
+export def "delete-api-v2-segments-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1035,7 +1035,7 @@ export def "segments delete" [
 # Returns the segment matching the given ID.
 #
 # GET /api/v2/segments/{id}
-export def "segments get" [
+export def "get-api-v2-segments-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1070,7 +1070,7 @@ export def "segments get" [
 # UNDER DEVELOPMENT - Returns the audio content segment matching the given ID.
 #
 # GET /api/v2/segments/{id}/content
-export def "segments-content get" [
+export def "get-api-v2-segments-id-content" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1105,7 +1105,7 @@ export def "segments-content get" [
 # Returns the spot insertions matching the query parameters.
 #
 # GET /api/v2/spotinsertions
-export def "spotinsertions list" [
+export def "get-api-v2-spotinsertions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1142,7 +1142,7 @@ export def "spotinsertions list" [
 # Creates a new spot insertion.
 #
 # POST /api/v2/spotinsertions
-export def "spotinsertions create" [
+export def "post-api-v2-spotinsertions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1185,7 +1185,7 @@ export def "spotinsertions create" [
 # Deletes the spot insertion with the given ID.
 #
 # DELETE /api/v2/spotinsertions/{id}
-export def "spotinsertions delete" [
+export def "delete-api-v2-spotinsertions-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1220,7 +1220,7 @@ export def "spotinsertions delete" [
 # Returns the spot insertion matching the given ID.
 #
 # GET /api/v2/spotinsertions/{id}
-export def "spotinsertions get" [
+export def "get-api-v2-spotinsertions-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1255,7 +1255,7 @@ export def "spotinsertions get" [
 # Returns the spots matching the query parameters.
 #
 # GET /api/v2/spots
-export def "spots list" [
+export def "get-api-v2-spots" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1292,7 +1292,7 @@ export def "spots list" [
 # Creates a new spot.
 #
 # POST /api/v2/spots
-export def "spots create" [
+export def "post-api-v2-spots" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1332,7 +1332,7 @@ export def "spots create" [
 # Deletes the spot with the given ID.
 #
 # DELETE /api/v2/spots/{id}
-export def "spots delete" [
+export def "delete-api-v2-spots-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1367,7 +1367,7 @@ export def "spots delete" [
 # Returns the spot matching the given ID.
 #
 # GET /api/v2/spots/{id}
-export def "spots get" [
+export def "get-api-v2-spots-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1402,7 +1402,7 @@ export def "spots get" [
 # Get the group information document.
 #
 # GET /radiodns/spi/3.1/GI.xml
-export def "radiodns-spi-3-1-gi-xml get" [
+export def "get-radiodns-spi-3-1-gi-xml" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1435,7 +1435,7 @@ export def "radiodns-spi-3-1-gi-xml get" [
 # Get the service information document.
 #
 # GET /radiodns/spi/3.1/SI.xml
-export def "radiodns-spi-3-1-si-xml get" [
+export def "get-radiodns-spi-3-1-si-xml" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1468,7 +1468,7 @@ export def "radiodns-spi-3-1-si-xml get" [
 # Get the program information document.
 #
 # GET /radiodns/spi/3.1/id/{fqdn}/{sid}/{date}_PI.xml
-export def "radiodns-spi-3-1-id get" [
+export def "get-radiodns-spi-3-1-id-fqdn-sid-date-pi-xml" [
   fqdn: string
   sid: string
   date: string

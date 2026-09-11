@@ -124,7 +124,7 @@ def user-confirmation-completer [] { ["NotRequired" "Required"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-hybrid-data-operations list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "operations-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -148,7 +148,7 @@ export def commands []: nothing -> table {
 #
 # GET /providers/Microsoft.HybridData/operations
 # operationId: Operations_List
-export def "providers-microsoft-hybrid-data-operations list" [
+export def "operations-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -184,7 +184,7 @@ export def "providers-microsoft-hybrid-data-operations list" [
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.HybridData/dataManagers
 # operationId: DataManagers_List
-export def "subscriptions-providers-microsoft-hybrid-data-data-managers list" [
+export def "data-managers-list" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -222,7 +222,7 @@ export def "subscriptions-providers-microsoft-hybrid-data-data-managers list" [
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.HybridData/dataManagers
 # operationId: DataManagers_ListByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-hybrid-data-data-managers list" [
+export def "data-managers-list-by-resource-group" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -262,7 +262,7 @@ export def "subscriptions-resource-groups-providers-microsoft-hybrid-data-data-m
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.HybridData/dataManagers/{dataManagerName}
 # operationId: DataManagers_Delete
-export def "subscriptions-resource-groups-providers-microsoft-hybrid-data-data-managers delete" [
+export def "data-managers-delete" [
   subscription_id: string
   resource_group_name: string
   data_manager_name: string
@@ -304,7 +304,7 @@ export def "subscriptions-resource-groups-providers-microsoft-hybrid-data-data-m
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.HybridData/dataManagers/{dataManagerName}
 # operationId: DataManagers_Get
-export def "subscriptions-resource-groups-providers-microsoft-hybrid-data-data-managers get" [
+export def "data-managers-get" [
   subscription_id: string
   resource_group_name: string
   data_manager_name: string
@@ -347,7 +347,7 @@ export def "subscriptions-resource-groups-providers-microsoft-hybrid-data-data-m
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.HybridData/dataManagers/{dataManagerName}
 # operationId: DataManagers_Update
 # --sku shape: {name?: string, tier?: string}
-export def "subscriptions-resource-groups-providers-microsoft-hybrid-data-data-managers update" [
+export def "data-managers-update" [
   subscription_id: string
   resource_group_name: string
   data_manager_name: string
@@ -398,7 +398,7 @@ export def "subscriptions-resource-groups-providers-microsoft-hybrid-data-data-m
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.HybridData/dataManagers/{dataManagerName}
 # operationId: DataManagers_Create
 # --sku shape: {name?: string, tier?: string}
-export def "subscriptions-resource-groups-providers-microsoft-hybrid-data-data-managers create" [
+export def "data-managers-create" [
   subscription_id: string
   resource_group_name: string
   data_manager_name: string
@@ -447,7 +447,7 @@ export def "subscriptions-resource-groups-providers-microsoft-hybrid-data-data-m
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.HybridData/dataManagers/{dataManagerName}/dataServices
 # operationId: DataServices_ListByDataManager
-export def "subscriptions-resource-groups-providers-microsoft-hybrid-data-data-managers-data-services list" [
+export def "data-services-list-by-data-manager" [
   subscription_id: string
   resource_group_name: string
   data_manager_name: string
@@ -489,7 +489,7 @@ export def "subscriptions-resource-groups-providers-microsoft-hybrid-data-data-m
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.HybridData/dataManagers/{dataManagerName}/dataServices/{dataServiceName}
 # operationId: DataServices_Get
-export def "subscriptions-resource-groups-providers-microsoft-hybrid-data-data-managers-data-services get" [
+export def "data-services-get" [
   subscription_id: string
   resource_group_name: string
   data_manager_name: string
@@ -533,7 +533,7 @@ export def "subscriptions-resource-groups-providers-microsoft-hybrid-data-data-m
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.HybridData/dataManagers/{dataManagerName}/dataServices/{dataServiceName}/jobDefinitions
 # operationId: JobDefinitions_ListByDataService
-export def "subscriptions-resource-groups-providers-microsoft-hybrid-data-data-managers-data-services-job-definitions list" [
+export def "job-definitions-list-by-data-service" [
   subscription_id: string
   resource_group_name: string
   data_manager_name: string
@@ -578,7 +578,7 @@ export def "subscriptions-resource-groups-providers-microsoft-hybrid-data-data-m
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.HybridData/dataManagers/{dataManagerName}/dataServices/{dataServiceName}/jobDefinitions/{jobDefinitionName}
 # operationId: JobDefinitions_Delete
-export def "subscriptions-resource-groups-providers-microsoft-hybrid-data-data-managers-data-services-job-definitions delete" [
+export def "job-definitions-delete" [
   subscription_id: string
   resource_group_name: string
   data_manager_name: string
@@ -624,7 +624,7 @@ export def "subscriptions-resource-groups-providers-microsoft-hybrid-data-data-m
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.HybridData/dataManagers/{dataManagerName}/dataServices/{dataServiceName}/jobDefinitions/{jobDefinitionName}
 # operationId: JobDefinitions_Get
-export def "subscriptions-resource-groups-providers-microsoft-hybrid-data-data-managers-data-services-job-definitions get" [
+export def "job-definitions-get" [
   subscription_id: string
   resource_group_name: string
   data_manager_name: string
@@ -671,7 +671,7 @@ export def "subscriptions-resource-groups-providers-microsoft-hybrid-data-data-m
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.HybridData/dataManagers/{dataManagerName}/dataServices/{dataServiceName}/jobDefinitions/{jobDefinitionName}
 # operationId: JobDefinitions_CreateOrUpdate
 # --properties shape: {customerSecrets?: list, dataServiceInput?: record, dataSinkId: string, dataSourceId: string, lastModifiedTime?: string, runLocation?: "none"|"australiaeast"|"australiasoutheast"|"brazilsouth"|"canadacentral"|"canadaeast"|"centralindia"|"centralus"|"eastasia"|"eastus"|"eastus2"|"japaneast"|"japanwest"|"koreacentral"|"koreasouth"|"southeastasia"|"southcentralus"|"southindia"|"northcentralus"|"northeurope"|"uksouth"|"ukwest"|"westcentralus"|"westeurope"|"westindia"|"westus"|"westus2", ... (3 more fields)}
-export def "subscriptions-resource-groups-providers-microsoft-hybrid-data-data-managers-data-services-job-definitions create-or-update" [
+export def "job-definitions-create-or-update" [
   subscription_id: string
   resource_group_name: string
   data_manager_name: string
@@ -721,7 +721,7 @@ export def "subscriptions-resource-groups-providers-microsoft-hybrid-data-data-m
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.HybridData/dataManagers/{dataManagerName}/dataServices/{dataServiceName}/jobDefinitions/{jobDefinitionName}/jobs
 # operationId: Jobs_ListByJobDefinition
-export def "subscriptions-resource-groups-providers-microsoft-hybrid-data-data-managers-data-services-job-definitions-jobs list" [
+export def "jobs-list-by-job-definition" [
   subscription_id: string
   resource_group_name: string
   data_manager_name: string
@@ -768,7 +768,7 @@ export def "subscriptions-resource-groups-providers-microsoft-hybrid-data-data-m
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.HybridData/dataManagers/{dataManagerName}/dataServices/{dataServiceName}/jobDefinitions/{jobDefinitionName}/jobs/{jobId}
 # operationId: Jobs_Get
-export def "subscriptions-resource-groups-providers-microsoft-hybrid-data-data-managers-data-services-job-definitions-jobs get" [
+export def "jobs-get" [
   subscription_id: string
   resource_group_name: string
   data_manager_name: string
@@ -817,7 +817,7 @@ export def "subscriptions-resource-groups-providers-microsoft-hybrid-data-data-m
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.HybridData/dataManagers/{dataManagerName}/dataServices/{dataServiceName}/jobDefinitions/{jobDefinitionName}/jobs/{jobId}/cancel
 # operationId: Jobs_Cancel
-export def "subscriptions-resource-groups-providers-microsoft-hybrid-data-data-managers-data-services-job-definitions-jobs-cancel cancel" [
+export def "jobs-cancel" [
   subscription_id: string
   resource_group_name: string
   data_manager_name: string
@@ -865,7 +865,7 @@ export def "subscriptions-resource-groups-providers-microsoft-hybrid-data-data-m
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.HybridData/dataManagers/{dataManagerName}/dataServices/{dataServiceName}/jobDefinitions/{jobDefinitionName}/jobs/{jobId}/resume
 # operationId: Jobs_Resume
-export def "subscriptions-resource-groups-providers-microsoft-hybrid-data-data-managers-data-services-job-definitions-jobs-resume create" [
+export def "jobs-resume" [
   subscription_id: string
   resource_group_name: string
   data_manager_name: string
@@ -914,7 +914,7 @@ export def "subscriptions-resource-groups-providers-microsoft-hybrid-data-data-m
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.HybridData/dataManagers/{dataManagerName}/dataServices/{dataServiceName}/jobDefinitions/{jobDefinitionName}/run
 # operationId: JobDefinitions_Run
 # --customerSecrets item shape: {algorithm: "None"|"RSA1_5"|"RSA_OAEP"|"PlainText", keyIdentifier: string, keyValue: string}
-export def "subscriptions-resource-groups-providers-microsoft-hybrid-data-data-managers-data-services-job-definitions-run create" [
+export def "job-definitions-run" [
   subscription_id: string
   resource_group_name: string
   data_manager_name: string
@@ -966,7 +966,7 @@ export def "subscriptions-resource-groups-providers-microsoft-hybrid-data-data-m
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.HybridData/dataManagers/{dataManagerName}/dataServices/{dataServiceName}/jobs
 # operationId: Jobs_ListByDataService
-export def "subscriptions-resource-groups-providers-microsoft-hybrid-data-data-managers-data-services-jobs list" [
+export def "jobs-list-by-data-service" [
   subscription_id: string
   resource_group_name: string
   data_manager_name: string
@@ -1011,7 +1011,7 @@ export def "subscriptions-resource-groups-providers-microsoft-hybrid-data-data-m
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.HybridData/dataManagers/{dataManagerName}/dataStoreTypes
 # operationId: DataStoreTypes_ListByDataManager
-export def "subscriptions-resource-groups-providers-microsoft-hybrid-data-data-managers-data-store-types list" [
+export def "data-store-types-list-by-data-manager" [
   subscription_id: string
   resource_group_name: string
   data_manager_name: string
@@ -1053,7 +1053,7 @@ export def "subscriptions-resource-groups-providers-microsoft-hybrid-data-data-m
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.HybridData/dataManagers/{dataManagerName}/dataStoreTypes/{dataStoreTypeName}
 # operationId: DataStoreTypes_Get
-export def "subscriptions-resource-groups-providers-microsoft-hybrid-data-data-managers-data-store-types get" [
+export def "data-store-types-get" [
   subscription_id: string
   resource_group_name: string
   data_manager_name: string
@@ -1097,7 +1097,7 @@ export def "subscriptions-resource-groups-providers-microsoft-hybrid-data-data-m
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.HybridData/dataManagers/{dataManagerName}/dataStores
 # operationId: DataStores_ListByDataManager
-export def "subscriptions-resource-groups-providers-microsoft-hybrid-data-data-managers-data-stores list" [
+export def "data-stores-list-by-data-manager" [
   subscription_id: string
   resource_group_name: string
   data_manager_name: string
@@ -1140,7 +1140,7 @@ export def "subscriptions-resource-groups-providers-microsoft-hybrid-data-data-m
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.HybridData/dataManagers/{dataManagerName}/dataStores/{dataStoreName}
 # operationId: DataStores_Delete
-export def "subscriptions-resource-groups-providers-microsoft-hybrid-data-data-managers-data-stores delete" [
+export def "data-stores-delete" [
   subscription_id: string
   resource_group_name: string
   data_manager_name: string
@@ -1184,7 +1184,7 @@ export def "subscriptions-resource-groups-providers-microsoft-hybrid-data-data-m
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.HybridData/dataManagers/{dataManagerName}/dataStores/{dataStoreName}
 # operationId: DataStores_Get
-export def "subscriptions-resource-groups-providers-microsoft-hybrid-data-data-managers-data-stores get" [
+export def "data-stores-get" [
   subscription_id: string
   resource_group_name: string
   data_manager_name: string
@@ -1229,7 +1229,7 @@ export def "subscriptions-resource-groups-providers-microsoft-hybrid-data-data-m
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.HybridData/dataManagers/{dataManagerName}/dataStores/{dataStoreName}
 # operationId: DataStores_CreateOrUpdate
 # --properties shape: {customerSecrets?: list, dataStoreTypeId: string, extendedProperties?: record, repositoryId?: string, state: "Disabled"|"Enabled"|"Supported"}
-export def "subscriptions-resource-groups-providers-microsoft-hybrid-data-data-managers-data-stores create-or-update" [
+export def "data-stores-create-or-update" [
   subscription_id: string
   resource_group_name: string
   data_manager_name: string
@@ -1277,7 +1277,7 @@ export def "subscriptions-resource-groups-providers-microsoft-hybrid-data-data-m
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.HybridData/dataManagers/{dataManagerName}/jobDefinitions
 # operationId: JobDefinitions_ListByDataManager
-export def "subscriptions-resource-groups-providers-microsoft-hybrid-data-data-managers-job-definitions list" [
+export def "job-definitions-list-by-data-manager" [
   subscription_id: string
   resource_group_name: string
   data_manager_name: string
@@ -1320,7 +1320,7 @@ export def "subscriptions-resource-groups-providers-microsoft-hybrid-data-data-m
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.HybridData/dataManagers/{dataManagerName}/jobs
 # operationId: Jobs_ListByDataManager
-export def "subscriptions-resource-groups-providers-microsoft-hybrid-data-data-managers-jobs list" [
+export def "jobs-list-by-data-manager" [
   subscription_id: string
   resource_group_name: string
   data_manager_name: string
@@ -1363,7 +1363,7 @@ export def "subscriptions-resource-groups-providers-microsoft-hybrid-data-data-m
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.HybridData/dataManagers/{dataManagerName}/publicKeys
 # operationId: PublicKeys_ListByDataManager
-export def "subscriptions-resource-groups-providers-microsoft-hybrid-data-data-managers-public-keys list" [
+export def "public-keys-list-by-data-manager" [
   subscription_id: string
   resource_group_name: string
   data_manager_name: string
@@ -1405,7 +1405,7 @@ export def "subscriptions-resource-groups-providers-microsoft-hybrid-data-data-m
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.HybridData/dataManagers/{dataManagerName}/publicKeys/{publicKeyName}
 # operationId: PublicKeys_Get
-export def "subscriptions-resource-groups-providers-microsoft-hybrid-data-data-managers-public-keys get" [
+export def "public-keys-get" [
   subscription_id: string
   resource_group_name: string
   data_manager_name: string

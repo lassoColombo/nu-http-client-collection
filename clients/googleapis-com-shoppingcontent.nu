@@ -130,7 +130,7 @@ def order-by-completer [] { ["RETURN_CREATION_TIME_ASC" "RETURN_CREATION_TIME_DE
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "accounts-authinfo get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "content-accounts-authinfo" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -154,7 +154,7 @@ export def commands []: nothing -> table {
 #
 # GET /accounts/authinfo
 # operationId: content.accounts.authinfo
-export def "accounts-authinfo get" [
+export def "content-accounts-authinfo" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -201,7 +201,7 @@ export def "accounts-authinfo get" [
 # POST /accounts/batch
 # operationId: content.accounts.custombatch
 # --entries item shape: {account?: record, accountId?: string, batchId?: int, force?: bool, labelIds?: list<string>, linkRequest?: record, merchantId?: string, method?: string, overwrite?: bool}
-export def "accounts-batch create-custombatch" [
+export def "content-accounts-custombatch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -253,7 +253,7 @@ export def "accounts-batch create-custombatch" [
 # POST /accountstatuses/batch
 # operationId: content.accountstatuses.custombatch
 # --entries item shape: {accountId?: string, batchId?: int, destinations?: list<string>, merchantId?: string, method?: string}
-export def "accountstatuses-batch create-custombatch" [
+export def "content-accountstatuses-custombatch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -304,7 +304,7 @@ export def "accountstatuses-batch create-custombatch" [
 # POST /accounttax/batch
 # operationId: content.accounttax.custombatch
 # --entries item shape: {accountId?: string, accountTax?: record, batchId?: int, merchantId?: string, method?: string}
-export def "accounttax-batch create-custombatch" [
+export def "content-accounttax-custombatch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -356,7 +356,7 @@ export def "accounttax-batch create-custombatch" [
 # POST /datafeeds/batch
 # operationId: content.datafeeds.custombatch
 # --entries item shape: {batchId?: int, datafeed?: record, datafeedId?: string, merchantId?: string, method?: string}
-export def "datafeeds-batch create-custombatch" [
+export def "content-datafeeds-custombatch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -408,7 +408,7 @@ export def "datafeeds-batch create-custombatch" [
 # POST /datafeedstatuses/batch
 # operationId: content.datafeedstatuses.custombatch
 # --entries item shape: {batchId?: int, country?: string, datafeedId?: string, language?: string, merchantId?: string, method?: string}
-export def "datafeedstatuses-batch create-custombatch" [
+export def "content-datafeedstatuses-custombatch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -459,7 +459,7 @@ export def "datafeedstatuses-batch create-custombatch" [
 # POST /liasettings/batch
 # operationId: content.liasettings.custombatch
 # --entries item shape: {accountId?: string, batchId?: int, contactEmail?: string, contactName?: string, country?: string, gmbEmail?: string, liaSettings?: record, merchantId?: string, method?: string, posDataProviderId?: string, posExternalAccountId?: string}
-export def "liasettings-batch create-custombatch" [
+export def "content-liasettings-custombatch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -510,7 +510,7 @@ export def "liasettings-batch create-custombatch" [
 #
 # GET /liasettings/posdataproviders
 # operationId: content.liasettings.listposdataproviders
-export def "liasettings-posdataproviders list" [
+export def "content-liasettings-listposdataproviders" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -557,7 +557,7 @@ export def "liasettings-posdataproviders list" [
 # POST /orders/batch
 # operationId: content.orders.custombatch
 # --entries item shape: {batchId?: int, cancel?: record, cancelLineItem?: record, inStoreRefundLineItem?: record, merchantId?: string, merchantOrderId?: string, method?: string, operationId?: string, orderId?: string, refund?: record, rejectReturnLineItem?: record, returnLineItem?: record, returnRefundLineItem?: record, setLineItemMetadata?: record, shipLineItems?: record, updateLineItemShippingDetails?: record, updateShipment?: record}
-export def "orders-batch create-custombatch" [
+export def "content-orders-custombatch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -608,7 +608,7 @@ export def "orders-batch create-custombatch" [
 # POST /pos/batch
 # operationId: content.pos.custombatch
 # --entries item shape: {batchId?: int, inventory?: record, merchantId?: string, method?: string, sale?: record, store?: record, storeCode?: string, targetMerchantId?: string}
-export def "pos-batch create-custombatch" [
+export def "content-pos-custombatch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -660,7 +660,7 @@ export def "pos-batch create-custombatch" [
 # POST /products/batch
 # operationId: content.products.custombatch
 # --entries item shape: {batchId?: int, merchantId?: string, method?: string, product?: record, productId?: string}
-export def "products-batch create-custombatch" [
+export def "content-products-custombatch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -712,7 +712,7 @@ export def "products-batch create-custombatch" [
 # POST /productstatuses/batch
 # operationId: content.productstatuses.custombatch
 # --entries item shape: {batchId?: int, destinations?: list<string>, includeAttributes?: bool, merchantId?: string, method?: string, productId?: string}
-export def "productstatuses-batch create-custombatch" [
+export def "content-productstatuses-custombatch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -764,7 +764,7 @@ export def "productstatuses-batch create-custombatch" [
 # POST /shippingsettings/batch
 # operationId: content.shippingsettings.custombatch
 # --entries item shape: {accountId?: string, batchId?: int, merchantId?: string, method?: string, shippingSettings?: record}
-export def "shippingsettings-batch create-custombatch" [
+export def "content-shippingsettings-custombatch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -815,7 +815,7 @@ export def "shippingsettings-batch create-custombatch" [
 #
 # GET /{merchantId}/accounts
 # operationId: content.accounts.list
-export def "accounts list" [
+export def "content-accounts-list" [
   merchant_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -870,7 +870,7 @@ export def "accounts list" [
 # --googleMyBusinessLink shape: {gmbEmail?: string, status?: string}
 # --users item shape: {admin?: bool, emailAddress?: string, orderManager?: bool, paymentsAnalyst?: bool, paymentsManager?: bool}
 # --youtubeChannelLinks item shape: {channelId?: string, status?: string}
-export def "accounts create" [
+export def "content-accounts-insert" [
   merchant_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -934,7 +934,7 @@ export def "accounts create" [
 #
 # DELETE /{merchantId}/accounts/{accountId}
 # operationId: content.accounts.delete
-export def "accounts delete" [
+export def "content-accounts-delete" [
   merchant_id: string
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -986,7 +986,7 @@ export def "accounts delete" [
 #
 # GET /{merchantId}/accounts/{accountId}
 # operationId: content.accounts.get
-export def "accounts get" [
+export def "content-accounts-get" [
   merchant_id: string
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1041,7 +1041,7 @@ export def "accounts get" [
 # --googleMyBusinessLink shape: {gmbEmail?: string, status?: string}
 # --users item shape: {admin?: bool, emailAddress?: string, orderManager?: bool, paymentsAnalyst?: bool, paymentsManager?: bool}
 # --youtubeChannelLinks item shape: {channelId?: string, status?: string}
-export def "accounts update" [
+export def "content-accounts-update" [
   merchant_id: string
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1107,7 +1107,7 @@ export def "accounts update" [
 #
 # POST /{merchantId}/accounts/{accountId}/claimwebsite
 # operationId: content.accounts.claimwebsite
-export def "accounts-claimwebsite create" [
+export def "content-accounts-claimwebsite" [
   merchant_id: string
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1158,7 +1158,7 @@ export def "accounts-claimwebsite create" [
 #
 # POST /{merchantId}/accounts/{accountId}/link
 # operationId: content.accounts.link
-export def "accounts-link create" [
+export def "content-accounts-link" [
   merchant_id: string
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1214,7 +1214,7 @@ export def "accounts-link create" [
 #
 # GET /{merchantId}/accountstatuses
 # operationId: content.accountstatuses.list
-export def "accountstatuses list" [
+export def "content-accountstatuses-list" [
   merchant_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1265,7 +1265,7 @@ export def "accountstatuses list" [
 #
 # GET /{merchantId}/accountstatuses/{accountId}
 # operationId: content.accountstatuses.get
-export def "accountstatuses get" [
+export def "content-accountstatuses-get" [
   merchant_id: string
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1316,7 +1316,7 @@ export def "accountstatuses get" [
 #
 # GET /{merchantId}/accounttax
 # operationId: content.accounttax.list
-export def "accounttax list" [
+export def "content-accounttax-list" [
   merchant_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1366,7 +1366,7 @@ export def "accounttax list" [
 #
 # GET /{merchantId}/accounttax/{accountId}
 # operationId: content.accounttax.get
-export def "accounttax get" [
+export def "content-accounttax-get" [
   merchant_id: string
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1417,7 +1417,7 @@ export def "accounttax get" [
 # PUT /{merchantId}/accounttax/{accountId}
 # operationId: content.accounttax.update
 # --rules item shape: {country?: string, locationId?: string, ratePercent?: string, shippingTaxed?: bool, useGlobalRate?: bool}
-export def "accounttax update" [
+export def "content-accounttax-update" [
   merchant_id: string
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1474,7 +1474,7 @@ export def "accounttax update" [
 #
 # GET /{merchantId}/datafeeds
 # operationId: content.datafeeds.list
-export def "datafeeds list" [
+export def "content-datafeeds-list" [
   merchant_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1527,7 +1527,7 @@ export def "datafeeds list" [
 # --fetchSchedule shape: {dayOfMonth?: int, fetchUrl?: string, hour?: int, minuteOfHour?: int, password?: string, paused?: bool, timeZone?: string, username?: string, weekday?: string}
 # --format shape: {columnDelimiter?: string, fileEncoding?: string, quotingMode?: string}
 # --targets item shape: {country?: string, excludedDestinations?: list<string>, includedDestinations?: list<string>, language?: string}
-export def "datafeeds create" [
+export def "content-datafeeds-insert" [
   merchant_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1591,7 +1591,7 @@ export def "datafeeds create" [
 #
 # DELETE /{merchantId}/datafeeds/{datafeedId}
 # operationId: content.datafeeds.delete
-export def "datafeeds delete" [
+export def "content-datafeeds-delete" [
   merchant_id: string
   datafeed_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1642,7 +1642,7 @@ export def "datafeeds delete" [
 #
 # GET /{merchantId}/datafeeds/{datafeedId}
 # operationId: content.datafeeds.get
-export def "datafeeds get" [
+export def "content-datafeeds-get" [
   merchant_id: string
   datafeed_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1695,7 +1695,7 @@ export def "datafeeds get" [
 # --fetchSchedule shape: {dayOfMonth?: int, fetchUrl?: string, hour?: int, minuteOfHour?: int, password?: string, paused?: bool, timeZone?: string, username?: string, weekday?: string}
 # --format shape: {columnDelimiter?: string, fileEncoding?: string, quotingMode?: string}
 # --targets item shape: {country?: string, excludedDestinations?: list<string>, includedDestinations?: list<string>, language?: string}
-export def "datafeeds update" [
+export def "content-datafeeds-update" [
   merchant_id: string
   datafeed_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1761,7 +1761,7 @@ export def "datafeeds update" [
 #
 # POST /{merchantId}/datafeeds/{datafeedId}/fetchNow
 # operationId: content.datafeeds.fetchnow
-export def "datafeeds-fetch-now create-fetchnow" [
+export def "content-datafeeds-fetchnow" [
   merchant_id: string
   datafeed_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1812,7 +1812,7 @@ export def "datafeeds-fetch-now create-fetchnow" [
 #
 # GET /{merchantId}/datafeedstatuses
 # operationId: content.datafeedstatuses.list
-export def "datafeedstatuses list" [
+export def "content-datafeedstatuses-list" [
   merchant_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1862,7 +1862,7 @@ export def "datafeedstatuses list" [
 #
 # GET /{merchantId}/datafeedstatuses/{datafeedId}
 # operationId: content.datafeedstatuses.get
-export def "datafeedstatuses get" [
+export def "content-datafeedstatuses-get" [
   merchant_id: string
   datafeed_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1914,7 +1914,7 @@ export def "datafeedstatuses get" [
 #
 # GET /{merchantId}/liasettings
 # operationId: content.liasettings.list
-export def "liasettings list" [
+export def "content-liasettings-list" [
   merchant_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1964,7 +1964,7 @@ export def "liasettings list" [
 #
 # GET /{merchantId}/liasettings/{accountId}
 # operationId: content.liasettings.get
-export def "liasettings get" [
+export def "content-liasettings-get" [
   merchant_id: string
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2015,7 +2015,7 @@ export def "liasettings get" [
 # PUT /{merchantId}/liasettings/{accountId}
 # operationId: content.liasettings.update
 # --countrySettings item shape: {about?: record, country?: string, hostedLocalStorefrontActive?: bool, inventory?: record, onDisplayToOrder?: record, posDataProvider?: record, storePickupActive?: bool}
-export def "liasettings update" [
+export def "content-liasettings-update" [
   merchant_id: string
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2072,7 +2072,7 @@ export def "liasettings update" [
 #
 # GET /{merchantId}/liasettings/{accountId}/accessiblegmbaccounts
 # operationId: content.liasettings.getaccessiblegmbaccounts
-export def "liasettings-accessiblegmbaccounts get" [
+export def "content-liasettings-getaccessiblegmbaccounts" [
   merchant_id: string
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2122,7 +2122,7 @@ export def "liasettings-accessiblegmbaccounts get" [
 #
 # POST /{merchantId}/liasettings/{accountId}/requestgmbaccess
 # operationId: content.liasettings.requestgmbaccess
-export def "liasettings-requestgmbaccess create" [
+export def "content-liasettings-requestgmbaccess" [
   merchant_id: string
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2173,7 +2173,7 @@ export def "liasettings-requestgmbaccess create" [
 #
 # POST /{merchantId}/liasettings/{accountId}/requestinventoryverification/{country}
 # operationId: content.liasettings.requestinventoryverification
-export def "liasettings-requestinventoryverification create" [
+export def "content-liasettings-requestinventoryverification" [
   merchant_id: string
   account_id: string
   country: string
@@ -2225,7 +2225,7 @@ export def "liasettings-requestinventoryverification create" [
 #
 # POST /{merchantId}/liasettings/{accountId}/setinventoryverificationcontact
 # operationId: content.liasettings.setinventoryverificationcontact
-export def "liasettings-setinventoryverificationcontact create" [
+export def "content-liasettings-setinventoryverificationcontact" [
   merchant_id: string
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2279,7 +2279,7 @@ export def "liasettings-setinventoryverificationcontact create" [
 #
 # POST /{merchantId}/liasettings/{accountId}/setposdataprovider
 # operationId: content.liasettings.setposdataprovider
-export def "liasettings-setposdataprovider create" [
+export def "content-liasettings-setposdataprovider" [
   merchant_id: string
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2334,7 +2334,7 @@ export def "liasettings-setposdataprovider create" [
 # operationId: content.orderinvoices.createchargeinvoice
 # --invoiceSummary shape: {additionalChargeSummaries?: list, customerBalance?: record, googleBalance?: record, merchantBalance?: record, productTotal?: record, promotionSummaries?: list}
 # --lineItemInvoices item shape: {lineItemId?: string, productId?: string, shipmentUnitIds?: list<string>, unitInvoice?: record}
-export def "orderinvoices-create-charge-invoice create-chargeinvoice" [
+export def "content-orderinvoices-createchargeinvoice" [
   merchant_id: string
   order_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2395,7 +2395,7 @@ export def "orderinvoices-create-charge-invoice create-chargeinvoice" [
 # --refundOnlyOption shape: {description?: string, reason?: string}
 # --returnOption shape: {description?: string, reason?: string}
 # --shipmentInvoices item shape: {invoiceSummary?: record, lineItemInvoices?: list, shipmentGroupId?: string}
-export def "orderinvoices-create-refund-invoice create-refundinvoice" [
+export def "content-orderinvoices-createrefundinvoice" [
   merchant_id: string
   order_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2453,7 +2453,7 @@ export def "orderinvoices-create-refund-invoice create-refundinvoice" [
 #
 # GET /{merchantId}/orderreports/disbursements
 # operationId: content.orderreports.listdisbursements
-export def "orderreports-disbursements list" [
+export def "content-orderreports-listdisbursements" [
   merchant_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2505,7 +2505,7 @@ export def "orderreports-disbursements list" [
 #
 # GET /{merchantId}/orderreports/disbursements/{disbursementId}/transactions
 # operationId: content.orderreports.listtransactions
-export def "orderreports-disbursements-transactions list" [
+export def "content-orderreports-listtransactions" [
   merchant_id: string
   disbursement_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2559,7 +2559,7 @@ export def "orderreports-disbursements-transactions list" [
 #
 # GET /{merchantId}/orderreturns
 # operationId: content.orderreturns.list
-export def "orderreturns list" [
+export def "content-orderreturns-list" [
   merchant_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2612,7 +2612,7 @@ export def "orderreturns list" [
 #
 # GET /{merchantId}/orderreturns/{returnId}
 # operationId: content.orderreturns.get
-export def "orderreturns get" [
+export def "content-orderreturns-get" [
   merchant_id: string
   return_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2662,7 +2662,7 @@ export def "orderreturns get" [
 #
 # GET /{merchantId}/orders
 # operationId: content.orders.list
-export def "orders list" [
+export def "content-orders-list" [
   merchant_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2717,7 +2717,7 @@ export def "orders list" [
 #
 # GET /{merchantId}/orders/{orderId}
 # operationId: content.orders.get
-export def "orders get" [
+export def "content-orders-get" [
   merchant_id: string
   order_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2767,7 +2767,7 @@ export def "orders get" [
 #
 # POST /{merchantId}/orders/{orderId}/acknowledge
 # operationId: content.orders.acknowledge
-export def "orders-acknowledge create" [
+export def "content-orders-acknowledge" [
   merchant_id: string
   order_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2821,7 +2821,7 @@ export def "orders-acknowledge create" [
 #
 # POST /{merchantId}/orders/{orderId}/cancel
 # operationId: content.orders.cancel
-export def "orders-cancel cancel" [
+export def "content-orders-cancel" [
   merchant_id: string
   order_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2880,7 +2880,7 @@ export def "orders-cancel cancel" [
 # --amount shape: {currency?: string, value?: string}
 # --amountPretax shape: {currency?: string, value?: string}
 # --amountTax shape: {currency?: string, value?: string}
-export def "orders-cancel-line-item create-cancellineitem" [
+export def "content-orders-cancellineitem" [
   merchant_id: string
   order_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2944,7 +2944,7 @@ export def "orders-cancel-line-item create-cancellineitem" [
 # operationId: content.orders.instorerefundlineitem
 # --amountPretax shape: {currency?: string, value?: string}
 # --amountTax shape: {currency?: string, value?: string}
-export def "orders-in-store-refund-line-item create-instorerefundlineitem" [
+export def "content-orders-instorerefundlineitem" [
   merchant_id: string
   order_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3008,7 +3008,7 @@ export def "orders-in-store-refund-line-item create-instorerefundlineitem" [
 # --amount shape: {currency?: string, value?: string}
 # --amountPretax shape: {currency?: string, value?: string}
 # --amountTax shape: {currency?: string, value?: string}
-export def "orders-refund create" [
+export def "content-orders-refund" [
   merchant_id: string
   order_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3067,7 +3067,7 @@ export def "orders-refund create" [
 #
 # POST /{merchantId}/orders/{orderId}/rejectReturnLineItem
 # operationId: content.orders.rejectreturnlineitem
-export def "orders-reject-return-line-item create-rejectreturnlineitem" [
+export def "content-orders-rejectreturnlineitem" [
   merchant_id: string
   order_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3126,7 +3126,7 @@ export def "orders-reject-return-line-item create-rejectreturnlineitem" [
 #
 # POST /{merchantId}/orders/{orderId}/returnLineItem
 # operationId: content.orders.returnlineitem
-export def "orders-return-line-item create-returnlineitem" [
+export def "content-orders-returnlineitem" [
   merchant_id: string
   order_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3187,7 +3187,7 @@ export def "orders-return-line-item create-returnlineitem" [
 # operationId: content.orders.returnrefundlineitem
 # --amountPretax shape: {currency?: string, value?: string}
 # --amountTax shape: {currency?: string, value?: string}
-export def "orders-return-refund-line-item create-returnrefundlineitem" [
+export def "content-orders-returnrefundlineitem" [
   merchant_id: string
   order_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3249,7 +3249,7 @@ export def "orders-return-refund-line-item create-returnrefundlineitem" [
 # POST /{merchantId}/orders/{orderId}/setLineItemMetadata
 # operationId: content.orders.setlineitemmetadata
 # --annotations item shape: {key?: string, value?: string}
-export def "orders-set-line-item-metadata create-setlineitemmetadata" [
+export def "content-orders-setlineitemmetadata" [
   merchant_id: string
   order_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3308,7 +3308,7 @@ export def "orders-set-line-item-metadata create-setlineitemmetadata" [
 # operationId: content.orders.shiplineitems
 # --lineItems item shape: {lineItemId?: string, productId?: string, quantity?: int}
 # --shipmentInfos item shape: {carrier?: string, shipmentId?: string, trackingId?: string}
-export def "orders-ship-line-items create-shiplineitems" [
+export def "content-orders-shiplineitems" [
   merchant_id: string
   order_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3369,7 +3369,7 @@ export def "orders-ship-line-items create-shiplineitems" [
 # POST /{merchantId}/orders/{orderId}/testreturn
 # operationId: content.orders.createtestreturn
 # --items item shape: {lineItemId?: string, quantity?: int}
-export def "orders-testreturn create" [
+export def "content-orders-createtestreturn" [
   merchant_id: string
   order_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3423,7 +3423,7 @@ export def "orders-testreturn create" [
 #
 # POST /{merchantId}/orders/{orderId}/updateLineItemShippingDetails
 # operationId: content.orders.updatelineitemshippingdetails
-export def "orders-update-line-item-shipping-details update-lineitemshippingdetails" [
+export def "content-orders-updatelineitemshippingdetails" [
   merchant_id: string
   order_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3481,7 +3481,7 @@ export def "orders-update-line-item-shipping-details update-lineitemshippingdeta
 #
 # POST /{merchantId}/orders/{orderId}/updateMerchantOrderId
 # operationId: content.orders.updatemerchantorderid
-export def "orders-update-merchant-order-id update-merchantorderid" [
+export def "content-orders-updatemerchantorderid" [
   merchant_id: string
   order_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3536,7 +3536,7 @@ export def "orders-update-merchant-order-id update-merchantorderid" [
 #
 # POST /{merchantId}/orders/{orderId}/updateShipment
 # operationId: content.orders.updateshipment
-export def "orders-update-shipment update" [
+export def "content-orders-updateshipment" [
   merchant_id: string
   order_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3595,7 +3595,7 @@ export def "orders-update-shipment update" [
 #
 # GET /{merchantId}/ordersbymerchantid/{merchantOrderId}
 # operationId: content.orders.getbymerchantorderid
-export def "ordersbymerchantid get-bymerchantorderid" [
+export def "content-orders-getbymerchantorderid" [
   merchant_id: string
   merchant_order_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3646,7 +3646,7 @@ export def "ordersbymerchantid get-bymerchantorderid" [
 # POST /{merchantId}/pos/{targetMerchantId}/inventory
 # operationId: content.pos.inventory
 # --price shape: {currency?: string, value?: string}
-export def "pos-inventory create" [
+export def "content-pos-inventory" [
   merchant_id: string
   target_merchant_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3709,7 +3709,7 @@ export def "pos-inventory create" [
 # POST /{merchantId}/pos/{targetMerchantId}/sale
 # operationId: content.pos.sale
 # --price shape: {currency?: string, value?: string}
-export def "pos-sale create" [
+export def "content-pos-sale" [
   merchant_id: string
   target_merchant_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3772,7 +3772,7 @@ export def "pos-sale create" [
 #
 # GET /{merchantId}/pos/{targetMerchantId}/store
 # operationId: content.pos.list
-export def "pos-store list" [
+export def "content-pos-list" [
   merchant_id: string
   target_merchant_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3822,7 +3822,7 @@ export def "pos-store list" [
 #
 # POST /{merchantId}/pos/{targetMerchantId}/store
 # operationId: content.pos.insert
-export def "pos-store create" [
+export def "content-pos-insert" [
   merchant_id: string
   target_merchant_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3884,7 +3884,7 @@ export def "pos-store create" [
 #
 # DELETE /{merchantId}/pos/{targetMerchantId}/store/{storeCode}
 # operationId: content.pos.delete
-export def "pos-store delete" [
+export def "content-pos-delete" [
   merchant_id: string
   target_merchant_id: string
   store_code: string
@@ -3937,7 +3937,7 @@ export def "pos-store delete" [
 #
 # GET /{merchantId}/pos/{targetMerchantId}/store/{storeCode}
 # operationId: content.pos.get
-export def "pos-store get" [
+export def "content-pos-get" [
   merchant_id: string
   target_merchant_id: string
   store_code: string
@@ -3989,7 +3989,7 @@ export def "pos-store get" [
 #
 # GET /{merchantId}/products
 # operationId: content.products.list
-export def "products list" [
+export def "content-products-list" [
   merchant_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -4058,7 +4058,7 @@ export def "products list" [
 # --unitPricingBaseMeasure shape: {unit?: string, value?: string}
 # --unitPricingMeasure shape: {unit?: string, value?: float}
 # --warnings item shape: {domain?: string, message?: string, reason?: string}
-export def "products create" [
+export def "content-products-insert" [
   merchant_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -4189,7 +4189,7 @@ export def "products create" [
 #
 # DELETE /{merchantId}/products/{productId}
 # operationId: content.products.delete
-export def "products delete" [
+export def "content-products-delete" [
   merchant_id: string
   product_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4240,7 +4240,7 @@ export def "products delete" [
 #
 # GET /{merchantId}/products/{productId}
 # operationId: content.products.get
-export def "products get" [
+export def "content-products-get" [
   merchant_id: string
   product_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4290,7 +4290,7 @@ export def "products get" [
 #
 # GET /{merchantId}/productstatuses
 # operationId: content.productstatuses.list
-export def "productstatuses list" [
+export def "content-productstatuses-list" [
   merchant_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -4343,7 +4343,7 @@ export def "productstatuses list" [
 #
 # GET /{merchantId}/productstatuses/{productId}
 # operationId: content.productstatuses.get
-export def "productstatuses get" [
+export def "content-productstatuses-get" [
   merchant_id: string
   product_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4395,7 +4395,7 @@ export def "productstatuses get" [
 #
 # GET /{merchantId}/shippingsettings
 # operationId: content.shippingsettings.list
-export def "shippingsettings list" [
+export def "content-shippingsettings-list" [
   merchant_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -4445,7 +4445,7 @@ export def "shippingsettings list" [
 #
 # GET /{merchantId}/shippingsettings/{accountId}
 # operationId: content.shippingsettings.get
-export def "shippingsettings get" [
+export def "content-shippingsettings-get" [
   merchant_id: string
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4498,7 +4498,7 @@ export def "shippingsettings get" [
 # --postalCodeGroups item shape: {country?: string, name?: string, postalCodeRanges?: list}
 # --services item shape: {active?: bool, currency?: string, deliveryCountry?: string, deliveryTime?: record, eligibility?: string, minimumOrderValue?: record, minimumOrderValueTable?: record, name?: string, pickupService?: record, rateGroups?: list, shipmentType?: string}
 # --warehouses item shape: {businessDayConfig?: record, cutoffTime?: record, handlingDays?: string, name?: string, shippingAddress?: record}
-export def "shippingsettings update" [
+export def "content-shippingsettings-update" [
   merchant_id: string
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4556,7 +4556,7 @@ export def "shippingsettings update" [
 #
 # GET /{merchantId}/supportedCarriers
 # operationId: content.shippingsettings.getsupportedcarriers
-export def "supported-carriers get-supportedcarriers" [
+export def "content-shippingsettings-getsupportedcarriers" [
   merchant_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -4604,7 +4604,7 @@ export def "supported-carriers get-supportedcarriers" [
 #
 # GET /{merchantId}/supportedHolidays
 # operationId: content.shippingsettings.getsupportedholidays
-export def "supported-holidays get-supportedholidays" [
+export def "content-shippingsettings-getsupportedholidays" [
   merchant_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -4652,7 +4652,7 @@ export def "supported-holidays get-supportedholidays" [
 #
 # GET /{merchantId}/supportedPickupServices
 # operationId: content.shippingsettings.getsupportedpickupservices
-export def "supported-pickup-services get-supportedpickupservices" [
+export def "content-shippingsettings-getsupportedpickupservices" [
   merchant_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -4701,7 +4701,7 @@ export def "supported-pickup-services get-supportedpickupservices" [
 # POST /{merchantId}/testorders
 # operationId: content.orders.createtestorder
 # --testOrder shape: {customer?: record, enableOrderinvoices?: bool, kind?: string, lineItems?: list, notificationMode?: string, paymentMethod?: record, predefinedDeliveryAddress?: string, predefinedPickupDetails?: string, promotions?: list, shippingCost?: record, shippingCostTax?: record, shippingOption?: string}
-export def "testorders create" [
+export def "content-orders-createtestorder" [
   merchant_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -4755,7 +4755,7 @@ export def "testorders create" [
 #
 # POST /{merchantId}/testorders/{orderId}/advance
 # operationId: content.orders.advancetestorder
-export def "testorders-advance create-advancetestorder" [
+export def "content-orders-advancetestorder" [
   merchant_id: string
   order_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4805,7 +4805,7 @@ export def "testorders-advance create-advancetestorder" [
 #
 # POST /{merchantId}/testorders/{orderId}/cancelByCustomer
 # operationId: content.orders.canceltestorderbycustomer
-export def "testorders-cancel-by-customer create-canceltestorderbycustomer" [
+export def "content-orders-canceltestorderbycustomer" [
   merchant_id: string
   order_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4859,7 +4859,7 @@ export def "testorders-cancel-by-customer create-canceltestorderbycustomer" [
 #
 # GET /{merchantId}/testordertemplates/{templateName}
 # operationId: content.orders.gettestordertemplate
-export def "testordertemplates get" [
+export def "content-orders-gettestordertemplate" [
   merchant_id: string
   template_name: string
   --base-url(-b): string@base-url-completer # API base URL

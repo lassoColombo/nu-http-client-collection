@@ -97,7 +97,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "contracts list-get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "list-contracts-get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -121,7 +121,7 @@ export def commands []: nothing -> table {
 #
 # GET /api/contracts/
 # operationId: List_Contracts_GET
-export def "contracts list-get" [
+export def "list-contracts-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -161,7 +161,7 @@ export def "contracts list-get" [
 #
 # GET /api/metadata/
 # operationId: Metadata_GET
-export def "metadata get" [
+export def "metadata-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -195,7 +195,7 @@ export def "metadata get" [
 #
 # GET /api/naics/
 # operationId: List_Naics_GET
-export def "naics list-get" [
+export def "list-naics-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -229,7 +229,7 @@ export def "naics list-get" [
 #
 # GET /api/vendor/{duns}
 # operationId: Get_Vendor_GET
-export def "vendor get" [
+export def "get-vendor-get" [
   duns: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -265,7 +265,7 @@ export def "vendor get" [
 #
 # GET /api/vendors/
 # operationId: List_Vendors_GET
-export def "vendors list-get" [
+export def "list-vendors-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

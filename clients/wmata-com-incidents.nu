@@ -102,7 +102,7 @@ def station-code-completer [] { ["A03" "E09"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "bus-incidents get-54763641281d830c946a3d78" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "54763641281d830c946a3d78" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -126,7 +126,7 @@ export def commands []: nothing -> table {
 #
 # GET /BusIncidents
 # operationId: 54763641281d830c946a3d78
-export def "bus-incidents get-54763641281d830c946a3d78" [
+export def "54763641281d830c946a3d78" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -162,7 +162,7 @@ export def "bus-incidents get-54763641281d830c946a3d78" [
 #
 # GET /ElevatorIncidents
 # operationId: 54763641281d830c946a3d79
-export def "elevator-incidents get-54763641281d830c946a3d79" [
+export def "54763641281d830c946a3d79" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -198,7 +198,7 @@ export def "elevator-incidents get-54763641281d830c946a3d79" [
 #
 # GET /Incidents
 # operationId: 54763641281d830c946a3d7a
-export def "incidents get-54763641281d830c946a3d7a" [
+export def "54763641281d830c946a3d7a" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -232,7 +232,7 @@ export def "incidents get-54763641281d830c946a3d7a" [
 #
 # GET /json/BusIncidents
 # operationId: 54763641281d830c946a3d75
-export def "json-bus-incidents get-54763641281d830c946a3d75" [
+export def "54763641281d830c946a3d75" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -268,7 +268,7 @@ export def "json-bus-incidents get-54763641281d830c946a3d75" [
 #
 # GET /json/ElevatorIncidents
 # operationId: 54763641281d830c946a3d76
-export def "json-elevator-incidents get-54763641281d830c946a3d76" [
+export def "54763641281d830c946a3d76" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -304,7 +304,7 @@ export def "json-elevator-incidents get-54763641281d830c946a3d76" [
 #
 # GET /json/Incidents
 # operationId: 54763641281d830c946a3d77
-export def "json-incidents get-54763641281d830c946a3d77" [
+export def "54763641281d830c946a3d77" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

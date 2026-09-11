@@ -183,7 +183,7 @@ def target-completer-11 [] { ["AUS Central Standard Time - (GMT+09:30) Darwin" "
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "add-to-collection create" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "add-to-collection" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -207,7 +207,7 @@ export def commands []: nothing -> table {
 #
 # POST /AddToCollection
 # operationId: AddToCollection
-export def "add-to-collection create" [
+export def "add-to-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -248,7 +248,7 @@ export def "add-to-collection create" [
 #
 # POST /CSVtoJSON
 # operationId: CsvToJson
-export def "cs-vto-json create-csv" [
+export def "csv-to-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -287,7 +287,7 @@ export def "cs-vto-json create-csv" [
 #
 # POST /CalculateAbsolute
 # operationId: CalculateAbsolute
-export def "calculate-absolute create" [
+export def "calculate-absolute" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -326,7 +326,7 @@ export def "calculate-absolute create" [
 #
 # POST /CalculateAddition
 # operationId: CalculateAddition
-export def "calculate-addition create" [
+export def "calculate-addition" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -366,7 +366,7 @@ export def "calculate-addition create" [
 #
 # POST /CalculateAverage
 # operationId: CalculateAverage
-export def "calculate-average create" [
+export def "calculate-average" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -405,7 +405,7 @@ export def "calculate-average create" [
 #
 # POST /CalculateCosine
 # operationId: CalculateCosine
-export def "calculate-cosine create" [
+export def "calculate-cosine" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -444,7 +444,7 @@ export def "calculate-cosine create" [
 #
 # POST /CalculateDivision
 # operationId: CalculateDivision
-export def "calculate-division create" [
+export def "calculate-division" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -484,7 +484,7 @@ export def "calculate-division create" [
 #
 # POST /CalculateLogarithm
 # operationId: CalculateLogarithm
-export def "calculate-logarithm create" [
+export def "calculate-logarithm" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -523,7 +523,7 @@ export def "calculate-logarithm create" [
 #
 # POST /CalculateMedian
 # operationId: CalculateMedian
-export def "calculate-median create" [
+export def "calculate-median" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -562,7 +562,7 @@ export def "calculate-median create" [
 #
 # POST /CalculateMinMax
 # operationId: CalculateMinMax
-export def "calculate-min-max create" [
+export def "calculate-min-max" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -601,7 +601,7 @@ export def "calculate-min-max create" [
 #
 # POST /CalculateModulo
 # operationId: CalculateModulo
-export def "calculate-modulo create" [
+export def "calculate-modulo" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -641,7 +641,7 @@ export def "calculate-modulo create" [
 #
 # POST /CalculateMultiplication
 # operationId: CalculateMultiplication
-export def "calculate-multiplication create" [
+export def "calculate-multiplication" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -681,7 +681,7 @@ export def "calculate-multiplication create" [
 #
 # POST /CalculateNthRoot
 # operationId: CalculateNthRoot
-export def "calculate-nth-root create" [
+export def "calculate-nth-root" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -721,7 +721,7 @@ export def "calculate-nth-root create" [
 #
 # POST /CalculatePower
 # operationId: CalculatePower
-export def "calculate-power create" [
+export def "calculate-power" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -761,7 +761,7 @@ export def "calculate-power create" [
 #
 # POST /CalculateSine
 # operationId: CalculateSine
-export def "calculate-sine create" [
+export def "calculate-sine" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -800,7 +800,7 @@ export def "calculate-sine create" [
 #
 # POST /CalculateSquareRoot
 # operationId: CalculateSquareRoot
-export def "calculate-square-root create" [
+export def "calculate-square-root" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -839,7 +839,7 @@ export def "calculate-square-root create" [
 #
 # POST /CalculateSubtraction
 # operationId: CalculateSubtraction
-export def "calculate-subtraction create" [
+export def "calculate-subtraction" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -879,7 +879,7 @@ export def "calculate-subtraction create" [
 #
 # POST /CalculateSum
 # operationId: CalculateSum
-export def "calculate-sum create" [
+export def "calculate-sum" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -918,7 +918,7 @@ export def "calculate-sum create" [
 #
 # POST /CalculateTangent
 # operationId: CalculateTangent
-export def "calculate-tangent create" [
+export def "calculate-tangent" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -957,7 +957,7 @@ export def "calculate-tangent create" [
 #
 # POST /CalculateVariance
 # operationId: CalculateVariance
-export def "calculate-variance create" [
+export def "calculate-variance" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -996,7 +996,7 @@ export def "calculate-variance create" [
 #
 # POST /CollectionContainsNumber
 # operationId: CollectionContainsNumber
-export def "collection-contains-number create" [
+export def "collection-contains-number" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1036,7 +1036,7 @@ export def "collection-contains-number create" [
 #
 # POST /CollectionContainsString
 # operationId: CollectionContainsString
-export def "collection-contains-string create" [
+export def "collection-contains-string" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1077,7 +1077,7 @@ export def "collection-contains-string create" [
 #
 # POST /CollectionEndsWithString
 # operationId: CollectionEndsWithString
-export def "collection-ends-with-string create" [
+export def "collection-ends-with-string" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1118,7 +1118,7 @@ export def "collection-ends-with-string create" [
 #
 # POST /CollectionStartsWithString
 # operationId: CollectionStartsWithString
-export def "collection-starts-with-string create" [
+export def "collection-starts-with-string" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1159,7 +1159,7 @@ export def "collection-starts-with-string create" [
 #
 # POST /CollectionToJSON
 # operationId: CollectionToJSON
-export def "collection-to-json create" [
+export def "collection-to-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1198,7 +1198,7 @@ export def "collection-to-json create" [
 #
 # POST /CollectionToXML
 # operationId: CollectionToXml
-export def "collection-to-xml create" [
+export def "collection-to-xml" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1238,7 +1238,7 @@ export def "collection-to-xml create" [
 #
 # POST /CompareStrings
 # operationId: CompareStrings
-export def "compare-strings create" [
+export def "compare-strings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1279,7 +1279,7 @@ export def "compare-strings create" [
 #
 # POST /ContainsString
 # operationId: ContainsString
-export def "contains-string create" [
+export def "contains-string" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1319,7 +1319,7 @@ export def "contains-string create" [
 #
 # POST /ConvertAngle
 # operationId: ConvertAngle
-export def "convert-angle create" [
+export def "convert-angle" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1359,7 +1359,7 @@ export def "convert-angle create" [
 #
 # POST /ConvertArea
 # operationId: ConvertArea
-export def "convert-area create" [
+export def "convert-area" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1399,7 +1399,7 @@ export def "convert-area create" [
 #
 # POST /ConvertCase
 # operationId: ConvertCase
-export def "convert-case create" [
+export def "convert-case" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1438,7 +1438,7 @@ export def "convert-case create" [
 #
 # POST /ConvertCurrency
 # operationId: ConvertCurrency
-export def "convert-currency create" [
+export def "convert-currency" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1478,7 +1478,7 @@ export def "convert-currency create" [
 #
 # POST /ConvertDistance
 # operationId: ConvertDistance
-export def "convert-distance create" [
+export def "convert-distance" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1518,7 +1518,7 @@ export def "convert-distance create" [
 #
 # POST /ConvertDuration
 # operationId: ConvertDuration
-export def "convert-duration create" [
+export def "convert-duration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1558,7 +1558,7 @@ export def "convert-duration create" [
 #
 # POST /ConvertEnergy
 # operationId: ConvertEnergy
-export def "convert-energy create" [
+export def "convert-energy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1598,7 +1598,7 @@ export def "convert-energy create" [
 #
 # POST /ConvertImage
 # operationId: ConvertImage
-export def "convert-image create" [
+export def "convert-image" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1640,7 +1640,7 @@ export def "convert-image create" [
 #
 # POST /ConvertPower
 # operationId: ConvertPower
-export def "convert-power create" [
+export def "convert-power" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1680,7 +1680,7 @@ export def "convert-power create" [
 #
 # POST /ConvertSpeed
 # operationId: ConvertSpeed
-export def "convert-speed create" [
+export def "convert-speed" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1720,7 +1720,7 @@ export def "convert-speed create" [
 #
 # POST /ConvertTemperature
 # operationId: ConvertTemperature
-export def "convert-temperature create" [
+export def "convert-temperature" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1760,7 +1760,7 @@ export def "convert-temperature create" [
 #
 # POST /ConvertVolume
 # operationId: ConvertVolume
-export def "convert-volume create" [
+export def "convert-volume" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1800,7 +1800,7 @@ export def "convert-volume create" [
 #
 # POST /ConvertWeight
 # operationId: ConvertWeight
-export def "convert-weight create" [
+export def "convert-weight" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1840,7 +1840,7 @@ export def "convert-weight create" [
 #
 # POST /CountCollection
 # operationId: CountCollection
-export def "count-collection create" [
+export def "count-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1878,7 +1878,7 @@ export def "count-collection create" [
 #
 # POST /CropImage
 # operationId: CropImage
-export def "crop-image create" [
+export def "crop-image" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1922,7 +1922,7 @@ export def "crop-image create" [
 #
 # POST /DateTimeDifference
 # operationId: DateTimeDifference
-export def "date-time-difference create" [
+export def "date-time-difference" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1961,7 +1961,7 @@ export def "date-time-difference create" [
 #
 # POST /DateTimeInfo
 # operationId: DateTimeInfo
-export def "date-time-info get" [
+export def "date-time-info" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2000,7 +2000,7 @@ export def "date-time-info get" [
 #
 # POST /DecodeString
 # operationId: DecodeString
-export def "decode-string create" [
+export def "decode-string" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2038,7 +2038,7 @@ export def "decode-string create" [
 #
 # POST /EncodeString
 # operationId: EncodeString
-export def "encode-string create" [
+export def "encode-string" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2076,7 +2076,7 @@ export def "encode-string create" [
 #
 # POST /FileToString
 # operationId: FileToString
-export def "file-to-string create" [
+export def "file-to-string" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2116,7 +2116,7 @@ export def "file-to-string create" [
 #
 # POST /FilterCollection
 # operationId: FilterCollection
-export def "filter-collection create" [
+export def "filter-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2156,7 +2156,7 @@ export def "filter-collection create" [
 #
 # POST /FlipImage
 # operationId: FlipImage
-export def "flip-image create" [
+export def "flip-image" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2197,7 +2197,7 @@ export def "flip-image create" [
 #
 # POST /FormatCurrency
 # operationId: FormatCurrency
-export def "format-currency create" [
+export def "format-currency" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2236,7 +2236,7 @@ export def "format-currency create" [
 #
 # POST /FormatDateTime
 # operationId: FormatDateTime
-export def "format-date-time create" [
+export def "format-date-time" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2276,7 +2276,7 @@ export def "format-date-time create" [
 #
 # POST /GenerateGuid
 # operationId: GenerateGuid
-export def "generate-guid generate" [
+export def "generate-guid" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2314,7 +2314,7 @@ export def "generate-guid generate" [
 #
 # POST /GenerateHash
 # operationId: GenerateHash
-export def "generate-hash generate" [
+export def "generate-hash" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2353,7 +2353,7 @@ export def "generate-hash generate" [
 #
 # POST /GenerateQRCode
 # operationId: GenerateQRCode
-export def "generate-qr-code generate" [
+export def "generate-qr-code" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2392,7 +2392,7 @@ export def "generate-qr-code generate" [
 #
 # POST /JSONtoCSV
 # operationId: JsonToCsv
-export def "jso-nto-csv create-json" [
+export def "json-to-csv" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2433,7 +2433,7 @@ export def "jso-nto-csv create-json" [
 #
 # POST /JSONtoHTML
 # operationId: JsonToHtml
-export def "jso-nto-html create-json" [
+export def "json-to-html" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2476,7 +2476,7 @@ export def "jso-nto-html create-json" [
 #
 # POST /JSONtoXML
 # operationId: JsonToXml
-export def "jso-nto-xml create-json" [
+export def "json-to-xml" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2515,7 +2515,7 @@ export def "jso-nto-xml create-json" [
 #
 # POST /JoinStrings
 # operationId: JoinStrings
-export def "join-strings create" [
+export def "join-strings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2556,7 +2556,7 @@ export def "join-strings create" [
 #
 # POST /MarketIndex
 # operationId: MarketIndex
-export def "market-index create" [
+export def "market-index" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2595,7 +2595,7 @@ export def "market-index create" [
 #
 # POST /QueryJSON
 # operationId: QueryJson
-export def "query-json list" [
+export def "query-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2634,7 +2634,7 @@ export def "query-json list" [
 #
 # POST /QueryXML
 # operationId: QueryXml
-export def "query-xml list" [
+export def "query-xml" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2673,7 +2673,7 @@ export def "query-xml list" [
 #
 # POST /RandomNumber
 # operationId: RandomNumber
-export def "random-number create" [
+export def "random-number" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2712,7 +2712,7 @@ export def "random-number create" [
 #
 # POST /RedactString
 # operationId: RedactString
-export def "redact-string create" [
+export def "redact-string" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2753,7 +2753,7 @@ export def "redact-string create" [
 #
 # POST /RemoveFromCollection
 # operationId: RemoveFromCollection
-export def "remove-from-collection delete" [
+export def "remove-from-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2794,7 +2794,7 @@ export def "remove-from-collection delete" [
 #
 # POST /ReplaceString
 # operationId: ReplaceString
-export def "replace-string update" [
+export def "replace-string" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2834,7 +2834,7 @@ export def "replace-string update" [
 #
 # POST /ReplaceValuesInCollection
 # operationId: ReplaceValuesInCollection
-export def "replace-values-in-collection update" [
+export def "replace-values-in-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2875,7 +2875,7 @@ export def "replace-values-in-collection update" [
 #
 # POST /ResizeImage
 # operationId: ResizeImage
-export def "resize-image resize" [
+export def "resize-image" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2920,7 +2920,7 @@ export def "resize-image resize" [
 #
 # POST /RotateImage
 # operationId: RotateImage
-export def "rotate-image create" [
+export def "rotate-image" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2961,7 +2961,7 @@ export def "rotate-image create" [
 #
 # POST /RoundNumber
 # operationId: RoundNumber
-export def "round-number create" [
+export def "round-number" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3000,7 +3000,7 @@ export def "round-number create" [
 #
 # POST /ShortenLink
 # operationId: ShortenLink
-export def "shorten-link create" [
+export def "shorten-link" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3038,7 +3038,7 @@ export def "shorten-link create" [
 #
 # POST /SortCollection
 # operationId: SortCollection
-export def "sort-collection create" [
+export def "sort-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3077,7 +3077,7 @@ export def "sort-collection create" [
 #
 # POST /SpeechToText
 # operationId: SpeechToText
-export def "speech-to-text create" [
+export def "speech-to-text" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3118,7 +3118,7 @@ export def "speech-to-text create" [
 #
 # POST /SplitCollection
 # operationId: SplitCollection
-export def "split-collection create" [
+export def "split-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3158,7 +3158,7 @@ export def "split-collection create" [
 #
 # POST /SplitString
 # operationId: SplitString
-export def "split-string create" [
+export def "split-string" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3197,7 +3197,7 @@ export def "split-string create" [
 #
 # POST /StandardDeviation
 # operationId: StandardDeviation
-export def "standard-deviation create" [
+export def "standard-deviation" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3236,7 +3236,7 @@ export def "standard-deviation create" [
 #
 # POST /StockPrices
 # operationId: StockPrices
-export def "stock-prices create" [
+export def "stock-prices" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3276,7 +3276,7 @@ export def "stock-prices create" [
 #
 # POST /StringToFile
 # operationId: StringToFile
-export def "string-to-file create" [
+export def "string-to-file" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3317,7 +3317,7 @@ export def "string-to-file create" [
 #
 # POST /TextToSpeech
 # operationId: TextToSpeech
-export def "text-to-speech create" [
+export def "text-to-speech" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3357,7 +3357,7 @@ export def "text-to-speech create" [
 #
 # POST /TranslateString
 # operationId: TranslateString
-export def "translate-string create" [
+export def "translate-string" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3396,7 +3396,7 @@ export def "translate-string create" [
 #
 # POST /TrimString
 # operationId: TrimString
-export def "trim-string create" [
+export def "trim-string" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3435,7 +3435,7 @@ export def "trim-string create" [
 #
 # POST /URLDecode
 # operationId: UrlDecode
-export def "url-decode create" [
+export def "url-decode" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3473,7 +3473,7 @@ export def "url-decode create" [
 #
 # POST /URLEncode
 # operationId: UrlEncode
-export def "url-encode create" [
+export def "url-encode" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3511,7 +3511,7 @@ export def "url-encode create" [
 #
 # POST /ValidateEmail
 # operationId: ValidateEmail
-export def "validate-email validate" [
+export def "validate-email" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3549,7 +3549,7 @@ export def "validate-email validate" [
 #
 # POST /VerifyHash
 # operationId: VerifyHash
-export def "verify-hash verify" [
+export def "verify-hash" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3589,7 +3589,7 @@ export def "verify-hash verify" [
 #
 # POST /WatermarkImage
 # operationId: WatermarkImage
-export def "watermark-image create" [
+export def "watermark-image" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3635,7 +3635,7 @@ export def "watermark-image create" [
 #
 # POST /WorldTime
 # operationId: WorldTime
-export def "world-time create" [
+export def "world-time" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3676,7 +3676,7 @@ export def "world-time create" [
 #
 # POST /XMLtoJSON
 # operationId: XmlToJson
-export def "xm-lto-json create-xml" [
+export def "xml-to-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

@@ -149,7 +149,7 @@ def event-completer-1 [] { ["add" "delete"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "admin-directory-customer-devices-chromeos list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "directory-chromeosdevices-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -173,7 +173,7 @@ export def commands []: nothing -> table {
 #
 # GET /admin/directory/v1/customer/{customerId}/devices/chromeos
 # operationId: directory.chromeosdevices.list
-export def "admin-directory-customer-devices-chromeos list" [
+export def "directory-chromeosdevices-list" [
   customer_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -229,7 +229,7 @@ export def "admin-directory-customer-devices-chromeos list" [
 #
 # POST /admin/directory/v1/customer/{customerId}/devices/chromeos/moveDevicesToOu
 # operationId: directory.chromeosdevices.moveDevicesToOu
-export def "admin-directory-customer-devices-chromeos-move-devices-to-ou move" [
+export def "directory-chromeosdevices-move-devices-to-ou" [
   customer_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -282,7 +282,7 @@ export def "admin-directory-customer-devices-chromeos-move-devices-to-ou move" [
 #
 # GET /admin/directory/v1/customer/{customerId}/devices/chromeos/{deviceId}
 # operationId: directory.chromeosdevices.get
-export def "admin-directory-customer-devices-chromeos get" [
+export def "directory-chromeosdevices-get" [
   customer_id: string
   device_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -344,7 +344,7 @@ export def "admin-directory-customer-devices-chromeos get" [
 # --screenshotFiles item shape: {createTime?: string, downloadUrl?: string, name?: string, type?: string}
 # --systemRamFreeReports item shape: {reportTime?: string, systemRamFreeInfo?: list<string>}
 # --tpmVersionInfo shape: {family?: string, firmwareVersion?: string, manufacturer?: string, specLevel?: string, tpmModel?: string, vendorSpecific?: string}
-export def "admin-directory-customer-devices-chromeos update-by-customer-id-device-id" [
+export def "directory-chromeosdevices-patch" [
   customer_id: string
   device_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -452,7 +452,7 @@ export def "admin-directory-customer-devices-chromeos update-by-customer-id-devi
 # --screenshotFiles item shape: {createTime?: string, downloadUrl?: string, name?: string, type?: string}
 # --systemRamFreeReports item shape: {reportTime?: string, systemRamFreeInfo?: list<string>}
 # --tpmVersionInfo shape: {family?: string, firmwareVersion?: string, manufacturer?: string, specLevel?: string, tpmModel?: string, vendorSpecific?: string}
-export def "admin-directory-customer-devices-chromeos update-by-customer-id-device-id-1" [
+export def "directory-chromeosdevices-update" [
   customer_id: string
   device_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -549,7 +549,7 @@ export def "admin-directory-customer-devices-chromeos update-by-customer-id-devi
 #
 # GET /admin/directory/v1/customer/{customerId}/devices/chromeos/{deviceId}/commands/{commandId}
 # operationId: admin.customer.devices.chromeos.commands.get
-export def "admin-directory-customer-devices-chromeos-commands get" [
+export def "admin-customer-devices-chromeos-commands-get" [
   customer_id: string
   device_id: string
   command_id: string
@@ -601,7 +601,7 @@ export def "admin-directory-customer-devices-chromeos-commands get" [
 #
 # POST /admin/directory/v1/customer/{customerId}/devices/chromeos/{deviceId}:issueCommand
 # operationId: admin.customer.devices.chromeos.issueCommand
-export def "admin-directory-customer-devices-chromeos create-issue-command" [
+export def "admin-customer-devices-chromeos-issue-command" [
   customer_id: string
   device_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -656,7 +656,7 @@ export def "admin-directory-customer-devices-chromeos create-issue-command" [
 #
 # POST /admin/directory/v1/customer/{customerId}/devices/chromeos/{resourceId}/action
 # operationId: directory.chromeosdevices.action
-export def "admin-directory-customer-devices-chromeos-action create" [
+export def "directory-chromeosdevices-action" [
   customer_id: string
   resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -711,7 +711,7 @@ export def "admin-directory-customer-devices-chromeos-action create" [
 #
 # GET /admin/directory/v1/customer/{customerId}/devices/mobile
 # operationId: directory.mobiledevices.list
-export def "admin-directory-customer-devices-mobile list" [
+export def "directory-mobiledevices-list" [
   customer_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -765,7 +765,7 @@ export def "admin-directory-customer-devices-mobile list" [
 #
 # DELETE /admin/directory/v1/customer/{customerId}/devices/mobile/{resourceId}
 # operationId: directory.mobiledevices.delete
-export def "admin-directory-customer-devices-mobile delete" [
+export def "directory-mobiledevices-delete" [
   customer_id: string
   resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -815,7 +815,7 @@ export def "admin-directory-customer-devices-mobile delete" [
 #
 # GET /admin/directory/v1/customer/{customerId}/devices/mobile/{resourceId}
 # operationId: directory.mobiledevices.get
-export def "admin-directory-customer-devices-mobile get" [
+export def "directory-mobiledevices-get" [
   customer_id: string
   resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -866,7 +866,7 @@ export def "admin-directory-customer-devices-mobile get" [
 #
 # POST /admin/directory/v1/customer/{customerId}/devices/mobile/{resourceId}/action
 # operationId: directory.mobiledevices.action
-export def "admin-directory-customer-devices-mobile-action create" [
+export def "directory-mobiledevices-action" [
   customer_id: string
   resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -920,7 +920,7 @@ export def "admin-directory-customer-devices-mobile-action create" [
 #
 # GET /admin/directory/v1/customer/{customerId}/orgunits
 # operationId: directory.orgunits.list
-export def "admin-directory-customer-orgunits list" [
+export def "directory-orgunits-list" [
   customer_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -970,7 +970,7 @@ export def "admin-directory-customer-orgunits list" [
 #
 # POST /admin/directory/v1/customer/{customerId}/orgunits
 # operationId: directory.orgunits.insert
-export def "admin-directory-customer-orgunits create" [
+export def "directory-orgunits-insert" [
   customer_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1030,7 +1030,7 @@ export def "admin-directory-customer-orgunits create" [
 #
 # DELETE /admin/directory/v1/customer/{customerId}/orgunits/{orgUnitPath}
 # operationId: directory.orgunits.delete
-export def "admin-directory-customer-orgunits delete" [
+export def "directory-orgunits-delete" [
   customer_id: string
   org_unit_path: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1080,7 +1080,7 @@ export def "admin-directory-customer-orgunits delete" [
 #
 # GET /admin/directory/v1/customer/{customerId}/orgunits/{orgUnitPath}
 # operationId: directory.orgunits.get
-export def "admin-directory-customer-orgunits get" [
+export def "directory-orgunits-get" [
   customer_id: string
   org_unit_path: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1130,7 +1130,7 @@ export def "admin-directory-customer-orgunits get" [
 #
 # PATCH /admin/directory/v1/customer/{customerId}/orgunits/{orgUnitPath}
 # operationId: directory.orgunits.patch
-export def "admin-directory-customer-orgunits update-by-customer-id-org-unit-path" [
+export def "directory-orgunits-patch" [
   customer_id: string
   org_unit_path: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1192,7 +1192,7 @@ export def "admin-directory-customer-orgunits update-by-customer-id-org-unit-pat
 #
 # PUT /admin/directory/v1/customer/{customerId}/orgunits/{orgUnitPath}
 # operationId: directory.orgunits.update
-export def "admin-directory-customer-orgunits update-by-customer-id-org-unit-path-1" [
+export def "directory-orgunits-update" [
   customer_id: string
   org_unit_path: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1254,7 +1254,7 @@ export def "admin-directory-customer-orgunits update-by-customer-id-org-unit-pat
 #
 # GET /admin/directory/v1/customer/{customerId}/schemas
 # operationId: directory.schemas.list
-export def "admin-directory-customer-schemas list" [
+export def "directory-schemas-list" [
   customer_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1303,7 +1303,7 @@ export def "admin-directory-customer-schemas list" [
 # POST /admin/directory/v1/customer/{customerId}/schemas
 # operationId: directory.schemas.insert
 # --fields item shape: {displayName?: string, etag?: string, fieldId?: string, fieldName?: string, fieldType?: string, indexed?: bool, kind?: string, multiValued?: bool, numericIndexingSpec?: record, readAccessType?: string}
-export def "admin-directory-customer-schemas create" [
+export def "directory-schemas-insert" [
   customer_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1360,7 +1360,7 @@ export def "admin-directory-customer-schemas create" [
 #
 # DELETE /admin/directory/v1/customer/{customerId}/schemas/{schemaKey}
 # operationId: directory.schemas.delete
-export def "admin-directory-customer-schemas delete" [
+export def "directory-schemas-delete" [
   customer_id: string
   schema_key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1410,7 +1410,7 @@ export def "admin-directory-customer-schemas delete" [
 #
 # GET /admin/directory/v1/customer/{customerId}/schemas/{schemaKey}
 # operationId: directory.schemas.get
-export def "admin-directory-customer-schemas get" [
+export def "directory-schemas-get" [
   customer_id: string
   schema_key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1461,7 +1461,7 @@ export def "admin-directory-customer-schemas get" [
 # PATCH /admin/directory/v1/customer/{customerId}/schemas/{schemaKey}
 # operationId: directory.schemas.patch
 # --fields item shape: {displayName?: string, etag?: string, fieldId?: string, fieldName?: string, fieldType?: string, indexed?: bool, kind?: string, multiValued?: bool, numericIndexingSpec?: record, readAccessType?: string}
-export def "admin-directory-customer-schemas update-by-customer-id-schema-key" [
+export def "directory-schemas-patch" [
   customer_id: string
   schema_key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1521,7 +1521,7 @@ export def "admin-directory-customer-schemas update-by-customer-id-schema-key" [
 # PUT /admin/directory/v1/customer/{customerId}/schemas/{schemaKey}
 # operationId: directory.schemas.update
 # --fields item shape: {displayName?: string, etag?: string, fieldId?: string, fieldName?: string, fieldType?: string, indexed?: bool, kind?: string, multiValued?: bool, numericIndexingSpec?: record, readAccessType?: string}
-export def "admin-directory-customer-schemas update-by-customer-id-schema-key-1" [
+export def "directory-schemas-update" [
   customer_id: string
   schema_key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1580,7 +1580,7 @@ export def "admin-directory-customer-schemas update-by-customer-id-schema-key-1"
 #
 # GET /admin/directory/v1/customer/{customer}/domainaliases
 # operationId: directory.domainAliases.list
-export def "admin-directory-customer-domainaliases list" [
+export def "directory-domain-aliases-list" [
   customer: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1629,7 +1629,7 @@ export def "admin-directory-customer-domainaliases list" [
 #
 # POST /admin/directory/v1/customer/{customer}/domainaliases
 # operationId: directory.domainAliases.insert
-export def "admin-directory-customer-domainaliases create" [
+export def "directory-domain-aliases-insert" [
   customer: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1686,7 +1686,7 @@ export def "admin-directory-customer-domainaliases create" [
 #
 # DELETE /admin/directory/v1/customer/{customer}/domainaliases/{domainAliasName}
 # operationId: directory.domainAliases.delete
-export def "admin-directory-customer-domainaliases delete" [
+export def "directory-domain-aliases-delete" [
   customer: string
   domain_alias_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1736,7 +1736,7 @@ export def "admin-directory-customer-domainaliases delete" [
 #
 # GET /admin/directory/v1/customer/{customer}/domainaliases/{domainAliasName}
 # operationId: directory.domainAliases.get
-export def "admin-directory-customer-domainaliases get" [
+export def "directory-domain-aliases-get" [
   customer: string
   domain_alias_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1786,7 +1786,7 @@ export def "admin-directory-customer-domainaliases get" [
 #
 # GET /admin/directory/v1/customer/{customer}/domains
 # operationId: directory.domains.list
-export def "admin-directory-customer-domains list" [
+export def "directory-domains-list" [
   customer: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1835,7 +1835,7 @@ export def "admin-directory-customer-domains list" [
 # POST /admin/directory/v1/customer/{customer}/domains
 # operationId: directory.domains.insert
 # --domainAliases item shape: {creationTime?: string, domainAliasName?: string, etag?: string, kind?: string, parentDomainName?: string, verified?: bool}
-export def "admin-directory-customer-domains create" [
+export def "directory-domains-insert" [
   customer: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1893,7 +1893,7 @@ export def "admin-directory-customer-domains create" [
 #
 # DELETE /admin/directory/v1/customer/{customer}/domains/{domainName}
 # operationId: directory.domains.delete
-export def "admin-directory-customer-domains delete" [
+export def "directory-domains-delete" [
   customer: string
   domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1943,7 +1943,7 @@ export def "admin-directory-customer-domains delete" [
 #
 # GET /admin/directory/v1/customer/{customer}/domains/{domainName}
 # operationId: directory.domains.get
-export def "admin-directory-customer-domains get" [
+export def "directory-domains-get" [
   customer: string
   domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1993,7 +1993,7 @@ export def "admin-directory-customer-domains get" [
 #
 # GET /admin/directory/v1/customer/{customer}/resources/buildings
 # operationId: directory.resources.buildings.list
-export def "admin-directory-customer-resources-buildings list" [
+export def "directory-resources-buildings-list" [
   customer: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2045,7 +2045,7 @@ export def "admin-directory-customer-resources-buildings list" [
 # operationId: directory.resources.buildings.insert
 # --address shape: {addressLines?: list<string>, administrativeArea?: string, languageCode?: string, locality?: string, postalCode?: string, regionCode?: string, sublocality?: string}
 # --coordinates shape: {latitude?: float, longitude?: float}
-export def "admin-directory-customer-resources-buildings create" [
+export def "directory-resources-buildings-insert" [
   customer: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2105,7 +2105,7 @@ export def "admin-directory-customer-resources-buildings create" [
 #
 # DELETE /admin/directory/v1/customer/{customer}/resources/buildings/{buildingId}
 # operationId: directory.resources.buildings.delete
-export def "admin-directory-customer-resources-buildings delete" [
+export def "directory-resources-buildings-delete" [
   customer: string
   building_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2155,7 +2155,7 @@ export def "admin-directory-customer-resources-buildings delete" [
 #
 # GET /admin/directory/v1/customer/{customer}/resources/buildings/{buildingId}
 # operationId: directory.resources.buildings.get
-export def "admin-directory-customer-resources-buildings get" [
+export def "directory-resources-buildings-get" [
   customer: string
   building_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2207,7 +2207,7 @@ export def "admin-directory-customer-resources-buildings get" [
 # operationId: directory.resources.buildings.patch
 # --address shape: {addressLines?: list<string>, administrativeArea?: string, languageCode?: string, locality?: string, postalCode?: string, regionCode?: string, sublocality?: string}
 # --coordinates shape: {latitude?: float, longitude?: float}
-export def "admin-directory-customer-resources-buildings update-by-customer-building-id" [
+export def "directory-resources-buildings-patch" [
   customer: string
   building_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2271,7 +2271,7 @@ export def "admin-directory-customer-resources-buildings update-by-customer-buil
 # operationId: directory.resources.buildings.update
 # --address shape: {addressLines?: list<string>, administrativeArea?: string, languageCode?: string, locality?: string, postalCode?: string, regionCode?: string, sublocality?: string}
 # --coordinates shape: {latitude?: float, longitude?: float}
-export def "admin-directory-customer-resources-buildings update-by-customer-building-id-1" [
+export def "directory-resources-buildings-update" [
   customer: string
   building_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2333,7 +2333,7 @@ export def "admin-directory-customer-resources-buildings update-by-customer-buil
 #
 # GET /admin/directory/v1/customer/{customer}/resources/calendars
 # operationId: directory.resources.calendars.list
-export def "admin-directory-customer-resources-calendars list" [
+export def "directory-resources-calendars-list" [
   customer: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2385,7 +2385,7 @@ export def "admin-directory-customer-resources-calendars list" [
 #
 # POST /admin/directory/v1/customer/{customer}/resources/calendars
 # operationId: directory.resources.calendars.insert
-export def "admin-directory-customer-resources-calendars create" [
+export def "directory-resources-calendars-insert" [
   customer: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2451,7 +2451,7 @@ export def "admin-directory-customer-resources-calendars create" [
 #
 # DELETE /admin/directory/v1/customer/{customer}/resources/calendars/{calendarResourceId}
 # operationId: directory.resources.calendars.delete
-export def "admin-directory-customer-resources-calendars delete" [
+export def "directory-resources-calendars-delete" [
   customer: string
   calendar_resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2501,7 +2501,7 @@ export def "admin-directory-customer-resources-calendars delete" [
 #
 # GET /admin/directory/v1/customer/{customer}/resources/calendars/{calendarResourceId}
 # operationId: directory.resources.calendars.get
-export def "admin-directory-customer-resources-calendars get" [
+export def "directory-resources-calendars-get" [
   customer: string
   calendar_resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2551,7 +2551,7 @@ export def "admin-directory-customer-resources-calendars get" [
 #
 # PATCH /admin/directory/v1/customer/{customer}/resources/calendars/{calendarResourceId}
 # operationId: directory.resources.calendars.patch
-export def "admin-directory-customer-resources-calendars update-by-customer-calendar-resource-id" [
+export def "directory-resources-calendars-patch" [
   customer: string
   calendar_resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2619,7 +2619,7 @@ export def "admin-directory-customer-resources-calendars update-by-customer-cale
 #
 # PUT /admin/directory/v1/customer/{customer}/resources/calendars/{calendarResourceId}
 # operationId: directory.resources.calendars.update
-export def "admin-directory-customer-resources-calendars update-by-customer-calendar-resource-id-1" [
+export def "directory-resources-calendars-update" [
   customer: string
   calendar_resource_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2687,7 +2687,7 @@ export def "admin-directory-customer-resources-calendars update-by-customer-cale
 #
 # GET /admin/directory/v1/customer/{customer}/resources/features
 # operationId: directory.resources.features.list
-export def "admin-directory-customer-resources-features list" [
+export def "directory-resources-features-list" [
   customer: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2737,7 +2737,7 @@ export def "admin-directory-customer-resources-features list" [
 #
 # POST /admin/directory/v1/customer/{customer}/resources/features
 # operationId: directory.resources.features.insert
-export def "admin-directory-customer-resources-features create" [
+export def "directory-resources-features-insert" [
   customer: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2791,7 +2791,7 @@ export def "admin-directory-customer-resources-features create" [
 #
 # DELETE /admin/directory/v1/customer/{customer}/resources/features/{featureKey}
 # operationId: directory.resources.features.delete
-export def "admin-directory-customer-resources-features delete" [
+export def "directory-resources-features-delete" [
   customer: string
   feature_key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2841,7 +2841,7 @@ export def "admin-directory-customer-resources-features delete" [
 #
 # GET /admin/directory/v1/customer/{customer}/resources/features/{featureKey}
 # operationId: directory.resources.features.get
-export def "admin-directory-customer-resources-features get" [
+export def "directory-resources-features-get" [
   customer: string
   feature_key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2891,7 +2891,7 @@ export def "admin-directory-customer-resources-features get" [
 #
 # PATCH /admin/directory/v1/customer/{customer}/resources/features/{featureKey}
 # operationId: directory.resources.features.patch
-export def "admin-directory-customer-resources-features update-by-customer-feature-key" [
+export def "directory-resources-features-patch" [
   customer: string
   feature_key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2947,7 +2947,7 @@ export def "admin-directory-customer-resources-features update-by-customer-featu
 #
 # PUT /admin/directory/v1/customer/{customer}/resources/features/{featureKey}
 # operationId: directory.resources.features.update
-export def "admin-directory-customer-resources-features update-by-customer-feature-key-1" [
+export def "directory-resources-features-update" [
   customer: string
   feature_key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3003,7 +3003,7 @@ export def "admin-directory-customer-resources-features update-by-customer-featu
 #
 # POST /admin/directory/v1/customer/{customer}/resources/features/{oldName}/rename
 # operationId: directory.resources.features.rename
-export def "admin-directory-customer-resources-features-rename rename" [
+export def "directory-resources-features-rename" [
   customer: string
   old_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3057,7 +3057,7 @@ export def "admin-directory-customer-resources-features-rename rename" [
 #
 # GET /admin/directory/v1/customer/{customer}/roleassignments
 # operationId: directory.roleAssignments.list
-export def "admin-directory-customer-roleassignments list" [
+export def "directory-role-assignments-list" [
   customer: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -3110,7 +3110,7 @@ export def "admin-directory-customer-roleassignments list" [
 #
 # POST /admin/directory/v1/customer/{customer}/roleassignments
 # operationId: directory.roleAssignments.insert
-export def "admin-directory-customer-roleassignments create" [
+export def "directory-role-assignments-insert" [
   customer: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -3168,7 +3168,7 @@ export def "admin-directory-customer-roleassignments create" [
 #
 # DELETE /admin/directory/v1/customer/{customer}/roleassignments/{roleAssignmentId}
 # operationId: directory.roleAssignments.delete
-export def "admin-directory-customer-roleassignments delete" [
+export def "directory-role-assignments-delete" [
   customer: string
   role_assignment_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3218,7 +3218,7 @@ export def "admin-directory-customer-roleassignments delete" [
 #
 # GET /admin/directory/v1/customer/{customer}/roleassignments/{roleAssignmentId}
 # operationId: directory.roleAssignments.get
-export def "admin-directory-customer-roleassignments get" [
+export def "directory-role-assignments-get" [
   customer: string
   role_assignment_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3268,7 +3268,7 @@ export def "admin-directory-customer-roleassignments get" [
 #
 # GET /admin/directory/v1/customer/{customer}/roles
 # operationId: directory.roles.list
-export def "admin-directory-customer-roles list" [
+export def "directory-roles-list" [
   customer: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -3319,7 +3319,7 @@ export def "admin-directory-customer-roles list" [
 # POST /admin/directory/v1/customer/{customer}/roles
 # operationId: directory.roles.insert
 # --rolePrivileges item shape: {privilegeName?: string, serviceId?: string}
-export def "admin-directory-customer-roles create" [
+export def "directory-roles-insert" [
   customer: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -3378,7 +3378,7 @@ export def "admin-directory-customer-roles create" [
 #
 # GET /admin/directory/v1/customer/{customer}/roles/ALL/privileges
 # operationId: directory.privileges.list
-export def "admin-directory-customer-roles-all-privileges list" [
+export def "directory-privileges-list" [
   customer: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -3426,7 +3426,7 @@ export def "admin-directory-customer-roles-all-privileges list" [
 #
 # DELETE /admin/directory/v1/customer/{customer}/roles/{roleId}
 # operationId: directory.roles.delete
-export def "admin-directory-customer-roles delete" [
+export def "directory-roles-delete" [
   customer: string
   role_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3476,7 +3476,7 @@ export def "admin-directory-customer-roles delete" [
 #
 # GET /admin/directory/v1/customer/{customer}/roles/{roleId}
 # operationId: directory.roles.get
-export def "admin-directory-customer-roles get" [
+export def "directory-roles-get" [
   customer: string
   role_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3527,7 +3527,7 @@ export def "admin-directory-customer-roles get" [
 # PATCH /admin/directory/v1/customer/{customer}/roles/{roleId}
 # operationId: directory.roles.patch
 # --rolePrivileges item shape: {privilegeName?: string, serviceId?: string}
-export def "admin-directory-customer-roles update-by-customer-role-id" [
+export def "directory-roles-patch" [
   customer: string
   role_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3589,7 +3589,7 @@ export def "admin-directory-customer-roles update-by-customer-role-id" [
 # PUT /admin/directory/v1/customer/{customer}/roles/{roleId}
 # operationId: directory.roles.update
 # --rolePrivileges item shape: {privilegeName?: string, serviceId?: string}
-export def "admin-directory-customer-roles update-by-customer-role-id-1" [
+export def "directory-roles-update" [
   customer: string
   role_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3650,7 +3650,7 @@ export def "admin-directory-customer-roles update-by-customer-role-id-1" [
 #
 # GET /admin/directory/v1/customers/{customerKey}
 # operationId: directory.customers.get
-export def "admin-directory-customers get" [
+export def "directory-customers-get" [
   customer_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -3699,7 +3699,7 @@ export def "admin-directory-customers get" [
 # PATCH /admin/directory/v1/customers/{customerKey}
 # operationId: directory.customers.patch
 # --postalAddress shape: {addressLine1?: string, addressLine2?: string, addressLine3?: string, contactName?: string, countryCode?: string, locality?: string, organizationName?: string, postalCode?: string, region?: string}
-export def "admin-directory-customers update-by-customer-key" [
+export def "directory-customers-patch" [
   customer_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -3760,7 +3760,7 @@ export def "admin-directory-customers update-by-customer-key" [
 # PUT /admin/directory/v1/customers/{customerKey}
 # operationId: directory.customers.update
 # --postalAddress shape: {addressLine1?: string, addressLine2?: string, addressLine3?: string, contactName?: string, countryCode?: string, locality?: string, organizationName?: string, postalCode?: string, region?: string}
-export def "admin-directory-customers update-by-customer-key-1" [
+export def "directory-customers-update" [
   customer_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -3820,7 +3820,7 @@ export def "admin-directory-customers update-by-customer-key-1" [
 #
 # GET /admin/directory/v1/groups
 # operationId: directory.groups.list
-export def "admin-directory-groups list" [
+export def "directory-groups-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -3874,7 +3874,7 @@ export def "admin-directory-groups list" [
 #
 # POST /admin/directory/v1/groups
 # operationId: directory.groups.insert
-export def "admin-directory-groups create" [
+export def "directory-groups-insert" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -3933,7 +3933,7 @@ export def "admin-directory-groups create" [
 #
 # DELETE /admin/directory/v1/groups/{groupKey}
 # operationId: directory.groups.delete
-export def "admin-directory-groups delete" [
+export def "directory-groups-delete" [
   group_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -3981,7 +3981,7 @@ export def "admin-directory-groups delete" [
 #
 # GET /admin/directory/v1/groups/{groupKey}
 # operationId: directory.groups.get
-export def "admin-directory-groups get" [
+export def "directory-groups-get" [
   group_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -4029,7 +4029,7 @@ export def "admin-directory-groups get" [
 #
 # PATCH /admin/directory/v1/groups/{groupKey}
 # operationId: directory.groups.patch
-export def "admin-directory-groups update-by-group-key" [
+export def "directory-groups-patch" [
   group_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -4090,7 +4090,7 @@ export def "admin-directory-groups update-by-group-key" [
 #
 # PUT /admin/directory/v1/groups/{groupKey}
 # operationId: directory.groups.update
-export def "admin-directory-groups update-by-group-key-1" [
+export def "directory-groups-update" [
   group_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -4151,7 +4151,7 @@ export def "admin-directory-groups update-by-group-key-1" [
 #
 # GET /admin/directory/v1/groups/{groupKey}/aliases
 # operationId: directory.groups.aliases.list
-export def "admin-directory-groups-aliases list" [
+export def "directory-groups-aliases-list" [
   group_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -4199,7 +4199,7 @@ export def "admin-directory-groups-aliases list" [
 #
 # POST /admin/directory/v1/groups/{groupKey}/aliases
 # operationId: directory.groups.aliases.insert
-export def "admin-directory-groups-aliases create" [
+export def "directory-groups-aliases-insert" [
   group_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -4255,7 +4255,7 @@ export def "admin-directory-groups-aliases create" [
 #
 # DELETE /admin/directory/v1/groups/{groupKey}/aliases/{alias}
 # operationId: directory.groups.aliases.delete
-export def "admin-directory-groups-aliases delete" [
+export def "directory-groups-aliases-delete" [
   group_key: string
   alias: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4305,7 +4305,7 @@ export def "admin-directory-groups-aliases delete" [
 #
 # GET /admin/directory/v1/groups/{groupKey}/hasMember/{memberKey}
 # operationId: directory.members.hasMember
-export def "admin-directory-groups-has-member get" [
+export def "directory-members-has-member" [
   group_key: string
   member_key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4355,7 +4355,7 @@ export def "admin-directory-groups-has-member get" [
 #
 # GET /admin/directory/v1/groups/{groupKey}/members
 # operationId: directory.members.list
-export def "admin-directory-groups-members list" [
+export def "directory-members-list" [
   group_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -4407,7 +4407,7 @@ export def "admin-directory-groups-members list" [
 #
 # POST /admin/directory/v1/groups/{groupKey}/members
 # operationId: directory.members.insert
-export def "admin-directory-groups-members create" [
+export def "directory-members-insert" [
   group_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -4466,7 +4466,7 @@ export def "admin-directory-groups-members create" [
 #
 # DELETE /admin/directory/v1/groups/{groupKey}/members/{memberKey}
 # operationId: directory.members.delete
-export def "admin-directory-groups-members delete" [
+export def "directory-members-delete" [
   group_key: string
   member_key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4516,7 +4516,7 @@ export def "admin-directory-groups-members delete" [
 #
 # GET /admin/directory/v1/groups/{groupKey}/members/{memberKey}
 # operationId: directory.members.get
-export def "admin-directory-groups-members get" [
+export def "directory-members-get" [
   group_key: string
   member_key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4566,7 +4566,7 @@ export def "admin-directory-groups-members get" [
 #
 # PATCH /admin/directory/v1/groups/{groupKey}/members/{memberKey}
 # operationId: directory.members.patch
-export def "admin-directory-groups-members update-by-group-key-member-key" [
+export def "directory-members-patch" [
   group_key: string
   member_key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4627,7 +4627,7 @@ export def "admin-directory-groups-members update-by-group-key-member-key" [
 #
 # PUT /admin/directory/v1/groups/{groupKey}/members/{memberKey}
 # operationId: directory.members.update
-export def "admin-directory-groups-members update-by-group-key-member-key-1" [
+export def "directory-members-update" [
   group_key: string
   member_key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4688,7 +4688,7 @@ export def "admin-directory-groups-members update-by-group-key-member-key-1" [
 #
 # GET /admin/directory/v1/users
 # operationId: directory.users.list
-export def "admin-directory-users list" [
+export def "directory-users-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -4747,7 +4747,7 @@ export def "admin-directory-users list" [
 # POST /admin/directory/v1/users
 # operationId: directory.users.insert
 # --name shape: {displayName?: string, familyName?: string, fullName?: string, givenName?: string}
-export def "admin-directory-users create" [
+export def "directory-users-insert" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -4825,7 +4825,7 @@ export def "admin-directory-users create" [
 #
 # POST /admin/directory/v1/users/watch
 # operationId: directory.users.watch
-export def "admin-directory-users-watch watch" [
+export def "directory-users-watch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -4896,7 +4896,7 @@ export def "admin-directory-users-watch watch" [
 #
 # DELETE /admin/directory/v1/users/{userKey}
 # operationId: directory.users.delete
-export def "admin-directory-users delete" [
+export def "directory-users-delete" [
   user_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -4944,7 +4944,7 @@ export def "admin-directory-users delete" [
 #
 # GET /admin/directory/v1/users/{userKey}
 # operationId: directory.users.get
-export def "admin-directory-users get" [
+export def "directory-users-get" [
   user_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -4996,7 +4996,7 @@ export def "admin-directory-users get" [
 # PATCH /admin/directory/v1/users/{userKey}
 # operationId: directory.users.patch
 # --name shape: {displayName?: string, familyName?: string, fullName?: string, givenName?: string}
-export def "admin-directory-users update-by-user-key" [
+export def "directory-users-patch" [
   user_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -5077,7 +5077,7 @@ export def "admin-directory-users update-by-user-key" [
 # PUT /admin/directory/v1/users/{userKey}
 # operationId: directory.users.update
 # --name shape: {displayName?: string, familyName?: string, fullName?: string, givenName?: string}
-export def "admin-directory-users update-by-user-key-1" [
+export def "directory-users-update" [
   user_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -5157,7 +5157,7 @@ export def "admin-directory-users update-by-user-key-1" [
 #
 # GET /admin/directory/v1/users/{userKey}/aliases
 # operationId: directory.users.aliases.list
-export def "admin-directory-users-aliases list" [
+export def "directory-users-aliases-list" [
   user_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -5206,7 +5206,7 @@ export def "admin-directory-users-aliases list" [
 #
 # POST /admin/directory/v1/users/{userKey}/aliases
 # operationId: directory.users.aliases.insert
-export def "admin-directory-users-aliases create" [
+export def "directory-users-aliases-insert" [
   user_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -5262,7 +5262,7 @@ export def "admin-directory-users-aliases create" [
 #
 # POST /admin/directory/v1/users/{userKey}/aliases/watch
 # operationId: directory.users.aliases.watch
-export def "admin-directory-users-aliases-watch watch" [
+export def "directory-users-aliases-watch" [
   user_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -5324,7 +5324,7 @@ export def "admin-directory-users-aliases-watch watch" [
 #
 # DELETE /admin/directory/v1/users/{userKey}/aliases/{alias}
 # operationId: directory.users.aliases.delete
-export def "admin-directory-users-aliases delete" [
+export def "directory-users-aliases-delete" [
   user_key: string
   alias: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5374,7 +5374,7 @@ export def "admin-directory-users-aliases delete" [
 #
 # GET /admin/directory/v1/users/{userKey}/asps
 # operationId: directory.asps.list
-export def "admin-directory-users-asps list" [
+export def "directory-asps-list" [
   user_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -5422,7 +5422,7 @@ export def "admin-directory-users-asps list" [
 #
 # DELETE /admin/directory/v1/users/{userKey}/asps/{codeId}
 # operationId: directory.asps.delete
-export def "admin-directory-users-asps delete" [
+export def "directory-asps-delete" [
   user_key: string
   code_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -5472,7 +5472,7 @@ export def "admin-directory-users-asps delete" [
 #
 # GET /admin/directory/v1/users/{userKey}/asps/{codeId}
 # operationId: directory.asps.get
-export def "admin-directory-users-asps get" [
+export def "directory-asps-get" [
   user_key: string
   code_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -5522,7 +5522,7 @@ export def "admin-directory-users-asps get" [
 #
 # POST /admin/directory/v1/users/{userKey}/makeAdmin
 # operationId: directory.users.makeAdmin
-export def "admin-directory-users-make-admin create" [
+export def "directory-users-make-admin" [
   user_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -5574,7 +5574,7 @@ export def "admin-directory-users-make-admin create" [
 #
 # DELETE /admin/directory/v1/users/{userKey}/photos/thumbnail
 # operationId: directory.users.photos.delete
-export def "admin-directory-users-photos-thumbnail delete" [
+export def "directory-users-photos-delete" [
   user_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -5622,7 +5622,7 @@ export def "admin-directory-users-photos-thumbnail delete" [
 #
 # GET /admin/directory/v1/users/{userKey}/photos/thumbnail
 # operationId: directory.users.photos.get
-export def "admin-directory-users-photos-thumbnail get" [
+export def "directory-users-photos-get" [
   user_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -5670,7 +5670,7 @@ export def "admin-directory-users-photos-thumbnail get" [
 #
 # PATCH /admin/directory/v1/users/{userKey}/photos/thumbnail
 # operationId: directory.users.photos.patch
-export def "admin-directory-users-photos-thumbnail update-by-user-key" [
+export def "directory-users-photos-patch" [
   user_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -5729,7 +5729,7 @@ export def "admin-directory-users-photos-thumbnail update-by-user-key" [
 #
 # PUT /admin/directory/v1/users/{userKey}/photos/thumbnail
 # operationId: directory.users.photos.update
-export def "admin-directory-users-photos-thumbnail update-by-user-key-1" [
+export def "directory-users-photos-update" [
   user_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -5788,7 +5788,7 @@ export def "admin-directory-users-photos-thumbnail update-by-user-key-1" [
 #
 # POST /admin/directory/v1/users/{userKey}/signOut
 # operationId: directory.users.signOut
-export def "admin-directory-users-sign-out create" [
+export def "directory-users-sign-out" [
   user_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -5836,7 +5836,7 @@ export def "admin-directory-users-sign-out create" [
 #
 # GET /admin/directory/v1/users/{userKey}/tokens
 # operationId: directory.tokens.list
-export def "admin-directory-users-tokens list" [
+export def "directory-tokens-list" [
   user_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -5884,7 +5884,7 @@ export def "admin-directory-users-tokens list" [
 #
 # DELETE /admin/directory/v1/users/{userKey}/tokens/{clientId}
 # operationId: directory.tokens.delete
-export def "admin-directory-users-tokens delete" [
+export def "directory-tokens-delete" [
   user_key: string
   client_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5934,7 +5934,7 @@ export def "admin-directory-users-tokens delete" [
 #
 # GET /admin/directory/v1/users/{userKey}/tokens/{clientId}
 # operationId: directory.tokens.get
-export def "admin-directory-users-tokens get" [
+export def "directory-tokens-get" [
   user_key: string
   client_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5984,7 +5984,7 @@ export def "admin-directory-users-tokens get" [
 #
 # POST /admin/directory/v1/users/{userKey}/twoStepVerification/turnOff
 # operationId: directory.twoStepVerification.turnOff
-export def "admin-directory-users-two-step-verification-turn-off create" [
+export def "directory-two-step-verification-turn-off" [
   user_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -6032,7 +6032,7 @@ export def "admin-directory-users-two-step-verification-turn-off create" [
 #
 # POST /admin/directory/v1/users/{userKey}/undelete
 # operationId: directory.users.undelete
-export def "admin-directory-users-undelete create" [
+export def "directory-users-undelete" [
   user_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -6084,7 +6084,7 @@ export def "admin-directory-users-undelete create" [
 #
 # GET /admin/directory/v1/users/{userKey}/verificationCodes
 # operationId: directory.verificationCodes.list
-export def "admin-directory-users-verification-codes list" [
+export def "directory-verification-codes-list" [
   user_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -6132,7 +6132,7 @@ export def "admin-directory-users-verification-codes list" [
 #
 # POST /admin/directory/v1/users/{userKey}/verificationCodes/generate
 # operationId: directory.verificationCodes.generate
-export def "admin-directory-users-verification-codes-generate generate" [
+export def "directory-verification-codes-generate" [
   user_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -6180,7 +6180,7 @@ export def "admin-directory-users-verification-codes-generate generate" [
 #
 # POST /admin/directory/v1/users/{userKey}/verificationCodes/invalidate
 # operationId: directory.verificationCodes.invalidate
-export def "admin-directory-users-verification-codes-invalidate create" [
+export def "directory-verification-codes-invalidate" [
   user_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -6228,7 +6228,7 @@ export def "admin-directory-users-verification-codes-invalidate create" [
 #
 # DELETE /admin/directory/v1/{name}
 # operationId: admin.customers.chrome.printServers.delete
-export def "admin-directory delete" [
+export def "admin-customers-chrome-print-servers-delete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -6276,7 +6276,7 @@ export def "admin-directory delete" [
 #
 # GET /admin/directory/v1/{name}
 # operationId: admin.customers.chrome.printServers.get
-export def "admin-directory get" [
+export def "admin-customers-chrome-print-servers-get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -6324,7 +6324,7 @@ export def "admin-directory get" [
 #
 # PATCH /admin/directory/v1/{name}
 # operationId: admin.customers.chrome.printServers.patch
-export def "admin-directory update" [
+export def "admin-customers-chrome-print-servers-patch" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -6382,7 +6382,7 @@ export def "admin-directory update" [
 #
 # GET /admin/directory/v1/{parent}/chrome/printServers
 # operationId: admin.customers.chrome.printServers.list
-export def "admin-directory-chrome-print-servers list" [
+export def "admin-customers-chrome-print-servers-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -6435,7 +6435,7 @@ export def "admin-directory-chrome-print-servers list" [
 #
 # POST /admin/directory/v1/{parent}/chrome/printServers
 # operationId: admin.customers.chrome.printServers.create
-export def "admin-directory-chrome-print-servers create" [
+export def "admin-customers-chrome-print-servers-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -6493,7 +6493,7 @@ export def "admin-directory-chrome-print-servers create" [
 # POST /admin/directory/v1/{parent}/chrome/printServers:batchCreatePrintServers
 # operationId: admin.customers.chrome.printServers.batchCreatePrintServers
 # --requests item shape: {parent?: string, printServer?: record}
-export def "admin-directory-chrome-print-servers-batch-create-print-servers create" [
+export def "admin-customers-chrome-print-servers-batch-create-print-servers" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -6545,7 +6545,7 @@ export def "admin-directory-chrome-print-servers-batch-create-print-servers crea
 #
 # POST /admin/directory/v1/{parent}/chrome/printServers:batchDeletePrintServers
 # operationId: admin.customers.chrome.printServers.batchDeletePrintServers
-export def "admin-directory-chrome-print-servers-batch-delete-print-servers delete" [
+export def "admin-customers-chrome-print-servers-batch-delete-print-servers" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -6597,7 +6597,7 @@ export def "admin-directory-chrome-print-servers-batch-delete-print-servers dele
 #
 # GET /admin/directory/v1/{parent}/chrome/printers
 # operationId: admin.customers.chrome.printers.list
-export def "admin-directory-chrome-printers list" [
+export def "admin-customers-chrome-printers-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -6651,7 +6651,7 @@ export def "admin-directory-chrome-printers list" [
 # POST /admin/directory/v1/{parent}/chrome/printers
 # operationId: admin.customers.chrome.printers.create
 # --auxiliaryMessages item shape: {auxiliaryMessage?: string, fieldMask?: string, severity?: "SEVERITY_UNSPECIFIED"|"SEVERITY_INFO"|"SEVERITY_WARNING"|"SEVERITY_ERROR"}
-export def "admin-directory-chrome-printers create" [
+export def "admin-customers-chrome-printers-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -6711,7 +6711,7 @@ export def "admin-directory-chrome-printers create" [
 # POST /admin/directory/v1/{parent}/chrome/printers:batchCreatePrinters
 # operationId: admin.customers.chrome.printers.batchCreatePrinters
 # --requests item shape: {parent?: string, printer?: record}
-export def "admin-directory-chrome-printers-batch-create-printers create" [
+export def "admin-customers-chrome-printers-batch-create-printers" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -6763,7 +6763,7 @@ export def "admin-directory-chrome-printers-batch-create-printers create" [
 #
 # POST /admin/directory/v1/{parent}/chrome/printers:batchDeletePrinters
 # operationId: admin.customers.chrome.printers.batchDeletePrinters
-export def "admin-directory-chrome-printers-batch-delete-printers delete" [
+export def "admin-customers-chrome-printers-batch-delete-printers" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -6815,7 +6815,7 @@ export def "admin-directory-chrome-printers-batch-delete-printers delete" [
 #
 # GET /admin/directory/v1/{parent}/chrome/printers:listPrinterModels
 # operationId: admin.customers.chrome.printers.listPrinterModels
-export def "admin-directory-chrome-printers-list-printer-models list" [
+export def "admin-customers-chrome-printers-list-printer-models" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -6866,7 +6866,7 @@ export def "admin-directory-chrome-printers-list-printer-models list" [
 #
 # POST /admin/directory_v1/channels/stop
 # operationId: admin.channels.stop
-export def "admin-directory-v1-channels-stop stop" [
+export def "admin-channels-stop" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)

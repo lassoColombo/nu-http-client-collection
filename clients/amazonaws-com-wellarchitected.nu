@@ -134,7 +134,7 @@ def share-invitation-action-completer [] { ["ACCEPT" "REJECT"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "workloads-associate-lenses update" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "associate-lenses" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -158,7 +158,7 @@ export def commands []: nothing -> table {
 #
 # PATCH /workloads/{WorkloadId}/associateLenses
 # operationId: AssociateLenses
-export def "workloads-associate-lenses update" [
+export def "associate-lenses" [
   workload_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -207,7 +207,7 @@ export def "workloads-associate-lenses update" [
 #
 # POST /lenses/{LensAlias}/shares
 # operationId: CreateLensShare
-export def "lenses-shares create-lens" [
+export def "create-lens-share" [
   lens_alias: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -257,7 +257,7 @@ export def "lenses-shares create-lens" [
 #
 # GET /lenses/{LensAlias}/shares
 # operationId: ListLensShares
-export def "lenses-shares list-lens" [
+export def "list-lens-shares" [
   lens_alias: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -307,7 +307,7 @@ export def "lenses-shares list-lens" [
 #
 # POST /lenses/{LensAlias}/versions
 # operationId: CreateLensVersion
-export def "lenses-versions create-lens" [
+export def "create-lens-version" [
   lens_alias: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -358,7 +358,7 @@ export def "lenses-versions create-lens" [
 #
 # POST /workloads/{WorkloadId}/milestones
 # operationId: CreateMilestone
-export def "workloads-milestones create" [
+export def "create-milestone" [
   workload_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -409,7 +409,7 @@ export def "workloads-milestones create" [
 # POST /workloads
 # operationId: CreateWorkload
 # --DiscoveryConfig shape: {TrustedAdvisorIntegrationStatus?: any}
-export def "workloads create" [
+export def "create-workload" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -472,7 +472,7 @@ export def "workloads create" [
 #
 # POST /workloads/{WorkloadId}/shares
 # operationId: CreateWorkloadShare
-export def "workloads-shares create" [
+export def "create-workload-share" [
   workload_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -523,7 +523,7 @@ export def "workloads-shares create" [
 #
 # GET /workloads/{WorkloadId}/shares
 # operationId: ListWorkloadShares
-export def "workloads-shares list" [
+export def "list-workload-shares" [
   workload_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -573,7 +573,7 @@ export def "workloads-shares list" [
 #
 # DELETE /lenses/{LensAlias}
 # operationId: DeleteLens
-export def "lenses delete-lens" [
+export def "delete-lens" [
   lens_alias: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -621,7 +621,7 @@ export def "lenses delete-lens" [
 #
 # DELETE /lenses/{LensAlias}/shares/{ShareId}
 # operationId: DeleteLensShare
-export def "lenses-shares delete-lens" [
+export def "delete-lens-share" [
   lens_alias: string
   share_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -670,7 +670,7 @@ export def "lenses-shares delete-lens" [
 #
 # DELETE /workloads/{WorkloadId}
 # operationId: DeleteWorkload
-export def "workloads delete" [
+export def "delete-workload" [
   workload_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -717,7 +717,7 @@ export def "workloads delete" [
 #
 # DELETE /workloads/{WorkloadId}/shares/{ShareId}
 # operationId: DeleteWorkloadShare
-export def "workloads-shares delete" [
+export def "delete-workload-share" [
   workload_id: string
   share_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -766,7 +766,7 @@ export def "workloads-shares delete" [
 #
 # PATCH /workloads/{WorkloadId}/disassociateLenses
 # operationId: DisassociateLenses
-export def "workloads-disassociate-lenses update" [
+export def "disassociate-lenses" [
   workload_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -815,7 +815,7 @@ export def "workloads-disassociate-lenses update" [
 #
 # GET /lenses/{LensAlias}/export
 # operationId: ExportLens
-export def "lenses-export export-lens" [
+export def "export-lens" [
   lens_alias: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -862,7 +862,7 @@ export def "lenses-export export-lens" [
 #
 # GET /workloads/{WorkloadId}/lensReviews/{LensAlias}/answers/{QuestionId}
 # operationId: GetAnswer
-export def "workloads-lens-reviews-answers get" [
+export def "get-answer" [
   workload_id: string
   lens_alias: string
   question_id: string
@@ -913,7 +913,7 @@ export def "workloads-lens-reviews-answers get" [
 #
 # PATCH /workloads/{WorkloadId}/lensReviews/{LensAlias}/answers/{QuestionId}
 # operationId: UpdateAnswer
-export def "workloads-lens-reviews-answers update" [
+export def "update-answer" [
   workload_id: string
   lens_alias: string
   question_id: string
@@ -970,7 +970,7 @@ export def "workloads-lens-reviews-answers update" [
 #
 # GET /consolidatedReport
 # operationId: GetConsolidatedReport
-export def "consolidated-report get" [
+export def "get-consolidated-report" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1018,7 +1018,7 @@ export def "consolidated-report get" [
 #
 # GET /lenses/{LensAlias}
 # operationId: GetLens
-export def "lenses get-lens" [
+export def "get-lens" [
   lens_alias: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1065,7 +1065,7 @@ export def "lenses get-lens" [
 #
 # GET /workloads/{WorkloadId}/lensReviews/{LensAlias}
 # operationId: GetLensReview
-export def "workloads-lens-reviews get" [
+export def "get-lens-review" [
   workload_id: string
   lens_alias: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1114,7 +1114,7 @@ export def "workloads-lens-reviews get" [
 #
 # PATCH /workloads/{WorkloadId}/lensReviews/{LensAlias}
 # operationId: UpdateLensReview
-export def "workloads-lens-reviews update" [
+export def "update-lens-review" [
   workload_id: string
   lens_alias: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1166,7 +1166,7 @@ export def "workloads-lens-reviews update" [
 #
 # GET /workloads/{WorkloadId}/lensReviews/{LensAlias}/report
 # operationId: GetLensReviewReport
-export def "workloads-lens-reviews-report get" [
+export def "get-lens-review-report" [
   workload_id: string
   lens_alias: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1215,7 +1215,7 @@ export def "workloads-lens-reviews-report get" [
 #
 # GET /lenses/{LensAlias}/versionDifference
 # operationId: GetLensVersionDifference
-export def "lenses-version-difference get-lens" [
+export def "get-lens-version-difference" [
   lens_alias: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1263,7 +1263,7 @@ export def "lenses-version-difference get-lens" [
 #
 # GET /workloads/{WorkloadId}/milestones/{MilestoneNumber}
 # operationId: GetMilestone
-export def "workloads-milestones get" [
+export def "get-milestone" [
   workload_id: string
   milestone_number: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -1310,7 +1310,7 @@ export def "workloads-milestones get" [
 #
 # GET /workloads/{WorkloadId}
 # operationId: GetWorkload
-export def "workloads get" [
+export def "get-workload" [
   workload_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1356,7 +1356,7 @@ export def "workloads get" [
 # PATCH /workloads/{WorkloadId}
 # operationId: UpdateWorkload
 # --DiscoveryConfig shape: {TrustedAdvisorIntegrationStatus?: any}
-export def "workloads update" [
+export def "update-workload" [
   workload_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1420,7 +1420,7 @@ export def "workloads update" [
 #
 # PUT /importLens
 # operationId: ImportLens
-export def "import-lens import" [
+export def "import-lens" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1470,7 +1470,7 @@ export def "import-lens import" [
 #
 # GET /workloads/{WorkloadId}/lensReviews/{LensAlias}/answers
 # operationId: ListAnswers
-export def "workloads-lens-reviews-answers list" [
+export def "list-answers" [
   workload_id: string
   lens_alias: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1522,7 +1522,7 @@ export def "workloads-lens-reviews-answers list" [
 #
 # POST /workloads/{WorkloadId}/checks
 # operationId: ListCheckDetails
-export def "workloads-checks list-details" [
+export def "list-check-details" [
   workload_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1579,7 +1579,7 @@ export def "workloads-checks list-details" [
 #
 # POST /workloads/{WorkloadId}/checkSummaries
 # operationId: ListCheckSummaries
-export def "workloads-check-summaries list" [
+export def "list-check-summaries" [
   workload_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1636,7 +1636,7 @@ export def "workloads-check-summaries list" [
 #
 # GET /workloads/{WorkloadId}/lensReviews/{LensAlias}/improvements
 # operationId: ListLensReviewImprovements
-export def "workloads-lens-reviews-improvements list" [
+export def "list-lens-review-improvements" [
   workload_id: string
   lens_alias: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1688,7 +1688,7 @@ export def "workloads-lens-reviews-improvements list" [
 #
 # GET /workloads/{WorkloadId}/lensReviews
 # operationId: ListLensReviews
-export def "workloads-lens-reviews list" [
+export def "list-lens-reviews" [
   workload_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1737,7 +1737,7 @@ export def "workloads-lens-reviews list" [
 #
 # GET /lenses
 # operationId: ListLenses
-export def "lenses list" [
+export def "list-lenses" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1786,7 +1786,7 @@ export def "lenses list" [
 #
 # POST /workloads/{WorkloadId}/milestonesSummaries
 # operationId: ListMilestones
-export def "workloads-milestones-summaries list" [
+export def "list-milestones" [
   workload_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1839,7 +1839,7 @@ export def "workloads-milestones-summaries list" [
 #
 # POST /notifications
 # operationId: ListNotifications
-export def "notifications list" [
+export def "list-notifications" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1891,7 +1891,7 @@ export def "notifications list" [
 #
 # GET /shareInvitations
 # operationId: ListShareInvitations
-export def "share-invitations list" [
+export def "list-share-invitations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1940,7 +1940,7 @@ export def "share-invitations list" [
 #
 # GET /tags/{WorkloadArn}
 # operationId: ListTagsForResource
-export def "tags list-for-resource" [
+export def "list-tags-for-resource" [
   workload_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1985,7 +1985,7 @@ export def "tags list-for-resource" [
 #
 # POST /tags/{WorkloadArn}
 # operationId: TagResource
-export def "tags tag-resource" [
+export def "tag-resource" [
   workload_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2034,7 +2034,7 @@ export def "tags tag-resource" [
 #
 # POST /workloadsSummaries
 # operationId: ListWorkloads
-export def "workloads-summaries list" [
+export def "list-workloads" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2086,7 +2086,7 @@ export def "workloads-summaries list" [
 #
 # DELETE /tags/{WorkloadArn}
 # operationId: UntagResource
-export def "tags untag-resource" [
+export def "untag-resource" [
   workload_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2133,7 +2133,7 @@ export def "tags untag-resource" [
 #
 # PATCH /global-settings
 # operationId: UpdateGlobalSettings
-export def "global-settings update" [
+export def "update-global-settings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2180,7 +2180,7 @@ export def "global-settings update" [
 #
 # PATCH /shareInvitations/{ShareInvitationId}
 # operationId: UpdateShareInvitation
-export def "share-invitations update" [
+export def "update-share-invitation" [
   share_invitation_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2229,7 +2229,7 @@ export def "share-invitations update" [
 #
 # PATCH /workloads/{WorkloadId}/shares/{ShareId}
 # operationId: UpdateWorkloadShare
-export def "workloads-shares update" [
+export def "update-workload-share" [
   workload_id: string
   share_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2280,7 +2280,7 @@ export def "workloads-shares update" [
 #
 # PUT /workloads/{WorkloadId}/lensReviews/{LensAlias}/upgrade
 # operationId: UpgradeLensReview
-export def "workloads-lens-reviews-upgrade update" [
+export def "upgrade-lens-review" [
   workload_id: string
   lens_alias: string
   --base-url(-b): string@base-url-completer # API base URL

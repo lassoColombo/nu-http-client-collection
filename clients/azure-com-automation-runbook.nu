@@ -122,7 +122,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resource-groups-providers-microsoft-automation-automation-accounts-runbooks list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "runbook-list-by-automation-account" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -147,7 +147,7 @@ export def commands []: nothing -> table {
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Automation/automationAccounts/{automationAccountName}/runbooks
 # Docs: http://aka.ms/azureautomationsdk/runbookoperations
 # operationId: Runbook_ListByAutomationAccount
-export def "subscriptions-resource-groups-providers-microsoft-automation-automation-accounts-runbooks list" [
+export def "runbook-list-by-automation-account" [
   subscription_id: string
   resource_group_name: string
   automation_account_name: string
@@ -190,7 +190,7 @@ export def "subscriptions-resource-groups-providers-microsoft-automation-automat
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Automation/automationAccounts/{automationAccountName}/runbooks/{runbookName}
 # Docs: http://aka.ms/azureautomationsdk/runbookoperations
 # operationId: Runbook_Delete
-export def "subscriptions-resource-groups-providers-microsoft-automation-automation-accounts-runbooks delete" [
+export def "runbook-delete" [
   subscription_id: string
   resource_group_name: string
   automation_account_name: string
@@ -235,7 +235,7 @@ export def "subscriptions-resource-groups-providers-microsoft-automation-automat
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Automation/automationAccounts/{automationAccountName}/runbooks/{runbookName}
 # Docs: http://aka.ms/azureautomationsdk/runbookoperations
 # operationId: Runbook_Get
-export def "subscriptions-resource-groups-providers-microsoft-automation-automation-accounts-runbooks get" [
+export def "runbook-get" [
   subscription_id: string
   resource_group_name: string
   automation_account_name: string
@@ -281,7 +281,7 @@ export def "subscriptions-resource-groups-providers-microsoft-automation-automat
 # Docs: http://aka.ms/azureautomationsdk/runbookoperations
 # operationId: Runbook_Update
 # --properties shape: {description?: string, logActivityTrace?: int, logProgress?: bool, logVerbose?: bool}
-export def "subscriptions-resource-groups-providers-microsoft-automation-automation-accounts-runbooks update" [
+export def "runbook-update" [
   subscription_id: string
   resource_group_name: string
   automation_account_name: string
@@ -334,7 +334,7 @@ export def "subscriptions-resource-groups-providers-microsoft-automation-automat
 # Docs: http://aka.ms/azureautomationsdk/runbookoperations
 # operationId: Runbook_CreateOrUpdate
 # --properties shape: {description?: string, draft?: any, logActivityTrace?: int, logProgress?: bool, logVerbose?: bool, publishContentLink?: any, runbookType: "Script"|"Graph"|"PowerShellWorkflow"|"PowerShell"|"GraphPowerShellWorkflow"|"GraphPowerShell"}
-export def "subscriptions-resource-groups-providers-microsoft-automation-automation-accounts-runbooks create-or-update" [
+export def "runbook-create-or-update" [
   subscription_id: string
   resource_group_name: string
   automation_account_name: string
@@ -386,7 +386,7 @@ export def "subscriptions-resource-groups-providers-microsoft-automation-automat
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Automation/automationAccounts/{automationAccountName}/runbooks/{runbookName}/content
 # Docs: http://aka.ms/azureautomationsdk/runbookoperations
 # operationId: Runbook_GetContent
-export def "subscriptions-resource-groups-providers-microsoft-automation-automation-accounts-runbooks-content get" [
+export def "runbook-get-content" [
   subscription_id: string
   resource_group_name: string
   automation_account_name: string
@@ -431,7 +431,7 @@ export def "subscriptions-resource-groups-providers-microsoft-automation-automat
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Automation/automationAccounts/{automationAccountName}/runbooks/{runbookName}/draft
 # Docs: http://aka.ms/azureautomationsdk/runbookdraftoperations
 # operationId: RunbookDraft_Get
-export def "subscriptions-resource-groups-providers-microsoft-automation-automation-accounts-runbooks-draft get" [
+export def "runbook-draft-get" [
   subscription_id: string
   resource_group_name: string
   automation_account_name: string
@@ -476,7 +476,7 @@ export def "subscriptions-resource-groups-providers-microsoft-automation-automat
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Automation/automationAccounts/{automationAccountName}/runbooks/{runbookName}/draft/content
 # Docs: http://aka.ms/azureautomationsdk/runbookdraftoperations
 # operationId: RunbookDraft_GetContent
-export def "subscriptions-resource-groups-providers-microsoft-automation-automation-accounts-runbooks-draft-content get" [
+export def "runbook-draft-get-content" [
   subscription_id: string
   resource_group_name: string
   automation_account_name: string
@@ -521,7 +521,7 @@ export def "subscriptions-resource-groups-providers-microsoft-automation-automat
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Automation/automationAccounts/{automationAccountName}/runbooks/{runbookName}/draft/content
 # Docs: http://aka.ms/azureautomationsdk/runbookdraftoperations
 # operationId: RunbookDraft_ReplaceContent
-export def "subscriptions-resource-groups-providers-microsoft-automation-automation-accounts-runbooks-draft-content update" [
+export def "runbook-draft-replace-content" [
   subscription_id: string
   resource_group_name: string
   automation_account_name: string
@@ -570,7 +570,7 @@ export def "subscriptions-resource-groups-providers-microsoft-automation-automat
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Automation/automationAccounts/{automationAccountName}/runbooks/{runbookName}/draft/testJob
 # Docs: http://aka.ms/azureautomationsdk/testjoboperations
 # operationId: TestJob_Get
-export def "subscriptions-resource-groups-providers-microsoft-automation-automation-accounts-runbooks-draft-test-job get" [
+export def "test-job-get" [
   subscription_id: string
   resource_group_name: string
   automation_account_name: string
@@ -615,7 +615,7 @@ export def "subscriptions-resource-groups-providers-microsoft-automation-automat
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Automation/automationAccounts/{automationAccountName}/runbooks/{runbookName}/draft/testJob
 # Docs: http://aka.ms/azureautomationsdk/testjoboperations
 # operationId: TestJob_Create
-export def "subscriptions-resource-groups-providers-microsoft-automation-automation-accounts-runbooks-draft-test-job create" [
+export def "test-job-create" [
   subscription_id: string
   resource_group_name: string
   automation_account_name: string
@@ -665,7 +665,7 @@ export def "subscriptions-resource-groups-providers-microsoft-automation-automat
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Automation/automationAccounts/{automationAccountName}/runbooks/{runbookName}/draft/testJob/resume
 # Docs: http://aka.ms/azureautomationsdk/testjoboperations
 # operationId: TestJob_Resume
-export def "subscriptions-resource-groups-providers-microsoft-automation-automation-accounts-runbooks-draft-test-job-resume test" [
+export def "test-job-resume" [
   subscription_id: string
   resource_group_name: string
   automation_account_name: string
@@ -710,7 +710,7 @@ export def "subscriptions-resource-groups-providers-microsoft-automation-automat
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Automation/automationAccounts/{automationAccountName}/runbooks/{runbookName}/draft/testJob/stop
 # Docs: http://aka.ms/azureautomationsdk/testjoboperations
 # operationId: TestJob_Stop
-export def "subscriptions-resource-groups-providers-microsoft-automation-automation-accounts-runbooks-draft-test-job-stop test" [
+export def "test-job-stop" [
   subscription_id: string
   resource_group_name: string
   automation_account_name: string
@@ -755,7 +755,7 @@ export def "subscriptions-resource-groups-providers-microsoft-automation-automat
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Automation/automationAccounts/{automationAccountName}/runbooks/{runbookName}/draft/testJob/streams
 # Docs: http://aka.ms/azureautomationsdk/jobstreamoperations
 # operationId: TestJobStreams_ListByTestJob
-export def "subscriptions-resource-groups-providers-microsoft-automation-automation-accounts-runbooks-draft-test-job-streams list" [
+export def "test-job-streams-list-by-test-job" [
   subscription_id: string
   resource_group_name: string
   automation_account_name: string
@@ -801,7 +801,7 @@ export def "subscriptions-resource-groups-providers-microsoft-automation-automat
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Automation/automationAccounts/{automationAccountName}/runbooks/{runbookName}/draft/testJob/streams/{jobStreamId}
 # Docs: http://aka.ms/azureautomationsdk/jobstreamoperations
 # operationId: TestJobStreams_Get
-export def "subscriptions-resource-groups-providers-microsoft-automation-automation-accounts-runbooks-draft-test-job-streams get" [
+export def "test-job-streams-get" [
   subscription_id: string
   resource_group_name: string
   automation_account_name: string
@@ -848,7 +848,7 @@ export def "subscriptions-resource-groups-providers-microsoft-automation-automat
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Automation/automationAccounts/{automationAccountName}/runbooks/{runbookName}/draft/testJob/suspend
 # Docs: http://aka.ms/azureautomationsdk/testjoboperations
 # operationId: TestJob_Suspend
-export def "subscriptions-resource-groups-providers-microsoft-automation-automation-accounts-runbooks-draft-test-job-suspend test" [
+export def "test-job-suspend" [
   subscription_id: string
   resource_group_name: string
   automation_account_name: string
@@ -893,7 +893,7 @@ export def "subscriptions-resource-groups-providers-microsoft-automation-automat
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Automation/automationAccounts/{automationAccountName}/runbooks/{runbookName}/draft/undoEdit
 # Docs: http://aka.ms/azureautomationsdk/runbookdraftoperations
 # operationId: RunbookDraft_UndoEdit
-export def "subscriptions-resource-groups-providers-microsoft-automation-automation-accounts-runbooks-draft-undo-edit create" [
+export def "runbook-draft-undo-edit" [
   subscription_id: string
   resource_group_name: string
   automation_account_name: string
@@ -938,7 +938,7 @@ export def "subscriptions-resource-groups-providers-microsoft-automation-automat
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Automation/automationAccounts/{automationAccountName}/runbooks/{runbookName}/publish
 # Docs: http://aka.ms/azureautomationsdk/runbookdraftoperations
 # operationId: Runbook_Publish
-export def "subscriptions-resource-groups-providers-microsoft-automation-automation-accounts-runbooks-publish publish" [
+export def "runbook-publish" [
   subscription_id: string
   resource_group_name: string
   automation_account_name: string

@@ -163,7 +163,7 @@ def x-amz-target-completer-62 [] { ["OvertureService.UpdateVirtualInterfaceAttri
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "api create-accept-direct-connect-gateway-association-proposal" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "accept-direct-connect-gateway-association-proposal" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -187,7 +187,7 @@ export def commands []: nothing -> table {
 #
 # POST /
 # operationId: AcceptDirectConnectGatewayAssociationProposal
-export def "api create-accept-direct-connect-gateway-association-proposal" [
+export def "accept-direct-connect-gateway-association-proposal" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -240,7 +240,7 @@ export def "api create-accept-direct-connect-gateway-association-proposal" [
 # DEPRECATED
 # operationId: AllocateConnectionOnInterconnect
 @deprecated
-export def "api create-allocate-connection-on-interconnect" [
+export def "allocate-connection-on-interconnect" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -292,7 +292,7 @@ export def "api create-allocate-connection-on-interconnect" [
 #
 # POST /
 # operationId: AllocateHostedConnection
-export def "api create-allocate-hosted-connection" [
+export def "allocate-hosted-connection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -345,7 +345,7 @@ export def "api create-allocate-hosted-connection" [
 #
 # POST /
 # operationId: AllocatePrivateVirtualInterface
-export def "api create-allocate-private-virtual-interface" [
+export def "allocate-private-virtual-interface" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -395,7 +395,7 @@ export def "api create-allocate-private-virtual-interface" [
 #
 # POST /
 # operationId: AllocatePublicVirtualInterface
-export def "api create-allocate-public-virtual-interface" [
+export def "allocate-public-virtual-interface" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -445,7 +445,7 @@ export def "api create-allocate-public-virtual-interface" [
 #
 # POST /
 # operationId: AllocateTransitVirtualInterface
-export def "api create-allocate-transit-virtual-interface" [
+export def "allocate-transit-virtual-interface" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -495,7 +495,7 @@ export def "api create-allocate-transit-virtual-interface" [
 #
 # POST /
 # operationId: AssociateConnectionWithLag
-export def "api create-associate-connection-with-lag" [
+export def "associate-connection-with-lag" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -544,7 +544,7 @@ export def "api create-associate-connection-with-lag" [
 #
 # POST /
 # operationId: AssociateHostedConnection
-export def "api create-associate-hosted-connection" [
+export def "associate-hosted-connection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -593,7 +593,7 @@ export def "api create-associate-hosted-connection" [
 #
 # POST /
 # operationId: AssociateMacSecKey
-export def "api create-associate-mac-sec-key" [
+export def "associate-mac-sec-key" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -644,7 +644,7 @@ export def "api create-associate-mac-sec-key" [
 #
 # POST /
 # operationId: AssociateVirtualInterface
-export def "api create-associate-virtual-interface" [
+export def "associate-virtual-interface" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -693,7 +693,7 @@ export def "api create-associate-virtual-interface" [
 #
 # POST /
 # operationId: ConfirmConnection
-export def "api confirm-connection" [
+export def "confirm-connection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -741,7 +741,7 @@ export def "api confirm-connection" [
 #
 # POST /
 # operationId: ConfirmCustomerAgreement
-export def "api confirm-customer-agreement" [
+export def "confirm-customer-agreement" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -789,7 +789,7 @@ export def "api confirm-customer-agreement" [
 #
 # POST /
 # operationId: ConfirmPrivateVirtualInterface
-export def "api confirm-private-virtual-interface" [
+export def "confirm-private-virtual-interface" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -839,7 +839,7 @@ export def "api confirm-private-virtual-interface" [
 #
 # POST /
 # operationId: ConfirmPublicVirtualInterface
-export def "api confirm-public-virtual-interface" [
+export def "confirm-public-virtual-interface" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -887,7 +887,7 @@ export def "api confirm-public-virtual-interface" [
 #
 # POST /
 # operationId: ConfirmTransitVirtualInterface
-export def "api confirm-transit-virtual-interface" [
+export def "confirm-transit-virtual-interface" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -936,7 +936,7 @@ export def "api confirm-transit-virtual-interface" [
 #
 # POST /
 # operationId: CreateBGPPeer
-export def "api create-bgp-peer" [
+export def "create-bgp-peer" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -985,7 +985,7 @@ export def "api create-bgp-peer" [
 #
 # POST /
 # operationId: CreateConnection
-export def "api create-connection" [
+export def "create-connection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1039,7 +1039,7 @@ export def "api create-connection" [
 #
 # POST /
 # operationId: CreateDirectConnectGateway
-export def "api create-direct-connect-gateway" [
+export def "create-direct-connect-gateway" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1088,7 +1088,7 @@ export def "api create-direct-connect-gateway" [
 #
 # POST /
 # operationId: CreateDirectConnectGatewayAssociation
-export def "api create-direct-connect-gateway-association" [
+export def "create-direct-connect-gateway-association" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1139,7 +1139,7 @@ export def "api create-direct-connect-gateway-association" [
 #
 # POST /
 # operationId: CreateDirectConnectGatewayAssociationProposal
-export def "api create-direct-connect-gateway-association-proposal" [
+export def "create-direct-connect-gateway-association-proposal" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1191,7 +1191,7 @@ export def "api create-direct-connect-gateway-association-proposal" [
 #
 # POST /
 # operationId: CreateInterconnect
-export def "api create-interconnect" [
+export def "create-interconnect" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1244,7 +1244,7 @@ export def "api create-interconnect" [
 #
 # POST /
 # operationId: CreateLag
-export def "api create-lag" [
+export def "create-lag" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1300,7 +1300,7 @@ export def "api create-lag" [
 #
 # POST /
 # operationId: CreatePrivateVirtualInterface
-export def "api create-private-virtual-interface" [
+export def "create-private-virtual-interface" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1349,7 +1349,7 @@ export def "api create-private-virtual-interface" [
 #
 # POST /
 # operationId: CreatePublicVirtualInterface
-export def "api create-public-virtual-interface" [
+export def "create-public-virtual-interface" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1398,7 +1398,7 @@ export def "api create-public-virtual-interface" [
 #
 # POST /
 # operationId: CreateTransitVirtualInterface
-export def "api create-transit-virtual-interface" [
+export def "create-transit-virtual-interface" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1447,7 +1447,7 @@ export def "api create-transit-virtual-interface" [
 #
 # POST /
 # operationId: DeleteBGPPeer
-export def "api delete-bgp-peer" [
+export def "delete-bgp-peer" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1498,7 +1498,7 @@ export def "api delete-bgp-peer" [
 #
 # POST /
 # operationId: DeleteConnection
-export def "api delete-connection" [
+export def "delete-connection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1546,7 +1546,7 @@ export def "api delete-connection" [
 #
 # POST /
 # operationId: DeleteDirectConnectGateway
-export def "api delete-direct-connect-gateway" [
+export def "delete-direct-connect-gateway" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1594,7 +1594,7 @@ export def "api delete-direct-connect-gateway" [
 #
 # POST /
 # operationId: DeleteDirectConnectGatewayAssociation
-export def "api delete-direct-connect-gateway-association" [
+export def "delete-direct-connect-gateway-association" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1644,7 +1644,7 @@ export def "api delete-direct-connect-gateway-association" [
 #
 # POST /
 # operationId: DeleteDirectConnectGatewayAssociationProposal
-export def "api delete-direct-connect-gateway-association-proposal" [
+export def "delete-direct-connect-gateway-association-proposal" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1692,7 +1692,7 @@ export def "api delete-direct-connect-gateway-association-proposal" [
 #
 # POST /
 # operationId: DeleteInterconnect
-export def "api delete-interconnect" [
+export def "delete-interconnect" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1740,7 +1740,7 @@ export def "api delete-interconnect" [
 #
 # POST /
 # operationId: DeleteLag
-export def "api delete-lag" [
+export def "delete-lag" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1788,7 +1788,7 @@ export def "api delete-lag" [
 #
 # POST /
 # operationId: DeleteVirtualInterface
-export def "api delete-virtual-interface" [
+export def "delete-virtual-interface" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1838,7 +1838,7 @@ export def "api delete-virtual-interface" [
 # DEPRECATED
 # operationId: DescribeConnectionLoa
 @deprecated
-export def "api get-connection-loa" [
+export def "describe-connection-loa" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1888,7 +1888,7 @@ export def "api get-connection-loa" [
 #
 # POST /
 # operationId: DescribeConnections
-export def "api get-connections" [
+export def "describe-connections" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1938,7 +1938,7 @@ export def "api get-connections" [
 # DEPRECATED
 # operationId: DescribeConnectionsOnInterconnect
 @deprecated
-export def "api get-connections-on-interconnect" [
+export def "describe-connections-on-interconnect" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1986,7 +1986,7 @@ export def "api get-connections-on-interconnect" [
 #
 # POST /
 # operationId: DescribeCustomerMetadata
-export def "api get-customer-metadata" [
+export def "describe-customer-metadata" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2030,7 +2030,7 @@ export def "api get-customer-metadata" [
 #
 # POST /
 # operationId: DescribeDirectConnectGatewayAssociationProposals
-export def "api get-direct-connect-gateway-association-proposals" [
+export def "describe-direct-connect-gateway-association-proposals" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2082,7 +2082,7 @@ export def "api get-direct-connect-gateway-association-proposals" [
 #
 # POST /
 # operationId: DescribeDirectConnectGatewayAssociations
-export def "api get-direct-connect-gateway-associations" [
+export def "describe-direct-connect-gateway-associations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2135,7 +2135,7 @@ export def "api get-direct-connect-gateway-associations" [
 #
 # POST /
 # operationId: DescribeDirectConnectGatewayAttachments
-export def "api get-direct-connect-gateway-attachments" [
+export def "describe-direct-connect-gateway-attachments" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2186,7 +2186,7 @@ export def "api get-direct-connect-gateway-attachments" [
 #
 # POST /
 # operationId: DescribeDirectConnectGateways
-export def "api get-direct-connect-gateways" [
+export def "describe-direct-connect-gateways" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2236,7 +2236,7 @@ export def "api get-direct-connect-gateways" [
 #
 # POST /
 # operationId: DescribeHostedConnections
-export def "api get-hosted-connections" [
+export def "describe-hosted-connections" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2286,7 +2286,7 @@ export def "api get-hosted-connections" [
 # DEPRECATED
 # operationId: DescribeInterconnectLoa
 @deprecated
-export def "api get-interconnect-loa" [
+export def "describe-interconnect-loa" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2336,7 +2336,7 @@ export def "api get-interconnect-loa" [
 #
 # POST /
 # operationId: DescribeInterconnects
-export def "api get-interconnects" [
+export def "describe-interconnects" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2384,7 +2384,7 @@ export def "api get-interconnects" [
 #
 # POST /
 # operationId: DescribeLags
-export def "api get-lags" [
+export def "describe-lags" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2432,7 +2432,7 @@ export def "api get-lags" [
 #
 # POST /
 # operationId: DescribeLoa
-export def "api get-loa" [
+export def "describe-loa" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2482,7 +2482,7 @@ export def "api get-loa" [
 #
 # POST /
 # operationId: DescribeLocations
-export def "api get-locations" [
+export def "describe-locations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2526,7 +2526,7 @@ export def "api get-locations" [
 #
 # POST /
 # operationId: DescribeRouterConfiguration
-export def "api get-router-configuration" [
+export def "describe-router-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2575,7 +2575,7 @@ export def "api get-router-configuration" [
 #
 # POST /
 # operationId: DescribeTags
-export def "api get-tags" [
+export def "describe-tags" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2623,7 +2623,7 @@ export def "api get-tags" [
 #
 # POST /
 # operationId: DescribeVirtualGateways
-export def "api get-virtual-gateways" [
+export def "describe-virtual-gateways" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2667,7 +2667,7 @@ export def "api get-virtual-gateways" [
 #
 # POST /
 # operationId: DescribeVirtualInterfaces
-export def "api get-virtual-interfaces" [
+export def "describe-virtual-interfaces" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2716,7 +2716,7 @@ export def "api get-virtual-interfaces" [
 #
 # POST /
 # operationId: DisassociateConnectionFromLag
-export def "api create-disassociate-connection-from-lag" [
+export def "disassociate-connection-from-lag" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2765,7 +2765,7 @@ export def "api create-disassociate-connection-from-lag" [
 #
 # POST /
 # operationId: DisassociateMacSecKey
-export def "api create-disassociate-mac-sec-key" [
+export def "disassociate-mac-sec-key" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2814,7 +2814,7 @@ export def "api create-disassociate-mac-sec-key" [
 #
 # POST /
 # operationId: ListVirtualInterfaceTestHistory
-export def "api list-virtual-interface-test-history" [
+export def "list-virtual-interface-test-history" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2867,7 +2867,7 @@ export def "api list-virtual-interface-test-history" [
 #
 # POST /
 # operationId: StartBgpFailoverTest
-export def "api start-bgp-failover-test" [
+export def "start-bgp-failover-test" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2917,7 +2917,7 @@ export def "api start-bgp-failover-test" [
 #
 # POST /
 # operationId: StopBgpFailoverTest
-export def "api stop-bgp-failover-test" [
+export def "stop-bgp-failover-test" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2965,7 +2965,7 @@ export def "api stop-bgp-failover-test" [
 #
 # POST /
 # operationId: TagResource
-export def "api tag-resource" [
+export def "tag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3014,7 +3014,7 @@ export def "api tag-resource" [
 #
 # POST /
 # operationId: UntagResource
-export def "api untag-resource" [
+export def "untag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3063,7 +3063,7 @@ export def "api untag-resource" [
 #
 # POST /
 # operationId: UpdateConnection
-export def "api update-connection" [
+export def "update-connection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3113,7 +3113,7 @@ export def "api update-connection" [
 #
 # POST /
 # operationId: UpdateDirectConnectGateway
-export def "api update-direct-connect-gateway" [
+export def "update-direct-connect-gateway" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3162,7 +3162,7 @@ export def "api update-direct-connect-gateway" [
 #
 # POST /
 # operationId: UpdateDirectConnectGatewayAssociation
-export def "api update-direct-connect-gateway-association" [
+export def "update-direct-connect-gateway-association" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3212,7 +3212,7 @@ export def "api update-direct-connect-gateway-association" [
 #
 # POST /
 # operationId: UpdateLag
-export def "api update-lag" [
+export def "update-lag" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3263,7 +3263,7 @@ export def "api update-lag" [
 #
 # POST /
 # operationId: UpdateVirtualInterfaceAttributes
-export def "api update-virtual-interface-attributes" [
+export def "update-virtual-interface-attributes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

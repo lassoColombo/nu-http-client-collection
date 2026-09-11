@@ -103,7 +103,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "rest-service-fe-changeset-v1-list-changesets get-for-text" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-changesets-for-text" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -127,7 +127,7 @@ export def commands []: nothing -> table {
 #
 # GET /rest-service-fe/changeset-v1/listChangesets
 # operationId: getChangesetsForText
-export def "rest-service-fe-changeset-v1-list-changesets get-for-text" [
+export def "get-changesets-for-text" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -169,7 +169,7 @@ export def "rest-service-fe-changeset-v1-list-changesets get-for-text" [
 #
 # POST /rest-service-fe/commit-graph-v1/details/{repository}
 # operationId: getChangesetDetails
-export def "rest-service-fe-commit-graph-v1-details get-changeset" [
+export def "get-changeset-details" [
   repository: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -205,7 +205,7 @@ export def "rest-service-fe-commit-graph-v1-details get-changeset" [
 #
 # GET /rest-service-fe/commit-graph-v1/slice/{repository}
 # operationId: findSliceData
-export def "rest-service-fe-commit-graph-v1-slice find-data" [
+export def "find-slice-data" [
   repository: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -246,7 +246,7 @@ export def "rest-service-fe-commit-graph-v1-slice find-data" [
 #
 # GET /rest-service-fe/repositories-v1
 # operationId: getAllRepositories
-export def "rest-service-fe-repositories-v1 get-list" [
+export def "get-all-repositories" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -280,7 +280,7 @@ export def "rest-service-fe-repositories-v1 get-list" [
 #
 # GET /rest-service-fe/repositories-v1/{repository}
 # operationId: getRepositoryInfo
-export def "rest-service-fe-repositories-v1 get" [
+export def "get-repository-info" [
   repository: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -315,7 +315,7 @@ export def "rest-service-fe-repositories-v1 get" [
 # GET /rest-service-fe/revisionData-v1/changeset/{repository}/{csid}
 #
 # operationId: getChangeset
-export def "rest-service-fe-revision-data-v1-changeset get" [
+export def "get-changeset" [
   repository: string
   csid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -353,7 +353,7 @@ export def "rest-service-fe-revision-data-v1-changeset get" [
 #
 # GET /rest-service-fe/revisionData-v1/changesetList/{repository}
 # operationId: listChangesets
-export def "rest-service-fe-revision-data-v1-changeset-list list" [
+export def "list-changesets" [
   repository: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -394,7 +394,7 @@ export def "rest-service-fe-revision-data-v1-changeset-list list" [
 #
 # GET /rest-service-fe/revisionData-v1/pathHistory/{repository}
 # operationId: listPathHistory
-export def "rest-service-fe-revision-data-v1-path-history list" [
+export def "list-path-history" [
   repository: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -432,7 +432,7 @@ export def "rest-service-fe-revision-data-v1-path-history list" [
 #
 # GET /rest-service-fe/revisionData-v1/pathList/{repository}
 # operationId: getPathList
-export def "rest-service-fe-revision-data-v1-path-list get" [
+export def "get-path-list" [
   repository: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -469,7 +469,7 @@ export def "rest-service-fe-revision-data-v1-path-list get" [
 # GET /rest-service-fe/revisionData-v1/revisionInfo/{repository}
 #
 # operationId: getRevisionInfo
-export def "rest-service-fe-revision-data-v1-revision-info get" [
+export def "get-revision-info" [
   repository: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -507,7 +507,7 @@ export def "rest-service-fe-revision-data-v1-revision-info get" [
 # GET /rest-service-fe/revisionData-v1/revisionTags/{repository}
 #
 # operationId: listTagsForRevision
-export def "rest-service-fe-revision-data-v1-revision-tags list" [
+export def "list-tags-for-revision" [
   repository: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -546,7 +546,7 @@ export def "rest-service-fe-revision-data-v1-revision-tags list" [
 #
 # GET /rest-service-fe/search-v1/crossRepositoryQuery
 # operationId: getCrossRepositoryQuery
-export def "rest-service-fe-search-v1-cross-repository-query get" [
+export def "get-cross-repository-query" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -584,7 +584,7 @@ export def "rest-service-fe-search-v1-cross-repository-query get" [
 #
 # GET /rest-service-fe/search-v1/query/{repository}
 # operationId: getQuery
-export def "rest-service-fe-search-v1-query get" [
+export def "get-query" [
   repository: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -623,7 +623,7 @@ export def "rest-service-fe-search-v1-query get" [
 #
 # GET /rest-service-fe/search-v1/queryAsRows/{repository}
 # operationId: getQueryAsRows
-export def "rest-service-fe-search-v1-query-as-rows get" [
+export def "get-query-as-rows" [
   repository: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -662,7 +662,7 @@ export def "rest-service-fe-search-v1-query-as-rows get" [
 #
 # POST /rest-service-fe/search-v1/reviewsForChangeset/{repository}
 # operationId: getReviewsForChangeset
-export def "rest-service-fe-search-v1-reviews-for-changeset get" [
+export def "get-reviews-for-changeset" [
   repository: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -698,7 +698,7 @@ export def "rest-service-fe-search-v1-reviews-for-changeset get" [
 #
 # POST /rest-service-fe/search-v1/reviewsForChangesets/{repository}
 # operationId: getReviewsForChangesets
-export def "rest-service-fe-search-v1-reviews-for-changesets get" [
+export def "get-reviews-for-changesets" [
   repository: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

@@ -125,7 +125,7 @@ def key-name-completer [] { ["Primary" "Secondary"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-batch-operations list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "operations-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -149,7 +149,7 @@ export def commands []: nothing -> table {
 #
 # GET /providers/Microsoft.Batch/operations
 # operationId: Operations_List
-export def "providers-microsoft-batch-operations list" [
+export def "operations-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -185,7 +185,7 @@ export def "providers-microsoft-batch-operations list" [
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Batch/batchAccounts
 # operationId: BatchAccount_List
-export def "subscriptions-providers-microsoft-batch-batch-accounts list" [
+export def "batch-account-list" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -223,7 +223,7 @@ export def "subscriptions-providers-microsoft-batch-batch-accounts list" [
 #
 # POST /subscriptions/{subscriptionId}/providers/Microsoft.Batch/locations/{locationName}/checkNameAvailability
 # operationId: Location_CheckNameAvailability
-export def "subscriptions-providers-microsoft-batch-locations-check-name-availability check" [
+export def "location-check-name-availability" [
   subscription_id: string
   location_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -268,7 +268,7 @@ export def "subscriptions-providers-microsoft-batch-locations-check-name-availab
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Batch/locations/{locationName}/quotas
 # operationId: Location_GetQuotas
-export def "subscriptions-providers-microsoft-batch-locations-quotas get" [
+export def "location-get-quotas" [
   subscription_id: string
   location_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -308,7 +308,7 @@ export def "subscriptions-providers-microsoft-batch-locations-quotas get" [
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Batch/batchAccounts
 # operationId: BatchAccount_ListByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-batch-batch-accounts list" [
+export def "batch-account-list-by-resource-group" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -348,7 +348,7 @@ export def "subscriptions-resource-groups-providers-microsoft-batch-batch-accoun
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Batch/batchAccounts/{accountName}
 # operationId: BatchAccount_Delete
-export def "subscriptions-resource-groups-providers-microsoft-batch-batch-accounts delete" [
+export def "batch-account-delete" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -390,7 +390,7 @@ export def "subscriptions-resource-groups-providers-microsoft-batch-batch-accoun
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Batch/batchAccounts/{accountName}
 # operationId: BatchAccount_Get
-export def "subscriptions-resource-groups-providers-microsoft-batch-batch-accounts get" [
+export def "batch-account-get" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -433,7 +433,7 @@ export def "subscriptions-resource-groups-providers-microsoft-batch-batch-accoun
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Batch/batchAccounts/{accountName}
 # operationId: BatchAccount_Update
 # --properties shape: {autoStorage?: any}
-export def "subscriptions-resource-groups-providers-microsoft-batch-batch-accounts update" [
+export def "batch-account-update" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -481,7 +481,7 @@ export def "subscriptions-resource-groups-providers-microsoft-batch-batch-accoun
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Batch/batchAccounts/{accountName}
 # operationId: BatchAccount_Create
 # --properties shape: {autoStorage?: any, keyVaultReference?: any, poolAllocationMode?: "BatchService"|"UserSubscription"}
-export def "subscriptions-resource-groups-providers-microsoft-batch-batch-accounts create" [
+export def "batch-account-create" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -529,7 +529,7 @@ export def "subscriptions-resource-groups-providers-microsoft-batch-batch-accoun
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Batch/batchAccounts/{accountName}/applications
 # operationId: Application_List
-export def "subscriptions-resource-groups-providers-microsoft-batch-batch-accounts-applications list" [
+export def "application-list" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -572,7 +572,7 @@ export def "subscriptions-resource-groups-providers-microsoft-batch-batch-accoun
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Batch/batchAccounts/{accountName}/applications/{applicationName}
 # operationId: Application_Delete
-export def "subscriptions-resource-groups-providers-microsoft-batch-batch-accounts-applications delete" [
+export def "application-delete" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -616,7 +616,7 @@ export def "subscriptions-resource-groups-providers-microsoft-batch-batch-accoun
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Batch/batchAccounts/{accountName}/applications/{applicationName}
 # operationId: Application_Get
-export def "subscriptions-resource-groups-providers-microsoft-batch-batch-accounts-applications get" [
+export def "application-get" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -661,7 +661,7 @@ export def "subscriptions-resource-groups-providers-microsoft-batch-batch-accoun
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Batch/batchAccounts/{accountName}/applications/{applicationName}
 # operationId: Application_Update
 # --properties shape: {allowUpdates?: bool, defaultVersion?: string, displayName?: string}
-export def "subscriptions-resource-groups-providers-microsoft-batch-batch-accounts-applications update" [
+export def "application-update" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -710,7 +710,7 @@ export def "subscriptions-resource-groups-providers-microsoft-batch-batch-accoun
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Batch/batchAccounts/{accountName}/applications/{applicationName}
 # operationId: Application_Create
 # --properties shape: {allowUpdates?: bool, defaultVersion?: string, displayName?: string}
-export def "subscriptions-resource-groups-providers-microsoft-batch-batch-accounts-applications create" [
+export def "application-create" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -758,7 +758,7 @@ export def "subscriptions-resource-groups-providers-microsoft-batch-batch-accoun
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Batch/batchAccounts/{accountName}/applications/{applicationName}/versions
 # operationId: ApplicationPackage_List
-export def "subscriptions-resource-groups-providers-microsoft-batch-batch-accounts-applications-versions list-package" [
+export def "application-package-list" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -803,7 +803,7 @@ export def "subscriptions-resource-groups-providers-microsoft-batch-batch-accoun
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Batch/batchAccounts/{accountName}/applications/{applicationName}/versions/{versionName}
 # operationId: ApplicationPackage_Delete
-export def "subscriptions-resource-groups-providers-microsoft-batch-batch-accounts-applications-versions delete-package" [
+export def "application-package-delete" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -849,7 +849,7 @@ export def "subscriptions-resource-groups-providers-microsoft-batch-batch-accoun
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Batch/batchAccounts/{accountName}/applications/{applicationName}/versions/{versionName}
 # operationId: ApplicationPackage_Get
-export def "subscriptions-resource-groups-providers-microsoft-batch-batch-accounts-applications-versions get-package" [
+export def "application-package-get" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -895,7 +895,7 @@ export def "subscriptions-resource-groups-providers-microsoft-batch-batch-accoun
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Batch/batchAccounts/{accountName}/applications/{applicationName}/versions/{versionName}
 # operationId: ApplicationPackage_Create
-export def "subscriptions-resource-groups-providers-microsoft-batch-batch-accounts-applications-versions create-package" [
+export def "application-package-create" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -945,7 +945,7 @@ export def "subscriptions-resource-groups-providers-microsoft-batch-batch-accoun
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Batch/batchAccounts/{accountName}/applications/{applicationName}/versions/{versionName}/activate
 # operationId: ApplicationPackage_Activate
-export def "subscriptions-resource-groups-providers-microsoft-batch-batch-accounts-applications-versions-activate create-package" [
+export def "application-package-activate" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -995,7 +995,7 @@ export def "subscriptions-resource-groups-providers-microsoft-batch-batch-accoun
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Batch/batchAccounts/{accountName}/certificates
 # operationId: Certificate_ListByBatchAccount
-export def "subscriptions-resource-groups-providers-microsoft-batch-batch-accounts-certificates list" [
+export def "certificate-list-by-batch-account" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -1040,7 +1040,7 @@ export def "subscriptions-resource-groups-providers-microsoft-batch-batch-accoun
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Batch/batchAccounts/{accountName}/certificates/{certificateName}
 # operationId: Certificate_Delete
-export def "subscriptions-resource-groups-providers-microsoft-batch-batch-accounts-certificates delete" [
+export def "certificate-delete" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -1084,7 +1084,7 @@ export def "subscriptions-resource-groups-providers-microsoft-batch-batch-accoun
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Batch/batchAccounts/{accountName}/certificates/{certificateName}
 # operationId: Certificate_Get
-export def "subscriptions-resource-groups-providers-microsoft-batch-batch-accounts-certificates get" [
+export def "certificate-get" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -1129,7 +1129,7 @@ export def "subscriptions-resource-groups-providers-microsoft-batch-batch-accoun
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Batch/batchAccounts/{accountName}/certificates/{certificateName}
 # operationId: Certificate_Update
 # --properties shape: {data: string, password?: string, format?: "Pfx"|"Cer", thumbprint?: string, thumbprintAlgorithm?: string}
-export def "subscriptions-resource-groups-providers-microsoft-batch-batch-accounts-certificates update" [
+export def "certificate-update" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -1181,7 +1181,7 @@ export def "subscriptions-resource-groups-providers-microsoft-batch-batch-accoun
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Batch/batchAccounts/{accountName}/certificates/{certificateName}
 # operationId: Certificate_Create
 # --properties shape: {data: string, password?: string, format?: "Pfx"|"Cer", thumbprint?: string, thumbprintAlgorithm?: string}
-export def "subscriptions-resource-groups-providers-microsoft-batch-batch-accounts-certificates create" [
+export def "certificate-create" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -1233,7 +1233,7 @@ export def "subscriptions-resource-groups-providers-microsoft-batch-batch-accoun
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Batch/batchAccounts/{accountName}/certificates/{certificateName}/cancelDelete
 # operationId: Certificate_CancelDeletion
-export def "subscriptions-resource-groups-providers-microsoft-batch-batch-accounts-certificates-cancel-delete cancel-deletion" [
+export def "certificate-cancel-deletion" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -1277,7 +1277,7 @@ export def "subscriptions-resource-groups-providers-microsoft-batch-batch-accoun
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Batch/batchAccounts/{accountName}/listKeys
 # operationId: BatchAccount_GetKeys
-export def "subscriptions-resource-groups-providers-microsoft-batch-batch-accounts-list-keys get" [
+export def "batch-account-get-keys" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -1319,7 +1319,7 @@ export def "subscriptions-resource-groups-providers-microsoft-batch-batch-accoun
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Batch/batchAccounts/{accountName}/pools
 # operationId: Pool_ListByBatchAccount
-export def "subscriptions-resource-groups-providers-microsoft-batch-batch-accounts-pools list" [
+export def "pool-list-by-batch-account" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -1364,7 +1364,7 @@ export def "subscriptions-resource-groups-providers-microsoft-batch-batch-accoun
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Batch/batchAccounts/{accountName}/pools/{poolName}
 # operationId: Pool_Delete
-export def "subscriptions-resource-groups-providers-microsoft-batch-batch-accounts-pools delete" [
+export def "pool-delete" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -1408,7 +1408,7 @@ export def "subscriptions-resource-groups-providers-microsoft-batch-batch-accoun
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Batch/batchAccounts/{accountName}/pools/{poolName}
 # operationId: Pool_Get
-export def "subscriptions-resource-groups-providers-microsoft-batch-batch-accounts-pools get" [
+export def "pool-get" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -1453,7 +1453,7 @@ export def "subscriptions-resource-groups-providers-microsoft-batch-batch-accoun
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Batch/batchAccounts/{accountName}/pools/{poolName}
 # operationId: Pool_Update
 # --properties shape: {applicationLicenses?: list<string>, applicationPackages?: list, autoScaleRun?: any, certificates?: list, deploymentConfiguration?: any, displayName?: string, interNodeCommunication?: "Enabled"|"Disabled", maxTasksPerNode?: int, metadata?: list, mountConfiguration?: list, networkConfiguration?: any, resizeOperationStatus?: any, scaleSettings?: any, startTask?: any, taskSchedulingPolicy?: any, userAccounts?: list, vmSize?: string}
-export def "subscriptions-resource-groups-providers-microsoft-batch-batch-accounts-pools update" [
+export def "pool-update" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -1505,7 +1505,7 @@ export def "subscriptions-resource-groups-providers-microsoft-batch-batch-accoun
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Batch/batchAccounts/{accountName}/pools/{poolName}
 # operationId: Pool_Create
 # --properties shape: {applicationLicenses?: list<string>, applicationPackages?: list, autoScaleRun?: any, certificates?: list, deploymentConfiguration?: any, displayName?: string, interNodeCommunication?: "Enabled"|"Disabled", maxTasksPerNode?: int, metadata?: list, mountConfiguration?: list, networkConfiguration?: any, resizeOperationStatus?: any, scaleSettings?: any, startTask?: any, taskSchedulingPolicy?: any, userAccounts?: list, vmSize?: string}
-export def "subscriptions-resource-groups-providers-microsoft-batch-batch-accounts-pools create" [
+export def "pool-create" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -1557,7 +1557,7 @@ export def "subscriptions-resource-groups-providers-microsoft-batch-batch-accoun
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Batch/batchAccounts/{accountName}/pools/{poolName}/disableAutoScale
 # operationId: Pool_DisableAutoScale
-export def "subscriptions-resource-groups-providers-microsoft-batch-batch-accounts-pools-disable-auto-scale disable" [
+export def "pool-disable-auto-scale" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -1601,7 +1601,7 @@ export def "subscriptions-resource-groups-providers-microsoft-batch-batch-accoun
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Batch/batchAccounts/{accountName}/pools/{poolName}/stopResize
 # operationId: Pool_StopResize
-export def "subscriptions-resource-groups-providers-microsoft-batch-batch-accounts-pools-stop-resize stop" [
+export def "pool-stop-resize" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -1645,7 +1645,7 @@ export def "subscriptions-resource-groups-providers-microsoft-batch-batch-accoun
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Batch/batchAccounts/{accountName}/regenerateKeys
 # operationId: BatchAccount_RegenerateKey
-export def "subscriptions-resource-groups-providers-microsoft-batch-batch-accounts-regenerate-keys create" [
+export def "batch-account-regenerate-key" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -1691,7 +1691,7 @@ export def "subscriptions-resource-groups-providers-microsoft-batch-batch-accoun
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Batch/batchAccounts/{accountName}/syncAutoStorageKeys
 # operationId: BatchAccount_SynchronizeAutoStorageKeys
-export def "subscriptions-resource-groups-providers-microsoft-batch-batch-accounts-sync-auto-storage-keys create-synchronize" [
+export def "batch-account-synchronize-auto-storage-keys" [
   subscription_id: string
   resource_group_name: string
   account_name: string

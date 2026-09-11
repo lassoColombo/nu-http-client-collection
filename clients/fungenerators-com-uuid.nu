@@ -104,7 +104,7 @@ def auth-scheme-completer [] { ["x-fungenerators-api-secret"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "uuid get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-uuid" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -127,7 +127,7 @@ export def commands []: nothing -> table {
 # Generate a random UUID (v4).
 #
 # GET /uuid
-export def "uuid get" [
+export def "get-uuid" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -162,7 +162,7 @@ export def "uuid get" [
 # Parse a UUID string and return its version and check whether it is valid.
 #
 # POST /uuid
-export def "uuid create" [
+export def "post-uuid" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -197,7 +197,7 @@ export def "uuid create" [
 # Generate a random UUID (v4).
 #
 # GET /uuid/version/{version}
-export def "uuid-version get" [
+export def "get-uuid-version-version" [
   version: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

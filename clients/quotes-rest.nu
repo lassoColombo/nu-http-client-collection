@@ -152,7 +152,7 @@ def accept-completer [] { ["application/json" "application/xml"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "qod get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-qod" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -175,7 +175,7 @@ export def commands []: nothing -> table {
 # Gets `Quote of the Day`. Optional `category` param determines the category of returned quote of the day
 #
 # GET /qod
-export def "qod get" [
+export def "get-qod" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -212,7 +212,7 @@ export def "qod get" [
 # Gets a list of `Quote of the Day` Categories.
 #
 # GET /qod/categories
-export def "qod-categories get" [
+export def "get-qod-categories" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -248,7 +248,7 @@ export def "qod-categories get" [
 # Gets a list of supported languages for `Quote of the Day`.
 #
 # GET /qod/languages
-export def "qod-languages get" [
+export def "get-qod-languages" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -281,7 +281,7 @@ export def "qod-languages get" [
 # Delete a qshow.
 #
 # DELETE /qshow
-export def "qshow delete" [
+export def "delete-qshow" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -316,7 +316,7 @@ export def "qshow delete" [
 # Gets a details about a qshow.
 #
 # GET /qshow
-export def "qshow get" [
+export def "get-qshow" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -352,7 +352,7 @@ export def "qshow get" [
 # Update an existing qshow.
 #
 # PATCH /qshow
-export def "qshow update" [
+export def "patch-qshow" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -390,7 +390,7 @@ export def "qshow update" [
 # Create and add a new qshow to your private collection.
 #
 # PUT /qshow
-export def "qshow update-1" [
+export def "put-qshow" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -427,7 +427,7 @@ export def "qshow update-1" [
 # Get the list of Qshows in They Said So platform.
 #
 # GET /qshow/list
-export def "qshow-list get" [
+export def "get-qshow-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -463,7 +463,7 @@ export def "qshow-list get" [
 # Get the quotes in a given Qshow.
 #
 # GET /qshow/quotes
-export def "qshow-quotes get" [
+export def "get-qshow-quotes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -498,7 +498,7 @@ export def "qshow-quotes get" [
 # Add a quote to a given Qshow.
 #
 # POST /qshow/quotes/add
-export def "qshow-quotes-add create" [
+export def "post-qshow-quotes-add" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -534,7 +534,7 @@ export def "qshow-quotes-add create" [
 # Remove a quote to a given Qshow.
 #
 # POST /qshow/quotes/remove
-export def "qshow-quotes-remove create" [
+export def "post-qshow-quotes-remove" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -570,7 +570,7 @@ export def "qshow-quotes-remove create" [
 # Delete a quote. The user needs to be the owner of the quote to be able to delete it.
 #
 # DELETE /quote
-export def "quote delete" [
+export def "delete-quote" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -605,7 +605,7 @@ export def "quote delete" [
 # Gets a `Quote` with a given `id`.
 #
 # GET /quote
-export def "quote get" [
+export def "get-quote" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -641,7 +641,7 @@ export def "quote get" [
 # Update a quote
 #
 # PATCH /quote
-export def "quote update" [
+export def "patch-quote" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -680,7 +680,7 @@ export def "quote update" [
 # Add a new quote to your private collection. Same as 'PUT' but added since some clients don't handle PUT well.
 #
 # POST /quote
-export def "quote create" [
+export def "post-quote" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -718,7 +718,7 @@ export def "quote create" [
 # Add a new quote to your private collection.
 #
 # PUT /quote
-export def "quote update-1" [
+export def "put-quote" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -756,7 +756,7 @@ export def "quote update-1" [
 # Gets a list of popular author names in the system.
 #
 # GET /quote/authors/popular
-export def "quote-authors-popular get" [
+export def "get-quote-authors-popular" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -794,7 +794,7 @@ export def "quote-authors-popular get" [
 # Gets a list of author names in the system.
 #
 # GET /quote/authors/search
-export def "quote-authors-search get" [
+export def "get-quote-authors-search" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -833,7 +833,7 @@ export def "quote-authors-search get" [
 # Gets a list of popular `Quote` Categories.
 #
 # GET /quote/categories/popular
-export def "quote-categories-popular get" [
+export def "get-quote-categories-popular" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -869,7 +869,7 @@ export def "quote-categories-popular get" [
 # Gets a list of `Quote` Categories matching the query string.
 #
 # GET /quote/categories/search
-export def "quote-categories-search get" [
+export def "get-quote-categories-search" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -906,7 +906,7 @@ export def "quote-categories-search get" [
 # Remove the disLike for the given Quote as a user of the API Key.
 #
 # DELETE /quote/dislike
-export def "quote-dislike delete" [
+export def "delete-quote-dislike" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -941,7 +941,7 @@ export def "quote-dislike delete" [
 # Dislike the given Quote as a user of the API Key. Same as `put` but a convenient alias for those clients that don't support `put` cleanly.
 #
 # POST /quote/dislike
-export def "quote-dislike create" [
+export def "post-quote-dislike" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -976,7 +976,7 @@ export def "quote-dislike create" [
 # Dislike the given Quote as a user of the API Key. Some clients don't cleanly support `PUT`, in such scenarios use the `POST` version of this.
 #
 # PUT /quote/dislike
-export def "quote-dislike update" [
+export def "put-quote-dislike" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1011,7 +1011,7 @@ export def "quote-dislike update" [
 # Delete a quote image. The user needs to be the owner of the quote image to be able to delete it.
 #
 # DELETE /quote/image
-export def "quote-image delete" [
+export def "delete-quote-image" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1046,7 +1046,7 @@ export def "quote-image delete" [
 # Gets a Quote image for a given id. Response can be an image file as a binary or a base64 encoded contents wrapped in json. `TODO`
 #
 # GET /quote/image
-export def "quote-image get" [
+export def "get-quote-image" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1082,7 +1082,7 @@ export def "quote-image get" [
 # Create a new quote image for a given quote. Choose background colors/images , choose different font styles and generate a beautiful quote image. Did you just had a feeling of being a god or what?!
 #
 # PUT /quote/image
-export def "quote-image update" [
+export def "put-quote-image" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1128,7 +1128,7 @@ export def "quote-image update" [
 # Delete a background image file. The user needs to be the owner of the background image to be able to delete it.
 #
 # DELETE /quote/image/background
-export def "quote-image-background delete" [
+export def "delete-quote-image-background" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1163,7 +1163,7 @@ export def "quote-image-background delete" [
 # Add an image for use later as a quote background image.
 #
 # POST /quote/image/background
-export def "quote-image-background create" [
+export def "post-quote-image-background" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1203,7 +1203,7 @@ export def "quote-image-background create" [
 # Lists background images in your private collection.
 #
 # GET /quote/image/background/list
-export def "quote-image-background-list get" [
+export def "get-quote-image-background-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1238,7 +1238,7 @@ export def "quote-image-background-list get" [
 # Searches for a background image with a given tag.
 #
 # GET /quote/image/background/search
-export def "quote-image-background-search get" [
+export def "get-quote-image-background-search" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1273,7 +1273,7 @@ export def "quote-image-background-search get" [
 # Add a tag to a given Image.
 #
 # POST /quote/image/background/tags/add
-export def "quote-image-background-tags-add create" [
+export def "post-quote-image-background-tags-add" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1309,7 +1309,7 @@ export def "quote-image-background-tags-add create" [
 # Remove a tag from a given Image.
 #
 # POST /quote/image/background/tags/remove
-export def "quote-image-background-tags-remove create" [
+export def "post-quote-image-background-tags-remove" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1345,7 +1345,7 @@ export def "quote-image-background-tags-remove create" [
 # Delete a font file. The user needs to be the owner of the font to be able to delete it.
 #
 # DELETE /quote/image/font
-export def "quote-image-font delete" [
+export def "delete-quote-image-font" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1380,7 +1380,7 @@ export def "quote-image-font delete" [
 # Add a font file for use later in creating a quote image. This is essentially a `PUT` but not many clients handle PUT with binary stream i.e. a file, gracefully.
 #
 # POST /quote/image/font
-export def "quote-image-font create" [
+export def "post-quote-image-font" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1420,7 +1420,7 @@ export def "quote-image-font create" [
 # Lists background images in your private collection.
 #
 # GET /quote/image/font/list
-export def "quote-image-font-list get" [
+export def "get-quote-image-font-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1455,7 +1455,7 @@ export def "quote-image-font-list get" [
 # Searches for a font with a given tag.
 #
 # GET /quote/image/font/search
-export def "quote-image-font-search get" [
+export def "get-quote-image-font-search" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1490,7 +1490,7 @@ export def "quote-image-font-search get" [
 # Add a tag to a given font.
 #
 # POST /quote/image/font/tags/add
-export def "quote-image-font-tags-add create" [
+export def "post-quote-image-font-tags-add" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1526,7 +1526,7 @@ export def "quote-image-font-tags-add create" [
 # Remove a tag from a given Font.
 #
 # POST /quote/image/font/tags/remove
-export def "quote-image-font-tags-remove create" [
+export def "post-quote-image-font-tags-remove" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1562,7 +1562,7 @@ export def "quote-image-font-tags-remove create" [
 # Gets a Random Quote image. Optional `category` param determines the category of quote used in the image. Optional `author` param gets the quote image of a given author.
 #
 # GET /quote/image/search
-export def "quote-image-search get" [
+export def "get-quote-image-search" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1599,7 +1599,7 @@ export def "quote-image-search get" [
 # Remove the Like for the given Quote as a user of the API Key.
 #
 # DELETE /quote/like
-export def "quote-like delete" [
+export def "delete-quote-like" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1634,7 +1634,7 @@ export def "quote-like delete" [
 # Like the given Quote as a user of the API Key. Same as `PUT` but a convenient alias for those clients that don't support `PUT` cleanly.
 #
 # POST /quote/like
-export def "quote-like create" [
+export def "post-quote-like" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1669,7 +1669,7 @@ export def "quote-like create" [
 # Like the given Quote as a user of the API Key. Some clients don't cleanly support `PUT`, in such scenarios use the `POST` version of this.
 #
 # PUT /quote/like
-export def "quote-like update" [
+export def "put-quote-like" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1704,7 +1704,7 @@ export def "quote-like update" [
 # Get the list of quotes in your private collection.
 #
 # GET /quote/list
-export def "quote-list get" [
+export def "get-quote-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1740,7 +1740,7 @@ export def "quote-list get" [
 # Gets a `Random Quote`. When you are in a hurry this is what you call to get a random famous quote.
 #
 # GET /quote/random
-export def "quote-random get" [
+export def "get-quote-random" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1777,7 +1777,7 @@ export def "quote-random get" [
 # Search for a `Quote` in They Said So platform. Optional `category` , `author`, `minlength`, `maxlength` params determines the filters applied while searching for the quote.
 #
 # GET /quote/search
-export def "quote-search get" [
+export def "get-quote-search" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1821,7 +1821,7 @@ export def "quote-search get" [
 # Add a tag to a given Quote.
 #
 # POST /quote/tags/add
-export def "quote-tags-add create" [
+export def "post-quote-tags-add" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1857,7 +1857,7 @@ export def "quote-tags-add create" [
 # Remove a tag from a given quote.
 #
 # POST /quote/tags/remove
-export def "quote-tags-remove create" [
+export def "post-quote-tags-remove" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

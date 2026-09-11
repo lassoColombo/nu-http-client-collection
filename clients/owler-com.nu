@@ -101,7 +101,7 @@ def accept-completer [] { ["application/json" "application/xml"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "company-basicsearch list-basic" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "basic-company-search" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -125,7 +125,7 @@ export def commands []: nothing -> table {
 #
 # GET /v1/company/basicsearch
 # operationId: basicCompanySearch
-export def "company-basicsearch list-basic" [
+export def "basic-company-search" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -164,7 +164,7 @@ export def "company-basicsearch list-basic" [
 # Get Competitor information by Id
 #
 # GET /v1/company/competitor/id/{companyId}
-export def "company-competitor-id get" [
+export def "get-v1-company-competitor-id-company-id" [
   company_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -202,7 +202,7 @@ export def "company-competitor-id get" [
 # Get Competitor information by URL
 #
 # GET /v1/company/competitor/url/{website}
-export def "company-competitor-url get" [
+export def "get-v1-company-competitor-url-website" [
   website: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -240,7 +240,7 @@ export def "company-competitor-url get" [
 # Get Competitor information by Id
 #
 # GET /v1/company/competitorpremium/id/{companyId}
-export def "company-competitorpremium-id get" [
+export def "get-v1-company-competitorpremium-id-company-id" [
   company_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -279,7 +279,7 @@ export def "company-competitorpremium-id get" [
 # Get Competitor information by Url
 #
 # GET /v1/company/competitorpremium/url/{website}
-export def "company-competitorpremium-url get" [
+export def "get-v1-company-competitorpremium-url-website" [
   website: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -319,7 +319,7 @@ export def "company-competitorpremium-url get" [
 #
 # GET /v1/company/fuzzysearch
 # operationId: fuzzyCompanySearch
-export def "company-fuzzysearch list-fuzzy" [
+export def "fuzzy-company-search" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -358,7 +358,7 @@ export def "company-fuzzysearch list-fuzzy" [
 # Get Company by Id
 #
 # GET /v1/company/id/{companyId}
-export def "company-id get" [
+export def "get-v1-company-id-company-id" [
   company_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -397,7 +397,7 @@ export def "company-id get" [
 #
 # GET /v1/company/search
 # operationId: searchCompany
-export def "company-search list" [
+export def "search-company" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -436,7 +436,7 @@ export def "company-search list" [
 # Get Company by URL
 #
 # GET /v1/company/url/{website}
-export def "company-url get" [
+export def "get-v1-company-url-website" [
   website: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -474,7 +474,7 @@ export def "company-url get" [
 # Get Complete Company Info by Id
 #
 # GET /v1/companypremium/id/{companyId}
-export def "companypremium-id get" [
+export def "get-v1-companypremium-id-company-id" [
   company_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -512,7 +512,7 @@ export def "companypremium-id get" [
 # Get Basic Company Info by Url
 #
 # GET /v1/companypremium/url/{website}
-export def "companypremium-url get" [
+export def "get-v1-companypremium-url-website" [
   website: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -550,7 +550,7 @@ export def "companypremium-url get" [
 # Get Feeds for given Company Ids
 #
 # GET /v1/feed
-export def "feed get" [
+export def "get-v1-feed" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -590,7 +590,7 @@ export def "feed get" [
 # Get Feeds for given Company Websites
 #
 # GET /v1/feed/url
-export def "feed-url get" [
+export def "get-v1-feed-url" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

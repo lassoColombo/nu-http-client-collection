@@ -123,7 +123,7 @@ def alt-completer [] { ["json" "media" "proto"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "jobs list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "youtubereporting-jobs-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -147,7 +147,7 @@ export def commands []: nothing -> table {
 #
 # GET /v1/jobs
 # operationId: youtubereporting.jobs.list
-export def "jobs list" [
+export def "youtubereporting-jobs-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -197,7 +197,7 @@ export def "jobs list" [
 #
 # POST /v1/jobs
 # operationId: youtubereporting.jobs.create
-export def "jobs create" [
+export def "youtubereporting-jobs-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -253,7 +253,7 @@ export def "jobs create" [
 #
 # DELETE /v1/jobs/{jobId}
 # operationId: youtubereporting.jobs.delete
-export def "jobs delete" [
+export def "youtubereporting-jobs-delete" [
   job_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -302,7 +302,7 @@ export def "jobs delete" [
 #
 # GET /v1/jobs/{jobId}
 # operationId: youtubereporting.jobs.get
-export def "jobs get" [
+export def "youtubereporting-jobs-get" [
   job_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -351,7 +351,7 @@ export def "jobs get" [
 #
 # GET /v1/jobs/{jobId}/reports
 # operationId: youtubereporting.jobs.reports.list
-export def "jobs-reports list" [
+export def "youtubereporting-jobs-reports-list" [
   job_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -405,7 +405,7 @@ export def "jobs-reports list" [
 #
 # GET /v1/jobs/{jobId}/reports/{reportId}
 # operationId: youtubereporting.jobs.reports.get
-export def "jobs-reports get" [
+export def "youtubereporting-jobs-reports-get" [
   job_id: string
   report_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -456,7 +456,7 @@ export def "jobs-reports get" [
 #
 # GET /v1/media/{resourceName}
 # operationId: youtubereporting.media.download
-export def "media download" [
+export def "youtubereporting-media-download" [
   resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -504,7 +504,7 @@ export def "media download" [
 #
 # GET /v1/reportTypes
 # operationId: youtubereporting.reportTypes.list
-export def "report-types list" [
+export def "youtubereporting-report-types-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)

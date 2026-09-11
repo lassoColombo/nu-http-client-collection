@@ -102,7 +102,7 @@ def accept-completer [] { ["application/json" "text/json"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "airport-autocomplete complete-auto-list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "auto-complete-airport-name-airport-name-search" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -126,7 +126,7 @@ export def commands []: nothing -> table {
 #
 # GET /v1/airport/autocomplete/{airport_name}
 # operationId: AutoCompleteAirportName_AirportNameSearch
-export def "airport-autocomplete complete-auto-list" [
+export def "auto-complete-airport-name-airport-name-search" [
   airport_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -166,7 +166,7 @@ export def "airport-autocomplete complete-auto-list" [
 #
 # GET /v1/airport/iata/{airport_iata}
 # operationId: AirportIATA_AirportIATASearch
-export def "airport-iata list" [
+export def "airport-iata-airport-iata-search" [
   airport_iata: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -203,7 +203,7 @@ export def "airport-iata list" [
 #
 # GET /v1/airport/name/{airport_name}
 # operationId: AirportDetails_AirportNameSearch
-export def "airport-name list-details" [
+export def "airport-details-airport-name-search" [
   airport_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -240,7 +240,7 @@ export def "airport-name list-details" [
 #
 # GET /v1/airport/nearest/{result_count}/{latitude}/{longitude}
 # operationId: NearestAirports_NearestAirportList
-export def "airport-nearest list" [
+export def "nearest-airports-nearest-airport-list" [
   result_count: int
   latitude: float
   longitude: float
@@ -281,7 +281,7 @@ export def "airport-nearest list" [
 #
 # GET /v1/country/code/{country_code}
 # operationId: CountryAirportList_CountryAirportList
-export def "country-code list-airport-airport" [
+export def "country-airport-list-country-airport-list" [
   country_code: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -320,7 +320,7 @@ export def "country-code list-airport-airport" [
 #
 # GET /v1/country_list
 # operationId: CountryList_CountryAirportList
-export def "country-list list-airport" [
+export def "country-list-country-airport-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

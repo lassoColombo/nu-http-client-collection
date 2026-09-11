@@ -104,7 +104,7 @@ def auth-scheme-completer [] { ["query-apikey"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "append-chat-message get-using" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "append-chat-message-using-get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -128,7 +128,7 @@ export def commands []: nothing -> table {
 #
 # GET /appendChatMessage
 # operationId: appendChatMessageUsingGET
-export def "append-chat-message get-using" [
+export def "append-chat-message-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -167,7 +167,7 @@ export def "append-chat-message get-using" [
 #
 # POST /appendChatMessage
 # operationId: appendChatMessageUsingPOST
-export def "append-chat-message create-using" [
+export def "append-chat-message-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -205,7 +205,7 @@ export def "append-chat-message create-using" [
 # GET /appendText
 #
 # operationId: appendTextUsingGET
-export def "append-text get-using" [
+export def "append-text-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -241,7 +241,7 @@ export def "append-text get-using" [
 # POST /appendText
 #
 # operationId: appendTextUsingPOST
-export def "append-text create-using" [
+export def "append-text-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -278,7 +278,7 @@ export def "append-text create-using" [
 #
 # GET /checkToken
 # operationId: checkTokenUsingGET
-export def "check-token get-using" [
+export def "check-token-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -312,7 +312,7 @@ export def "check-token get-using" [
 #
 # POST /checkToken
 # operationId: checkTokenUsingPOST
-export def "check-token create-using" [
+export def "check-token-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -345,7 +345,7 @@ export def "check-token create-using" [
 # GET /copyPad
 #
 # operationId: copyPadUsingGET
-export def "copy-pad get-using" [
+export def "copy-pad-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -382,7 +382,7 @@ export def "copy-pad get-using" [
 # POST /copyPad
 #
 # operationId: copyPadUsingPOST
-export def "copy-pad create-using" [
+export def "copy-pad-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -419,7 +419,7 @@ export def "copy-pad create-using" [
 # GET /copyPadWithoutHistory
 #
 # operationId: copyPadWithoutHistoryUsingGET
-export def "copy-pad-without-history get-using" [
+export def "copy-pad-without-history-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -456,7 +456,7 @@ export def "copy-pad-without-history get-using" [
 # POST /copyPadWithoutHistory
 #
 # operationId: copyPadWithoutHistoryUsingPOST
-export def "copy-pad-without-history create-using" [
+export def "copy-pad-without-history-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -494,7 +494,7 @@ export def "copy-pad-without-history create-using" [
 #
 # GET /createAuthor
 # operationId: createAuthorUsingGET
-export def "create-author get-using" [
+export def "create-author-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -530,7 +530,7 @@ export def "create-author get-using" [
 #
 # POST /createAuthor
 # operationId: createAuthorUsingPOST
-export def "create-author create-using" [
+export def "create-author-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -566,7 +566,7 @@ export def "create-author create-using" [
 #
 # GET /createAuthorIfNotExistsFor
 # operationId: createAuthorIfNotExistsForUsingGET
-export def "create-author-if-not-exists-for get-using" [
+export def "create-author-if-not-exists-for-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -603,7 +603,7 @@ export def "create-author-if-not-exists-for get-using" [
 #
 # POST /createAuthorIfNotExistsFor
 # operationId: createAuthorIfNotExistsForUsingPOST
-export def "create-author-if-not-exists-for create-using" [
+export def "create-author-if-not-exists-for-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -639,7 +639,7 @@ export def "create-author-if-not-exists-for create-using" [
 # GET /createDiffHTML
 #
 # operationId: createDiffHTMLUsingGET
-export def "create-diff-html get-using" [
+export def "create-diff-html-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -676,7 +676,7 @@ export def "create-diff-html get-using" [
 # POST /createDiffHTML
 #
 # operationId: createDiffHTMLUsingPOST
-export def "create-diff-html create-using" [
+export def "create-diff-html-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -714,7 +714,7 @@ export def "create-diff-html create-using" [
 #
 # GET /createGroup
 # operationId: createGroupUsingGET
-export def "create-group get-using" [
+export def "create-group-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -748,7 +748,7 @@ export def "create-group get-using" [
 #
 # POST /createGroup
 # operationId: createGroupUsingPOST
-export def "create-group create-using" [
+export def "create-group-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -782,7 +782,7 @@ export def "create-group create-using" [
 #
 # GET /createGroupIfNotExistsFor
 # operationId: createGroupIfNotExistsForUsingGET
-export def "create-group-if-not-exists-for get-using" [
+export def "create-group-if-not-exists-for-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -818,7 +818,7 @@ export def "create-group-if-not-exists-for get-using" [
 #
 # POST /createGroupIfNotExistsFor
 # operationId: createGroupIfNotExistsForUsingPOST
-export def "create-group-if-not-exists-for create-using" [
+export def "create-group-if-not-exists-for-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -854,7 +854,7 @@ export def "create-group-if-not-exists-for create-using" [
 #
 # GET /createGroupPad
 # operationId: createGroupPadUsingGET
-export def "create-group-pad get-using" [
+export def "create-group-pad-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -892,7 +892,7 @@ export def "create-group-pad get-using" [
 #
 # POST /createGroupPad
 # operationId: createGroupPadUsingPOST
-export def "create-group-pad create-using" [
+export def "create-group-pad-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -930,7 +930,7 @@ export def "create-group-pad create-using" [
 #
 # GET /createPad
 # operationId: createPadUsingGET
-export def "create-pad get-using" [
+export def "create-pad-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -967,7 +967,7 @@ export def "create-pad get-using" [
 #
 # POST /createPad
 # operationId: createPadUsingPOST
-export def "create-pad create-using" [
+export def "create-pad-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1004,7 +1004,7 @@ export def "create-pad create-using" [
 #
 # GET /createSession
 # operationId: createSessionUsingGET
-export def "create-session get-using" [
+export def "create-session-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1042,7 +1042,7 @@ export def "create-session get-using" [
 #
 # POST /createSession
 # operationId: createSessionUsingPOST
-export def "create-session create-using" [
+export def "create-session-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1080,7 +1080,7 @@ export def "create-session create-using" [
 #
 # GET /deleteGroup
 # operationId: deleteGroupUsingGET
-export def "delete-group get-using" [
+export def "delete-group-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1116,7 +1116,7 @@ export def "delete-group get-using" [
 #
 # POST /deleteGroup
 # operationId: deleteGroupUsingPOST
-export def "delete-group create-using" [
+export def "delete-group-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1152,7 +1152,7 @@ export def "delete-group create-using" [
 #
 # GET /deletePad
 # operationId: deletePadUsingGET
-export def "delete-pad get-using" [
+export def "delete-pad-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1188,7 +1188,7 @@ export def "delete-pad get-using" [
 #
 # POST /deletePad
 # operationId: deletePadUsingPOST
-export def "delete-pad create-using" [
+export def "delete-pad-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1224,7 +1224,7 @@ export def "delete-pad create-using" [
 #
 # GET /deleteSession
 # operationId: deleteSessionUsingGET
-export def "delete-session get-using" [
+export def "delete-session-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1260,7 +1260,7 @@ export def "delete-session get-using" [
 #
 # POST /deleteSession
 # operationId: deleteSessionUsingPOST
-export def "delete-session create-using" [
+export def "delete-session-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1295,7 +1295,7 @@ export def "delete-session create-using" [
 # GET /getAttributePool
 #
 # operationId: getAttributePoolUsingGET
-export def "get-attribute-pool get" [
+export def "get-attribute-pool-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1330,7 +1330,7 @@ export def "get-attribute-pool get" [
 # POST /getAttributePool
 #
 # operationId: getAttributePoolUsingPOST
-export def "get-attribute-pool create-using" [
+export def "get-attribute-pool-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1366,7 +1366,7 @@ export def "get-attribute-pool create-using" [
 #
 # GET /getAuthorName
 # operationId: getAuthorNameUsingGET
-export def "get-author-name get" [
+export def "get-author-name-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1402,7 +1402,7 @@ export def "get-author-name get" [
 #
 # POST /getAuthorName
 # operationId: getAuthorNameUsingPOST
-export def "get-author-name create-using" [
+export def "get-author-name-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1438,7 +1438,7 @@ export def "get-author-name create-using" [
 #
 # GET /getChatHead
 # operationId: getChatHeadUsingGET
-export def "get-chat-head get" [
+export def "get-chat-head-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1474,7 +1474,7 @@ export def "get-chat-head get" [
 #
 # POST /getChatHead
 # operationId: getChatHeadUsingPOST
-export def "get-chat-head create-using" [
+export def "get-chat-head-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1510,7 +1510,7 @@ export def "get-chat-head create-using" [
 #
 # GET /getChatHistory
 # operationId: getChatHistoryUsingGET
-export def "get-chat-history get" [
+export def "get-chat-history-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1548,7 +1548,7 @@ export def "get-chat-history get" [
 #
 # POST /getChatHistory
 # operationId: getChatHistoryUsingPOST
-export def "get-chat-history create-using" [
+export def "get-chat-history-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1586,7 +1586,7 @@ export def "get-chat-history create-using" [
 #
 # GET /getHTML
 # operationId: getHTMLUsingGET
-export def "get-html get" [
+export def "get-html-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1623,7 +1623,7 @@ export def "get-html get" [
 #
 # POST /getHTML
 # operationId: getHTMLUsingPOST
-export def "get-html create-using" [
+export def "get-html-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1660,7 +1660,7 @@ export def "get-html create-using" [
 #
 # GET /getLastEdited
 # operationId: getLastEditedUsingGET
-export def "get-last-edited get" [
+export def "get-last-edited-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1696,7 +1696,7 @@ export def "get-last-edited get" [
 #
 # POST /getLastEdited
 # operationId: getLastEditedUsingPOST
-export def "get-last-edited create-using" [
+export def "get-last-edited-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1731,7 +1731,7 @@ export def "get-last-edited create-using" [
 # GET /getPadID
 #
 # operationId: getPadIDUsingGET
-export def "get-pad-id get" [
+export def "get-pad-id-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1766,7 +1766,7 @@ export def "get-pad-id get" [
 # POST /getPadID
 #
 # operationId: getPadIDUsingPOST
-export def "get-pad-id create-using" [
+export def "get-pad-id-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1802,7 +1802,7 @@ export def "get-pad-id create-using" [
 #
 # GET /getPublicStatus
 # operationId: getPublicStatusUsingGET
-export def "get-public-status get" [
+export def "get-public-status-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1838,7 +1838,7 @@ export def "get-public-status get" [
 #
 # POST /getPublicStatus
 # operationId: getPublicStatusUsingPOST
-export def "get-public-status create-using" [
+export def "get-public-status-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1874,7 +1874,7 @@ export def "get-public-status create-using" [
 #
 # GET /getReadOnlyID
 # operationId: getReadOnlyIDUsingGET
-export def "get-read-only-id get" [
+export def "get-read-only-id-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1910,7 +1910,7 @@ export def "get-read-only-id get" [
 #
 # POST /getReadOnlyID
 # operationId: getReadOnlyIDUsingPOST
-export def "get-read-only-id create-using" [
+export def "get-read-only-id-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1945,7 +1945,7 @@ export def "get-read-only-id create-using" [
 # GET /getRevisionChangeset
 #
 # operationId: getRevisionChangesetUsingGET
-export def "get-revision-changeset get" [
+export def "get-revision-changeset-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1981,7 +1981,7 @@ export def "get-revision-changeset get" [
 # POST /getRevisionChangeset
 #
 # operationId: getRevisionChangesetUsingPOST
-export def "get-revision-changeset create-using" [
+export def "get-revision-changeset-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2018,7 +2018,7 @@ export def "get-revision-changeset create-using" [
 #
 # GET /getRevisionsCount
 # operationId: getRevisionsCountUsingGET
-export def "get-revisions-count get" [
+export def "get-revisions-count-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2054,7 +2054,7 @@ export def "get-revisions-count get" [
 #
 # POST /getRevisionsCount
 # operationId: getRevisionsCountUsingPOST
-export def "get-revisions-count create-using" [
+export def "get-revisions-count-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2089,7 +2089,7 @@ export def "get-revisions-count create-using" [
 # GET /getSavedRevisionsCount
 #
 # operationId: getSavedRevisionsCountUsingGET
-export def "get-saved-revisions-count get" [
+export def "get-saved-revisions-count-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2124,7 +2124,7 @@ export def "get-saved-revisions-count get" [
 # POST /getSavedRevisionsCount
 #
 # operationId: getSavedRevisionsCountUsingPOST
-export def "get-saved-revisions-count create-using" [
+export def "get-saved-revisions-count-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2160,7 +2160,7 @@ export def "get-saved-revisions-count create-using" [
 #
 # GET /getSessionInfo
 # operationId: getSessionInfoUsingGET
-export def "get-session-info get" [
+export def "get-session-info-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2196,7 +2196,7 @@ export def "get-session-info get" [
 #
 # POST /getSessionInfo
 # operationId: getSessionInfoUsingPOST
-export def "get-session-info create-using" [
+export def "get-session-info-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2231,7 +2231,7 @@ export def "get-session-info create-using" [
 # GET /getStats
 #
 # operationId: getStatsUsingGET
-export def "get-stats get" [
+export def "get-stats-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2264,7 +2264,7 @@ export def "get-stats get" [
 # POST /getStats
 #
 # operationId: getStatsUsingPOST
-export def "get-stats create-using" [
+export def "get-stats-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2298,7 +2298,7 @@ export def "get-stats create-using" [
 #
 # GET /getText
 # operationId: getTextUsingGET
-export def "get-text get" [
+export def "get-text-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2335,7 +2335,7 @@ export def "get-text get" [
 #
 # POST /getText
 # operationId: getTextUsingPOST
-export def "get-text create-using" [
+export def "get-text-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2371,7 +2371,7 @@ export def "get-text create-using" [
 # GET /listAllGroups
 #
 # operationId: listAllGroupsUsingGET
-export def "list-all-groups get-using" [
+export def "list-all-groups-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2404,7 +2404,7 @@ export def "list-all-groups get-using" [
 # POST /listAllGroups
 #
 # operationId: listAllGroupsUsingPOST
-export def "list-all-groups create-using" [
+export def "list-all-groups-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2438,7 +2438,7 @@ export def "list-all-groups create-using" [
 #
 # GET /listAllPads
 # operationId: listAllPadsUsingGET
-export def "list-all-pads get-using" [
+export def "list-all-pads-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2472,7 +2472,7 @@ export def "list-all-pads get-using" [
 #
 # POST /listAllPads
 # operationId: listAllPadsUsingPOST
-export def "list-all-pads create-using" [
+export def "list-all-pads-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2506,7 +2506,7 @@ export def "list-all-pads create-using" [
 #
 # GET /listAuthorsOfPad
 # operationId: listAuthorsOfPadUsingGET
-export def "list-authors-of-pad get-using" [
+export def "list-authors-of-pad-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2542,7 +2542,7 @@ export def "list-authors-of-pad get-using" [
 #
 # POST /listAuthorsOfPad
 # operationId: listAuthorsOfPadUsingPOST
-export def "list-authors-of-pad create-using" [
+export def "list-authors-of-pad-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2578,7 +2578,7 @@ export def "list-authors-of-pad create-using" [
 #
 # GET /listPads
 # operationId: listPadsUsingGET
-export def "list-pads get-using" [
+export def "list-pads-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2614,7 +2614,7 @@ export def "list-pads get-using" [
 #
 # POST /listPads
 # operationId: listPadsUsingPOST
-export def "list-pads create-using" [
+export def "list-pads-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2650,7 +2650,7 @@ export def "list-pads create-using" [
 #
 # GET /listPadsOfAuthor
 # operationId: listPadsOfAuthorUsingGET
-export def "list-pads-of-author get-using" [
+export def "list-pads-of-author-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2686,7 +2686,7 @@ export def "list-pads-of-author get-using" [
 #
 # POST /listPadsOfAuthor
 # operationId: listPadsOfAuthorUsingPOST
-export def "list-pads-of-author create-using" [
+export def "list-pads-of-author-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2721,7 +2721,7 @@ export def "list-pads-of-author create-using" [
 # GET /listSavedRevisions
 #
 # operationId: listSavedRevisionsUsingGET
-export def "list-saved-revisions get-using" [
+export def "list-saved-revisions-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2756,7 +2756,7 @@ export def "list-saved-revisions get-using" [
 # POST /listSavedRevisions
 #
 # operationId: listSavedRevisionsUsingPOST
-export def "list-saved-revisions create-using" [
+export def "list-saved-revisions-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2792,7 +2792,7 @@ export def "list-saved-revisions create-using" [
 #
 # GET /listSessionsOfAuthor
 # operationId: listSessionsOfAuthorUsingGET
-export def "list-sessions-of-author get-using" [
+export def "list-sessions-of-author-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2828,7 +2828,7 @@ export def "list-sessions-of-author get-using" [
 #
 # POST /listSessionsOfAuthor
 # operationId: listSessionsOfAuthorUsingPOST
-export def "list-sessions-of-author create-using" [
+export def "list-sessions-of-author-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2863,7 +2863,7 @@ export def "list-sessions-of-author create-using" [
 # GET /listSessionsOfGroup
 #
 # operationId: listSessionsOfGroupUsingGET
-export def "list-sessions-of-group get-using" [
+export def "list-sessions-of-group-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2898,7 +2898,7 @@ export def "list-sessions-of-group get-using" [
 # POST /listSessionsOfGroup
 #
 # operationId: listSessionsOfGroupUsingPOST
-export def "list-sessions-of-group create-using" [
+export def "list-sessions-of-group-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2933,7 +2933,7 @@ export def "list-sessions-of-group create-using" [
 # GET /movePad
 #
 # operationId: movePadUsingGET
-export def "move-pad get-using" [
+export def "move-pad-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2970,7 +2970,7 @@ export def "move-pad get-using" [
 # POST /movePad
 #
 # operationId: movePadUsingPOST
-export def "move-pad create-using" [
+export def "move-pad-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3008,7 +3008,7 @@ export def "move-pad create-using" [
 #
 # GET /padUsers
 # operationId: padUsersUsingGET
-export def "pad-users get-using" [
+export def "pad-users-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3044,7 +3044,7 @@ export def "pad-users get-using" [
 #
 # POST /padUsers
 # operationId: padUsersUsingPOST
-export def "pad-users create-using" [
+export def "pad-users-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3080,7 +3080,7 @@ export def "pad-users create-using" [
 #
 # GET /padUsersCount
 # operationId: padUsersCountUsingGET
-export def "pad-users-count get-using" [
+export def "pad-users-count-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3116,7 +3116,7 @@ export def "pad-users-count get-using" [
 #
 # POST /padUsersCount
 # operationId: padUsersCountUsingPOST
-export def "pad-users-count create-using" [
+export def "pad-users-count-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3151,7 +3151,7 @@ export def "pad-users-count create-using" [
 # GET /restoreRevision
 #
 # operationId: restoreRevisionUsingGET
-export def "restore-revision get-using" [
+export def "restore-revision-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3187,7 +3187,7 @@ export def "restore-revision get-using" [
 # POST /restoreRevision
 #
 # operationId: restoreRevisionUsingPOST
-export def "restore-revision create-using" [
+export def "restore-revision-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3223,7 +3223,7 @@ export def "restore-revision create-using" [
 # GET /saveRevision
 #
 # operationId: saveRevisionUsingGET
-export def "save-revision get-using" [
+export def "save-revision-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3259,7 +3259,7 @@ export def "save-revision get-using" [
 # POST /saveRevision
 #
 # operationId: saveRevisionUsingPOST
-export def "save-revision create-using" [
+export def "save-revision-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3296,7 +3296,7 @@ export def "save-revision create-using" [
 #
 # GET /sendClientsMessage
 # operationId: sendClientsMessageUsingGET
-export def "send-clients-message get-using" [
+export def "send-clients-message-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3333,7 +3333,7 @@ export def "send-clients-message get-using" [
 #
 # POST /sendClientsMessage
 # operationId: sendClientsMessageUsingPOST
-export def "send-clients-message create-using" [
+export def "send-clients-message-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3370,7 +3370,7 @@ export def "send-clients-message create-using" [
 #
 # GET /setHTML
 # operationId: setHTMLUsingGET
-export def "set-html get-using" [
+export def "set-html-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3407,7 +3407,7 @@ export def "set-html get-using" [
 #
 # POST /setHTML
 # operationId: setHTMLUsingPOST
-export def "set-html create-using" [
+export def "set-html-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3444,7 +3444,7 @@ export def "set-html create-using" [
 #
 # GET /setPublicStatus
 # operationId: setPublicStatusUsingGET
-export def "set-public-status get-using" [
+export def "set-public-status-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3481,7 +3481,7 @@ export def "set-public-status get-using" [
 #
 # POST /setPublicStatus
 # operationId: setPublicStatusUsingPOST
-export def "set-public-status create-using" [
+export def "set-public-status-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3518,7 +3518,7 @@ export def "set-public-status create-using" [
 #
 # GET /setText
 # operationId: setTextUsingGET
-export def "set-text get-using" [
+export def "set-text-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3555,7 +3555,7 @@ export def "set-text get-using" [
 #
 # POST /setText
 # operationId: setTextUsingPOST
-export def "set-text create-using" [
+export def "set-text-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

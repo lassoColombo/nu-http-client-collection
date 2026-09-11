@@ -110,7 +110,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-marketplace-ordering-operations list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "operations-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -134,7 +134,7 @@ export def commands []: nothing -> table {
 #
 # GET /providers/Microsoft.MarketplaceOrdering/operations
 # operationId: Operations_List
-export def "providers-microsoft-marketplace-ordering-operations list" [
+export def "operations-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -170,7 +170,7 @@ export def "providers-microsoft-marketplace-ordering-operations list" [
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.MarketplaceOrdering/agreements
 # operationId: MarketplaceAgreements_List
-export def "subscriptions-providers-microsoft-marketplace-ordering-agreements list" [
+export def "marketplace-agreements-list" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -208,7 +208,7 @@ export def "subscriptions-providers-microsoft-marketplace-ordering-agreements li
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.MarketplaceOrdering/agreements/{publisherId}/offers/{offerId}/plans/{planId}
 # operationId: MarketplaceAgreements_GetAgreement
-export def "subscriptions-providers-microsoft-marketplace-ordering-agreements-offers-plans get" [
+export def "marketplace-agreements-get-agreement" [
   subscription_id: string
   publisher_id: string
   offer_id: string
@@ -252,7 +252,7 @@ export def "subscriptions-providers-microsoft-marketplace-ordering-agreements-of
 #
 # POST /subscriptions/{subscriptionId}/providers/Microsoft.MarketplaceOrdering/agreements/{publisherId}/offers/{offerId}/plans/{planId}/cancel
 # operationId: MarketplaceAgreements_Cancel
-export def "subscriptions-providers-microsoft-marketplace-ordering-agreements-offers-plans-cancel cancel" [
+export def "marketplace-agreements-cancel" [
   subscription_id: string
   publisher_id: string
   offer_id: string
@@ -296,7 +296,7 @@ export def "subscriptions-providers-microsoft-marketplace-ordering-agreements-of
 #
 # POST /subscriptions/{subscriptionId}/providers/Microsoft.MarketplaceOrdering/agreements/{publisherId}/offers/{offerId}/plans/{planId}/sign
 # operationId: MarketplaceAgreements_Sign
-export def "subscriptions-providers-microsoft-marketplace-ordering-agreements-offers-plans-sign create" [
+export def "marketplace-agreements-sign" [
   subscription_id: string
   publisher_id: string
   offer_id: string
@@ -340,7 +340,7 @@ export def "subscriptions-providers-microsoft-marketplace-ordering-agreements-of
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.MarketplaceOrdering/offerTypes/{offerType}/publishers/{publisherId}/offers/{offerId}/plans/{planId}/agreements/current
 # operationId: MarketplaceAgreements_Get
-export def "subscriptions-providers-microsoft-marketplace-ordering-offer-types-publishers-offers-plans-agreements-current get" [
+export def "marketplace-agreements-get" [
   subscription_id: string
   offer_type: string
   publisher_id: string
@@ -387,7 +387,7 @@ export def "subscriptions-providers-microsoft-marketplace-ordering-offer-types-p
 # PUT /subscriptions/{subscriptionId}/providers/Microsoft.MarketplaceOrdering/offerTypes/{offerType}/publishers/{publisherId}/offers/{offerId}/plans/{planId}/agreements/current
 # operationId: MarketplaceAgreements_Create
 # --properties shape: {accepted?: bool, licenseTextLink?: string, plan?: string, privacyPolicyLink?: string, product?: string, publisher?: string, retrieveDatetime?: string, signature?: string}
-export def "subscriptions-providers-microsoft-marketplace-ordering-offer-types-publishers-offers-plans-agreements-current create" [
+export def "marketplace-agreements-create" [
   subscription_id: string
   offer_type: string
   publisher_id: string

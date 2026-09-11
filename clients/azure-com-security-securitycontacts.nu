@@ -116,7 +116,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-providers-microsoft-security-security-contacts list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "security-contacts-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -140,7 +140,7 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Security/securityContacts
 # operationId: SecurityContacts_List
-export def "subscriptions-providers-microsoft-security-security-contacts list" [
+export def "security-contacts-list" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -178,7 +178,7 @@ export def "subscriptions-providers-microsoft-security-security-contacts list" [
 #
 # DELETE /subscriptions/{subscriptionId}/providers/Microsoft.Security/securityContacts/{securityContactName}
 # operationId: SecurityContacts_Delete
-export def "subscriptions-providers-microsoft-security-security-contacts delete" [
+export def "security-contacts-delete" [
   subscription_id: string
   security_contact_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -218,7 +218,7 @@ export def "subscriptions-providers-microsoft-security-security-contacts delete"
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Security/securityContacts/{securityContactName}
 # operationId: SecurityContacts_Get
-export def "subscriptions-providers-microsoft-security-security-contacts get" [
+export def "security-contacts-get" [
   subscription_id: string
   security_contact_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -259,7 +259,7 @@ export def "subscriptions-providers-microsoft-security-security-contacts get" [
 # PATCH /subscriptions/{subscriptionId}/providers/Microsoft.Security/securityContacts/{securityContactName}
 # operationId: SecurityContacts_Update
 # --properties shape: {alertNotifications: "On"|"Off", alertsToAdmins: "On"|"Off", email: string, phone?: string}
-export def "subscriptions-providers-microsoft-security-security-contacts update" [
+export def "security-contacts-update" [
   subscription_id: string
   security_contact_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -304,7 +304,7 @@ export def "subscriptions-providers-microsoft-security-security-contacts update"
 # PUT /subscriptions/{subscriptionId}/providers/Microsoft.Security/securityContacts/{securityContactName}
 # operationId: SecurityContacts_Create
 # --properties shape: {alertNotifications: "On"|"Off", alertsToAdmins: "On"|"Off", email: string, phone?: string}
-export def "subscriptions-providers-microsoft-security-security-contacts create" [
+export def "security-contacts-create" [
   subscription_id: string
   security_contact_name: string
   --base-url(-b): string@base-url-completer # API base URL

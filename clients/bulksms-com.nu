@@ -115,7 +115,7 @@ def trigger-scope-completer [] { ["RECEIVED" "SENT"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "blocked-numbers get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-blocked-numbers" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -138,7 +138,7 @@ export def commands []: nothing -> table {
 # List blocked numbers
 #
 # GET /blocked-numbers
-export def "blocked-numbers get" [
+export def "get-blocked-numbers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -174,7 +174,7 @@ export def "blocked-numbers get" [
 # Create a blocked number
 #
 # POST /blocked-numbers
-export def "blocked-numbers create" [
+export def "post-blocked-numbers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -211,7 +211,7 @@ export def "blocked-numbers create" [
 # Transfer credits to another account
 #
 # POST /credit/transfer
-export def "credit-transfer create" [
+export def "post-credit-transfer" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -252,7 +252,7 @@ export def "credit-transfer create" [
 # Retrieve Messages
 #
 # GET /messages
-export def "messages list" [
+export def "get-messages" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -289,7 +289,7 @@ export def "messages list" [
 # Send Messages
 #
 # POST /messages
-export def "messages create" [
+export def "post-messages" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -331,7 +331,7 @@ export def "messages create" [
 # Send message by simple GET or POST
 #
 # GET /messages/send
-export def "messages-send get" [
+export def "get-messages-send" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -368,7 +368,7 @@ export def "messages-send get" [
 # Show Message
 #
 # GET /messages/{id}
-export def "messages get" [
+export def "get-messages-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -403,7 +403,7 @@ export def "messages get" [
 # List Related Messages
 #
 # GET /messages/{id}/relatedReceivedMessages
-export def "messages-related-received-messages get" [
+export def "get-messages-id-related-received-messages" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -438,7 +438,7 @@ export def "messages-related-received-messages get" [
 # Get profile
 #
 # GET /profile
-export def "profile get" [
+export def "get-profile" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -471,7 +471,7 @@ export def "profile get" [
 # Upload an attachment via a signed URL
 #
 # POST /rmm/pre-sign-attachment
-export def "rmm-pre-sign-attachment create" [
+export def "post-rmm-pre-sign-attachment" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -509,7 +509,7 @@ export def "rmm-pre-sign-attachment create" [
 # List webhooks
 #
 # GET /webhooks
-export def "webhooks list" [
+export def "get-webhooks" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -542,7 +542,7 @@ export def "webhooks list" [
 # Create a webhook
 #
 # POST /webhooks
-export def "webhooks create" [
+export def "post-webhooks" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -585,7 +585,7 @@ export def "webhooks create" [
 # Delete a webhook
 #
 # DELETE /webhooks/{id}
-export def "webhooks delete" [
+export def "delete-webhooks-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -620,7 +620,7 @@ export def "webhooks delete" [
 # Read a webhook
 #
 # GET /webhooks/{id}
-export def "webhooks get" [
+export def "get-webhooks-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -655,7 +655,7 @@ export def "webhooks get" [
 # Update a webhook
 #
 # POST /webhooks/{id}
-export def "webhooks create-by-id" [
+export def "post-webhooks-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

@@ -116,7 +116,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-providers-microsoft-network-firewall-policies list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "firewall-policies-list-all" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -140,7 +140,7 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Network/firewallPolicies
 # operationId: FirewallPolicies_ListAll
-export def "subscriptions-providers-microsoft-network-firewall-policies list" [
+export def "firewall-policies-list-all" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -178,7 +178,7 @@ export def "subscriptions-providers-microsoft-network-firewall-policies list" [
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/firewallPolicies
 # operationId: FirewallPolicies_List
-export def "subscriptions-resource-groups-providers-microsoft-network-firewall-policies list" [
+export def "firewall-policies-list" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -218,7 +218,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-firewall-p
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/firewallPolicies/{firewallPolicyName}
 # operationId: FirewallPolicies_Delete
-export def "subscriptions-resource-groups-providers-microsoft-network-firewall-policies delete" [
+export def "firewall-policies-delete" [
   subscription_id: string
   resource_group_name: string
   firewall_policy_name: string
@@ -260,7 +260,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-firewall-p
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/firewallPolicies/{firewallPolicyName}
 # operationId: FirewallPolicies_Get
-export def "subscriptions-resource-groups-providers-microsoft-network-firewall-policies get" [
+export def "firewall-policies-get" [
   subscription_id: string
   resource_group_name: string
   firewall_policy_name: string
@@ -303,7 +303,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-firewall-p
 #
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/firewallPolicies/{firewallPolicyName}
 # operationId: FirewallPolicies_UpdateTags
-export def "subscriptions-resource-groups-providers-microsoft-network-firewall-policies update-tags" [
+export def "firewall-policies-update-tags" [
   subscription_id: string
   resource_group_name: string
   firewall_policy_name: string
@@ -350,7 +350,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-firewall-p
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/firewallPolicies/{firewallPolicyName}
 # operationId: FirewallPolicies_CreateOrUpdate
 # --properties shape: {basePolicy?: any, threatIntelMode?: "Alert"|"Deny"|"Off"}
-export def "subscriptions-resource-groups-providers-microsoft-network-firewall-policies create-or-update" [
+export def "firewall-policies-create-or-update" [
   subscription_id: string
   resource_group_name: string
   firewall_policy_name: string
@@ -399,7 +399,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-firewall-p
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/firewallPolicies/{firewallPolicyName}/ruleGroups
 # operationId: FirewallPolicyRuleGroups_List
-export def "subscriptions-resource-groups-providers-microsoft-network-firewall-policies-rule-groups list-policy" [
+export def "firewall-policy-rule-groups-list" [
   subscription_id: string
   resource_group_name: string
   firewall_policy_name: string
@@ -441,7 +441,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-firewall-p
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/firewallPolicies/{firewallPolicyName}/ruleGroups/{ruleGroupName}
 # operationId: FirewallPolicyRuleGroups_Delete
-export def "subscriptions-resource-groups-providers-microsoft-network-firewall-policies-rule-groups delete-policy" [
+export def "firewall-policy-rule-groups-delete" [
   subscription_id: string
   resource_group_name: string
   firewall_policy_name: string
@@ -485,7 +485,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-firewall-p
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/firewallPolicies/{firewallPolicyName}/ruleGroups/{ruleGroupName}
 # operationId: FirewallPolicyRuleGroups_Get
-export def "subscriptions-resource-groups-providers-microsoft-network-firewall-policies-rule-groups get-policy" [
+export def "firewall-policy-rule-groups-get" [
   subscription_id: string
   resource_group_name: string
   firewall_policy_name: string
@@ -530,7 +530,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-firewall-p
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/firewallPolicies/{firewallPolicyName}/ruleGroups/{ruleGroupName}
 # operationId: FirewallPolicyRuleGroups_CreateOrUpdate
 # --properties shape: {priority?: int, rules?: list}
-export def "subscriptions-resource-groups-providers-microsoft-network-firewall-policies-rule-groups create-policy-or-update" [
+export def "firewall-policy-rule-groups-create-or-update" [
   subscription_id: string
   resource_group_name: string
   firewall_policy_name: string

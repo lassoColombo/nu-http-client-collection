@@ -112,7 +112,7 @@ def alt-completer [] { ["json" "media" "proto"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "reports-batch-get get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "analyticsreporting-reports-batch-get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -137,7 +137,7 @@ export def commands []: nothing -> table {
 # POST /v4/reports:batchGet
 # operationId: analyticsreporting.reports.batchGet
 # --reportRequests item shape: {cohortGroup?: record, dateRanges?: list, dimensionFilterClauses?: list, dimensions?: list, filtersExpression?: string, hideTotals?: bool, hideValueRanges?: bool, includeEmptyRows?: bool, metricFilterClauses?: list, metrics?: list, orderBys?: list, pageSize?: int, pageToken?: string, pivots?: list, samplingLevel?: "SAMPLING_UNSPECIFIED"|"DEFAULT"|"SMALL"|"LARGE", segments?: list, viewId?: string}
-export def "reports-batch-get get" [
+export def "analyticsreporting-reports-batch-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -190,7 +190,7 @@ export def "reports-batch-get get" [
 # operationId: analyticsreporting.userActivity.search
 # --dateRange shape: {endDate?: string, startDate?: string}
 # --user shape: {type?: "USER_ID_TYPE_UNSPECIFIED"|"USER_ID"|"CLIENT_ID", userId?: string}
-export def "user-activity-search list" [
+export def "analyticsreporting-user-activity-search" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)

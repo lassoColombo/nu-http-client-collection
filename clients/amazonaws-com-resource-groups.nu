@@ -118,7 +118,7 @@ def group-lifecycle-events-desired-status-completer [] { ["ACTIVE" "INACTIVE"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "groups create" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "create-group" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -144,7 +144,7 @@ export def commands []: nothing -> table {
 # operationId: CreateGroup
 # --ResourceQuery shape: {Type?: any, Query?: any}
 # --Configuration item shape: {Type: any, Parameters?: any}
-export def "groups create" [
+export def "create-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -195,7 +195,7 @@ export def "groups create" [
 #
 # POST /delete-group
 # operationId: DeleteGroup
-export def "delete-group delete" [
+export def "delete-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -243,7 +243,7 @@ export def "delete-group delete" [
 #
 # POST /get-account-settings
 # operationId: GetAccountSettings
-export def "get-account-settings get" [
+export def "get-account-settings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -286,7 +286,7 @@ export def "get-account-settings get" [
 #
 # POST /get-group
 # operationId: GetGroup
-export def "get-group get" [
+export def "get-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -334,7 +334,7 @@ export def "get-group get" [
 #
 # POST /get-group-configuration
 # operationId: GetGroupConfiguration
-export def "get-group-configuration get" [
+export def "get-group-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -381,7 +381,7 @@ export def "get-group-configuration get" [
 #
 # POST /get-group-query
 # operationId: GetGroupQuery
-export def "get-group-query get" [
+export def "get-group-query" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -429,7 +429,7 @@ export def "get-group-query get" [
 #
 # GET /resources/{Arn}/tags
 # operationId: GetTags
-export def "resources-tags get" [
+export def "get-tags" [
   arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -474,7 +474,7 @@ export def "resources-tags get" [
 #
 # PUT /resources/{Arn}/tags
 # operationId: Tag
-export def "resources-tags tag" [
+export def "tag" [
   arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -523,7 +523,7 @@ export def "resources-tags tag" [
 #
 # PATCH /resources/{Arn}/tags
 # operationId: Untag
-export def "resources-tags untag" [
+export def "untag" [
   arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -572,7 +572,7 @@ export def "resources-tags untag" [
 #
 # POST /group-resources
 # operationId: GroupResources
-export def "group-resources create" [
+export def "group-resources" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -621,7 +621,7 @@ export def "group-resources create" [
 # POST /list-group-resources
 # operationId: ListGroupResources
 # --Filters item shape: {Name: any, Values: any}
-export def "list-group-resources list" [
+export def "list-group-resources" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -676,7 +676,7 @@ export def "list-group-resources list" [
 # POST /groups-list
 # operationId: ListGroups
 # --Filters item shape: {Name: any, Values: any}
-export def "groups-list list" [
+export def "list-groups" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -729,7 +729,7 @@ export def "groups-list list" [
 # POST /put-group-configuration
 # operationId: PutGroupConfiguration
 # --Configuration item shape: {Type: any, Parameters?: any}
-export def "put-group-configuration update" [
+export def "put-group-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -778,7 +778,7 @@ export def "put-group-configuration update" [
 # POST /resources/search
 # operationId: SearchResources
 # --ResourceQuery shape: {Type?: any, Query?: any}
-export def "resources-search list" [
+export def "search-resources" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -830,7 +830,7 @@ export def "resources-search list" [
 #
 # POST /ungroup-resources
 # operationId: UngroupResources
-export def "ungroup-resources create" [
+export def "ungroup-resources" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -878,7 +878,7 @@ export def "ungroup-resources create" [
 #
 # POST /update-account-settings
 # operationId: UpdateAccountSettings
-export def "update-account-settings update" [
+export def "update-account-settings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -925,7 +925,7 @@ export def "update-account-settings update" [
 #
 # POST /update-group
 # operationId: UpdateGroup
-export def "update-group update" [
+export def "update-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -975,7 +975,7 @@ export def "update-group update" [
 # POST /update-group-query
 # operationId: UpdateGroupQuery
 # --ResourceQuery shape: {Type?: any, Query?: any}
-export def "update-group-query update" [
+export def "update-group-query" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

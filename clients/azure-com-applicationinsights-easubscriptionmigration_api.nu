@@ -99,7 +99,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-providers-microsoft-insights-list-migrationdate create-ea-migration-date" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "ea-subscription-list-migration-date-post" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -123,7 +123,7 @@ export def commands []: nothing -> table {
 #
 # POST /subscriptions/{subscriptionId}/providers/microsoft.insights/listMigrationdate
 # operationId: EASubscriptionListMigrationDate_Post
-export def "subscriptions-providers-microsoft-insights-list-migrationdate create-ea-migration-date" [
+export def "ea-subscription-list-migration-date-post" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -161,7 +161,7 @@ export def "subscriptions-providers-microsoft-insights-list-migrationdate create
 #
 # POST /subscriptions/{subscriptionId}/providers/microsoft.insights/migrateToNewPricingModel
 # operationId: EASubscriptionMigrateToNewPricingModel_Post
-export def "subscriptions-providers-microsoft-insights-migrate-to-new-pricing-model create-ea" [
+export def "ea-subscription-migrate-to-new-pricing-model-post" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -199,7 +199,7 @@ export def "subscriptions-providers-microsoft-insights-migrate-to-new-pricing-mo
 #
 # POST /subscriptions/{subscriptionId}/providers/microsoft.insights/rollbackToLegacyPricingModel
 # operationId: EASubscriptionRollbackToLegacyPricingModel_Post
-export def "subscriptions-providers-microsoft-insights-rollback-to-legacy-pricing-model create-ea" [
+export def "ea-subscription-rollback-to-legacy-pricing-model-post" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

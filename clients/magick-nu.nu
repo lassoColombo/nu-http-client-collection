@@ -109,7 +109,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "strategies-strategy-id get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-strategies-strategy-id-strategy-id" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -133,7 +133,7 @@ export def commands []: nothing -> table {
 #
 # GET /strategies/strategyId/{strategyId}
 # operationId: getStrategiesStrategyIdStrategyId
-export def "strategies-strategy-id get" [
+export def "get-strategies-strategy-id-strategy-id" [
   strategy_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -169,7 +169,7 @@ export def "strategies-strategy-id get" [
 #
 # GET /strategies/templates
 # operationId: getStrategiesTemplates
-export def "strategies-templates get" [
+export def "get-strategies-templates" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -203,7 +203,7 @@ export def "strategies-templates get" [
 #
 # POST /tradingAccounts
 # operationId: postTradingAccounts
-export def "trading-accounts create" [
+export def "post-trading-accounts" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -244,7 +244,7 @@ export def "trading-accounts create" [
 #
 # PUT /tradingAccounts/password/{username}/{brokerserver}/{mt4username}
 # operationId: putTradingAccountsPasswordUsernameBrokerserverMt4username
-export def "trading-accounts-password update" [
+export def "put-trading-accounts-password-username-brokerserver-mt4username" [
   username: string
   brokerserver: string
   mt4username: string
@@ -289,7 +289,7 @@ export def "trading-accounts-password update" [
 #
 # POST /users
 # operationId: postUsers
-export def "users create" [
+export def "post-users" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -333,7 +333,7 @@ export def "users create" [
 #
 # GET /users/email/{email}
 # operationId: getUsersEmailEmail
-export def "users-email get" [
+export def "get-users-email-email" [
   email: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -369,7 +369,7 @@ export def "users-email get" [
 #
 # PUT /users/password/{username}
 # operationId: putUsersPasswordUsername
-export def "users-password update" [
+export def "put-users-password-username" [
   username: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -410,7 +410,7 @@ export def "users-password update" [
 #
 # GET /users/username/{username}
 # operationId: getUsersUsernameUsername
-export def "users-username get" [
+export def "get-users-username-username" [
   username: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

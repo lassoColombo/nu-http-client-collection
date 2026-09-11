@@ -108,7 +108,7 @@ def accept-completer [] { ["application/json" "application/pdf"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "company-announcement get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "company-announcement" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -132,7 +132,7 @@ export def commands []: nothing -> table {
 #
 # GET /api/v1/company/announcement/{id}
 # operationId: CompanyAnnouncement
-export def "company-announcement get" [
+export def "company-announcement" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -168,7 +168,7 @@ export def "company-announcement get" [
 #
 # POST /api/v1/company/deepsearch/isin
 # operationId: CompanyDeepsearchISIN
-export def "company-deepsearch-isin create" [
+export def "company-deepsearch-isin" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -207,7 +207,7 @@ export def "company-deepsearch-isin create" [
 #
 # GET /api/v1/company/deepsearch/lei/{number}
 # operationId: CompanyDeepsearchLEI
-export def "company-deepsearch-lei get" [
+export def "company-deepsearch-lei" [
   number: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -245,7 +245,7 @@ export def "company-deepsearch-lei get" [
 #
 # GET /api/v1/company/deepsearch/name/{country}/{name}
 # operationId: CompanyDeepsearchName
-export def "company-deepsearch-name get" [
+export def "company-deepsearch-name" [
   country: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -283,7 +283,7 @@ export def "company-deepsearch-name get" [
 #
 # GET /api/v1/company/deepsearch/number/{country}/{number}
 # operationId: CompanyDeepsearchNumber
-export def "company-deepsearch-number get" [
+export def "company-deepsearch-number" [
   country: string
   number: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -321,7 +321,7 @@ export def "company-deepsearch-number get" [
 #
 # GET /api/v1/company/monitoring/changeTypes
 # operationId: CompanyMonitorChangeTypesList
-export def "company-monitoring-change-types list-monitor" [
+export def "company-monitor-change-types-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -355,7 +355,7 @@ export def "company-monitoring-change-types list-monitor" [
 #
 # GET /api/v1/company/monitoring/list
 # operationId: CompanyMonitorList
-export def "company-monitoring-list list-monitor" [
+export def "company-monitor-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -389,7 +389,7 @@ export def "company-monitoring-list list-monitor" [
 #
 # GET /api/v1/company/monitoring/list/{id}
 # operationId: CompanyMonitorId
-export def "company-monitoring-list get-monitor" [
+export def "company-monitor-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -425,7 +425,7 @@ export def "company-monitoring-list get-monitor" [
 #
 # POST /api/v1/company/monitoring/register/{id}
 # operationId: CompanyMonitorRegister
-export def "company-monitoring-register create-monitor" [
+export def "company-monitor-register" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -467,7 +467,7 @@ export def "company-monitoring-register create-monitor" [
 #
 # POST /api/v1/company/monitoring/unregister/{id}
 # operationId: CompanyMonitorUnregister
-export def "company-monitoring-unregister delete-monitor" [
+export def "company-monitor-unregister" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -503,7 +503,7 @@ export def "company-monitoring-unregister delete-monitor" [
 #
 # GET /api/v1/company/notification/list
 # operationId: CompanyNotificationList
-export def "company-notification-list list" [
+export def "company-notification-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -537,7 +537,7 @@ export def "company-notification-list list" [
 #
 # GET /api/v1/company/notification/list/{id}
 # operationId: CompanyNotificationId
-export def "company-notification-list get" [
+export def "company-notification-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -573,7 +573,7 @@ export def "company-notification-list get" [
 #
 # POST /api/v1/company/notification/register/{id}
 # operationId: CompanyNotificationRegister
-export def "company-notification-register create" [
+export def "company-notification-register" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -614,7 +614,7 @@ export def "company-notification-register create" [
 #
 # POST /api/v1/company/notification/unregister/{id}
 # operationId: CompanyNotificationUnregister
-export def "company-notification-unregister delete" [
+export def "company-notification-unregister" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -650,7 +650,7 @@ export def "company-notification-unregister delete" [
 #
 # GET /api/v1/company/search/name/{country}/{name}
 # operationId: CompanySearchName
-export def "company-search-name list" [
+export def "company-search-name" [
   country: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -690,7 +690,7 @@ export def "company-search-name list" [
 #
 # GET /api/v1/company/search/number/{country}/{number}
 # operationId: CompanySearchNumber
-export def "company-search-number list" [
+export def "company-search-number" [
   country: string
   number: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -730,7 +730,7 @@ export def "company-search-number list" [
 #
 # POST /api/v1/company/search/{country}
 # operationId: CompanyAlternativeSearch
-export def "company-search list-alternative" [
+export def "company-alternative-search" [
   country: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -776,7 +776,7 @@ export def "company-search list-alternative" [
 #
 # GET /api/v1/company/{id}/announcements
 # operationId: CompanyIdAnnouncements
-export def "company-announcements get" [
+export def "company-id-announcements" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -816,7 +816,7 @@ export def "company-announcements get" [
 #
 # GET /api/v1/company/{id}/super/{country}
 # operationId: CompanyIdSuper
-export def "company-super get" [
+export def "company-id-super" [
   id: string
   country: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -856,7 +856,7 @@ export def "company-super get" [
 #
 # GET /api/v1/company/{id}/{dataset}
 # operationId: CompanyIdDataset
-export def "company get" [
+export def "company-id-dataset" [
   id: string
   dataset: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -897,7 +897,7 @@ export def "company get" [
 #
 # GET /api/v1/ein-verification/basic-check
 # operationId: EinVerificationBasic
-export def "ein-verification-basic-check get" [
+export def "ein-verification-basic" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -933,7 +933,7 @@ export def "ein-verification-basic-check get" [
 #
 # GET /api/v1/ein-verification/comprehensive-check
 # operationId: EinVerificationComprehensive
-export def "ein-verification-comprehensive-check get" [
+export def "ein-verification-comprehensive" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -969,7 +969,7 @@ export def "ein-verification-comprehensive-check get" [
 #
 # GET /api/v1/ein-verification/lookup
 # operationId: EinVerificationLookup
-export def "ein-verification-lookup get" [
+export def "ein-verification-lookup" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1008,7 +1008,7 @@ export def "ein-verification-lookup get" [
 #
 # POST /api/v1/iban-verification/check-iban
 # operationId: IbanBasic
-export def "iban-verification-check-iban create-basic" [
+export def "iban-basic" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1047,7 +1047,7 @@ export def "iban-verification-check-iban create-basic" [
 #
 # POST /api/v1/iban-verification/comprehensive-check-iban
 # operationId: IbanComprehensive
-export def "iban-verification-comprehensive-check-iban create" [
+export def "iban-comprehensive" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1086,7 +1086,7 @@ export def "iban-verification-comprehensive-check-iban create" [
 #
 # POST /api/v1/nif-verification/basic-check/{country}
 # operationId: NifBasic
-export def "nif-verification-basic-check create" [
+export def "nif-basic" [
   country: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1129,7 +1129,7 @@ export def "nif-verification-basic-check create" [
 #
 # POST /api/v1/nif-verification/comprehensive-check/{country}
 # operationId: NifComprehensive
-export def "nif-verification-comprehensive-check create" [
+export def "nif-comprehensive" [
   country: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1172,7 +1172,7 @@ export def "nif-verification-comprehensive-check create" [
 #
 # GET /api/v1/pepsanction/monitor/list
 # operationId: PepMonitorList
-export def "pepsanction-monitor-list list-pep" [
+export def "pep-monitor-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1206,7 +1206,7 @@ export def "pepsanction-monitor-list list-pep" [
 #
 # POST /api/v1/pepsanction/monitor/unregister/{id}
 # operationId: PepMonitorUnregister
-export def "pepsanction-monitor-unregister delete-pep" [
+export def "pep-monitor-unregister" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1242,7 +1242,7 @@ export def "pepsanction-monitor-unregister delete-pep" [
 #
 # POST /api/v1/pepsanction/monitor/update/{id}
 # operationId: PepMonitorUpdate
-export def "pepsanction-monitor-update update-pep" [
+export def "pep-monitor-update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1283,7 +1283,7 @@ export def "pepsanction-monitor-update update-pep" [
 #
 # POST /api/v1/pepsanction/order/{type}/{search}
 # operationId: PepOrder
-export def "pepsanction-order create-pep" [
+export def "pep-order" [
   type: string
   search: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1341,7 +1341,7 @@ export def "pepsanction-order create-pep" [
 #
 # GET /api/v1/pepsanction/retrieve/{id}
 # operationId: PepRetrieve
-export def "pepsanction-retrieve get-pep" [
+export def "pep-retrieve" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1380,7 +1380,7 @@ export def "pepsanction-retrieve get-pep" [
 #
 # GET /api/v1/product/availability/{sku}/{subjectId}
 # operationId: ProductAvailability
-export def "product-availability get" [
+export def "product-availability" [
   sku: string
   subject_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1418,7 +1418,7 @@ export def "product-availability get" [
 #
 # GET /api/v1/product/catalog/{country}
 # operationId: ProductCatalog
-export def "product-catalog get" [
+export def "product-catalog" [
   country: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1454,7 +1454,7 @@ export def "product-catalog get" [
 #
 # GET /api/v1/product/notifier/{notifierId}
 # operationId: ProductNotifier
-export def "product-notifier get" [
+export def "product-notifier" [
   notifier_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1490,7 +1490,7 @@ export def "product-notifier get" [
 #
 # POST /api/v1/product/notifier/{orderId}/{type}/{uri}
 # operationId: ProductNotifierCreate
-export def "product-notifier create" [
+export def "product-notifier-create" [
   order_id: string
   type: string
   uri: string
@@ -1530,7 +1530,7 @@ export def "product-notifier create" [
 #
 # POST /api/v1/product/order/concierge
 # operationId: ProductOrderConcierge
-export def "product-order-concierge create" [
+export def "product-order-concierge" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1581,7 +1581,7 @@ export def "product-order-concierge create" [
 #
 # POST /api/v1/product/order/ubo
 # operationId: ProductOrderUbo
-export def "product-order-ubo create" [
+export def "product-order-ubo" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1625,7 +1625,7 @@ export def "product-order-ubo create" [
 #
 # POST /api/v1/product/order/{sku}/{option}/{subjectId}
 # operationId: ProductOrderWithOption
-export def "product-order create-by-sku-option-subject-id" [
+export def "product-order-with-option" [
   sku: string
   option: string
   subject_id: string
@@ -1665,7 +1665,7 @@ export def "product-order create-by-sku-option-subject-id" [
 #
 # POST /api/v1/product/order/{sku}/{subjectId}
 # operationId: ProductOrder
-export def "product-order create-by-sku-subject-id" [
+export def "product-order" [
   sku: string
   subject_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1703,7 +1703,7 @@ export def "product-order create-by-sku-subject-id" [
 #
 # GET /api/v1/product/search/{subjectId}
 # operationId: ProductSearch
-export def "product-search list" [
+export def "product-search" [
   subject_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1739,7 +1739,7 @@ export def "product-search list" [
 #
 # GET /api/v1/product/status/{orderId}
 # operationId: ProductStatus
-export def "product-status get" [
+export def "product-status" [
   order_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1775,7 +1775,7 @@ export def "product-status get" [
 #
 # POST /api/v1/product/update/{action}/{orderId}
 # operationId: ProductUpdateAction
-export def "product-update update" [
+export def "product-update-action" [
   action: string
   order_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1818,7 +1818,7 @@ export def "product-update update" [
 #
 # GET /api/v1/product/{orderId}
 # operationId: ProductRetrieve
-export def "product get" [
+export def "product-retrieve" [
   order_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1854,7 +1854,7 @@ export def "product get" [
 #
 # GET /api/v1/system/countries
 # operationId: SystemCountries
-export def "system-countries get" [
+export def "system-countries" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1888,7 +1888,7 @@ export def "system-countries get" [
 #
 # GET /api/v1/system/health
 # operationId: HealthCheck
-export def "system-health check" [
+export def "health-check" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1922,7 +1922,7 @@ export def "system-health check" [
 #
 # GET /api/v1/system/pricelist
 # operationId: SystemPricelist
-export def "system-pricelist get" [
+export def "system-pricelist" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1956,7 +1956,7 @@ export def "system-pricelist get" [
 #
 # GET /api/v1/tin-verification/basic-check
 # operationId: TinVerificationBasicCheck
-export def "tin-verification-basic-check check" [
+export def "tin-verification-basic-check" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1993,7 +1993,7 @@ export def "tin-verification-basic-check check" [
 #
 # GET /api/v1/tin-verification/comprehensive-check
 # operationId: TinVerificationComprehensiveCheck
-export def "tin-verification-comprehensive-check check" [
+export def "tin-verification-comprehensive-check" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2031,7 +2031,7 @@ export def "tin-verification-comprehensive-check check" [
 #
 # GET /api/v1/tin-verification/name-lookup
 # operationId: TinVerificationNameLookup
-export def "tin-verification-name-lookup get" [
+export def "tin-verification-name-lookup" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2067,7 +2067,7 @@ export def "tin-verification-name-lookup get" [
 #
 # POST /api/v1/vat-verification/basic-check/{country}
 # operationId: VatBasic
-export def "vat-verification-basic-check create" [
+export def "vat-basic" [
   country: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2111,7 +2111,7 @@ export def "vat-verification-basic-check create" [
 #
 # POST /api/v1/vat-verification/comprehensive-check/{country}
 # operationId: VatComprehensive
-export def "vat-verification-comprehensive-check create" [
+export def "vat-comprehensive" [
   country: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2155,7 +2155,7 @@ export def "vat-verification-comprehensive-check create" [
 #
 # POST /api/v1/vat-verification/leveltwo-check/{country}
 # operationId: VatLevelTwo
-export def "vat-verification-leveltwo-check create-level-two" [
+export def "vat-level-two" [
   country: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2197,7 +2197,7 @@ export def "vat-verification-leveltwo-check create-level-two" [
 #
 # POST /api/v1/vat-verification/lookup/{country}
 # operationId: VatLookup
-export def "vat-verification-lookup create" [
+export def "vat-lookup" [
   country: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

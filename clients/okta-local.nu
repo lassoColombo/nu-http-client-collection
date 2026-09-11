@@ -115,7 +115,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "users find" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "find-user" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -139,7 +139,7 @@ export def commands []: nothing -> table {
 #
 # GET /api/v1/users
 # operationId: findUser
-export def "users find" [
+export def "find-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -176,7 +176,7 @@ export def "users find" [
 # POST /api/v1/users
 # operationId: createUserInGroup
 # --profile shape: {email?: string, firstName?: string, lastName?: string, login?: string}
-export def "users create-in-group" [
+export def "create-user-in-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -217,7 +217,7 @@ export def "users create-in-group" [
 #
 # GET /api/v1/users/me
 # operationId: getCurrentUser
-export def "users-me get" [
+export def "get-current-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -251,7 +251,7 @@ export def "users-me get" [
 #
 # GET /api/v1/users/{userId}
 # operationId: getUser
-export def "users get" [
+export def "get-user" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -288,7 +288,7 @@ export def "users get" [
 # PUT /api/v1/users/{userId}
 # operationId: setRecoveryCredential
 # --credentials shape: {recovery_question?: record}
-export def "users update-recovery-credential" [
+export def "set-recovery-credential" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -328,7 +328,7 @@ export def "users update-recovery-credential" [
 #
 # GET /api/v1/users/{userId}/appLinks
 # operationId: getAssignedAppLinks
-export def "users-app-links get-assigned" [
+export def "get-assigned-app-links" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -366,7 +366,7 @@ export def "users-app-links get-assigned" [
 # operationId: changePassword
 # --newPassword shape: {value?: string}
 # --oldPassword shape: {value?: string}
-export def "users-credentials-change-password create" [
+export def "change-password" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -409,7 +409,7 @@ export def "users-credentials-change-password create" [
 # operationId: changeRecoveryQuestion
 # --password shape: {value?: string}
 # --recovery_question shape: {answer?: string, question?: string}
-export def "users-credentials-change-recovery-question create" [
+export def "change-recovery-question" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -450,7 +450,7 @@ export def "users-credentials-change-recovery-question create" [
 #
 # POST /api/v1/users/{userId}/credentials/forgot_password
 # operationId: forgotPassword(oneTimeCode)
-export def "users-credentials-forgot-password create-passwordone-time-code" [
+export def "forgot-passwordone-time-code" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -492,7 +492,7 @@ export def "users-credentials-forgot-password create-passwordone-time-code" [
 #
 # GET /api/v1/users/{userId}/groups
 # operationId: getGroupsForUser
-export def "users-groups get" [
+export def "get-groups-for-user" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -528,7 +528,7 @@ export def "users-groups get" [
 #
 # POST /api/v1/users/{userId}/lifecycle/activate
 # operationId: activateUser
-export def "users-lifecycle-activate create" [
+export def "activate-user" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -570,7 +570,7 @@ export def "users-lifecycle-activate create" [
 #
 # POST /api/v1/users/{userId}/lifecycle/deactivate
 # operationId: deactivateUser
-export def "users-lifecycle-deactivate create" [
+export def "deactivate-user" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -610,7 +610,7 @@ export def "users-lifecycle-deactivate create" [
 #
 # POST /api/v1/users/{userId}/lifecycle/expire_password
 # operationId: setTempPassword
-export def "users-lifecycle-expire-password update-temp" [
+export def "set-temp-password" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -652,7 +652,7 @@ export def "users-lifecycle-expire-password update-temp" [
 #
 # POST /api/v1/users/{userId}/lifecycle/reset_factors
 # operationId: resetFactors
-export def "users-lifecycle-reset-factors reset" [
+export def "reset-factors" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -692,7 +692,7 @@ export def "users-lifecycle-reset-factors reset" [
 #
 # POST /api/v1/users/{userId}/lifecycle/reset_password
 # operationId: resetPassword
-export def "users-lifecycle-reset-password reset" [
+export def "reset-password" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -734,7 +734,7 @@ export def "users-lifecycle-reset-password reset" [
 #
 # POST /api/v1/users/{userId}/lifecycle/suspend
 # operationId: suspendUser
-export def "users-lifecycle-suspend create" [
+export def "suspend-user" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -774,7 +774,7 @@ export def "users-lifecycle-suspend create" [
 #
 # POST /api/v1/users/{userId}/lifecycle/unlock
 # operationId: unlockUser
-export def "users-lifecycle-unlock unlock" [
+export def "unlock-user" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -814,7 +814,7 @@ export def "users-lifecycle-unlock unlock" [
 #
 # POST /api/v1/users/{userId}/lifecycle/unsuspend
 # operationId: unsuspendUser
-export def "users-lifecycle-unsuspend create" [
+export def "unsuspend-user" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -854,7 +854,7 @@ export def "users-lifecycle-unsuspend create" [
 #
 # DELETE /api/v1/users/{userId}/sessions
 # operationId: clearUserSessions
-export def "users-sessions delete-clear" [
+export def "clear-user-sessions" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

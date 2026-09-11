@@ -122,7 +122,7 @@ def auth-scheme-completer [] { ["ocp-apim-subscription-key"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "alterations get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "alterations-get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -146,7 +146,7 @@ export def commands []: nothing -> table {
 #
 # GET /alterations
 # operationId: Alterations_Get
-export def "alterations get" [
+export def "alterations-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -181,7 +181,7 @@ export def "alterations get" [
 # PUT /alterations
 # operationId: Alterations_Replace
 # --wordAlterations item shape: {alterations: list<string>}
-export def "alterations update" [
+export def "alterations-replace" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -219,7 +219,7 @@ export def "alterations update" [
 #
 # GET /endpointSettings
 # operationId: EndpointSettings_GetSettings
-export def "endpoint-settings get" [
+export def "endpoint-settings-get-settings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -253,7 +253,7 @@ export def "endpoint-settings get" [
 #
 # PATCH /endpointSettings
 # operationId: EndpointSettings_UpdateSettings
-export def "endpoint-settings update" [
+export def "endpoint-settings-update-settings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -291,7 +291,7 @@ export def "endpoint-settings update" [
 #
 # GET /endpointkeys
 # operationId: EndpointKeys_GetKeys
-export def "endpointkeys get-endpoint-keys-keys" [
+export def "endpoint-keys-get-keys" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -325,7 +325,7 @@ export def "endpointkeys get-endpoint-keys-keys" [
 #
 # PATCH /endpointkeys/{keyType}
 # operationId: EndpointKeys_RefreshKeys
-export def "endpointkeys refresh-endpoint-keys-keys" [
+export def "endpoint-keys-refresh-keys" [
   key_type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -361,7 +361,7 @@ export def "endpointkeys refresh-endpoint-keys-keys" [
 #
 # GET /knowledgebases
 # operationId: Knowledgebase_ListAll
-export def "knowledgebases list" [
+export def "knowledgebase-list-all" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -397,7 +397,7 @@ export def "knowledgebases list" [
 # operationId: Knowledgebase_Create
 # --files item shape: {fileName: string, fileUri: string}
 # --qnaList item shape: {answer: string, context?: any, id?: int, metadata?: list, questions: list<string>, source?: string}
-export def "knowledgebases-create create" [
+export def "knowledgebase-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -441,7 +441,7 @@ export def "knowledgebases-create create" [
 #
 # DELETE /knowledgebases/{kbId}
 # operationId: Knowledgebase_Delete
-export def "knowledgebases delete" [
+export def "knowledgebase-delete" [
   kb_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -477,7 +477,7 @@ export def "knowledgebases delete" [
 #
 # GET /knowledgebases/{kbId}
 # operationId: Knowledgebase_GetDetails
-export def "knowledgebases get-details" [
+export def "knowledgebase-get-details" [
   kb_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -513,7 +513,7 @@ export def "knowledgebases get-details" [
 #
 # PATCH /knowledgebases/{kbId}
 # operationId: Knowledgebase_Update
-export def "knowledgebases update-by-kb-id" [
+export def "knowledgebase-update" [
   kb_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -557,7 +557,7 @@ export def "knowledgebases update-by-kb-id" [
 #
 # POST /knowledgebases/{kbId}
 # operationId: Knowledgebase_Publish
-export def "knowledgebases publish" [
+export def "knowledgebase-publish" [
   kb_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -594,7 +594,7 @@ export def "knowledgebases publish" [
 # PUT /knowledgebases/{kbId}
 # operationId: Knowledgebase_Replace
 # --qnAList item shape: {answer: string, context?: any, id?: int, metadata?: list, questions: list<string>, source?: string}
-export def "knowledgebases update-by-kb-id-1" [
+export def "knowledgebase-replace" [
   kb_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -634,7 +634,7 @@ export def "knowledgebases update-by-kb-id-1" [
 #
 # GET /knowledgebases/{kbId}/{environment}/qna
 # operationId: Knowledgebase_Download
-export def "knowledgebases-qna download" [
+export def "knowledgebase-download" [
   kb_id: string
   environment: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -672,7 +672,7 @@ export def "knowledgebases-qna download" [
 #
 # GET /operations/{operationId}
 # operationId: Operations_GetDetails
-export def "operations get-details" [
+export def "operations-get-details" [
   operation_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

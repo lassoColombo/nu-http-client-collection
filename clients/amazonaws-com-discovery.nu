@@ -125,7 +125,7 @@ def x-amz-target-completer-24 [] { ["AWSPoseidonService_V2015_11_01.UpdateApplic
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "api create-associate-configuration-items-to-application" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "associate-configuration-items-to-application" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -149,7 +149,7 @@ export def commands []: nothing -> table {
 #
 # POST /
 # operationId: AssociateConfigurationItemsToApplication
-export def "api create-associate-configuration-items-to-application" [
+export def "associate-configuration-items-to-application" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -198,7 +198,7 @@ export def "api create-associate-configuration-items-to-application" [
 #
 # POST /
 # operationId: BatchDeleteImportData
-export def "api delete-batch-import-data" [
+export def "batch-delete-import-data" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -246,7 +246,7 @@ export def "api delete-batch-import-data" [
 #
 # POST /
 # operationId: CreateApplication
-export def "api create-application" [
+export def "create-application" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -295,7 +295,7 @@ export def "api create-application" [
 #
 # POST /
 # operationId: CreateTags
-export def "api create-tags" [
+export def "create-tags" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -344,7 +344,7 @@ export def "api create-tags" [
 #
 # POST /
 # operationId: DeleteApplications
-export def "api delete-applications" [
+export def "delete-applications" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -392,7 +392,7 @@ export def "api delete-applications" [
 #
 # POST /
 # operationId: DeleteTags
-export def "api delete-tags" [
+export def "delete-tags" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -441,7 +441,7 @@ export def "api delete-tags" [
 #
 # POST /
 # operationId: DescribeAgents
-export def "api get-agents" [
+export def "describe-agents" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -492,7 +492,7 @@ export def "api get-agents" [
 #
 # POST /
 # operationId: DescribeConfigurations
-export def "api get-configurations" [
+export def "describe-configurations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -540,7 +540,7 @@ export def "api get-configurations" [
 #
 # POST /
 # operationId: DescribeContinuousExports
-export def "api get-continuous-exports" [
+export def "describe-continuous-exports" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -595,7 +595,7 @@ export def "api get-continuous-exports" [
 # DEPRECATED
 # operationId: DescribeExportConfigurations
 @deprecated
-export def "api get-export-configurations" [
+export def "describe-export-configurations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -645,7 +645,7 @@ export def "api get-export-configurations" [
 #
 # POST /
 # operationId: DescribeExportTasks
-export def "api get-export-tasks" [
+export def "describe-export-tasks" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -696,7 +696,7 @@ export def "api get-export-tasks" [
 #
 # POST /
 # operationId: DescribeImportTasks
-export def "api get-import-tasks" [
+export def "describe-import-tasks" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -749,7 +749,7 @@ export def "api get-import-tasks" [
 #
 # POST /
 # operationId: DescribeTags
-export def "api get-tags" [
+export def "describe-tags" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -799,7 +799,7 @@ export def "api get-tags" [
 #
 # POST /
 # operationId: DisassociateConfigurationItemsFromApplication
-export def "api create-disassociate-configuration-items-from-application" [
+export def "disassociate-configuration-items-from-application" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -850,7 +850,7 @@ export def "api create-disassociate-configuration-items-from-application" [
 # DEPRECATED
 # operationId: ExportConfigurations
 @deprecated
-export def "api export-configurations" [
+export def "export-configurations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -894,7 +894,7 @@ export def "api export-configurations" [
 #
 # POST /
 # operationId: GetDiscoverySummary
-export def "api get-discovery-summary" [
+export def "get-discovery-summary" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -942,7 +942,7 @@ export def "api get-discovery-summary" [
 #
 # POST /
 # operationId: ListConfigurations
-export def "api list-configurations" [
+export def "list-configurations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -994,7 +994,7 @@ export def "api list-configurations" [
 #
 # POST /
 # operationId: ListServerNeighbors
-export def "api list-server-neighbors" [
+export def "list-server-neighbors" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1046,7 +1046,7 @@ export def "api list-server-neighbors" [
 #
 # POST /
 # operationId: StartContinuousExport
-export def "api start-continuous-export" [
+export def "start-continuous-export" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1094,7 +1094,7 @@ export def "api start-continuous-export" [
 #
 # POST /
 # operationId: StartDataCollectionByAgentIds
-export def "api start-data-collection-by-agent" [
+export def "start-data-collection-by-agent-ids" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1142,7 +1142,7 @@ export def "api start-data-collection-by-agent" [
 #
 # POST /
 # operationId: StartExportTask
-export def "api start-export-task" [
+export def "start-export-task" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1193,7 +1193,7 @@ export def "api start-export-task" [
 #
 # POST /
 # operationId: StartImportTask
-export def "api start-import-task" [
+export def "start-import-task" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1243,7 +1243,7 @@ export def "api start-import-task" [
 #
 # POST /
 # operationId: StopContinuousExport
-export def "api stop-continuous-export" [
+export def "stop-continuous-export" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1291,7 +1291,7 @@ export def "api stop-continuous-export" [
 #
 # POST /
 # operationId: StopDataCollectionByAgentIds
-export def "api stop-data-collection-by-agent" [
+export def "stop-data-collection-by-agent-ids" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1339,7 +1339,7 @@ export def "api stop-data-collection-by-agent" [
 #
 # POST /
 # operationId: UpdateApplication
-export def "api update-application" [
+export def "update-application" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

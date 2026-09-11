@@ -122,7 +122,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-automation-operations list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "operations-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -146,7 +146,7 @@ export def commands []: nothing -> table {
 #
 # GET /providers/Microsoft.Automation/operations
 # operationId: Operations_List
-export def "providers-microsoft-automation-operations list" [
+export def "operations-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -182,7 +182,7 @@ export def "providers-microsoft-automation-operations list" [
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Automation/automationAccounts
 # operationId: AutomationAccount_List
-export def "subscriptions-providers-microsoft-automation-automation-accounts list" [
+export def "automation-account-list" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -221,7 +221,7 @@ export def "subscriptions-providers-microsoft-automation-automation-accounts lis
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Automation/automationAccounts
 # Docs: http://aka.ms/azureautomationsdk/automationaccountoperations
 # operationId: AutomationAccount_ListByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-automation-automation-accounts list" [
+export def "automation-account-list-by-resource-group" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -262,7 +262,7 @@ export def "subscriptions-resource-groups-providers-microsoft-automation-automat
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Automation/automationAccounts/{automationAccountName}
 # Docs: http://aka.ms/azureautomationsdk/automationaccountoperations
 # operationId: AutomationAccount_Delete
-export def "subscriptions-resource-groups-providers-microsoft-automation-automation-accounts delete" [
+export def "automation-account-delete" [
   subscription_id: string
   resource_group_name: string
   automation_account_name: string
@@ -305,7 +305,7 @@ export def "subscriptions-resource-groups-providers-microsoft-automation-automat
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Automation/automationAccounts/{automationAccountName}
 # Docs: http://aka.ms/azureautomationsdk/automationaccountoperations
 # operationId: AutomationAccount_Get
-export def "subscriptions-resource-groups-providers-microsoft-automation-automation-accounts get" [
+export def "automation-account-get" [
   subscription_id: string
   resource_group_name: string
   automation_account_name: string
@@ -349,7 +349,7 @@ export def "subscriptions-resource-groups-providers-microsoft-automation-automat
 # Docs: http://aka.ms/azureautomationsdk/automationaccountoperations
 # operationId: AutomationAccount_Update
 # --properties shape: {sku?: any}
-export def "subscriptions-resource-groups-providers-microsoft-automation-automation-accounts update" [
+export def "automation-account-update" [
   subscription_id: string
   resource_group_name: string
   automation_account_name: string
@@ -400,7 +400,7 @@ export def "subscriptions-resource-groups-providers-microsoft-automation-automat
 # Docs: http://aka.ms/azureautomationsdk/automationaccountoperations
 # operationId: AutomationAccount_CreateOrUpdate
 # --properties shape: {sku?: any}
-export def "subscriptions-resource-groups-providers-microsoft-automation-automation-accounts create-or-update" [
+export def "automation-account-create-or-update" [
   subscription_id: string
   resource_group_name: string
   automation_account_name: string
@@ -449,7 +449,7 @@ export def "subscriptions-resource-groups-providers-microsoft-automation-automat
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Automation/automationAccounts/{automationAccountName}/listKeys
 # operationId: Keys_ListByAutomationAccount
-export def "subscriptions-resource-groups-providers-microsoft-automation-automation-accounts-list-keys list" [
+export def "keys-list-by-automation-account" [
   subscription_id: string
   resource_group_name: string
   automation_account_name: string
@@ -492,7 +492,7 @@ export def "subscriptions-resource-groups-providers-microsoft-automation-automat
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Automation/automationAccounts/{automationAccountName}/statistics
 # Docs: http://aka.ms/azureautomationsdk/statisticsoperations
 # operationId: Statistics_ListByAutomationAccount
-export def "subscriptions-resource-groups-providers-microsoft-automation-automation-accounts-statistics list" [
+export def "statistics-list-by-automation-account" [
   subscription_id: string
   resource_group_name: string
   automation_account_name: string
@@ -536,7 +536,7 @@ export def "subscriptions-resource-groups-providers-microsoft-automation-automat
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Automation/automationAccounts/{automationAccountName}/usages
 # Docs: http://aka.ms/azureautomationsdk/usageoperations
 # operationId: Usages_ListByAutomationAccount
-export def "subscriptions-resource-groups-providers-microsoft-automation-automation-accounts-usages list" [
+export def "usages-list-by-automation-account" [
   subscription_id: string
   resource_group_name: string
   automation_account_name: string

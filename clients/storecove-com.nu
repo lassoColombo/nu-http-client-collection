@@ -123,7 +123,7 @@ def syntax-completer [] { ["json" "original"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "discovery-exists create" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "discovery-exists" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -147,7 +147,7 @@ export def commands []: nothing -> table {
 #
 # POST /discovery/exists
 # operationId: discovery_exists
-export def "discovery-exists create" [
+export def "discovery-exists" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -189,7 +189,7 @@ export def "discovery-exists create" [
 #
 # GET /discovery/identifiers
 # operationId: discovery_identifiers
-export def "discovery-identifiers get" [
+export def "discovery-identifiers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -223,7 +223,7 @@ export def "discovery-identifiers get" [
 #
 # POST /discovery/receives
 # operationId: discovery_receives
-export def "discovery-receives create" [
+export def "discovery-receives" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -268,7 +268,7 @@ export def "discovery-receives create" [
 # --attachments item shape: {description?: string, document: string, documentId?: string, filename?: string, mimeType: "application/pdf", primaryImage?: bool}
 # --document shape: {documentType: "invoice"|"invoice_response"|"order", invoice?: record, invoiceResponse?: record, order?: record, rawDocumentData?: record}
 # --routing shape: {clearWithoutSending?: bool, eIdentifiers?: list, emails?: list<string>}
-export def "document-submissions create" [
+export def "create-document-submission" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -312,7 +312,7 @@ export def "document-submissions create" [
 #
 # GET /document_submissions/{guid}/evidence/{evidence_type}
 # operationId: show_document_submission_evidence
-export def "document-submissions-evidence get-show" [
+export def "show-document-submission-evidence" [
   guid: string
   evidence_type: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -355,7 +355,7 @@ export def "document-submissions-evidence get-show" [
 # --invoiceData shape: {conversionStrategy?: "ubl"|"cii"|"idoc", document?: string}
 # --invoiceRecipient shape: {emails?: list<string>, publicIdentifiers?: list}
 # --routing shape: {clearWithoutSending?: bool, eIdentifiers?: list, emails?: list<string>}
-export def "invoice-submissions create" [
+export def "create-invoice-submission" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -406,7 +406,7 @@ export def "invoice-submissions create" [
 # POST /invoice_submissions/preflight
 # operationId: preflight_invoice_recipient
 # --publicIdentifiers item shape: {id: string, scheme: string}
-export def "invoice-submissions-preflight create-recipient" [
+export def "preflight-invoice-recipient" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -444,7 +444,7 @@ export def "invoice-submissions-preflight create-recipient" [
 #
 # GET /invoice_submissions/{guid}/evidence
 # operationId: show_invoice_submission_evidence
-export def "invoice-submissions-evidence get-show" [
+export def "show-invoice-submission-evidence" [
   guid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -481,7 +481,7 @@ export def "invoice-submissions-evidence get-show" [
 # POST /legal_entities
 # operationId: create_legal_entity
 # --rea shape: {capital?: float, identifier?: string, liquidation_status?: "LN"|"LS", partners?: "SU"|"SM", ... (1 more fields)}
-export def "legal-entities create-entity" [
+export def "create-legal-entity" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -531,7 +531,7 @@ export def "legal-entities create-entity" [
 #
 # DELETE /legal_entities/{id}
 # operationId: delete_legal_entity
-export def "legal-entities delete-entity" [
+export def "delete-legal-entity" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -567,7 +567,7 @@ export def "legal-entities delete-entity" [
 #
 # GET /legal_entities/{id}
 # operationId: get_legal_entity
-export def "legal-entities get-entity" [
+export def "get-legal-entity" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -604,7 +604,7 @@ export def "legal-entities get-entity" [
 # PATCH /legal_entities/{id}
 # operationId: update_legal_entity
 # --rea shape: {capital?: float, identifier?: string, liquidation_status?: "LN"|"LS", partners?: "SU"|"SM", ... (1 more fields)}
-export def "legal-entities update-entity" [
+export def "update-legal-entity" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -658,7 +658,7 @@ export def "legal-entities update-entity" [
 #
 # POST /legal_entities/{legal_entity_id}/additional_tax_identifiers
 # operationId: create_additional_tax_identifier
-export def "legal-entities-additional-tax-identifiers create" [
+export def "create-additional-tax-identifier" [
   legal_entity_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -704,7 +704,7 @@ export def "legal-entities-additional-tax-identifiers create" [
 #
 # DELETE /legal_entities/{legal_entity_id}/additional_tax_identifiers/{id}
 # operationId: delete_additional_tax_identifier
-export def "legal-entities-additional-tax-identifiers delete" [
+export def "delete-additional-tax-identifier" [
   legal_entity_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -742,7 +742,7 @@ export def "legal-entities-additional-tax-identifiers delete" [
 #
 # GET /legal_entities/{legal_entity_id}/additional_tax_identifiers/{id}
 # operationId: get_additional_tax_identifier
-export def "legal-entities-additional-tax-identifiers get" [
+export def "get-additional-tax-identifier" [
   legal_entity_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -780,7 +780,7 @@ export def "legal-entities-additional-tax-identifiers get" [
 #
 # PATCH /legal_entities/{legal_entity_id}/additional_tax_identifiers/{id}
 # operationId: update_additional_tax_identifier
-export def "legal-entities-additional-tax-identifiers update" [
+export def "update-additional-tax-identifier" [
   legal_entity_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -824,7 +824,7 @@ export def "legal-entities-additional-tax-identifiers update" [
 #
 # POST /legal_entities/{legal_entity_id}/administrations
 # operationId: create_administration
-export def "legal-entities-administrations create" [
+export def "create-administration" [
   legal_entity_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -868,7 +868,7 @@ export def "legal-entities-administrations create" [
 #
 # DELETE /legal_entities/{legal_entity_id}/administrations/{id}
 # operationId: delete_administration
-export def "legal-entities-administrations delete" [
+export def "delete-administration" [
   legal_entity_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -906,7 +906,7 @@ export def "legal-entities-administrations delete" [
 #
 # GET /legal_entities/{legal_entity_id}/administrations/{id}
 # operationId: get_administration
-export def "legal-entities-administrations get" [
+export def "get-administration" [
   legal_entity_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -944,7 +944,7 @@ export def "legal-entities-administrations get" [
 #
 # PATCH /legal_entities/{legal_entity_id}/administrations/{id}
 # operationId: update_administration
-export def "legal-entities-administrations update" [
+export def "update-administration" [
   legal_entity_id: int
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -990,7 +990,7 @@ export def "legal-entities-administrations update" [
 # POST /legal_entities/{legal_entity_id}/peppol_identifiers
 # operationId: create_peppol_identifier
 # --corppass shape: {client_redirect_fail_url?: string, client_redirect_success_url?: string, enabled?: bool, flow_type: "corppass_flow_redirect"|"corppass_flow_email", signer_email?: string, signer_name?: string, simulate_corppass?: bool}
-export def "legal-entities-peppol-identifiers create" [
+export def "create-peppol-identifier" [
   legal_entity_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1033,7 +1033,7 @@ export def "legal-entities-peppol-identifiers create" [
 #
 # DELETE /legal_entities/{legal_entity_id}/peppol_identifiers/{superscheme}/{scheme}/{identifier}
 # operationId: delete_peppol_identifier
-export def "legal-entities-peppol-identifiers delete" [
+export def "delete-peppol-identifier" [
   legal_entity_id: int
   superscheme: string
   scheme: string
@@ -1075,7 +1075,7 @@ export def "legal-entities-peppol-identifiers delete" [
 #
 # POST /legal_entities/{legal_entity_id}/received_documents
 # operationId: receive_documenht
-export def "legal-entities-received-documents receive-documenht" [
+export def "receive-documenht" [
   legal_entity_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1117,7 +1117,7 @@ export def "legal-entities-received-documents receive-documenht" [
 #
 # GET /purchase_invoices/{guid}
 # operationId: get_invoice_json
-export def "purchase-invoices get-json" [
+export def "get-invoice-json" [
   guid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1155,7 +1155,7 @@ export def "purchase-invoices get-json" [
 #
 # GET /purchase_invoices/{guid}/{packaging}
 # operationId: get_invoice_ubl
-export def "purchase-invoices get-ubl" [
+export def "get-invoice-ubl" [
   guid: string
   packaging: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1195,7 +1195,7 @@ export def "purchase-invoices get-ubl" [
 #
 # GET /purchase_invoices/{guid}/{packaging}/{package_version}
 # operationId: get_invoice_ubl_versioned
-export def "purchase-invoices get-ubl-versioned" [
+export def "get-invoice-ubl-versioned" [
   guid: string
   packaging: string
   package_version: string
@@ -1235,7 +1235,7 @@ export def "purchase-invoices get-ubl-versioned" [
 #
 # POST /received_documents
 # operationId: create_received_document
-export def "received-documents create" [
+export def "create-received-document" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1275,7 +1275,7 @@ export def "received-documents create" [
 #
 # GET /received_documents/{guid}/{format}
 # operationId: get_received_document
-export def "received-documents get" [
+export def "get-received-document" [
   guid: string
   format: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1315,7 +1315,7 @@ export def "received-documents get" [
 #
 # GET /webhook_instances/
 # operationId: get_webhook_instances
-export def "webhook-instances get" [
+export def "get-webhook-instances" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1349,7 +1349,7 @@ export def "webhook-instances get" [
 #
 # DELETE /webhook_instances/{guid}
 # operationId: delete_webhook_instance
-export def "webhook-instances delete" [
+export def "delete-webhook-instance" [
   guid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

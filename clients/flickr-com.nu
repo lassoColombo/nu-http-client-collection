@@ -138,7 +138,7 @@ def safety-level-completer [] { ["1" "2" "3"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "oauth-access-token get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-access-token" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -162,7 +162,7 @@ export def commands []: nothing -> table {
 #
 # GET /oauth/access_token
 # operationId: getAccessToken
-export def "oauth-access-token get" [
+export def "get-access-token" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -205,7 +205,7 @@ export def "oauth-access-token get" [
 #
 # GET /oauth/request_token
 # operationId: getRequestToken
-export def "oauth-request-token get" [
+export def "get-request-token" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -247,7 +247,7 @@ export def "oauth-request-token get" [
 #
 # GET /rest?method=flickr.favorites.getContext
 # operationId: getFavoritesContextByID
-export def "rest-methodflickr-favorites-get-context get" [
+export def "get-favorites-context-by-id" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -285,7 +285,7 @@ export def "rest-methodflickr-favorites-get-context get" [
 #
 # GET /rest?method=flickr.favorites.getList
 # operationId: getFavoritesByPersonID
-export def "rest-methodflickr-favorites-get-list get-by-person" [
+export def "get-favorites-by-person-id" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -326,7 +326,7 @@ export def "rest-methodflickr-favorites-get-list get-by-person" [
 #
 # GET /rest?method=flickr.galleries.getPhotos
 # operationId: getGalleryPhotosByID
-export def "rest-methodflickr-galleries-get-photos get-gallery" [
+export def "get-gallery-photos-by-id" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -363,7 +363,7 @@ export def "rest-methodflickr-galleries-get-photos get-gallery" [
 #
 # GET /rest?method=flickr.groups.discuss.replies.getInfo
 # operationId: getGroupTopicRepliesByID
-export def "rest-methodflickr-groups-discuss-replies-get-info get-topic" [
+export def "get-group-topic-replies-by-id" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -402,7 +402,7 @@ export def "rest-methodflickr-groups-discuss-replies-get-info get-topic" [
 #
 # GET /rest?method=flickr.groups.discuss.topics.getInfo
 # operationId: getGroupTopicByID
-export def "rest-methodflickr-groups-discuss-topics-get-info get" [
+export def "get-group-topic-by-id" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -440,7 +440,7 @@ export def "rest-methodflickr-groups-discuss-topics-get-info get" [
 #
 # GET /rest?method=flickr.groups.discuss.topics.getList
 # operationId: getGroupDiscussionsByID
-export def "rest-methodflickr-groups-discuss-topics-get-list get-discussions" [
+export def "get-group-discussions-by-id" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -479,7 +479,7 @@ export def "rest-methodflickr-groups-discuss-topics-get-list get-discussions" [
 #
 # GET /rest?method=flickr.groups.getInfo
 # operationId: getGroupByID
-export def "rest-methodflickr-groups-get-info get" [
+export def "get-group-by-id" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -517,7 +517,7 @@ export def "rest-methodflickr-groups-get-info get" [
 # Returns next and previous photos for a photo in a group pool
 #
 # GET /rest?method=flickr.groups.pools.getContext
-export def "rest-methodflickr-groups-pools-get-context get" [
+export def "get-restmethodflickr-groups-pools-get-context" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -555,7 +555,7 @@ export def "rest-methodflickr-groups-pools-get-context get" [
 #
 # GET /rest?method=flickr.groups.pools.getPhotos
 # operationId: getGroupPhotosByID
-export def "rest-methodflickr-groups-pools-get-photos get" [
+export def "get-group-photos-by-id" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -592,7 +592,7 @@ export def "rest-methodflickr-groups-pools-get-photos get" [
 #
 # GET /rest?method=flickr.people.getInfo
 # operationId: getPersonByID
-export def "rest-methodflickr-people-get-info get-person" [
+export def "get-person-by-id" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -629,7 +629,7 @@ export def "rest-methodflickr-people-get-info get-person" [
 #
 # GET /rest?method=flickr.people.getPhotos
 # operationId: getMediaByPersonID
-export def "rest-methodflickr-people-get-photos get-media-by-person" [
+export def "get-media-by-person-id" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -675,7 +675,7 @@ export def "rest-methodflickr-people-get-photos get-media-by-person" [
 #
 # GET /rest?method=flickr.photolist.getContext
 # operationId: getPhotolistContextByID
-export def "rest-methodflickr-photolist-get-context get" [
+export def "get-photolist-context-by-id" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -713,7 +713,7 @@ export def "rest-methodflickr-photolist-get-context get" [
 #
 # GET /rest?method=flickr.photos.getContext
 # operationId: getPhotostreamContextByID
-export def "rest-methodflickr-photos-get-context get-photostream" [
+export def "get-photostream-context-by-id" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -750,7 +750,7 @@ export def "rest-methodflickr-photos-get-context get-photostream" [
 #
 # GET /rest?method=flickr.photos.getExif
 # operationId: getPhotoExifByID
-export def "rest-methodflickr-photos-get-exif get" [
+export def "get-photo-exif-by-id" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -788,7 +788,7 @@ export def "rest-methodflickr-photos-get-exif get" [
 #
 # GET /rest?method=flickr.photos.getInfo
 # operationId: getPhotoByID
-export def "rest-methodflickr-photos-get-info get" [
+export def "get-photo-by-id" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -825,7 +825,7 @@ export def "rest-methodflickr-photos-get-info get" [
 #
 # GET /rest?method=flickr.photos.getSizes
 # operationId: getPhotoSizesByID
-export def "rest-methodflickr-photos-get-sizes get" [
+export def "get-photo-sizes-by-id" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -862,7 +862,7 @@ export def "rest-methodflickr-photos-get-sizes get" [
 #
 # GET /rest?method=flickr.photos.licenses.getInfo
 # operationId: getLicenseByID
-export def "rest-methodflickr-photos-licenses-get-info get" [
+export def "get-license-by-id" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -898,7 +898,7 @@ export def "rest-methodflickr-photos-licenses-get-info get" [
 #
 # GET /rest?method=flickr.photos.search
 # operationId: getMediaBySearch
-export def "rest-methodflickr-photos-search get-media" [
+export def "get-media-by-search" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -966,7 +966,7 @@ export def "rest-methodflickr-photos-search get-media" [
 #
 # GET /rest?method=flickr.photosets.getContext
 # operationId: getAlbumContextByID
-export def "rest-methodflickr-photosets-get-context get-album" [
+export def "get-album-context-by-id" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1004,7 +1004,7 @@ export def "rest-methodflickr-photosets-get-context get-album" [
 #
 # GET /rest?method=flickr.photosets.getList
 # operationId: getAlbumsByPersonID
-export def "rest-methodflickr-photosets-get-list get-albums-by-person" [
+export def "get-albums-by-person-id" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1043,7 +1043,7 @@ export def "rest-methodflickr-photosets-get-list get-albums-by-person" [
 #
 # GET /rest?method=flickr.photosets.getPhotos
 # operationId: getAlbumByID
-export def "rest-methodflickr-photosets-get-photos get-album" [
+export def "get-album-by-id" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1080,7 +1080,7 @@ export def "rest-methodflickr-photosets-get-photos get-album" [
 #
 # GET /rest?method=flickr.test.echo
 # operationId: echo
-export def "rest-methodflickr-test-echo get" [
+export def "echo" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1117,7 +1117,7 @@ export def "rest-methodflickr-test-echo get" [
 #
 # POST /upload
 # operationId: uploadPhoto
-export def "upload upload-photo" [
+export def "upload-photo" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

@@ -123,7 +123,7 @@ def alt-completer [] { ["json" "media" "proto"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "projects delete" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "notebooks-projects-locations-operations-delete" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -147,7 +147,7 @@ export def commands []: nothing -> table {
 #
 # DELETE /v2/{name}
 # operationId: notebooks.projects.locations.operations.delete
-export def "projects delete" [
+export def "notebooks-projects-locations-operations-delete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -195,7 +195,7 @@ export def "projects delete" [
 #
 # GET /v2/{name}
 # operationId: notebooks.projects.locations.operations.get
-export def "projects get" [
+export def "notebooks-projects-locations-operations-get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -243,7 +243,7 @@ export def "projects get" [
 #
 # GET /v2/{name}/locations
 # operationId: notebooks.projects.locations.list
-export def "locations list" [
+export def "notebooks-projects-locations-list" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -294,7 +294,7 @@ export def "locations list" [
 #
 # GET /v2/{name}/operations
 # operationId: notebooks.projects.locations.operations.list
-export def "operations list" [
+export def "notebooks-projects-locations-operations-list" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -345,7 +345,7 @@ export def "operations list" [
 #
 # POST /v2/{name}:cancel
 # operationId: notebooks.projects.locations.operations.cancel
-export def "projects cancel" [
+export def "notebooks-projects-locations-operations-cancel" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -397,7 +397,7 @@ export def "projects cancel" [
 #
 # GET /v2/{resource}:getIamPolicy
 # operationId: notebooks.projects.locations.instances.getIamPolicy
-export def "projects get-iam-policy" [
+export def "notebooks-projects-locations-instances-get-iam-policy" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -447,7 +447,7 @@ export def "projects get-iam-policy" [
 # POST /v2/{resource}:setIamPolicy
 # operationId: notebooks.projects.locations.instances.setIamPolicy
 # --policy shape: {bindings?: list, etag?: string, version?: int}
-export def "projects update-iam-policy" [
+export def "notebooks-projects-locations-instances-set-iam-policy" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -499,7 +499,7 @@ export def "projects update-iam-policy" [
 #
 # POST /v2/{resource}:testIamPermissions
 # operationId: notebooks.projects.locations.instances.testIamPermissions
-export def "projects test-iam-permissions" [
+export def "notebooks-projects-locations-instances-test-iam-permissions" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)

@@ -99,7 +99,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "knowledgebases-generate-answer generate-runtime" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "runtime-generate-answer" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -124,7 +124,7 @@ export def commands []: nothing -> table {
 # POST /knowledgebases/{kbId}/generateAnswer
 # operationId: Runtime_GenerateAnswer
 # --strictFilters item shape: {name: string, value: string}
-export def "knowledgebases-generate-answer generate-runtime" [
+export def "runtime-generate-answer" [
   kb_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -173,7 +173,7 @@ export def "knowledgebases-generate-answer generate-runtime" [
 # POST /knowledgebases/{kbId}/train
 # operationId: Runtime_Train
 # --feedbackRecords item shape: {qnaId?: int, userId?: string, userQuestion?: string}
-export def "knowledgebases-train create-runtime" [
+export def "runtime-train" [
   kb_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

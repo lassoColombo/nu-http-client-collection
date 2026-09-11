@@ -120,7 +120,7 @@ def role-completer [] { ["ADMIN_ROLE_UNSPECIFIED" "MANAGER" "OWNER" "PRIMARY_OWN
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "accounts list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "mybusinessaccountmanagement-accounts-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -144,7 +144,7 @@ export def commands []: nothing -> table {
 #
 # GET /v1/accounts
 # operationId: mybusinessaccountmanagement.accounts.list
-export def "accounts list" [
+export def "mybusinessaccountmanagement-accounts-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -195,7 +195,7 @@ export def "accounts list" [
 # POST /v1/accounts
 # operationId: mybusinessaccountmanagement.accounts.create
 # --organizationInfo shape: {address?: record}
-export def "accounts create" [
+export def "mybusinessaccountmanagement-accounts-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -249,7 +249,7 @@ export def "accounts create" [
 #
 # DELETE /v1/{name}
 # operationId: mybusinessaccountmanagement.locations.admins.delete
-export def "locations delete" [
+export def "mybusinessaccountmanagement-locations-admins-delete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -297,7 +297,7 @@ export def "locations delete" [
 #
 # GET /v1/{name}
 # operationId: mybusinessaccountmanagement.accounts.get
-export def "accounts get" [
+export def "mybusinessaccountmanagement-accounts-get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -345,7 +345,7 @@ export def "accounts get" [
 #
 # PATCH /v1/{name}
 # operationId: mybusinessaccountmanagement.locations.admins.patch
-export def "locations update" [
+export def "mybusinessaccountmanagement-locations-admins-patch" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -402,7 +402,7 @@ export def "locations update" [
 #
 # POST /v1/{name}:accept
 # operationId: mybusinessaccountmanagement.accounts.invitations.accept
-export def "accounts create-accept" [
+export def "mybusinessaccountmanagement-accounts-invitations-accept" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -454,7 +454,7 @@ export def "accounts create-accept" [
 #
 # POST /v1/{name}:decline
 # operationId: mybusinessaccountmanagement.accounts.invitations.decline
-export def "accounts create-decline" [
+export def "mybusinessaccountmanagement-accounts-invitations-decline" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -506,7 +506,7 @@ export def "accounts create-decline" [
 #
 # POST /v1/{name}:transfer
 # operationId: mybusinessaccountmanagement.locations.transfer
-export def "locations create-transfer" [
+export def "mybusinessaccountmanagement-locations-transfer" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -558,7 +558,7 @@ export def "locations create-transfer" [
 #
 # GET /v1/{parent}/admins
 # operationId: mybusinessaccountmanagement.locations.admins.list
-export def "admins list" [
+export def "mybusinessaccountmanagement-locations-admins-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -606,7 +606,7 @@ export def "admins list" [
 #
 # POST /v1/{parent}/admins
 # operationId: mybusinessaccountmanagement.locations.admins.create
-export def "admins create" [
+export def "mybusinessaccountmanagement-locations-admins-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -661,7 +661,7 @@ export def "admins create" [
 #
 # GET /v1/{parent}/invitations
 # operationId: mybusinessaccountmanagement.accounts.invitations.list
-export def "invitations list" [
+export def "mybusinessaccountmanagement-accounts-invitations-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

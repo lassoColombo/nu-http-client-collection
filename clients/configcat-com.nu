@@ -129,7 +129,7 @@ def comparator-completer [] { ["contains" "doesNotContain" "isNotOneOf" "isOneOf
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "code-references create" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "post-v1-code-references" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -152,7 +152,7 @@ export def commands []: nothing -> table {
 # POST /v1/code-references
 #
 # --flagReferences item shape: {references: list, settingId: int}
-export def "code-references create" [
+export def "post-v1-code-references" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -194,7 +194,7 @@ export def "code-references create" [
 }
 
 # POST /v1/code-references/delete-reports
-export def "code-references-delete-reports create" [
+export def "post-v1-code-references-delete-reports" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -235,7 +235,7 @@ export def "code-references-delete-reports create" [
 #
 # DELETE /v1/configs/{configId}
 # operationId: delete-config
-export def "configs delete" [
+export def "delete-config" [
   config_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -271,7 +271,7 @@ export def "configs delete" [
 #
 # GET /v1/configs/{configId}
 # operationId: get-config
-export def "configs get" [
+export def "get-config" [
   config_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -308,7 +308,7 @@ export def "configs get" [
 #
 # PUT /v1/configs/{configId}
 # operationId: update-config
-export def "configs update" [
+export def "update-config" [
   config_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -350,7 +350,7 @@ export def "configs update" [
 #
 # GET /v1/configs/{configId}/deleted-settings
 # operationId: get-deleted-settings
-export def "configs-deleted-settings get" [
+export def "get-deleted-settings" [
   config_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -387,7 +387,7 @@ export def "configs-deleted-settings get" [
 #
 # GET /v1/configs/{configId}/environments/{environmentId}
 # operationId: get-sdk-keys
-export def "configs-environments get-sdk-keys" [
+export def "get-sdk-keys" [
   config_id: string
   environment_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -426,7 +426,7 @@ export def "configs-environments get-sdk-keys" [
 #
 # GET /v1/configs/{configId}/environments/{environmentId}/values
 # operationId: get-setting-values
-export def "configs-environments-values get-setting" [
+export def "get-setting-values" [
   config_id: string
   environment_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -465,7 +465,7 @@ export def "configs-environments-values get-setting" [
 #
 # GET /v1/configs/{configId}/settings
 # operationId: get-settings
-export def "configs-settings get" [
+export def "get-settings" [
   config_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -503,7 +503,7 @@ export def "configs-settings get" [
 # POST /v1/configs/{configId}/settings
 # operationId: create-setting
 # --initialValues item shape: {environmentId?: string, value?: any}
-export def "configs-settings create" [
+export def "create-setting" [
   config_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -549,7 +549,7 @@ export def "configs-settings create" [
 #
 # DELETE /v1/environments/{environmentId}
 # operationId: delete-environment
-export def "environments delete" [
+export def "delete-environment" [
   environment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -585,7 +585,7 @@ export def "environments delete" [
 #
 # GET /v1/environments/{environmentId}
 # operationId: get-environment
-export def "environments get" [
+export def "get-environment" [
   environment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -622,7 +622,7 @@ export def "environments get" [
 #
 # PUT /v1/environments/{environmentId}
 # operationId: update-environment
-export def "environments update" [
+export def "update-environment" [
   environment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -665,7 +665,7 @@ export def "environments update" [
 #
 # DELETE /v1/environments/{environmentId}/settings/{settingId}/integrationLinks/{integrationLinkType}/{key}
 # operationId: delete-integration-link
-export def "environments-settings-integration-links delete" [
+export def "delete-integration-link" [
   environment_id: string
   setting_id: int
   integration_link_type: string
@@ -708,7 +708,7 @@ export def "environments-settings-integration-links delete" [
 #
 # POST /v1/environments/{environmentId}/settings/{settingId}/integrationLinks/{integrationLinkType}/{key}
 # operationId: add-or-update-integration-link
-export def "environments-settings-integration-links create-or-update" [
+export def "add-or-update-integration-link" [
   environment_id: string
   setting_id: int
   integration_link_type: string
@@ -756,7 +756,7 @@ export def "environments-settings-integration-links create-or-update" [
 #
 # GET /v1/environments/{environmentId}/settings/{settingId}/value
 # operationId: get-setting-value
-export def "environments-settings-value get" [
+export def "get-setting-value" [
   environment_id: string
   setting_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -796,7 +796,7 @@ export def "environments-settings-value get" [
 # PATCH /v1/environments/{environmentId}/settings/{settingId}/value
 # operationId: update-setting-value
 # --operations item shape: {from?: record, op?: "unknown"|"add"|"remove"|"replace"|"move"|"copy"|"test", path?: record, value?: record}
-export def "environments-settings-value update-by-environment-id-setting-id" [
+export def "update-setting-value" [
   environment_id: string
   setting_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -843,7 +843,7 @@ export def "environments-settings-value update-by-environment-id-setting-id" [
 # operationId: replace-setting-value
 # --rolloutPercentageItems item shape: {percentage: int, value?: any}
 # --rolloutRules item shape: {comparator?: "isOneOf"|"isNotOneOf"|"contains"|"doesNotContain"|"semVerIsOneOf"|"semVerIsNotOneOf"|"semVerLess"|"semVerLessOrEquals"|"semVerGreater"|"semVerGreaterOrEquals"|"numberEquals"|"numberDoesNotEqual"|"numberLess"|"numberLessOrEquals"|"numberGreater"|"numberGreaterOrEquals"|"sensitiveIsOneOf"|"sensitiveIsNotOneOf", comparisonAttribute?: string, comparisonValue?: string, segmentComparator?: "isIn"|"isNotIn", segmentId?: string, value?: any}
-export def "environments-settings-value update-by-environment-id-setting-id-1" [
+export def "replace-setting-value" [
   environment_id: string
   setting_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -890,7 +890,7 @@ export def "environments-settings-value update-by-environment-id-setting-id-1" [
 #
 # GET /v1/integrationLink/{integrationLinkType}/{key}/details
 # operationId: get-integration-link-details
-export def "integration-link-details get" [
+export def "get-integration-link-details" [
   integration_link_type: string
   key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -926,7 +926,7 @@ export def "integration-link-details get" [
 }
 
 # POST /v1/jira/Connect
-export def "jira-connect create" [
+export def "post-v1-jira-connect" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -964,7 +964,7 @@ export def "jira-connect create" [
 # POST /v1/jira/environments/{environmentId}/settings/{settingId}/integrationLinks/{key}
 #
 # operationId: jira-add-or-update-integration-link
-export def "jira-environments-settings-integration-links create-or-update" [
+export def "jira-add-or-update-integration-link" [
   environment_id: string
   setting_id: int
   key: string
@@ -1012,7 +1012,7 @@ export def "jira-environments-settings-integration-links create-or-update" [
 #
 # GET /v1/me
 # operationId: get-me
-export def "me get" [
+export def "get-me" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1047,7 +1047,7 @@ export def "me get" [
 #
 # GET /v1/organizations
 # operationId: get-organizations
-export def "organizations get" [
+export def "get-organizations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1082,7 +1082,7 @@ export def "organizations get" [
 #
 # GET /v1/organizations/{organizationId}/auditlogs
 # operationId: get-organization-auditlogs
-export def "organizations-auditlogs get" [
+export def "get-organization-auditlogs" [
   organization_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1126,7 +1126,7 @@ export def "organizations-auditlogs get" [
 #
 # GET /v1/organizations/{organizationId}/members
 # operationId: get-organization-members
-export def "organizations-members get" [
+export def "get-organization-members" [
   organization_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1163,7 +1163,7 @@ export def "organizations-members get" [
 #
 # DELETE /v1/organizations/{organizationId}/members/{userId}
 # operationId: delete-organization-member
-export def "organizations-members delete" [
+export def "delete-organization-member" [
   organization_id: string
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1201,7 +1201,7 @@ export def "organizations-members delete" [
 #
 # POST /v1/organizations/{organizationId}/members/{userId}
 # operationId: add-member-to-group
-export def "organizations-members create-to-group" [
+export def "add-member-to-group" [
   organization_id: string
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1243,7 +1243,7 @@ export def "organizations-members create-to-group" [
 #
 # POST /v1/organizations/{organizationId}/products
 # operationId: create-product
-export def "organizations-products create" [
+export def "create-product" [
   organization_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1285,7 +1285,7 @@ export def "organizations-products create" [
 #
 # DELETE /v1/permissions/{permissionGroupId}
 # operationId: delete-permission-group
-export def "permissions delete-group" [
+export def "delete-permission-group" [
   permission_group_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1321,7 +1321,7 @@ export def "permissions delete-group" [
 #
 # GET /v1/permissions/{permissionGroupId}
 # operationId: get-permission-group
-export def "permissions get-group" [
+export def "get-permission-group" [
   permission_group_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1359,7 +1359,7 @@ export def "permissions get-group" [
 # PUT /v1/permissions/{permissionGroupId}
 # operationId: update-permission-group
 # --environmentAccesses item shape: {color?: string, description?: string, environmentAccessType?: "full"|"readOnly"|"none", environmentId?: string, name?: string, order?: int, reasonRequired?: bool}
-export def "permissions update-group" [
+export def "update-permission-group" [
   permission_group_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1423,7 +1423,7 @@ export def "permissions update-group" [
 #
 # GET /v1/products
 # operationId: get-products
-export def "products list" [
+export def "get-products" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1458,7 +1458,7 @@ export def "products list" [
 #
 # DELETE /v1/products/{productId}
 # operationId: delete-product
-export def "products delete" [
+export def "delete-product" [
   product_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1494,7 +1494,7 @@ export def "products delete" [
 #
 # GET /v1/products/{productId}
 # operationId: get-product
-export def "products get" [
+export def "get-product" [
   product_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1531,7 +1531,7 @@ export def "products get" [
 #
 # PUT /v1/products/{productId}
 # operationId: update-product
-export def "products update" [
+export def "update-product" [
   product_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1573,7 +1573,7 @@ export def "products update" [
 #
 # GET /v1/products/{productId}/auditlogs
 # operationId: get-auditlogs
-export def "products-auditlogs get" [
+export def "get-auditlogs" [
   product_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1616,7 +1616,7 @@ export def "products-auditlogs get" [
 #
 # GET /v1/products/{productId}/configs
 # operationId: get-configs
-export def "products-configs get" [
+export def "get-configs" [
   product_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1653,7 +1653,7 @@ export def "products-configs get" [
 #
 # POST /v1/products/{productId}/configs
 # operationId: create-config
-export def "products-configs create" [
+export def "create-config" [
   product_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1695,7 +1695,7 @@ export def "products-configs create" [
 #
 # GET /v1/products/{productId}/environments
 # operationId: get-environments
-export def "products-environments get" [
+export def "get-environments" [
   product_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1732,7 +1732,7 @@ export def "products-environments get" [
 #
 # POST /v1/products/{productId}/environments
 # operationId: create-environment
-export def "products-environments create" [
+export def "create-environment" [
   product_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1775,7 +1775,7 @@ export def "products-environments create" [
 #
 # GET /v1/products/{productId}/members
 # operationId: get-product-members
-export def "products-members get" [
+export def "get-product-members" [
   product_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1812,7 +1812,7 @@ export def "products-members get" [
 #
 # POST /v1/products/{productId}/members/invite
 # operationId: invite-member
-export def "products-members-invite create" [
+export def "invite-member" [
   product_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1853,7 +1853,7 @@ export def "products-members-invite create" [
 #
 # DELETE /v1/products/{productId}/members/{userId}
 # operationId: delete-product-member
-export def "products-members delete" [
+export def "delete-product-member" [
   product_id: string
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1891,7 +1891,7 @@ export def "products-members delete" [
 #
 # GET /v1/products/{productId}/permissions
 # operationId: get-permission-groups
-export def "products-permissions get-groups" [
+export def "get-permission-groups" [
   product_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1929,7 +1929,7 @@ export def "products-permissions get-groups" [
 # POST /v1/products/{productId}/permissions
 # operationId: create-permission-group
 # --environmentAccesses item shape: {color?: string, description?: string, environmentAccessType?: "full"|"readOnly"|"none", environmentId?: string, name?: string, order?: int, reasonRequired?: bool}
-export def "products-permissions create-group" [
+export def "create-permission-group" [
   product_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1993,7 +1993,7 @@ export def "products-permissions create-group" [
 #
 # GET /v1/products/{productId}/segments
 # operationId: get-segments
-export def "products-segments get" [
+export def "get-segments" [
   product_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2030,7 +2030,7 @@ export def "products-segments get" [
 #
 # POST /v1/products/{productId}/segments
 # operationId: create-segment
-export def "products-segments create" [
+export def "create-segment" [
   product_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2075,7 +2075,7 @@ export def "products-segments create" [
 #
 # GET /v1/products/{productId}/tags
 # operationId: get-tags
-export def "products-tags get" [
+export def "get-tags" [
   product_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2112,7 +2112,7 @@ export def "products-tags get" [
 #
 # POST /v1/products/{productId}/tags
 # operationId: create-tag
-export def "products-tags create" [
+export def "create-tag" [
   product_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2154,7 +2154,7 @@ export def "products-tags create" [
 #
 # DELETE /v1/segments/{segmentId}
 # operationId: delete-segment
-export def "segments delete" [
+export def "delete-segment" [
   segment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2190,7 +2190,7 @@ export def "segments delete" [
 #
 # GET /v1/segments/{segmentId}
 # operationId: get-segment
-export def "segments get" [
+export def "get-segment" [
   segment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2227,7 +2227,7 @@ export def "segments get" [
 #
 # PUT /v1/segments/{segmentId}
 # operationId: update-segment
-export def "segments update" [
+export def "update-segment" [
   segment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2272,7 +2272,7 @@ export def "segments update" [
 #
 # DELETE /v1/settings/{settingId}
 # operationId: delete-setting
-export def "settings delete" [
+export def "delete-setting" [
   setting_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2308,7 +2308,7 @@ export def "settings delete" [
 #
 # GET /v1/settings/{settingId}
 # operationId: get-setting
-export def "settings get" [
+export def "get-setting" [
   setting_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2346,7 +2346,7 @@ export def "settings get" [
 # PATCH /v1/settings/{settingId}
 # operationId: update-setting
 # --operations item shape: {from?: record, op?: "unknown"|"add"|"remove"|"replace"|"move"|"copy"|"test", path?: record, value?: record}
-export def "settings update" [
+export def "update-setting" [
   setting_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2387,7 +2387,7 @@ export def "settings update" [
 #
 # GET /v1/settings/{settingKeyOrId}/value
 # operationId: get-setting-value-by-sdkkey
-export def "settings-value get-by-sdkkey" [
+export def "get-setting-value-by-sdkkey" [
   setting_key_or_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2428,7 +2428,7 @@ export def "settings-value get-by-sdkkey" [
 # PATCH /v1/settings/{settingKeyOrId}/value
 # operationId: update-setting-value-by-sdkkey
 # --operations item shape: {from?: record, op?: "unknown"|"add"|"remove"|"replace"|"move"|"copy"|"test", path?: record, value?: record}
-export def "settings-value update-by-sdkkey-by-setting-key-or-id" [
+export def "update-setting-value-by-sdkkey" [
   setting_key_or_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2476,7 +2476,7 @@ export def "settings-value update-by-sdkkey-by-setting-key-or-id" [
 # operationId: replace-setting-value-by-sdkkey
 # --rolloutPercentageItems item shape: {percentage: int, value?: any}
 # --rolloutRules item shape: {comparator?: "isOneOf"|"isNotOneOf"|"contains"|"doesNotContain"|"semVerIsOneOf"|"semVerIsNotOneOf"|"semVerLess"|"semVerLessOrEquals"|"semVerGreater"|"semVerGreaterOrEquals"|"numberEquals"|"numberDoesNotEqual"|"numberLess"|"numberLessOrEquals"|"numberGreater"|"numberGreaterOrEquals"|"sensitiveIsOneOf"|"sensitiveIsNotOneOf", comparisonAttribute?: string, comparisonValue?: string, segmentComparator?: "isIn"|"isNotIn", segmentId?: string, value?: any}
-export def "settings-value update-by-sdkkey-by-setting-key-or-id-1" [
+export def "replace-setting-value-by-sdkkey" [
   setting_key_or_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2524,7 +2524,7 @@ export def "settings-value update-by-sdkkey-by-setting-key-or-id-1" [
 #
 # DELETE /v1/tags/{tagId}
 # operationId: delete-tag
-export def "tags delete" [
+export def "delete-tag" [
   tag_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2560,7 +2560,7 @@ export def "tags delete" [
 #
 # GET /v1/tags/{tagId}
 # operationId: get-tag
-export def "tags get" [
+export def "get-tag" [
   tag_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2597,7 +2597,7 @@ export def "tags get" [
 #
 # PUT /v1/tags/{tagId}
 # operationId: update-tag
-export def "tags update" [
+export def "update-tag" [
   tag_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2639,7 +2639,7 @@ export def "tags update" [
 #
 # GET /v1/tags/{tagId}/settings
 # operationId: get-settings-by-tag
-export def "tags-settings get" [
+export def "get-settings-by-tag" [
   tag_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

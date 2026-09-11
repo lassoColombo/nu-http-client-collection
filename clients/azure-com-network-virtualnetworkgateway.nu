@@ -131,7 +131,7 @@ def pfs-group-completer [] { ["ECP256" "ECP384" "None" "PFS1" "PFS14" "PFS2" "PF
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resource-groups-providers-microsoft-network-connections list-virtual-gateway" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "virtual-network-gateway-connections-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -155,7 +155,7 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/connections
 # operationId: VirtualNetworkGatewayConnections_List
-export def "subscriptions-resource-groups-providers-microsoft-network-connections list-virtual-gateway" [
+export def "virtual-network-gateway-connections-list" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -195,7 +195,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-connection
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/connections/{virtualNetworkGatewayConnectionName}
 # operationId: VirtualNetworkGatewayConnections_Delete
-export def "subscriptions-resource-groups-providers-microsoft-network-connections delete-virtual-gateway" [
+export def "virtual-network-gateway-connections-delete" [
   subscription_id: string
   resource_group_name: string
   virtual_network_gateway_connection_name: string
@@ -237,7 +237,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-connection
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/connections/{virtualNetworkGatewayConnectionName}
 # operationId: VirtualNetworkGatewayConnections_Get
-export def "subscriptions-resource-groups-providers-microsoft-network-connections get-virtual-gateway" [
+export def "virtual-network-gateway-connections-get" [
   subscription_id: string
   resource_group_name: string
   virtual_network_gateway_connection_name: string
@@ -279,7 +279,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-connection
 #
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/connections/{virtualNetworkGatewayConnectionName}
 # operationId: VirtualNetworkGatewayConnections_UpdateTags
-export def "subscriptions-resource-groups-providers-microsoft-network-connections update-virtual-gateway-tags" [
+export def "virtual-network-gateway-connections-update-tags" [
   subscription_id: string
   resource_group_name: string
   virtual_network_gateway_connection_name: string
@@ -326,7 +326,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-connection
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/connections/{virtualNetworkGatewayConnectionName}
 # operationId: VirtualNetworkGatewayConnections_CreateOrUpdate
 # --properties shape: {authorizationKey?: string, connectionProtocol?: "IKEv2"|"IKEv1", connectionStatus?: "Unknown"|"Connecting"|"Connected"|"NotConnected", connectionType: "IPsec"|"Vnet2Vnet"|"ExpressRoute"|"VPNClient", enableBgp?: bool, expressRouteGatewayBypass?: bool, ipsecPolicies?: list, localNetworkGateway2?: any, peer?: any, resourceGuid?: string, routingWeight?: int, sharedKey?: string, trafficSelectorPolicies?: list, usePolicyBasedTrafficSelectors?: bool, virtualNetworkGateway1: any, ... (1 more fields)}
-export def "subscriptions-resource-groups-providers-microsoft-network-connections create-virtual-gateway-or-update" [
+export def "virtual-network-gateway-connections-create-or-update" [
   subscription_id: string
   resource_group_name: string
   virtual_network_gateway_connection_name: string
@@ -376,7 +376,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-connection
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/connections/{virtualNetworkGatewayConnectionName}/sharedkey
 # operationId: VirtualNetworkGatewayConnections_GetSharedKey
-export def "subscriptions-resource-groups-providers-microsoft-network-connections-sharedkey get-virtual-gateway-shared-key" [
+export def "virtual-network-gateway-connections-get-shared-key" [
   subscription_id: string
   resource_group_name: string
   virtual_network_gateway_connection_name: string
@@ -418,7 +418,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-connection
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/connections/{virtualNetworkGatewayConnectionName}/sharedkey
 # operationId: VirtualNetworkGatewayConnections_SetSharedKey
-export def "subscriptions-resource-groups-providers-microsoft-network-connections-sharedkey update-virtual-gateway-shared-key" [
+export def "virtual-network-gateway-connections-set-shared-key" [
   subscription_id: string
   resource_group_name: string
   virtual_network_gateway_connection_name: string
@@ -465,7 +465,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-connection
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/connections/{virtualNetworkGatewayConnectionName}/sharedkey/reset
 # operationId: VirtualNetworkGatewayConnections_ResetSharedKey
-export def "subscriptions-resource-groups-providers-microsoft-network-connections-sharedkey-reset reset-virtual-gateway-shared-key" [
+export def "virtual-network-gateway-connections-reset-shared-key" [
   subscription_id: string
   resource_group_name: string
   virtual_network_gateway_connection_name: string
@@ -511,7 +511,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-connection
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/connections/{virtualNetworkGatewayConnectionName}/startPacketCapture
 # operationId: VirtualNetworkGatewayConnections_StartPacketCapture
-export def "subscriptions-resource-groups-providers-microsoft-network-connections-start-packet-capture start-virtual-gateway" [
+export def "virtual-network-gateway-connections-start-packet-capture" [
   subscription_id: string
   resource_group_name: string
   virtual_network_gateway_connection_name: string
@@ -557,7 +557,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-connection
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/connections/{virtualNetworkGatewayConnectionName}/stopPacketCapture
 # operationId: VirtualNetworkGatewayConnections_StopPacketCapture
-export def "subscriptions-resource-groups-providers-microsoft-network-connections-stop-packet-capture stop-virtual-gateway" [
+export def "virtual-network-gateway-connections-stop-packet-capture" [
   subscription_id: string
   resource_group_name: string
   virtual_network_gateway_connection_name: string
@@ -603,7 +603,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-connection
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/connections/{virtualNetworkGatewayConnectionName}/vpndeviceconfigurationscript
 # operationId: VirtualNetworkGateways_VpnDeviceConfigurationScript
-export def "subscriptions-resource-groups-providers-microsoft-network-connections-vpndeviceconfigurationscript create-virtual-gateways-vpn-device-configuration-script" [
+export def "virtual-network-gateways-vpn-device-configuration-script" [
   subscription_id: string
   resource_group_name: string
   virtual_network_gateway_connection_name: string
@@ -651,7 +651,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-connection
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/localNetworkGateways
 # operationId: LocalNetworkGateways_List
-export def "subscriptions-resource-groups-providers-microsoft-network-local-network-gateways list" [
+export def "local-network-gateways-list" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -691,7 +691,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-local-netw
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/localNetworkGateways/{localNetworkGatewayName}
 # operationId: LocalNetworkGateways_Delete
-export def "subscriptions-resource-groups-providers-microsoft-network-local-network-gateways delete" [
+export def "local-network-gateways-delete" [
   subscription_id: string
   resource_group_name: string
   local_network_gateway_name: string
@@ -733,7 +733,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-local-netw
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/localNetworkGateways/{localNetworkGatewayName}
 # operationId: LocalNetworkGateways_Get
-export def "subscriptions-resource-groups-providers-microsoft-network-local-network-gateways get" [
+export def "local-network-gateways-get" [
   subscription_id: string
   resource_group_name: string
   local_network_gateway_name: string
@@ -775,7 +775,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-local-netw
 #
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/localNetworkGateways/{localNetworkGatewayName}
 # operationId: LocalNetworkGateways_UpdateTags
-export def "subscriptions-resource-groups-providers-microsoft-network-local-network-gateways update-tags" [
+export def "local-network-gateways-update-tags" [
   subscription_id: string
   resource_group_name: string
   local_network_gateway_name: string
@@ -822,7 +822,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-local-netw
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/localNetworkGateways/{localNetworkGatewayName}
 # operationId: LocalNetworkGateways_CreateOrUpdate
 # --properties shape: {bgpSettings?: any, gatewayIpAddress?: string, localNetworkAddressSpace?: any, resourceGuid?: string}
-export def "subscriptions-resource-groups-providers-microsoft-network-local-network-gateways create-or-update" [
+export def "local-network-gateways-create-or-update" [
   subscription_id: string
   resource_group_name: string
   local_network_gateway_name: string
@@ -872,7 +872,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-local-netw
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/virtualNetworkGateways
 # operationId: VirtualNetworkGateways_List
-export def "subscriptions-resource-groups-providers-microsoft-network-virtual-network-gateways list" [
+export def "virtual-network-gateways-list" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -912,7 +912,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-virtual-ne
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/virtualNetworkGateways/{virtualNetworkGatewayName}
 # operationId: VirtualNetworkGateways_Delete
-export def "subscriptions-resource-groups-providers-microsoft-network-virtual-network-gateways delete" [
+export def "virtual-network-gateways-delete" [
   subscription_id: string
   resource_group_name: string
   virtual_network_gateway_name: string
@@ -954,7 +954,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-virtual-ne
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/virtualNetworkGateways/{virtualNetworkGatewayName}
 # operationId: VirtualNetworkGateways_Get
-export def "subscriptions-resource-groups-providers-microsoft-network-virtual-network-gateways get" [
+export def "virtual-network-gateways-get" [
   subscription_id: string
   resource_group_name: string
   virtual_network_gateway_name: string
@@ -996,7 +996,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-virtual-ne
 #
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/virtualNetworkGateways/{virtualNetworkGatewayName}
 # operationId: VirtualNetworkGateways_UpdateTags
-export def "subscriptions-resource-groups-providers-microsoft-network-virtual-network-gateways update-tags" [
+export def "virtual-network-gateways-update-tags" [
   subscription_id: string
   resource_group_name: string
   virtual_network_gateway_name: string
@@ -1043,7 +1043,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-virtual-ne
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/virtualNetworkGateways/{virtualNetworkGatewayName}
 # operationId: VirtualNetworkGateways_CreateOrUpdate
 # --properties shape: {activeActive?: bool, bgpSettings?: any, customRoutes?: any, enableBgp?: bool, gatewayDefaultSite?: any, gatewayType?: "Vpn"|"ExpressRoute", ipConfigurations?: list, resourceGuid?: string, sku?: any, vpnClientConfiguration?: any, vpnGatewayGeneration?: "None"|"Generation1"|"Generation2", vpnType?: "PolicyBased"|"RouteBased"}
-export def "subscriptions-resource-groups-providers-microsoft-network-virtual-network-gateways create-or-update" [
+export def "virtual-network-gateways-create-or-update" [
   subscription_id: string
   resource_group_name: string
   virtual_network_gateway_name: string
@@ -1093,7 +1093,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-virtual-ne
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/virtualNetworkGateways/{virtualNetworkGatewayName}/connections
 # operationId: VirtualNetworkGateways_ListConnections
-export def "subscriptions-resource-groups-providers-microsoft-network-virtual-network-gateways-connections list" [
+export def "virtual-network-gateways-list-connections" [
   subscription_id: string
   resource_group_name: string
   virtual_network_gateway_name: string
@@ -1135,7 +1135,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-virtual-ne
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/virtualNetworkGateways/{virtualNetworkGatewayName}/generatevpnclientpackage
 # operationId: VirtualNetworkGateways_Generatevpnclientpackage
-export def "subscriptions-resource-groups-providers-microsoft-network-virtual-network-gateways-generatevpnclientpackage create" [
+export def "virtual-network-gateways-generatevpnclientpackage" [
   subscription_id: string
   resource_group_name: string
   virtual_network_gateway_name: string
@@ -1184,7 +1184,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-virtual-ne
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/virtualNetworkGateways/{virtualNetworkGatewayName}/generatevpnprofile
 # operationId: VirtualNetworkGateways_GenerateVpnProfile
-export def "subscriptions-resource-groups-providers-microsoft-network-virtual-network-gateways-generatevpnprofile generate-vpn-profile" [
+export def "virtual-network-gateways-generate-vpn-profile" [
   subscription_id: string
   resource_group_name: string
   virtual_network_gateway_name: string
@@ -1233,7 +1233,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-virtual-ne
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/virtualNetworkGateways/{virtualNetworkGatewayName}/getAdvertisedRoutes
 # operationId: VirtualNetworkGateways_GetAdvertisedRoutes
-export def "subscriptions-resource-groups-providers-microsoft-network-virtual-network-gateways-get-advertised-routes get" [
+export def "virtual-network-gateways-get-advertised-routes" [
   subscription_id: string
   resource_group_name: string
   virtual_network_gateway_name: string
@@ -1276,7 +1276,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-virtual-ne
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/virtualNetworkGateways/{virtualNetworkGatewayName}/getBgpPeerStatus
 # operationId: VirtualNetworkGateways_GetBgpPeerStatus
-export def "subscriptions-resource-groups-providers-microsoft-network-virtual-network-gateways-get-bgp-peer-status get" [
+export def "virtual-network-gateways-get-bgp-peer-status" [
   subscription_id: string
   resource_group_name: string
   virtual_network_gateway_name: string
@@ -1319,7 +1319,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-virtual-ne
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/virtualNetworkGateways/{virtualNetworkGatewayName}/getLearnedRoutes
 # operationId: VirtualNetworkGateways_GetLearnedRoutes
-export def "subscriptions-resource-groups-providers-microsoft-network-virtual-network-gateways-get-learned-routes get" [
+export def "virtual-network-gateways-get-learned-routes" [
   subscription_id: string
   resource_group_name: string
   virtual_network_gateway_name: string
@@ -1361,7 +1361,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-virtual-ne
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/virtualNetworkGateways/{virtualNetworkGatewayName}/getVpnClientConnectionHealth
 # operationId: VirtualNetworkGateways_GetVpnclientConnectionHealth
-export def "subscriptions-resource-groups-providers-microsoft-network-virtual-network-gateways-get-vpn-client-connection-health get-vpnclient" [
+export def "virtual-network-gateways-get-vpnclient-connection-health" [
   subscription_id: string
   resource_group_name: string
   virtual_network_gateway_name: string
@@ -1403,7 +1403,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-virtual-ne
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/virtualNetworkGateways/{virtualNetworkGatewayName}/getvpnclientipsecparameters
 # operationId: VirtualNetworkGateways_GetVpnclientIpsecParameters
-export def "subscriptions-resource-groups-providers-microsoft-network-virtual-network-gateways-get-vpnclientipsecparameters get-vpnclient-ipsec-parameters" [
+export def "virtual-network-gateways-get-vpnclient-ipsec-parameters" [
   subscription_id: string
   resource_group_name: string
   virtual_network_gateway_name: string
@@ -1445,7 +1445,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-virtual-ne
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/virtualNetworkGateways/{virtualNetworkGatewayName}/getvpnprofilepackageurl
 # operationId: VirtualNetworkGateways_GetVpnProfilePackageUrl
-export def "subscriptions-resource-groups-providers-microsoft-network-virtual-network-gateways-get-vpnprofilepackageurl get-vpn-profile-package-url" [
+export def "virtual-network-gateways-get-vpn-profile-package-url" [
   subscription_id: string
   resource_group_name: string
   virtual_network_gateway_name: string
@@ -1487,7 +1487,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-virtual-ne
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/virtualNetworkGateways/{virtualNetworkGatewayName}/reset
 # operationId: VirtualNetworkGateways_Reset
-export def "subscriptions-resource-groups-providers-microsoft-network-virtual-network-gateways-reset reset" [
+export def "virtual-network-gateways-reset" [
   subscription_id: string
   resource_group_name: string
   virtual_network_gateway_name: string
@@ -1530,7 +1530,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-virtual-ne
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/virtualNetworkGateways/{virtualNetworkGatewayName}/resetvpnclientsharedkey
 # operationId: VirtualNetworkGateways_ResetVpnClientSharedKey
-export def "subscriptions-resource-groups-providers-microsoft-network-virtual-network-gateways-resetvpnclientsharedkey reset-vpn-client-shared-key" [
+export def "virtual-network-gateways-reset-vpn-client-shared-key" [
   subscription_id: string
   resource_group_name: string
   virtual_network_gateway_name: string
@@ -1572,7 +1572,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-virtual-ne
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/virtualNetworkGateways/{virtualNetworkGatewayName}/setvpnclientipsecparameters
 # operationId: VirtualNetworkGateways_SetVpnclientIpsecParameters
-export def "subscriptions-resource-groups-providers-microsoft-network-virtual-network-gateways-setvpnclientipsecparameters update-vpnclient-ipsec-parameters" [
+export def "virtual-network-gateways-set-vpnclient-ipsec-parameters" [
   subscription_id: string
   resource_group_name: string
   virtual_network_gateway_name: string
@@ -1625,7 +1625,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-virtual-ne
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/virtualNetworkGateways/{virtualNetworkGatewayName}/startPacketCapture
 # operationId: VirtualNetworkGateways_StartPacketCapture
-export def "subscriptions-resource-groups-providers-microsoft-network-virtual-network-gateways-start-packet-capture start" [
+export def "virtual-network-gateways-start-packet-capture" [
   subscription_id: string
   resource_group_name: string
   virtual_network_gateway_name: string
@@ -1671,7 +1671,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-virtual-ne
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/virtualNetworkGateways/{virtualNetworkGatewayName}/stopPacketCapture
 # operationId: VirtualNetworkGateways_StopPacketCapture
-export def "subscriptions-resource-groups-providers-microsoft-network-virtual-network-gateways-stop-packet-capture stop" [
+export def "virtual-network-gateways-stop-packet-capture" [
   subscription_id: string
   resource_group_name: string
   virtual_network_gateway_name: string
@@ -1717,7 +1717,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-virtual-ne
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/virtualNetworkGateways/{virtualNetworkGatewayName}/supportedvpndevices
 # operationId: VirtualNetworkGateways_SupportedVpnDevices
-export def "subscriptions-resource-groups-providers-microsoft-network-virtual-network-gateways-supportedvpndevices create-supported-vpn-devices" [
+export def "virtual-network-gateways-supported-vpn-devices" [
   subscription_id: string
   resource_group_name: string
   virtual_network_gateway_name: string

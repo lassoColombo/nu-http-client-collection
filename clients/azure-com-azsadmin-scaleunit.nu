@@ -104,7 +104,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resource-groups-providers-microsoft-fabric-admin-fabric-locations-scale-units list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "scale-units-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -128,7 +128,7 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Fabric.Admin/fabricLocations/{location}/scaleUnits
 # operationId: ScaleUnits_List
-export def "subscriptions-resource-groups-providers-microsoft-fabric-admin-fabric-locations-scale-units list" [
+export def "scale-units-list" [
   subscription_id: string
   resource_group_name: string
   location: string
@@ -171,7 +171,7 @@ export def "subscriptions-resource-groups-providers-microsoft-fabric-admin-fabri
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Fabric.Admin/fabricLocations/{location}/scaleUnits/{scaleUnit}
 # operationId: ScaleUnits_Get
-export def "subscriptions-resource-groups-providers-microsoft-fabric-admin-fabric-locations-scale-units get" [
+export def "scale-units-get" [
   subscription_id: string
   resource_group_name: string
   location: string
@@ -218,7 +218,7 @@ export def "subscriptions-resource-groups-providers-microsoft-fabric-admin-fabri
 # --infrastructureNetwork shape: {subnet?: list<string>, vlanId?: list<string>}
 # --physicalNodes item shape: {bmcIpAddress?: string, name?: string}
 # --storageNetwork shape: {subnet?: list<string>, vlanId?: list<string>}
-export def "subscriptions-resource-groups-providers-microsoft-fabric-admin-fabric-locations-scale-units-create-from-json create" [
+export def "scale-units-create-from-json" [
   subscription_id: string
   resource_group_name: string
   location: string
@@ -274,7 +274,7 @@ export def "subscriptions-resource-groups-providers-microsoft-fabric-admin-fabri
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Fabric.Admin/fabricLocations/{location}/scaleUnits/{scaleUnit}/scaleOut
 # operationId: ScaleUnits_ScaleOut
 # --nodeList item shape: {bmcIpv4Address?: string, computerName?: string}
-export def "subscriptions-resource-groups-providers-microsoft-fabric-admin-fabric-locations-scale-units-scale-out create" [
+export def "scale-units-scale-out" [
   subscription_id: string
   resource_group_name: string
   location: string

@@ -138,7 +138,7 @@ def x-amz-target-completer-36 [] { ["AWSInsightsIndexService.UpdateCostCategoryD
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "api create-anomaly-monitor" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "create-anomaly-monitor" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -162,7 +162,7 @@ export def commands []: nothing -> table {
 #
 # POST /
 # operationId: CreateAnomalyMonitor
-export def "api create-anomaly-monitor" [
+export def "create-anomaly-monitor" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -211,7 +211,7 @@ export def "api create-anomaly-monitor" [
 #
 # POST /
 # operationId: CreateAnomalySubscription
-export def "api create-anomaly-subscription" [
+export def "create-anomaly-subscription" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -260,7 +260,7 @@ export def "api create-anomaly-subscription" [
 #
 # POST /
 # operationId: CreateCostCategoryDefinition
-export def "api create-cost-category-definition" [
+export def "create-cost-category-definition" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -314,7 +314,7 @@ export def "api create-cost-category-definition" [
 #
 # POST /
 # operationId: DeleteAnomalyMonitor
-export def "api delete-anomaly-monitor" [
+export def "delete-anomaly-monitor" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -362,7 +362,7 @@ export def "api delete-anomaly-monitor" [
 #
 # POST /
 # operationId: DeleteAnomalySubscription
-export def "api delete-anomaly-subscription" [
+export def "delete-anomaly-subscription" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -410,7 +410,7 @@ export def "api delete-anomaly-subscription" [
 #
 # POST /
 # operationId: DeleteCostCategoryDefinition
-export def "api delete-cost-category-definition" [
+export def "delete-cost-category-definition" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -458,7 +458,7 @@ export def "api delete-cost-category-definition" [
 #
 # POST /
 # operationId: DescribeCostCategoryDefinition
-export def "api get-cost-category-definition" [
+export def "describe-cost-category-definition" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -507,7 +507,7 @@ export def "api get-cost-category-definition" [
 #
 # POST /
 # operationId: GetAnomalies
-export def "api get-anomalies" [
+export def "get-anomalies" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -560,7 +560,7 @@ export def "api get-anomalies" [
 #
 # POST /
 # operationId: GetAnomalyMonitors
-export def "api get-anomaly-monitors" [
+export def "get-anomaly-monitors" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -610,7 +610,7 @@ export def "api get-anomaly-monitors" [
 #
 # POST /
 # operationId: GetAnomalySubscriptions
-export def "api get-anomaly-subscriptions" [
+export def "get-anomaly-subscriptions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -661,7 +661,7 @@ export def "api get-anomaly-subscriptions" [
 #
 # POST /
 # operationId: GetCostAndUsage
-export def "api get-cost-and-usage" [
+export def "get-cost-and-usage" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -714,7 +714,7 @@ export def "api get-cost-and-usage" [
 #
 # POST /
 # operationId: GetCostAndUsageWithResources
-export def "api get-cost-and-usage-with-resources" [
+export def "get-cost-and-usage-with-resources" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -769,7 +769,7 @@ export def "api get-cost-and-usage-with-resources" [
 # operationId: GetCostCategories
 # --TimePeriod shape: {Start: any, End: any}
 # --Filter shape: {Or?: any, And?: any, Not?: any, Dimensions?: any, Tags?: any, CostCategories?: any}
-export def "api get-cost-categories" [
+export def "get-cost-categories" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -823,7 +823,7 @@ export def "api get-cost-categories" [
 #
 # POST /
 # operationId: GetCostForecast
-export def "api get-cost-forecast" [
+export def "get-cost-forecast" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -876,7 +876,7 @@ export def "api get-cost-forecast" [
 # POST /
 # operationId: GetDimensionValues
 # --Filter shape: {Or?: any, And?: any, Not?: any, Dimensions?: any, Tags?: any, CostCategories?: any}
-export def "api get-dimension-values" [
+export def "get-dimension-values" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -931,7 +931,7 @@ export def "api get-dimension-values" [
 #
 # POST /
 # operationId: GetReservationCoverage
-export def "api get-reservation-coverage" [
+export def "get-reservation-coverage" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -987,7 +987,7 @@ export def "api get-reservation-coverage" [
 # POST /
 # operationId: GetReservationPurchaseRecommendation
 # --Filter shape: {Or?: any, And?: any, Not?: any, Dimensions?: any, Tags?: any, CostCategories?: any}
-export def "api get-reservation-purchase-recommendation" [
+export def "get-reservation-purchase-recommendation" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1044,7 +1044,7 @@ export def "api get-reservation-purchase-recommendation" [
 #
 # POST /
 # operationId: GetReservationUtilization
-export def "api get-reservation-utilization" [
+export def "get-reservation-utilization" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1099,7 +1099,7 @@ export def "api get-reservation-utilization" [
 # POST /
 # operationId: GetRightsizingRecommendation
 # --Filter shape: {Or?: any, And?: any, Not?: any, Dimensions?: any, Tags?: any, CostCategories?: any}
-export def "api get-rightsizing-recommendation" [
+export def "get-rightsizing-recommendation" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1151,7 +1151,7 @@ export def "api get-rightsizing-recommendation" [
 #
 # POST /
 # operationId: GetSavingsPlansCoverage
-export def "api get-savings-plans-coverage" [
+export def "get-savings-plans-coverage" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1209,7 +1209,7 @@ export def "api get-savings-plans-coverage" [
 #
 # POST /
 # operationId: GetSavingsPlansPurchaseRecommendation
-export def "api get-savings-plans-purchase-recommendation" [
+export def "get-savings-plans-purchase-recommendation" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1264,7 +1264,7 @@ export def "api get-savings-plans-purchase-recommendation" [
 #
 # POST /
 # operationId: GetSavingsPlansUtilization
-export def "api get-savings-plans-utilization" [
+export def "get-savings-plans-utilization" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1315,7 +1315,7 @@ export def "api get-savings-plans-utilization" [
 #
 # POST /
 # operationId: GetSavingsPlansUtilizationDetails
-export def "api get-savings-plans-utilization-details" [
+export def "get-savings-plans-utilization-details" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1372,7 +1372,7 @@ export def "api get-savings-plans-utilization-details" [
 # POST /
 # operationId: GetTags
 # --Filter shape: {Or?: any, And?: any, Not?: any, Dimensions?: any, Tags?: any, CostCategories?: any}
-export def "api get-tags" [
+export def "get-tags" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1426,7 +1426,7 @@ export def "api get-tags" [
 #
 # POST /
 # operationId: GetUsageForecast
-export def "api get-usage-forecast" [
+export def "get-usage-forecast" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1478,7 +1478,7 @@ export def "api get-usage-forecast" [
 #
 # POST /
 # operationId: ListCostAllocationTags
-export def "api list-cost-allocation-tags" [
+export def "list-cost-allocation-tags" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1533,7 +1533,7 @@ export def "api list-cost-allocation-tags" [
 #
 # POST /
 # operationId: ListCostCategoryDefinitions
-export def "api list-cost-category-definitions" [
+export def "list-cost-category-definitions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1586,7 +1586,7 @@ export def "api list-cost-category-definitions" [
 #
 # POST /
 # operationId: ListSavingsPlansPurchaseRecommendationGeneration
-export def "api list-savings-plans-purchase-recommendation-generation" [
+export def "list-savings-plans-purchase-recommendation-generation" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1637,7 +1637,7 @@ export def "api list-savings-plans-purchase-recommendation-generation" [
 #
 # POST /
 # operationId: ListTagsForResource
-export def "api list-tags-for-resource" [
+export def "list-tags-for-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1685,7 +1685,7 @@ export def "api list-tags-for-resource" [
 #
 # POST /
 # operationId: ProvideAnomalyFeedback
-export def "api create-provide-anomaly-feedback" [
+export def "provide-anomaly-feedback" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1734,7 +1734,7 @@ export def "api create-provide-anomaly-feedback" [
 #
 # POST /
 # operationId: StartSavingsPlansPurchaseRecommendationGeneration
-export def "api start-savings-plans-purchase-recommendation-generation" [
+export def "start-savings-plans-purchase-recommendation-generation" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1782,7 +1782,7 @@ export def "api start-savings-plans-purchase-recommendation-generation" [
 #
 # POST /
 # operationId: TagResource
-export def "api tag-resource" [
+export def "tag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1831,7 +1831,7 @@ export def "api tag-resource" [
 #
 # POST /
 # operationId: UntagResource
-export def "api untag-resource" [
+export def "untag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1880,7 +1880,7 @@ export def "api untag-resource" [
 #
 # POST /
 # operationId: UpdateAnomalyMonitor
-export def "api update-anomaly-monitor" [
+export def "update-anomaly-monitor" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1929,7 +1929,7 @@ export def "api update-anomaly-monitor" [
 #
 # POST /
 # operationId: UpdateAnomalySubscription
-export def "api update-anomaly-subscription" [
+export def "update-anomaly-subscription" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1983,7 +1983,7 @@ export def "api update-anomaly-subscription" [
 #
 # POST /
 # operationId: UpdateCostAllocationTagsStatus
-export def "api update-cost-allocation-tags-status" [
+export def "update-cost-allocation-tags-status" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2031,7 +2031,7 @@ export def "api update-cost-allocation-tags-status" [
 #
 # POST /
 # operationId: UpdateCostCategoryDefinition
-export def "api update-cost-category-definition" [
+export def "update-cost-category-definition" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

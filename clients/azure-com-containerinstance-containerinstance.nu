@@ -122,7 +122,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-container-instance-operations list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "operations-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -146,7 +146,7 @@ export def commands []: nothing -> table {
 #
 # GET /providers/Microsoft.ContainerInstance/operations
 # operationId: Operations_List
-export def "providers-microsoft-container-instance-operations list" [
+export def "operations-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -182,7 +182,7 @@ export def "providers-microsoft-container-instance-operations list" [
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.ContainerInstance/containerGroups
 # operationId: ContainerGroups_List
-export def "subscriptions-providers-microsoft-container-instance-container-groups list" [
+export def "container-groups-list" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -220,7 +220,7 @@ export def "subscriptions-providers-microsoft-container-instance-container-group
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.ContainerInstance/locations/{location}/cachedImages
 # operationId: ListCachedImages
-export def "subscriptions-providers-microsoft-container-instance-locations-cached-images list" [
+export def "list-cached-images" [
   subscription_id: string
   location: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -260,7 +260,7 @@ export def "subscriptions-providers-microsoft-container-instance-locations-cache
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.ContainerInstance/locations/{location}/capabilities
 # operationId: ListCapabilities
-export def "subscriptions-providers-microsoft-container-instance-locations-capabilities list" [
+export def "list-capabilities" [
   subscription_id: string
   location: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -300,7 +300,7 @@ export def "subscriptions-providers-microsoft-container-instance-locations-capab
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.ContainerInstance/locations/{location}/usages
 # operationId: ContainerGroupUsage_List
-export def "subscriptions-providers-microsoft-container-instance-locations-usages list-group" [
+export def "container-group-usage-list" [
   subscription_id: string
   location: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -340,7 +340,7 @@ export def "subscriptions-providers-microsoft-container-instance-locations-usage
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ContainerInstance/containerGroups
 # operationId: ContainerGroups_ListByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-container-instance-container-groups list" [
+export def "container-groups-list-by-resource-group" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -380,7 +380,7 @@ export def "subscriptions-resource-groups-providers-microsoft-container-instance
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ContainerInstance/containerGroups/{containerGroupName}
 # operationId: ContainerGroups_Delete
-export def "subscriptions-resource-groups-providers-microsoft-container-instance-container-groups delete" [
+export def "container-groups-delete" [
   subscription_id: string
   resource_group_name: string
   container_group_name: string
@@ -422,7 +422,7 @@ export def "subscriptions-resource-groups-providers-microsoft-container-instance
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ContainerInstance/containerGroups/{containerGroupName}
 # operationId: ContainerGroups_Get
-export def "subscriptions-resource-groups-providers-microsoft-container-instance-container-groups get" [
+export def "container-groups-get" [
   subscription_id: string
   resource_group_name: string
   container_group_name: string
@@ -464,7 +464,7 @@ export def "subscriptions-resource-groups-providers-microsoft-container-instance
 #
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ContainerInstance/containerGroups/{containerGroupName}
 # operationId: ContainerGroups_Update
-export def "subscriptions-resource-groups-providers-microsoft-container-instance-container-groups update" [
+export def "container-groups-update" [
   subscription_id: string
   resource_group_name: string
   container_group_name: string
@@ -513,7 +513,7 @@ export def "subscriptions-resource-groups-providers-microsoft-container-instance
 # operationId: ContainerGroups_CreateOrUpdate
 # --identity shape: {type?: "SystemAssigned"|"UserAssigned"|"SystemAssigned, UserAssigned"|"None", userAssignedIdentities?: record}
 # --properties shape: {containers: list, diagnostics?: record, dnsConfig?: record, imageRegistryCredentials?: list, ipAddress?: record, networkProfile?: record, osType: "Windows"|"Linux", restartPolicy?: "Always"|"OnFailure"|"Never", volumes?: list}
-export def "subscriptions-resource-groups-providers-microsoft-container-instance-container-groups create-or-update" [
+export def "container-groups-create-or-update" [
   subscription_id: string
   resource_group_name: string
   container_group_name: string
@@ -563,7 +563,7 @@ export def "subscriptions-resource-groups-providers-microsoft-container-instance
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ContainerInstance/containerGroups/{containerGroupName}/containers/{containerName}/exec
 # operationId: Container_ExecuteCommand
 # --terminalSize shape: {cols?: int, rows?: int}
-export def "subscriptions-resource-groups-providers-microsoft-container-instance-container-groups-containers-exec create-execute-command" [
+export def "container-execute-command" [
   subscription_id: string
   resource_group_name: string
   container_group_name: string
@@ -612,7 +612,7 @@ export def "subscriptions-resource-groups-providers-microsoft-container-instance
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ContainerInstance/containerGroups/{containerGroupName}/containers/{containerName}/logs
 # operationId: Container_ListLogs
-export def "subscriptions-resource-groups-providers-microsoft-container-instance-container-groups-containers-logs list" [
+export def "container-list-logs" [
   subscription_id: string
   resource_group_name: string
   container_group_name: string
@@ -657,7 +657,7 @@ export def "subscriptions-resource-groups-providers-microsoft-container-instance
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ContainerInstance/containerGroups/{containerGroupName}/restart
 # operationId: ContainerGroups_Restart
-export def "subscriptions-resource-groups-providers-microsoft-container-instance-container-groups-restart restart" [
+export def "container-groups-restart" [
   subscription_id: string
   resource_group_name: string
   container_group_name: string
@@ -699,7 +699,7 @@ export def "subscriptions-resource-groups-providers-microsoft-container-instance
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ContainerInstance/containerGroups/{containerGroupName}/start
 # operationId: ContainerGroups_Start
-export def "subscriptions-resource-groups-providers-microsoft-container-instance-container-groups-start start" [
+export def "container-groups-start" [
   subscription_id: string
   resource_group_name: string
   container_group_name: string
@@ -741,7 +741,7 @@ export def "subscriptions-resource-groups-providers-microsoft-container-instance
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ContainerInstance/containerGroups/{containerGroupName}/stop
 # operationId: ContainerGroups_Stop
-export def "subscriptions-resource-groups-providers-microsoft-container-instance-container-groups-stop stop" [
+export def "container-groups-stop" [
   subscription_id: string
   resource_group_name: string
   container_group_name: string
@@ -783,7 +783,7 @@ export def "subscriptions-resource-groups-providers-microsoft-container-instance
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/virtualNetworks/{virtualNetworkName}/subnets/{subnetName}/providers/Microsoft.ContainerInstance/serviceAssociationLinks/default
 # operationId: ServiceAssociationLink_Delete
-export def "subscriptions-resource-groups-providers-microsoft-network-virtual-networks-subnets-providers-microsoft-container-instance-service-association-links-default delete" [
+export def "service-association-link-delete" [
   subscription_id: string
   resource_group_name: string
   virtual_network_name: string

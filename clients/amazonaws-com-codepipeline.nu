@@ -139,7 +139,7 @@ def x-amz-target-completer-38 [] { ["CodePipeline_20150709.UpdatePipeline"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "api create-acknowledge-job" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "acknowledge-job" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -163,7 +163,7 @@ export def commands []: nothing -> table {
 #
 # POST /
 # operationId: AcknowledgeJob
-export def "api create-acknowledge-job" [
+export def "acknowledge-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -212,7 +212,7 @@ export def "api create-acknowledge-job" [
 #
 # POST /
 # operationId: AcknowledgeThirdPartyJob
-export def "api create-acknowledge-third-party-job" [
+export def "acknowledge-third-party-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -262,7 +262,7 @@ export def "api create-acknowledge-third-party-job" [
 #
 # POST /
 # operationId: CreateCustomActionType
-export def "api create-custom-action-type" [
+export def "create-custom-action-type" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -317,7 +317,7 @@ export def "api create-custom-action-type" [
 #
 # POST /
 # operationId: CreatePipeline
-export def "api create-pipeline" [
+export def "create-pipeline" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -366,7 +366,7 @@ export def "api create-pipeline" [
 #
 # POST /
 # operationId: DeleteCustomActionType
-export def "api delete-custom-action-type" [
+export def "delete-custom-action-type" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -416,7 +416,7 @@ export def "api delete-custom-action-type" [
 #
 # POST /
 # operationId: DeletePipeline
-export def "api delete-pipeline" [
+export def "delete-pipeline" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -464,7 +464,7 @@ export def "api delete-pipeline" [
 #
 # POST /
 # operationId: DeleteWebhook
-export def "api delete-webhook" [
+export def "delete-webhook" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -512,7 +512,7 @@ export def "api delete-webhook" [
 #
 # POST /
 # operationId: DeregisterWebhookWithThirdParty
-export def "api create-deregister-webhook-with-third-party" [
+export def "deregister-webhook-with-third-party" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -560,7 +560,7 @@ export def "api create-deregister-webhook-with-third-party" [
 #
 # POST /
 # operationId: DisableStageTransition
-export def "api disable-stage-transition" [
+export def "disable-stage-transition" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -611,7 +611,7 @@ export def "api disable-stage-transition" [
 #
 # POST /
 # operationId: EnableStageTransition
-export def "api enable-stage-transition" [
+export def "enable-stage-transition" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -661,7 +661,7 @@ export def "api enable-stage-transition" [
 #
 # POST /
 # operationId: GetActionType
-export def "api get-action-type" [
+export def "get-action-type" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -712,7 +712,7 @@ export def "api get-action-type" [
 #
 # POST /
 # operationId: GetJobDetails
-export def "api get-job-details" [
+export def "get-job-details" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -760,7 +760,7 @@ export def "api get-job-details" [
 #
 # POST /
 # operationId: GetPipeline
-export def "api get-pipeline" [
+export def "get-pipeline" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -809,7 +809,7 @@ export def "api get-pipeline" [
 #
 # POST /
 # operationId: GetPipelineExecution
-export def "api get-pipeline-execution" [
+export def "get-pipeline-execution" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -858,7 +858,7 @@ export def "api get-pipeline-execution" [
 #
 # POST /
 # operationId: GetPipelineState
-export def "api get-pipeline-state" [
+export def "get-pipeline-state" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -906,7 +906,7 @@ export def "api get-pipeline-state" [
 #
 # POST /
 # operationId: GetThirdPartyJobDetails
-export def "api get-third-party-job-details" [
+export def "get-third-party-job-details" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -955,7 +955,7 @@ export def "api get-third-party-job-details" [
 #
 # POST /
 # operationId: ListActionExecutions
-export def "api list-action-executions" [
+export def "list-action-executions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1009,7 +1009,7 @@ export def "api list-action-executions" [
 #
 # POST /
 # operationId: ListActionTypes
-export def "api list-action-types" [
+export def "list-action-types" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1061,7 +1061,7 @@ export def "api list-action-types" [
 #
 # POST /
 # operationId: ListPipelineExecutions
-export def "api list-pipeline-executions" [
+export def "list-pipeline-executions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1114,7 +1114,7 @@ export def "api list-pipeline-executions" [
 #
 # POST /
 # operationId: ListPipelines
-export def "api list-pipelines" [
+export def "list-pipelines" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1166,7 +1166,7 @@ export def "api list-pipelines" [
 #
 # POST /
 # operationId: ListTagsForResource
-export def "api list-tags-for-resource" [
+export def "list-tags-for-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1219,7 +1219,7 @@ export def "api list-tags-for-resource" [
 #
 # POST /
 # operationId: ListWebhooks
-export def "api list-webhooks" [
+export def "list-webhooks" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1271,7 +1271,7 @@ export def "api list-webhooks" [
 #
 # POST /
 # operationId: PollForJobs
-export def "api create-poll-for-jobs" [
+export def "poll-for-jobs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1321,7 +1321,7 @@ export def "api create-poll-for-jobs" [
 #
 # POST /
 # operationId: PollForThirdPartyJobs
-export def "api create-poll-for-third-party-jobs" [
+export def "poll-for-third-party-jobs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1370,7 +1370,7 @@ export def "api create-poll-for-third-party-jobs" [
 #
 # POST /
 # operationId: PutActionRevision
-export def "api update-action-revision" [
+export def "put-action-revision" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1421,7 +1421,7 @@ export def "api update-action-revision" [
 #
 # POST /
 # operationId: PutApprovalResult
-export def "api update-approval-result" [
+export def "put-approval-result" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1473,7 +1473,7 @@ export def "api update-approval-result" [
 #
 # POST /
 # operationId: PutJobFailureResult
-export def "api update-job-failure-result" [
+export def "put-job-failure-result" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1522,7 +1522,7 @@ export def "api update-job-failure-result" [
 #
 # POST /
 # operationId: PutJobSuccessResult
-export def "api update-job-success-result" [
+export def "put-job-success-result" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1574,7 +1574,7 @@ export def "api update-job-success-result" [
 #
 # POST /
 # operationId: PutThirdPartyJobFailureResult
-export def "api update-third-party-job-failure-result" [
+export def "put-third-party-job-failure-result" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1624,7 +1624,7 @@ export def "api update-third-party-job-failure-result" [
 #
 # POST /
 # operationId: PutThirdPartyJobSuccessResult
-export def "api update-third-party-job-success-result" [
+export def "put-third-party-job-success-result" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1676,7 +1676,7 @@ export def "api update-third-party-job-success-result" [
 #
 # POST /
 # operationId: PutWebhook
-export def "api update-webhook" [
+export def "put-webhook" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1725,7 +1725,7 @@ export def "api update-webhook" [
 #
 # POST /
 # operationId: RegisterWebhookWithThirdParty
-export def "api create-webhook-with-third-party" [
+export def "register-webhook-with-third-party" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1773,7 +1773,7 @@ export def "api create-webhook-with-third-party" [
 #
 # POST /
 # operationId: RetryStageExecution
-export def "api create-retry-stage-execution" [
+export def "retry-stage-execution" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1824,7 +1824,7 @@ export def "api create-retry-stage-execution" [
 #
 # POST /
 # operationId: StartPipelineExecution
-export def "api start-pipeline-execution" [
+export def "start-pipeline-execution" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1873,7 +1873,7 @@ export def "api start-pipeline-execution" [
 #
 # POST /
 # operationId: StopPipelineExecution
-export def "api stop-pipeline-execution" [
+export def "stop-pipeline-execution" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1924,7 +1924,7 @@ export def "api stop-pipeline-execution" [
 #
 # POST /
 # operationId: TagResource
-export def "api tag-resource" [
+export def "tag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1973,7 +1973,7 @@ export def "api tag-resource" [
 #
 # POST /
 # operationId: UntagResource
-export def "api untag-resource" [
+export def "untag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2022,7 +2022,7 @@ export def "api untag-resource" [
 #
 # POST /
 # operationId: UpdateActionType
-export def "api update-action-type" [
+export def "update-action-type" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2070,7 +2070,7 @@ export def "api update-action-type" [
 #
 # POST /
 # operationId: UpdatePipeline
-export def "api update-pipeline" [
+export def "update-pipeline" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

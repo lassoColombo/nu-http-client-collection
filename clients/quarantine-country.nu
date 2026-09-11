@@ -97,7 +97,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "spots-day get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-spots-day" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -120,7 +120,7 @@ export def commands []: nothing -> table {
 # Resolve change chart by day
 #
 # GET /spots/day
-export def "spots-day get" [
+export def "get-spots-day" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -156,7 +156,7 @@ export def "spots-day get" [
 # Resolve change chart for week
 #
 # GET /spots/month
-export def "spots-month get" [
+export def "get-spots-month" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -192,7 +192,7 @@ export def "spots-month get" [
 # Resolve change chart for week
 #
 # GET /spots/week
-export def "spots-week get" [
+export def "get-spots-week" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -228,7 +228,7 @@ export def "spots-week get" [
 # Resolve change chart for week
 #
 # GET /spots/year
-export def "spots-year get" [
+export def "get-spots-year" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -264,7 +264,7 @@ export def "spots-year get" [
 # Get latest coronavirus situation report
 #
 # GET /summary/latest
-export def "summary-latest get" [
+export def "get-summary-latest" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -299,7 +299,7 @@ export def "summary-latest get" [
 # Resolve report for region
 #
 # GET /summary/region
-export def "summary-region get" [
+export def "get-summary-region" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

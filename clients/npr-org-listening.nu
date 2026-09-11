@@ -107,7 +107,7 @@ def channel-completer [] { ["emailprograms" "emailstories" "followed" "lapseduse
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "aggregation-recommendations get-agg" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-agg-recommendations" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -131,7 +131,7 @@ export def commands []: nothing -> table {
 #
 # GET /v2/aggregation/{aggId}/recommendations
 # operationId: getAggRecommendations
-export def "aggregation-recommendations get-agg" [
+export def "get-agg-recommendations" [
   agg_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -173,7 +173,7 @@ export def "aggregation-recommendations get-agg" [
 #
 # GET /v2/channels
 # operationId: getChannels
-export def "channels get" [
+export def "get-channels" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -213,7 +213,7 @@ export def "channels get" [
 #
 # GET /v2/history
 # operationId: getHistory
-export def "history get" [
+export def "get-history" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -251,7 +251,7 @@ export def "history get" [
 #
 # GET /v2/organizations/{orgId}/categories/{category}/recommendations
 # operationId: getOrganizationCategory
-export def "organizations-categories-recommendations get" [
+export def "get-organization-category" [
   org_id: int
   category: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -293,7 +293,7 @@ export def "organizations-categories-recommendations get" [
 #
 # GET /v2/organizations/{orgId}/recommendations
 # operationId: getOrganizationOverview
-export def "organizations-recommendations get-overview" [
+export def "get-organization-overview" [
   org_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -333,7 +333,7 @@ export def "organizations-recommendations get-overview" [
 #
 # GET /v2/promo/recommendations
 # operationId: getPromo
-export def "promo-recommendations get" [
+export def "get-promo" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -371,7 +371,7 @@ export def "promo-recommendations get" [
 #
 # POST /v2/ratings
 # operationId: postRating
-export def "ratings create" [
+export def "post-rating" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -417,7 +417,7 @@ export def "ratings create" [
 #
 # GET /v2/recommendations
 # operationId: getRecommendations
-export def "recommendations get" [
+export def "get-recommendations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -460,7 +460,7 @@ export def "recommendations get" [
 #
 # GET /v2/search/recommendations
 # operationId: getSearchRecommendations
-export def "search-recommendations get" [
+export def "get-search-recommendations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

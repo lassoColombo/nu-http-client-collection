@@ -119,7 +119,7 @@ def kind-completer-1 [] { ["clientGroup" "machine" "machineGroup" "port" "proces
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resource-groups-providers-microsoft-operational-insights-workspaces-features-service-map-client-groups get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "client-groups-get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -143,7 +143,7 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.OperationalInsights/workspaces/{workspaceName}/features/serviceMap/clientGroups/{clientGroupName}
 # operationId: ClientGroups_Get
-export def "subscriptions-resource-groups-providers-microsoft-operational-insights-workspaces-features-service-map-client-groups get" [
+export def "client-groups-get" [
   subscription_id: string
   resource_group_name: string
   workspace_name: string
@@ -189,7 +189,7 @@ export def "subscriptions-resource-groups-providers-microsoft-operational-insigh
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.OperationalInsights/workspaces/{workspaceName}/features/serviceMap/clientGroups/{clientGroupName}/members
 # operationId: ClientGroups_ListMembers
-export def "subscriptions-resource-groups-providers-microsoft-operational-insights-workspaces-features-service-map-client-groups-members list" [
+export def "client-groups-list-members" [
   subscription_id: string
   resource_group_name: string
   workspace_name: string
@@ -236,7 +236,7 @@ export def "subscriptions-resource-groups-providers-microsoft-operational-insigh
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.OperationalInsights/workspaces/{workspaceName}/features/serviceMap/clientGroups/{clientGroupName}/membersCount
 # operationId: ClientGroups_GetMembersCount
-export def "subscriptions-resource-groups-providers-microsoft-operational-insights-workspaces-features-service-map-client-groups-members-count get" [
+export def "client-groups-get-members-count" [
   subscription_id: string
   resource_group_name: string
   workspace_name: string
@@ -283,7 +283,7 @@ export def "subscriptions-resource-groups-providers-microsoft-operational-insigh
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.OperationalInsights/workspaces/{workspaceName}/features/serviceMap/generateMap
 # Discriminator (request): kind
 # operationId: Maps_Generate
-export def "subscriptions-resource-groups-providers-microsoft-operational-insights-workspaces-features-service-map-generate-map generate" [
+export def "maps-generate" [
   subscription_id: string
   resource_group_name: string
   workspace_name: string
@@ -331,7 +331,7 @@ export def "subscriptions-resource-groups-providers-microsoft-operational-insigh
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.OperationalInsights/workspaces/{workspaceName}/features/serviceMap/machineGroups
 # operationId: MachineGroups_ListByWorkspace
-export def "subscriptions-resource-groups-providers-microsoft-operational-insights-workspaces-features-service-map-machine-groups list" [
+export def "machine-groups-list-by-workspace" [
   subscription_id: string
   resource_group_name: string
   workspace_name: string
@@ -376,7 +376,7 @@ export def "subscriptions-resource-groups-providers-microsoft-operational-insigh
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.OperationalInsights/workspaces/{workspaceName}/features/serviceMap/machineGroups
 # operationId: MachineGroups_Create
 # --properties shape: {count?: int, displayName: string, groupType?: "unknown"|"azure-cs"|"azure-sf"|"azure-vmss"|"user-static", machines?: list}
-export def "subscriptions-resource-groups-providers-microsoft-operational-insights-workspaces-features-service-map-machine-groups create" [
+export def "machine-groups-create" [
   subscription_id: string
   resource_group_name: string
   workspace_name: string
@@ -424,7 +424,7 @@ export def "subscriptions-resource-groups-providers-microsoft-operational-insigh
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.OperationalInsights/workspaces/{workspaceName}/features/serviceMap/machineGroups/{machineGroupName}
 # operationId: MachineGroups_Delete
-export def "subscriptions-resource-groups-providers-microsoft-operational-insights-workspaces-features-service-map-machine-groups delete" [
+export def "machine-groups-delete" [
   subscription_id: string
   resource_group_name: string
   workspace_name: string
@@ -468,7 +468,7 @@ export def "subscriptions-resource-groups-providers-microsoft-operational-insigh
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.OperationalInsights/workspaces/{workspaceName}/features/serviceMap/machineGroups/{machineGroupName}
 # operationId: MachineGroups_Get
-export def "subscriptions-resource-groups-providers-microsoft-operational-insights-workspaces-features-service-map-machine-groups get" [
+export def "machine-groups-get" [
   subscription_id: string
   resource_group_name: string
   workspace_name: string
@@ -515,7 +515,7 @@ export def "subscriptions-resource-groups-providers-microsoft-operational-insigh
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.OperationalInsights/workspaces/{workspaceName}/features/serviceMap/machineGroups/{machineGroupName}
 # operationId: MachineGroups_Update
 # --properties shape: {count?: int, displayName: string, groupType?: "unknown"|"azure-cs"|"azure-sf"|"azure-vmss"|"user-static", machines?: list}
-export def "subscriptions-resource-groups-providers-microsoft-operational-insights-workspaces-features-service-map-machine-groups update" [
+export def "machine-groups-update" [
   subscription_id: string
   resource_group_name: string
   workspace_name: string
@@ -565,7 +565,7 @@ export def "subscriptions-resource-groups-providers-microsoft-operational-insigh
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.OperationalInsights/workspaces/{workspaceName}/features/serviceMap/machines
 # operationId: Machines_ListByWorkspace
-export def "subscriptions-resource-groups-providers-microsoft-operational-insights-workspaces-features-service-map-machines list" [
+export def "machines-list-by-workspace" [
   subscription_id: string
   resource_group_name: string
   workspace_name: string
@@ -612,7 +612,7 @@ export def "subscriptions-resource-groups-providers-microsoft-operational-insigh
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.OperationalInsights/workspaces/{workspaceName}/features/serviceMap/machines/{machineName}
 # operationId: Machines_Get
-export def "subscriptions-resource-groups-providers-microsoft-operational-insights-workspaces-features-service-map-machines get" [
+export def "machines-get" [
   subscription_id: string
   resource_group_name: string
   workspace_name: string
@@ -657,7 +657,7 @@ export def "subscriptions-resource-groups-providers-microsoft-operational-insigh
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.OperationalInsights/workspaces/{workspaceName}/features/serviceMap/machines/{machineName}/connections
 # operationId: Machines_ListConnections
-export def "subscriptions-resource-groups-providers-microsoft-operational-insights-workspaces-features-service-map-machines-connections list" [
+export def "machines-list-connections" [
   subscription_id: string
   resource_group_name: string
   workspace_name: string
@@ -703,7 +703,7 @@ export def "subscriptions-resource-groups-providers-microsoft-operational-insigh
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.OperationalInsights/workspaces/{workspaceName}/features/serviceMap/machines/{machineName}/liveness
 # operationId: Machines_GetLiveness
-export def "subscriptions-resource-groups-providers-microsoft-operational-insights-workspaces-features-service-map-machines-liveness get" [
+export def "machines-get-liveness" [
   subscription_id: string
   resource_group_name: string
   workspace_name: string
@@ -749,7 +749,7 @@ export def "subscriptions-resource-groups-providers-microsoft-operational-insigh
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.OperationalInsights/workspaces/{workspaceName}/features/serviceMap/machines/{machineName}/machineGroups
 # operationId: Machines_ListMachineGroupMembership
-export def "subscriptions-resource-groups-providers-microsoft-operational-insights-workspaces-features-service-map-machines-machine-groups list-membership" [
+export def "machines-list-machine-group-membership" [
   subscription_id: string
   resource_group_name: string
   workspace_name: string
@@ -795,7 +795,7 @@ export def "subscriptions-resource-groups-providers-microsoft-operational-insigh
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.OperationalInsights/workspaces/{workspaceName}/features/serviceMap/machines/{machineName}/ports
 # operationId: Machines_ListPorts
-export def "subscriptions-resource-groups-providers-microsoft-operational-insights-workspaces-features-service-map-machines-ports list" [
+export def "machines-list-ports" [
   subscription_id: string
   resource_group_name: string
   workspace_name: string
@@ -841,7 +841,7 @@ export def "subscriptions-resource-groups-providers-microsoft-operational-insigh
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.OperationalInsights/workspaces/{workspaceName}/features/serviceMap/machines/{machineName}/ports/{portName}
 # operationId: Ports_Get
-export def "subscriptions-resource-groups-providers-microsoft-operational-insights-workspaces-features-service-map-machines-ports get" [
+export def "ports-get" [
   subscription_id: string
   resource_group_name: string
   workspace_name: string
@@ -889,7 +889,7 @@ export def "subscriptions-resource-groups-providers-microsoft-operational-insigh
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.OperationalInsights/workspaces/{workspaceName}/features/serviceMap/machines/{machineName}/ports/{portName}/acceptingProcesses
 # operationId: Ports_ListAcceptingProcesses
-export def "subscriptions-resource-groups-providers-microsoft-operational-insights-workspaces-features-service-map-machines-ports-accepting-processes list" [
+export def "ports-list-accepting-processes" [
   subscription_id: string
   resource_group_name: string
   workspace_name: string
@@ -937,7 +937,7 @@ export def "subscriptions-resource-groups-providers-microsoft-operational-insigh
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.OperationalInsights/workspaces/{workspaceName}/features/serviceMap/machines/{machineName}/ports/{portName}/connections
 # operationId: Ports_ListConnections
-export def "subscriptions-resource-groups-providers-microsoft-operational-insights-workspaces-features-service-map-machines-ports-connections list" [
+export def "ports-list-connections" [
   subscription_id: string
   resource_group_name: string
   workspace_name: string
@@ -985,7 +985,7 @@ export def "subscriptions-resource-groups-providers-microsoft-operational-insigh
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.OperationalInsights/workspaces/{workspaceName}/features/serviceMap/machines/{machineName}/ports/{portName}/liveness
 # operationId: Ports_GetLiveness
-export def "subscriptions-resource-groups-providers-microsoft-operational-insights-workspaces-features-service-map-machines-ports-liveness get" [
+export def "ports-get-liveness" [
   subscription_id: string
   resource_group_name: string
   workspace_name: string
@@ -1033,7 +1033,7 @@ export def "subscriptions-resource-groups-providers-microsoft-operational-insigh
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.OperationalInsights/workspaces/{workspaceName}/features/serviceMap/machines/{machineName}/processes
 # operationId: Machines_ListProcesses
-export def "subscriptions-resource-groups-providers-microsoft-operational-insights-workspaces-features-service-map-machines-processes list" [
+export def "machines-list-processes" [
   subscription_id: string
   resource_group_name: string
   workspace_name: string
@@ -1081,7 +1081,7 @@ export def "subscriptions-resource-groups-providers-microsoft-operational-insigh
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.OperationalInsights/workspaces/{workspaceName}/features/serviceMap/machines/{machineName}/processes/{processName}
 # operationId: Processes_Get
-export def "subscriptions-resource-groups-providers-microsoft-operational-insights-workspaces-features-service-map-machines-processes get" [
+export def "processes-get" [
   subscription_id: string
   resource_group_name: string
   workspace_name: string
@@ -1128,7 +1128,7 @@ export def "subscriptions-resource-groups-providers-microsoft-operational-insigh
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.OperationalInsights/workspaces/{workspaceName}/features/serviceMap/machines/{machineName}/processes/{processName}/acceptingPorts
 # operationId: Processes_ListAcceptingPorts
-export def "subscriptions-resource-groups-providers-microsoft-operational-insights-workspaces-features-service-map-machines-processes-accepting-ports list" [
+export def "processes-list-accepting-ports" [
   subscription_id: string
   resource_group_name: string
   workspace_name: string
@@ -1176,7 +1176,7 @@ export def "subscriptions-resource-groups-providers-microsoft-operational-insigh
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.OperationalInsights/workspaces/{workspaceName}/features/serviceMap/machines/{machineName}/processes/{processName}/connections
 # operationId: Processes_ListConnections
-export def "subscriptions-resource-groups-providers-microsoft-operational-insights-workspaces-features-service-map-machines-processes-connections list" [
+export def "processes-list-connections" [
   subscription_id: string
   resource_group_name: string
   workspace_name: string
@@ -1224,7 +1224,7 @@ export def "subscriptions-resource-groups-providers-microsoft-operational-insigh
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.OperationalInsights/workspaces/{workspaceName}/features/serviceMap/machines/{machineName}/processes/{processName}/liveness
 # operationId: Processes_GetLiveness
-export def "subscriptions-resource-groups-providers-microsoft-operational-insights-workspaces-features-service-map-machines-processes-liveness get" [
+export def "processes-get-liveness" [
   subscription_id: string
   resource_group_name: string
   workspace_name: string
@@ -1272,7 +1272,7 @@ export def "subscriptions-resource-groups-providers-microsoft-operational-insigh
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.OperationalInsights/workspaces/{workspaceName}/features/serviceMap/summaries/machines
 # operationId: Summaries_GetMachines
-export def "subscriptions-resource-groups-providers-microsoft-operational-insights-workspaces-features-service-map-summaries-machines get" [
+export def "summaries-get-machines" [
   subscription_id: string
   resource_group_name: string
   workspace_name: string

@@ -104,7 +104,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-management-groups-providers-microsoft-policy-insights-policy-events-query-results list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "policy-events-list-query-results-for-management-group" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -128,7 +128,7 @@ export def commands []: nothing -> table {
 #
 # POST /providers/{managementGroupsNamespace}/managementGroups/{managementGroupName}/providers/Microsoft.PolicyInsights/policyEvents/{policyEventsResource}/queryResults
 # operationId: PolicyEvents_ListQueryResultsForManagementGroup
-export def "providers-management-groups-providers-microsoft-policy-insights-policy-events-query-results list" [
+export def "policy-events-list-query-results-for-management-group" [
   management_groups_namespace: string
   management_group_name: string
   policy_events_resource: string
@@ -177,7 +177,7 @@ export def "providers-management-groups-providers-microsoft-policy-insights-poli
 #
 # POST /subscriptions/{subscriptionId}/providers/Microsoft.PolicyInsights/policyEvents/{policyEventsResource}/queryResults
 # operationId: PolicyEvents_ListQueryResultsForSubscription
-export def "subscriptions-providers-microsoft-policy-insights-policy-events-query-results list" [
+export def "policy-events-list-query-results-for-subscription" [
   subscription_id: string
   policy_events_resource: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -224,7 +224,7 @@ export def "subscriptions-providers-microsoft-policy-insights-policy-events-quer
 #
 # POST /subscriptions/{subscriptionId}/providers/{authorizationNamespace}/policyAssignments/{policyAssignmentName}/providers/Microsoft.PolicyInsights/policyEvents/{policyEventsResource}/queryResults
 # operationId: PolicyEvents_ListQueryResultsForSubscriptionLevelPolicyAssignment
-export def "subscriptions-providers-policy-assignments-providers-microsoft-policy-insights-policy-events-query-results list-for-level" [
+export def "policy-events-list-query-results-for-subscription-level-policy-assignment" [
   subscription_id: string
   authorization_namespace: string
   policy_assignment_name: string
@@ -275,7 +275,7 @@ export def "subscriptions-providers-policy-assignments-providers-microsoft-polic
 #
 # POST /subscriptions/{subscriptionId}/providers/{authorizationNamespace}/policyDefinitions/{policyDefinitionName}/providers/Microsoft.PolicyInsights/policyEvents/{policyEventsResource}/queryResults
 # operationId: PolicyEvents_ListQueryResultsForPolicyDefinition
-export def "subscriptions-providers-policy-definitions-providers-microsoft-policy-insights-policy-events-query-results list" [
+export def "policy-events-list-query-results-for-policy-definition" [
   subscription_id: string
   authorization_namespace: string
   policy_definition_name: string
@@ -326,7 +326,7 @@ export def "subscriptions-providers-policy-definitions-providers-microsoft-polic
 #
 # POST /subscriptions/{subscriptionId}/providers/{authorizationNamespace}/policySetDefinitions/{policySetDefinitionName}/providers/Microsoft.PolicyInsights/policyEvents/{policyEventsResource}/queryResults
 # operationId: PolicyEvents_ListQueryResultsForPolicySetDefinition
-export def "subscriptions-providers-policy-set-definitions-providers-microsoft-policy-insights-policy-events-query-results list" [
+export def "policy-events-list-query-results-for-policy-set-definition" [
   subscription_id: string
   authorization_namespace: string
   policy_set_definition_name: string
@@ -377,7 +377,7 @@ export def "subscriptions-providers-policy-set-definitions-providers-microsoft-p
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.PolicyInsights/policyEvents/{policyEventsResource}/queryResults
 # operationId: PolicyEvents_ListQueryResultsForResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-policy-insights-policy-events-query-results list" [
+export def "policy-events-list-query-results-for-resource-group" [
   subscription_id: string
   resource_group_name: string
   policy_events_resource: string
@@ -426,7 +426,7 @@ export def "subscriptions-resource-groups-providers-microsoft-policy-insights-po
 #
 # POST /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/{authorizationNamespace}/policyAssignments/{policyAssignmentName}/providers/Microsoft.PolicyInsights/policyEvents/{policyEventsResource}/queryResults
 # operationId: PolicyEvents_ListQueryResultsForResourceGroupLevelPolicyAssignment
-export def "subscriptions-resourcegroups-providers-policy-assignments-providers-microsoft-policy-insights-policy-events-query-results list-for-resource-group-level" [
+export def "policy-events-list-query-results-for-resource-group-level-policy-assignment" [
   subscription_id: string
   resource_group_name: string
   authorization_namespace: string
@@ -479,7 +479,7 @@ export def "subscriptions-resourcegroups-providers-policy-assignments-providers-
 #
 # POST /{resourceId}/providers/Microsoft.PolicyInsights/policyEvents/{policyEventsResource}/queryResults
 # operationId: PolicyEvents_ListQueryResultsForResource
-export def "providers-microsoft-policy-insights-policy-events-query-results list-for-resource" [
+export def "policy-events-list-query-results-for-resource" [
   resource_id: string
   policy_events_resource: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -526,7 +526,7 @@ export def "providers-microsoft-policy-insights-policy-events-query-results list
 #
 # GET /{scope}/providers/Microsoft.PolicyInsights/policyEvents/$metadata
 # operationId: PolicyEvents_GetMetadata
-export def "providers-microsoft-policy-insights-policy-events-metadata get-metadata" [
+export def "policy-events-get-metadata" [
   scope: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

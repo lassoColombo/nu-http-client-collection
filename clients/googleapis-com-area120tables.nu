@@ -130,7 +130,7 @@ def view-completer [] { ["COLUMN_ID_VIEW" "VIEW_UNSPECIFIED"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "v1alpha1-tables list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "area120tables-tables-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -154,7 +154,7 @@ export def commands []: nothing -> table {
 #
 # GET /v1alpha1/tables
 # operationId: area120tables.tables.list
-export def "v1alpha1-tables list" [
+export def "area120tables-tables-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -203,7 +203,7 @@ export def "v1alpha1-tables list" [
 #
 # GET /v1alpha1/workspaces
 # operationId: area120tables.workspaces.list
-export def "v1alpha1-workspaces list" [
+export def "area120tables-workspaces-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -251,7 +251,7 @@ export def "v1alpha1-workspaces list" [
 #
 # DELETE /v1alpha1/{name}
 # operationId: area120tables.tables.rows.delete
-export def "v1alpha1 delete" [
+export def "area120tables-tables-rows-delete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -299,7 +299,7 @@ export def "v1alpha1 delete" [
 #
 # GET /v1alpha1/{name}
 # operationId: area120tables.workspaces.get
-export def "v1alpha1 get" [
+export def "area120tables-workspaces-get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -348,7 +348,7 @@ export def "v1alpha1 get" [
 #
 # PATCH /v1alpha1/{name}
 # operationId: area120tables.tables.rows.patch
-export def "v1alpha1 update" [
+export def "area120tables-tables-rows-patch" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -405,7 +405,7 @@ export def "v1alpha1 update" [
 #
 # GET /v1alpha1/{parent}/rows
 # operationId: area120tables.tables.rows.list
-export def "v1alpha1-rows list" [
+export def "area120tables-tables-rows-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -458,7 +458,7 @@ export def "v1alpha1-rows list" [
 #
 # POST /v1alpha1/{parent}/rows
 # operationId: area120tables.tables.rows.create
-export def "v1alpha1-rows create" [
+export def "area120tables-tables-rows-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -515,7 +515,7 @@ export def "v1alpha1-rows create" [
 # POST /v1alpha1/{parent}/rows:batchCreate
 # operationId: area120tables.tables.rows.batchCreate
 # --requests item shape: {parent?: string, row?: record, view?: "VIEW_UNSPECIFIED"|"COLUMN_ID_VIEW"}
-export def "v1alpha1-rows-batch-create create" [
+export def "area120tables-tables-rows-batch-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -567,7 +567,7 @@ export def "v1alpha1-rows-batch-create create" [
 #
 # POST /v1alpha1/{parent}/rows:batchDelete
 # operationId: area120tables.tables.rows.batchDelete
-export def "v1alpha1-rows-batch-delete delete" [
+export def "area120tables-tables-rows-batch-delete" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -620,7 +620,7 @@ export def "v1alpha1-rows-batch-delete delete" [
 # POST /v1alpha1/{parent}/rows:batchUpdate
 # operationId: area120tables.tables.rows.batchUpdate
 # --requests item shape: {row?: record, updateMask?: string, view?: "VIEW_UNSPECIFIED"|"COLUMN_ID_VIEW"}
-export def "v1alpha1-rows-batch-update update" [
+export def "area120tables-tables-rows-batch-update" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)

@@ -112,7 +112,7 @@ def accept-completer [] { ["*/*" "application/json"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "actions list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "list-actions" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -136,7 +136,7 @@ export def commands []: nothing -> table {
 #
 # GET /api/v1/actions/{serviceId}
 # operationId: listActions
-export def "actions list" [
+export def "list-actions" [
   service_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -172,7 +172,7 @@ export def "actions list" [
 #
 # GET /api/v1/actions/{serviceId}/{actionId}
 # operationId: describeAction
-export def "actions get" [
+export def "describe-action" [
   service_id: string
   action_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -210,7 +210,7 @@ export def "actions get" [
 #
 # POST /api/v1/actions/{serviceId}/{actionId}/exec
 # operationId: executeAction
-export def "actions-exec create-execute" [
+export def "execute-action" [
   service_id: string
   action_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -259,7 +259,7 @@ export def "actions-exec create-execute" [
 #
 # GET /api/v1/actions/{serviceId}/{actionId}/help
 # operationId: actionHelp
-export def "actions-help get" [
+export def "action-help" [
   service_id: string
   action_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -297,7 +297,7 @@ export def "actions-help get" [
 #
 # GET /api/v1/login
 # operationId: login
-export def "login get" [
+export def "login" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -331,7 +331,7 @@ export def "login get" [
 #
 # GET /api/v1/logout
 # operationId: logout
-export def "logout get" [
+export def "logout" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -365,7 +365,7 @@ export def "logout get" [
 #
 # GET /api/v1/services
 # operationId: listServices
-export def "services list" [
+export def "list-services" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -399,7 +399,7 @@ export def "services list" [
 #
 # POST /api/v1/services
 # operationId: loadService
-export def "services create-load" [
+export def "load-service" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -438,7 +438,7 @@ export def "services create-load" [
 #
 # DELETE /api/v1/services/{serviceId}
 # operationId: unloadService
-export def "services delete-unload" [
+export def "unload-service" [
   service_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -474,7 +474,7 @@ export def "services delete-unload" [
 #
 # GET /api/v1/services/{serviceId}
 # operationId: describeService
-export def "services get" [
+export def "describe-service" [
   service_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

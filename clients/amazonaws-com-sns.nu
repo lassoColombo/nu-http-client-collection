@@ -149,7 +149,7 @@ def action-completer-41 [] { ["VerifySMSSandboxPhoneNumber"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "api get-create-permission" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-add-permission" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -173,7 +173,7 @@ export def commands []: nothing -> table {
 #
 # GET /
 # operationId: GET_AddPermission
-export def "api get-create-permission" [
+export def "get-add-permission" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -223,7 +223,7 @@ export def "api get-create-permission" [
 #
 # POST /
 # operationId: POST_AddPermission
-export def "api create-permission" [
+export def "post-add-permission" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -273,7 +273,7 @@ export def "api create-permission" [
 #
 # GET /
 # operationId: GET_CheckIfPhoneNumberIsOptedOut
-export def "api get-check-if-phone-number-is-opted-out" [
+export def "get-check-if-phone-number-is-opted-out" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -320,7 +320,7 @@ export def "api get-check-if-phone-number-is-opted-out" [
 #
 # POST /
 # operationId: POST_CheckIfPhoneNumberIsOptedOut
-export def "api create-check-if-phone-number-is-opted-out" [
+export def "post-check-if-phone-number-is-opted-out" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -370,7 +370,7 @@ export def "api create-check-if-phone-number-is-opted-out" [
 #
 # GET /
 # operationId: GET_ConfirmSubscription
-export def "api get-confirm-subscription" [
+export def "get-confirm-subscription" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -419,7 +419,7 @@ export def "api get-confirm-subscription" [
 #
 # POST /
 # operationId: POST_ConfirmSubscription
-export def "api create-confirm-subscription" [
+export def "post-confirm-subscription" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -469,7 +469,7 @@ export def "api create-confirm-subscription" [
 #
 # GET /
 # operationId: GET_CreatePlatformApplication
-export def "api get-create-platform-application" [
+export def "get-create-platform-application" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -518,7 +518,7 @@ export def "api get-create-platform-application" [
 #
 # POST /
 # operationId: POST_CreatePlatformApplication
-export def "api create-platform-application" [
+export def "post-create-platform-application" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -568,7 +568,7 @@ export def "api create-platform-application" [
 #
 # GET /
 # operationId: GET_CreatePlatformEndpoint
-export def "api get-create-platform-endpoint" [
+export def "get-create-platform-endpoint" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -618,7 +618,7 @@ export def "api get-create-platform-endpoint" [
 #
 # POST /
 # operationId: POST_CreatePlatformEndpoint
-export def "api create-platform-endpoint" [
+export def "post-create-platform-endpoint" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -668,7 +668,7 @@ export def "api create-platform-endpoint" [
 #
 # GET /
 # operationId: GET_CreateSMSSandboxPhoneNumber
-export def "api get-create-sms-sandbox-phone-number" [
+export def "get-create-sms-sandbox-phone-number" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -716,7 +716,7 @@ export def "api get-create-sms-sandbox-phone-number" [
 #
 # POST /
 # operationId: POST_CreateSMSSandboxPhoneNumber
-export def "api create-sms-sandbox-phone-number" [
+export def "post-create-sms-sandbox-phone-number" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -766,7 +766,7 @@ export def "api create-sms-sandbox-phone-number" [
 #
 # GET /
 # operationId: GET_CreateTopic
-export def "api get-create-topic" [
+export def "get-create-topic" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -816,7 +816,7 @@ export def "api get-create-topic" [
 #
 # POST /
 # operationId: POST_CreateTopic
-export def "api create-topic" [
+export def "post-create-topic" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -866,7 +866,7 @@ export def "api create-topic" [
 #
 # GET /
 # operationId: GET_DeleteEndpoint
-export def "api get-delete-endpoint" [
+export def "get-delete-endpoint" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -913,7 +913,7 @@ export def "api get-delete-endpoint" [
 #
 # POST /
 # operationId: POST_DeleteEndpoint
-export def "api create-delete-endpoint" [
+export def "post-delete-endpoint" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -963,7 +963,7 @@ export def "api create-delete-endpoint" [
 #
 # GET /
 # operationId: GET_DeletePlatformApplication
-export def "api get-delete-platform-application" [
+export def "get-delete-platform-application" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1010,7 +1010,7 @@ export def "api get-delete-platform-application" [
 #
 # POST /
 # operationId: POST_DeletePlatformApplication
-export def "api create-delete-platform-application" [
+export def "post-delete-platform-application" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1060,7 +1060,7 @@ export def "api create-delete-platform-application" [
 #
 # GET /
 # operationId: GET_DeleteSMSSandboxPhoneNumber
-export def "api get-delete-sms-sandbox-phone-number" [
+export def "get-delete-sms-sandbox-phone-number" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1107,7 +1107,7 @@ export def "api get-delete-sms-sandbox-phone-number" [
 #
 # POST /
 # operationId: POST_DeleteSMSSandboxPhoneNumber
-export def "api create-delete-sms-sandbox-phone-number" [
+export def "post-delete-sms-sandbox-phone-number" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1157,7 +1157,7 @@ export def "api create-delete-sms-sandbox-phone-number" [
 #
 # GET /
 # operationId: GET_DeleteTopic
-export def "api get-delete-topic" [
+export def "get-delete-topic" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1204,7 +1204,7 @@ export def "api get-delete-topic" [
 #
 # POST /
 # operationId: POST_DeleteTopic
-export def "api create-delete-topic" [
+export def "post-delete-topic" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1254,7 +1254,7 @@ export def "api create-delete-topic" [
 #
 # GET /
 # operationId: GET_GetDataProtectionPolicy
-export def "api get-data-protection-policy" [
+export def "get-get-data-protection-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1301,7 +1301,7 @@ export def "api get-data-protection-policy" [
 #
 # POST /
 # operationId: POST_GetDataProtectionPolicy
-export def "api create-get-data-protection-policy" [
+export def "post-get-data-protection-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1351,7 +1351,7 @@ export def "api create-get-data-protection-policy" [
 #
 # GET /
 # operationId: GET_GetEndpointAttributes
-export def "api get-endpoint-attributes" [
+export def "get-get-endpoint-attributes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1398,7 +1398,7 @@ export def "api get-endpoint-attributes" [
 #
 # POST /
 # operationId: POST_GetEndpointAttributes
-export def "api create-get-endpoint-attributes" [
+export def "post-get-endpoint-attributes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1448,7 +1448,7 @@ export def "api create-get-endpoint-attributes" [
 #
 # GET /
 # operationId: GET_GetPlatformApplicationAttributes
-export def "api get-platform-application-attributes" [
+export def "get-get-platform-application-attributes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1495,7 +1495,7 @@ export def "api get-platform-application-attributes" [
 #
 # POST /
 # operationId: POST_GetPlatformApplicationAttributes
-export def "api create-get-platform-application-attributes" [
+export def "post-get-platform-application-attributes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1545,7 +1545,7 @@ export def "api create-get-platform-application-attributes" [
 #
 # GET /
 # operationId: GET_GetSMSAttributes
-export def "api get-sms-attributes" [
+export def "get-get-sms-attributes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1592,7 +1592,7 @@ export def "api get-sms-attributes" [
 #
 # POST /
 # operationId: POST_GetSMSAttributes
-export def "api create-get-sms-attributes" [
+export def "post-get-sms-attributes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1642,7 +1642,7 @@ export def "api create-get-sms-attributes" [
 #
 # GET /
 # operationId: GET_GetSMSSandboxAccountStatus
-export def "api get-sms-sandbox-account-status" [
+export def "get-get-sms-sandbox-account-status" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1688,7 +1688,7 @@ export def "api get-sms-sandbox-account-status" [
 #
 # POST /
 # operationId: POST_GetSMSSandboxAccountStatus
-export def "api create-get-sms-sandbox-account-status" [
+export def "post-get-sms-sandbox-account-status" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1738,7 +1738,7 @@ export def "api create-get-sms-sandbox-account-status" [
 #
 # GET /
 # operationId: GET_GetSubscriptionAttributes
-export def "api get-subscription-attributes" [
+export def "get-get-subscription-attributes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1785,7 +1785,7 @@ export def "api get-subscription-attributes" [
 #
 # POST /
 # operationId: POST_GetSubscriptionAttributes
-export def "api create-get-subscription-attributes" [
+export def "post-get-subscription-attributes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1835,7 +1835,7 @@ export def "api create-get-subscription-attributes" [
 #
 # GET /
 # operationId: GET_GetTopicAttributes
-export def "api get-topic-attributes" [
+export def "get-get-topic-attributes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1882,7 +1882,7 @@ export def "api get-topic-attributes" [
 #
 # POST /
 # operationId: POST_GetTopicAttributes
-export def "api create-get-topic-attributes" [
+export def "post-get-topic-attributes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1932,7 +1932,7 @@ export def "api create-get-topic-attributes" [
 #
 # GET /
 # operationId: GET_ListEndpointsByPlatformApplication
-export def "api get-list-endpoints-by-platform-application" [
+export def "get-list-endpoints-by-platform-application" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1980,7 +1980,7 @@ export def "api get-list-endpoints-by-platform-application" [
 #
 # POST /
 # operationId: POST_ListEndpointsByPlatformApplication
-export def "api create-list-endpoints-by-platform-application" [
+export def "post-list-endpoints-by-platform-application" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2031,7 +2031,7 @@ export def "api create-list-endpoints-by-platform-application" [
 #
 # GET /
 # operationId: GET_ListOriginationNumbers
-export def "api get-list-origination-numbers" [
+export def "get-list-origination-numbers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2079,7 +2079,7 @@ export def "api get-list-origination-numbers" [
 #
 # POST /
 # operationId: POST_ListOriginationNumbers
-export def "api create-list-origination-numbers" [
+export def "post-list-origination-numbers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2131,7 +2131,7 @@ export def "api create-list-origination-numbers" [
 #
 # GET /
 # operationId: GET_ListPhoneNumbersOptedOut
-export def "api get-list-phone-numbers-opted-out" [
+export def "get-list-phone-numbers-opted-out" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2178,7 +2178,7 @@ export def "api get-list-phone-numbers-opted-out" [
 #
 # POST /
 # operationId: POST_ListPhoneNumbersOptedOut
-export def "api create-list-phone-numbers-opted-out" [
+export def "post-list-phone-numbers-opted-out" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2229,7 +2229,7 @@ export def "api create-list-phone-numbers-opted-out" [
 #
 # GET /
 # operationId: GET_ListPlatformApplications
-export def "api get-list-platform-applications" [
+export def "get-list-platform-applications" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2276,7 +2276,7 @@ export def "api get-list-platform-applications" [
 #
 # POST /
 # operationId: POST_ListPlatformApplications
-export def "api create-list-platform-applications" [
+export def "post-list-platform-applications" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2327,7 +2327,7 @@ export def "api create-list-platform-applications" [
 #
 # GET /
 # operationId: GET_ListSMSSandboxPhoneNumbers
-export def "api get-list-sms-sandbox-phone-numbers" [
+export def "get-list-sms-sandbox-phone-numbers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2375,7 +2375,7 @@ export def "api get-list-sms-sandbox-phone-numbers" [
 #
 # POST /
 # operationId: POST_ListSMSSandboxPhoneNumbers
-export def "api create-list-sms-sandbox-phone-numbers" [
+export def "post-list-sms-sandbox-phone-numbers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2427,7 +2427,7 @@ export def "api create-list-sms-sandbox-phone-numbers" [
 #
 # GET /
 # operationId: GET_ListSubscriptions
-export def "api get-list-subscriptions" [
+export def "get-list-subscriptions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2474,7 +2474,7 @@ export def "api get-list-subscriptions" [
 #
 # POST /
 # operationId: POST_ListSubscriptions
-export def "api create-list-subscriptions" [
+export def "post-list-subscriptions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2525,7 +2525,7 @@ export def "api create-list-subscriptions" [
 #
 # GET /
 # operationId: GET_ListSubscriptionsByTopic
-export def "api get-list-subscriptions-by-topic" [
+export def "get-list-subscriptions-by-topic" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2573,7 +2573,7 @@ export def "api get-list-subscriptions-by-topic" [
 #
 # POST /
 # operationId: POST_ListSubscriptionsByTopic
-export def "api create-list-subscriptions-by-topic" [
+export def "post-list-subscriptions-by-topic" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2624,7 +2624,7 @@ export def "api create-list-subscriptions-by-topic" [
 #
 # GET /
 # operationId: GET_ListTagsForResource
-export def "api get-list-tags-for-resource" [
+export def "get-list-tags-for-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2671,7 +2671,7 @@ export def "api get-list-tags-for-resource" [
 #
 # POST /
 # operationId: POST_ListTagsForResource
-export def "api create-list-tags-for-resource" [
+export def "post-list-tags-for-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2721,7 +2721,7 @@ export def "api create-list-tags-for-resource" [
 #
 # GET /
 # operationId: GET_ListTopics
-export def "api get-list-topics" [
+export def "get-list-topics" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2768,7 +2768,7 @@ export def "api get-list-topics" [
 #
 # POST /
 # operationId: POST_ListTopics
-export def "api create-list-topics" [
+export def "post-list-topics" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2819,7 +2819,7 @@ export def "api create-list-topics" [
 #
 # GET /
 # operationId: GET_OptInPhoneNumber
-export def "api get-opt-in-phone-number" [
+export def "get-opt-in-phone-number" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2866,7 +2866,7 @@ export def "api get-opt-in-phone-number" [
 #
 # POST /
 # operationId: POST_OptInPhoneNumber
-export def "api create-opt-in-phone-number" [
+export def "post-opt-in-phone-number" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2916,7 +2916,7 @@ export def "api create-opt-in-phone-number" [
 #
 # GET /
 # operationId: GET_Publish
-export def "api get-publish" [
+export def "get-publish" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2971,7 +2971,7 @@ export def "api get-publish" [
 #
 # POST /
 # operationId: POST_Publish
-export def "api create-publish" [
+export def "post-publish" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3021,7 +3021,7 @@ export def "api create-publish" [
 #
 # GET /
 # operationId: GET_PublishBatch
-export def "api get-publish-batch" [
+export def "get-publish-batch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3069,7 +3069,7 @@ export def "api get-publish-batch" [
 #
 # POST /
 # operationId: POST_PublishBatch
-export def "api create-publish-batch" [
+export def "post-publish-batch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3119,7 +3119,7 @@ export def "api create-publish-batch" [
 #
 # GET /
 # operationId: GET_PutDataProtectionPolicy
-export def "api get-update-data-protection-policy" [
+export def "get-put-data-protection-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3167,7 +3167,7 @@ export def "api get-update-data-protection-policy" [
 #
 # POST /
 # operationId: POST_PutDataProtectionPolicy
-export def "api create-update-data-protection-policy" [
+export def "post-put-data-protection-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3217,7 +3217,7 @@ export def "api create-update-data-protection-policy" [
 #
 # GET /
 # operationId: GET_RemovePermission
-export def "api get-delete-permission" [
+export def "get-remove-permission" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3265,7 +3265,7 @@ export def "api get-delete-permission" [
 #
 # POST /
 # operationId: POST_RemovePermission
-export def "api create-delete-permission" [
+export def "post-remove-permission" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3315,7 +3315,7 @@ export def "api create-delete-permission" [
 #
 # GET /
 # operationId: GET_SetEndpointAttributes
-export def "api get-update-endpoint-attributes" [
+export def "get-set-endpoint-attributes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3363,7 +3363,7 @@ export def "api get-update-endpoint-attributes" [
 #
 # POST /
 # operationId: POST_SetEndpointAttributes
-export def "api create-update-endpoint-attributes" [
+export def "post-set-endpoint-attributes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3413,7 +3413,7 @@ export def "api create-update-endpoint-attributes" [
 #
 # GET /
 # operationId: GET_SetPlatformApplicationAttributes
-export def "api get-update-platform-application-attributes" [
+export def "get-set-platform-application-attributes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3461,7 +3461,7 @@ export def "api get-update-platform-application-attributes" [
 #
 # POST /
 # operationId: POST_SetPlatformApplicationAttributes
-export def "api create-update-platform-application-attributes" [
+export def "post-set-platform-application-attributes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3511,7 +3511,7 @@ export def "api create-update-platform-application-attributes" [
 #
 # GET /
 # operationId: GET_SetSMSAttributes
-export def "api get-update-sms-attributes" [
+export def "get-set-sms-attributes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3558,7 +3558,7 @@ export def "api get-update-sms-attributes" [
 #
 # POST /
 # operationId: POST_SetSMSAttributes
-export def "api create-update-sms-attributes" [
+export def "post-set-sms-attributes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3608,7 +3608,7 @@ export def "api create-update-sms-attributes" [
 #
 # GET /
 # operationId: GET_SetSubscriptionAttributes
-export def "api get-update-subscription-attributes" [
+export def "get-set-subscription-attributes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3657,7 +3657,7 @@ export def "api get-update-subscription-attributes" [
 #
 # POST /
 # operationId: POST_SetSubscriptionAttributes
-export def "api create-update-subscription-attributes" [
+export def "post-set-subscription-attributes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3707,7 +3707,7 @@ export def "api create-update-subscription-attributes" [
 #
 # GET /
 # operationId: GET_SetTopicAttributes
-export def "api get-update-topic-attributes" [
+export def "get-set-topic-attributes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3756,7 +3756,7 @@ export def "api get-update-topic-attributes" [
 #
 # POST /
 # operationId: POST_SetTopicAttributes
-export def "api create-update-topic-attributes" [
+export def "post-set-topic-attributes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3806,7 +3806,7 @@ export def "api create-update-topic-attributes" [
 #
 # GET /
 # operationId: GET_Subscribe
-export def "api get-subscribe" [
+export def "get-subscribe" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3857,7 +3857,7 @@ export def "api get-subscribe" [
 #
 # POST /
 # operationId: POST_Subscribe
-export def "api create-subscribe" [
+export def "post-subscribe" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3907,7 +3907,7 @@ export def "api create-subscribe" [
 #
 # GET /
 # operationId: GET_TagResource
-export def "api get-tag-resource" [
+export def "get-tag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3955,7 +3955,7 @@ export def "api get-tag-resource" [
 #
 # POST /
 # operationId: POST_TagResource
-export def "api create-tag-resource" [
+export def "post-tag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4005,7 +4005,7 @@ export def "api create-tag-resource" [
 #
 # GET /
 # operationId: GET_Unsubscribe
-export def "api get-unsubscribe" [
+export def "get-unsubscribe" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4052,7 +4052,7 @@ export def "api get-unsubscribe" [
 #
 # POST /
 # operationId: POST_Unsubscribe
-export def "api create-unsubscribe" [
+export def "post-unsubscribe" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4102,7 +4102,7 @@ export def "api create-unsubscribe" [
 #
 # GET /
 # operationId: GET_UntagResource
-export def "api get-untag-resource" [
+export def "get-untag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4150,7 +4150,7 @@ export def "api get-untag-resource" [
 #
 # POST /
 # operationId: POST_UntagResource
-export def "api create-untag-resource" [
+export def "post-untag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4200,7 +4200,7 @@ export def "api create-untag-resource" [
 #
 # GET /
 # operationId: GET_VerifySMSSandboxPhoneNumber
-export def "api get-verify-sms-sandbox-phone-number" [
+export def "get-verify-sms-sandbox-phone-number" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4248,7 +4248,7 @@ export def "api get-verify-sms-sandbox-phone-number" [
 #
 # POST /
 # operationId: POST_VerifySMSSandboxPhoneNumber
-export def "api create-verify-sms-sandbox-phone-number" [
+export def "post-verify-sms-sandbox-phone-number" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

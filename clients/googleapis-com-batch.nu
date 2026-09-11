@@ -123,7 +123,7 @@ def alt-completer [] { ["json" "media" "proto"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "projects delete" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "batch-projects-locations-operations-delete" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -147,7 +147,7 @@ export def commands []: nothing -> table {
 #
 # DELETE /v1/{name}
 # operationId: batch.projects.locations.operations.delete
-export def "projects delete" [
+export def "batch-projects-locations-operations-delete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -197,7 +197,7 @@ export def "projects delete" [
 #
 # GET /v1/{name}
 # operationId: batch.projects.locations.operations.get
-export def "projects get" [
+export def "batch-projects-locations-operations-get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -245,7 +245,7 @@ export def "projects get" [
 #
 # GET /v1/{name}/locations
 # operationId: batch.projects.locations.list
-export def "locations list" [
+export def "batch-projects-locations-list" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -296,7 +296,7 @@ export def "locations list" [
 #
 # GET /v1/{name}/operations
 # operationId: batch.projects.locations.operations.list
-export def "operations list" [
+export def "batch-projects-locations-operations-list" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -347,7 +347,7 @@ export def "operations list" [
 #
 # POST /v1/{name}:cancel
 # operationId: batch.projects.locations.operations.cancel
-export def "projects cancel" [
+export def "batch-projects-locations-operations-cancel" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -399,7 +399,7 @@ export def "projects cancel" [
 #
 # GET /v1/{parent}/jobs
 # operationId: batch.projects.locations.jobs.list
-export def "jobs list" [
+export def "batch-projects-locations-jobs-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -455,7 +455,7 @@ export def "jobs list" [
 # --notifications item shape: {message?: record, pubsubTopic?: string}
 # --status shape: {runDuration?: string, state?: "STATE_UNSPECIFIED"|"QUEUED"|"SCHEDULED"|"RUNNING"|"SUCCEEDED"|"FAILED"|"DELETION_IN_PROGRESS", statusEvents?: list, taskGroups?: record}
 # --taskGroups item shape: {parallelism?: string, permissiveSsh?: bool, requireHostsFile?: bool, taskCount?: string, taskCountPerNode?: string, taskEnvironments?: list, taskSpec?: record}
-export def "jobs create" [
+export def "batch-projects-locations-jobs-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -518,7 +518,7 @@ export def "jobs create" [
 # --agentInfo shape: {jobId?: string, reportTime?: string, state?: "AGENT_STATE_UNSPECIFIED"|"AGENT_STARTING"|"AGENT_RUNNING"|"AGENT_STOPPED", taskGroupId?: string, tasks?: list}
 # --agentTimingInfo shape: {agentStartupTime?: string, bootTime?: string, scriptStartupTime?: string}
 # --metadata shape: {creationTime?: string, creator?: string, imageVersion?: string, instance?: string, instanceId?: string, instancePreemptionNoticeReceived?: bool, osRelease?: record, version?: string, zone?: string}
-export def "state-report create" [
+export def "batch-projects-locations-state-report" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -572,7 +572,7 @@ export def "state-report create" [
 #
 # GET /v1/{parent}/tasks
 # operationId: batch.projects.locations.jobs.taskGroups.tasks.list
-export def "tasks list" [
+export def "batch-projects-locations-jobs-task-groups-tasks-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)

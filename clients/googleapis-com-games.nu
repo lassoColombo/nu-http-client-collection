@@ -122,7 +122,7 @@ def include-rank-type-completer [] { ["ALL" "FRIENDS" "INCLUDE_RANK_TYPE_UNSPECI
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "games-achievements list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "games-achievement-definitions-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -146,7 +146,7 @@ export def commands []: nothing -> table {
 #
 # GET /games/v1/achievements
 # operationId: games.achievementDefinitions.list
-export def "games-achievements list" [
+export def "games-achievement-definitions-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -196,7 +196,7 @@ export def "games-achievements list" [
 # POST /games/v1/achievements/updateMultiple
 # operationId: games.achievements.updateMultiple
 # --updates item shape: {achievementId?: string, incrementPayload?: record, kind?: string, setStepsAtLeastPayload?: record, updateType?: "ACHIEVEMENT_UPDATE_TYPE_UNSPECIFIED"|"REVEAL"|"UNLOCK"|"INCREMENT"|"SET_STEPS_AT_LEAST"}
-export def "games-achievements-update-multiple update" [
+export def "games-achievements-update-multiple" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -247,7 +247,7 @@ export def "games-achievements-update-multiple update" [
 #
 # POST /games/v1/achievements/{achievementId}/increment
 # operationId: games.achievements.increment
-export def "games-achievements-increment create" [
+export def "games-achievements-increment" [
   achievement_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -297,7 +297,7 @@ export def "games-achievements-increment create" [
 #
 # POST /games/v1/achievements/{achievementId}/reveal
 # operationId: games.achievements.reveal
-export def "games-achievements-reveal create" [
+export def "games-achievements-reveal" [
   achievement_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -345,7 +345,7 @@ export def "games-achievements-reveal create" [
 #
 # POST /games/v1/achievements/{achievementId}/setStepsAtLeast
 # operationId: games.achievements.setStepsAtLeast
-export def "games-achievements-set-steps-at-least update" [
+export def "games-achievements-set-steps-at-least" [
   achievement_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -394,7 +394,7 @@ export def "games-achievements-set-steps-at-least update" [
 #
 # POST /games/v1/achievements/{achievementId}/unlock
 # operationId: games.achievements.unlock
-export def "games-achievements-unlock unlock" [
+export def "games-achievements-unlock" [
   achievement_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -442,7 +442,7 @@ export def "games-achievements-unlock unlock" [
 #
 # POST /games/v1/applications/getEndPoint
 # operationId: games.applications.getEndPoint
-export def "games-applications-get-end-point get" [
+export def "games-applications-get-end-point" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -490,7 +490,7 @@ export def "games-applications-get-end-point get" [
 #
 # POST /games/v1/applications/played
 # operationId: games.applications.played
-export def "games-applications-played create" [
+export def "games-applications-played" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -536,7 +536,7 @@ export def "games-applications-played create" [
 #
 # GET /games/v1/applications/{applicationId}
 # operationId: games.applications.get
-export def "games-applications get" [
+export def "games-applications-get" [
   application_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -586,7 +586,7 @@ export def "games-applications get" [
 #
 # GET /games/v1/applications/{applicationId}/verify
 # operationId: games.applications.verify
-export def "games-applications-verify verify" [
+export def "games-applications-verify" [
   application_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -634,7 +634,7 @@ export def "games-applications-verify verify" [
 #
 # GET /games/v1/eventDefinitions
 # operationId: games.events.listDefinitions
-export def "games-event-definitions list" [
+export def "games-events-list-definitions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -683,7 +683,7 @@ export def "games-event-definitions list" [
 #
 # GET /games/v1/events
 # operationId: games.events.listByPlayer
-export def "games-events list-by-player" [
+export def "games-events-list-by-player" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -733,7 +733,7 @@ export def "games-events list-by-player" [
 # POST /games/v1/events
 # operationId: games.events.record
 # --timePeriods item shape: {kind?: string, timePeriod?: record, updates?: list}
-export def "games-events create-record" [
+export def "games-events-record" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -787,7 +787,7 @@ export def "games-events create-record" [
 #
 # GET /games/v1/leaderboards
 # operationId: games.leaderboards.list
-export def "games-leaderboards list" [
+export def "games-leaderboards-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -837,7 +837,7 @@ export def "games-leaderboards list" [
 # POST /games/v1/leaderboards/scores
 # operationId: games.scores.submitMultiple
 # --scores item shape: {kind?: string, leaderboardId?: string, score?: string, scoreTag?: string, signature?: string}
-export def "games-leaderboards-scores submit-multiple" [
+export def "games-scores-submit-multiple" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -889,7 +889,7 @@ export def "games-leaderboards-scores submit-multiple" [
 #
 # GET /games/v1/leaderboards/{leaderboardId}
 # operationId: games.leaderboards.get
-export def "games-leaderboards get" [
+export def "games-leaderboards-get" [
   leaderboard_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -938,7 +938,7 @@ export def "games-leaderboards get" [
 #
 # POST /games/v1/leaderboards/{leaderboardId}/scores
 # operationId: games.scores.submit
-export def "games-leaderboards-scores submit" [
+export def "games-scores-submit" [
   leaderboard_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -989,7 +989,7 @@ export def "games-leaderboards-scores submit" [
 #
 # GET /games/v1/leaderboards/{leaderboardId}/scores/{collection}
 # operationId: games.scores.list
-export def "games-leaderboards-scores list" [
+export def "games-scores-list" [
   leaderboard_id: string
   collection: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1043,7 +1043,7 @@ export def "games-leaderboards-scores list" [
 #
 # GET /games/v1/leaderboards/{leaderboardId}/window/{collection}
 # operationId: games.scores.listWindow
-export def "games-leaderboards-window list" [
+export def "games-scores-list-window" [
   leaderboard_id: string
   collection: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1099,7 +1099,7 @@ export def "games-leaderboards-window list" [
 #
 # GET /games/v1/metagameConfig
 # operationId: games.metagame.getMetagameConfig
-export def "games-metagame-config get" [
+export def "games-metagame-get-metagame-config" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -1145,7 +1145,7 @@ export def "games-metagame-config get" [
 #
 # GET /games/v1/players/me/multipleApplicationPlayerIds
 # operationId: games.players.getMultipleApplicationPlayerIds
-export def "games-players-me-multiple-application-player-ids get" [
+export def "games-players-get-multiple-application-player-ids" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -1192,7 +1192,7 @@ export def "games-players-me-multiple-application-player-ids get" [
 #
 # GET /games/v1/players/me/players/{collection}
 # operationId: games.players.list
-export def "games-players-me-players list" [
+export def "games-players-list" [
   collection: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1243,7 +1243,7 @@ export def "games-players-me-players list" [
 #
 # GET /games/v1/players/me/scopedIds
 # operationId: games.players.getScopedPlayerIds
-export def "games-players-me-scoped-ids get" [
+export def "games-players-get-scoped-player-ids" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -1289,7 +1289,7 @@ export def "games-players-me-scoped-ids get" [
 #
 # GET /games/v1/players/{playerId}
 # operationId: games.players.get
-export def "games-players get" [
+export def "games-players-get" [
   player_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1339,7 +1339,7 @@ export def "games-players get" [
 #
 # GET /games/v1/players/{playerId}/achievements
 # operationId: games.achievements.list
-export def "games-players-achievements list" [
+export def "games-achievements-list" [
   player_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1391,7 +1391,7 @@ export def "games-players-achievements list" [
 #
 # GET /games/v1/players/{playerId}/categories/{collection}
 # operationId: games.metagame.listCategoriesByPlayer
-export def "games-players-categories list" [
+export def "games-metagame-list-categories-by-player" [
   player_id: string
   collection: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1444,7 +1444,7 @@ export def "games-players-categories list" [
 #
 # GET /games/v1/players/{playerId}/leaderboards/{leaderboardId}/scores/{timeSpan}
 # operationId: games.scores.get
-export def "games-players-leaderboards-scores get" [
+export def "games-scores-get" [
   player_id: string
   leaderboard_id: string
   time_span: string
@@ -1500,7 +1500,7 @@ export def "games-players-leaderboards-scores get" [
 #
 # GET /games/v1/players/{playerId}/snapshots
 # operationId: games.snapshots.list
-export def "games-players-snapshots list" [
+export def "games-snapshots-list" [
   player_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1551,7 +1551,7 @@ export def "games-players-snapshots list" [
 #
 # GET /games/v1/revisions/check
 # operationId: games.revisions.check
-export def "games-revisions-check check" [
+export def "games-revisions-check" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -1598,7 +1598,7 @@ export def "games-revisions-check check" [
 #
 # GET /games/v1/snapshots/{snapshotId}
 # operationId: games.snapshots.get
-export def "games-snapshots get" [
+export def "games-snapshots-get" [
   snapshot_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1647,7 +1647,7 @@ export def "games-snapshots get" [
 #
 # GET /games/v1/stats
 # operationId: games.stats.get
-export def "games-stats get" [
+export def "games-stats-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)

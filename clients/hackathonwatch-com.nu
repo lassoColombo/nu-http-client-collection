@@ -97,7 +97,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "hackathons-coming-json get-format" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-hackathons-coming-format" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -121,7 +121,7 @@ export def commands []: nothing -> table {
 #
 # GET /hackathons/coming.json
 # operationId: GET-hackathons-coming---format-
-export def "hackathons-coming-json get-format" [
+export def "get-hackathons-coming-format" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -157,7 +157,7 @@ export def "hackathons-coming-json get-format" [
 #
 # GET /hackathons/{id}.json
 # operationId: GET-hackathons--id---format-
-export def "hackathons get-format" [
+export def "get-hackathons-id-format" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -193,7 +193,7 @@ export def "hackathons get-format" [
 #
 # GET /swagger_doc.json
 # operationId: GET-swagger_doc---format-
-export def "swagger-doc-json get-format" [
+export def "get-swagger-doc-format" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -227,7 +227,7 @@ export def "swagger-doc-json get-format" [
 #
 # GET /swagger_doc/{name}.json
 # operationId: GET-swagger_doc--name---format-
-export def "swagger-doc get-format" [
+export def "get-swagger-doc-name-format" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

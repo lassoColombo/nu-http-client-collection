@@ -124,7 +124,7 @@ def data-range-completer [] { ["ALL_TIME" "CURRENT_DAY" "CUSTOM_DATES" "LAST_14_
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "queries list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "doubleclickbidmanager-queries-listqueries" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -148,7 +148,7 @@ export def commands []: nothing -> table {
 #
 # GET /queries
 # operationId: doubleclickbidmanager.queries.listqueries
-export def "queries list" [
+export def "doubleclickbidmanager-queries-listqueries" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -196,7 +196,7 @@ export def "queries list" [
 #
 # GET /queries/{queryId}/reports
 # operationId: doubleclickbidmanager.reports.listreports
-export def "queries-reports list" [
+export def "doubleclickbidmanager-reports-listreports" [
   query_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -249,7 +249,7 @@ export def "queries-reports list" [
 # --metadata shape: {dataRange?: "CUSTOM_DATES"|"CURRENT_DAY"|"PREVIOUS_DAY"|"WEEK_TO_DATE"|"MONTH_TO_DATE"|"QUARTER_TO_DATE"|"YEAR_TO_DATE"|"PREVIOUS_WEEK"|"PREVIOUS_HALF_MONTH"|"PREVIOUS_MONTH"|"PREVIOUS_QUARTER"|"PREVIOUS_YEAR"|"LAST_7_DAYS"|"LAST_30_DAYS"|"LAST_90_DAYS"|"LAST_365_DAYS"|"ALL_TIME"|"LAST_14_DAYS"|"TYPE_NOT_SUPPORTED"|"LAST_60_DAYS", format?: "CSV"|"EXCEL_CSV"|"XLSX", googleCloudStoragePathForLatestReport?: string, googleDrivePathForLatestReport?: string, latestReportRunTimeMs?: string, ... (6 more fields)}
 # --params shape: {filters?: list, groupBys?: list<string>, includeInviteData?: bool, metrics?: list<string>, options?: record, ... (1 more fields)}
 # --schedule shape: {endTimeMs?: string, frequency?: "ONE_TIME"|"DAILY"|"WEEKLY"|"SEMI_MONTHLY"|"MONTHLY"|"QUARTERLY"|"YEARLY", nextRunMinuteOfDay?: int, nextRunTimezoneCode?: string, startTimeMs?: string}
-export def "query create" [
+export def "doubleclickbidmanager-queries-createquery" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -307,7 +307,7 @@ export def "query create" [
 #
 # DELETE /query/{queryId}
 # operationId: doubleclickbidmanager.queries.deletequery
-export def "query delete" [
+export def "doubleclickbidmanager-queries-deletequery" [
   query_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -355,7 +355,7 @@ export def "query delete" [
 #
 # GET /query/{queryId}
 # operationId: doubleclickbidmanager.queries.getquery
-export def "query get" [
+export def "doubleclickbidmanager-queries-getquery" [
   query_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -403,7 +403,7 @@ export def "query get" [
 #
 # POST /query/{queryId}
 # operationId: doubleclickbidmanager.queries.runquery
-export def "query create-runquery" [
+export def "doubleclickbidmanager-queries-runquery" [
   query_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)

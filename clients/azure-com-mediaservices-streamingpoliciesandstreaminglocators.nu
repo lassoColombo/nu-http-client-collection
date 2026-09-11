@@ -116,7 +116,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resource-groups-providers-microsoft-media-media-services-streaming-locators list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "streaming-locators-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -140,7 +140,7 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Media/mediaServices/{accountName}/streamingLocators
 # operationId: StreamingLocators_List
-export def "subscriptions-resource-groups-providers-microsoft-media-media-services-streaming-locators list" [
+export def "streaming-locators-list" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -185,7 +185,7 @@ export def "subscriptions-resource-groups-providers-microsoft-media-media-servic
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Media/mediaServices/{accountName}/streamingLocators/{streamingLocatorName}
 # operationId: StreamingLocators_Delete
-export def "subscriptions-resource-groups-providers-microsoft-media-media-services-streaming-locators delete" [
+export def "streaming-locators-delete" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -229,7 +229,7 @@ export def "subscriptions-resource-groups-providers-microsoft-media-media-servic
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Media/mediaServices/{accountName}/streamingLocators/{streamingLocatorName}
 # operationId: StreamingLocators_Get
-export def "subscriptions-resource-groups-providers-microsoft-media-media-services-streaming-locators get" [
+export def "streaming-locators-get" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -274,7 +274,7 @@ export def "subscriptions-resource-groups-providers-microsoft-media-media-servic
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Media/mediaServices/{accountName}/streamingLocators/{streamingLocatorName}
 # operationId: StreamingLocators_Create
 # --properties shape: {alternativeMediaId?: string, assetName: string, contentKeys?: list, defaultContentKeyPolicyName?: string, endTime?: string, filters?: list<string>, startTime?: string, streamingLocatorId?: string, streamingPolicyName: string}
-export def "subscriptions-resource-groups-providers-microsoft-media-media-services-streaming-locators create" [
+export def "streaming-locators-create" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -322,7 +322,7 @@ export def "subscriptions-resource-groups-providers-microsoft-media-media-servic
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Media/mediaServices/{accountName}/streamingLocators/{streamingLocatorName}/listContentKeys
 # operationId: StreamingLocators_ListContentKeys
-export def "subscriptions-resource-groups-providers-microsoft-media-media-services-streaming-locators-list-content-keys list" [
+export def "streaming-locators-list-content-keys" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -366,7 +366,7 @@ export def "subscriptions-resource-groups-providers-microsoft-media-media-servic
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Media/mediaServices/{accountName}/streamingLocators/{streamingLocatorName}/listPaths
 # operationId: StreamingLocators_ListPaths
-export def "subscriptions-resource-groups-providers-microsoft-media-media-services-streaming-locators-list-paths list" [
+export def "streaming-locators-list-paths" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -410,7 +410,7 @@ export def "subscriptions-resource-groups-providers-microsoft-media-media-servic
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Media/mediaServices/{accountName}/streamingPolicies
 # operationId: StreamingPolicies_List
-export def "subscriptions-resource-groups-providers-microsoft-media-media-services-streaming-policies list" [
+export def "streaming-policies-list" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -455,7 +455,7 @@ export def "subscriptions-resource-groups-providers-microsoft-media-media-servic
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Media/mediaServices/{accountName}/streamingPolicies/{streamingPolicyName}
 # operationId: StreamingPolicies_Delete
-export def "subscriptions-resource-groups-providers-microsoft-media-media-services-streaming-policies delete" [
+export def "streaming-policies-delete" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -499,7 +499,7 @@ export def "subscriptions-resource-groups-providers-microsoft-media-media-servic
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Media/mediaServices/{accountName}/streamingPolicies/{streamingPolicyName}
 # operationId: StreamingPolicies_Get
-export def "subscriptions-resource-groups-providers-microsoft-media-media-services-streaming-policies get" [
+export def "streaming-policies-get" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -544,7 +544,7 @@ export def "subscriptions-resource-groups-providers-microsoft-media-media-servic
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Media/mediaServices/{accountName}/streamingPolicies/{streamingPolicyName}
 # operationId: StreamingPolicies_Create
 # --properties shape: {commonEncryptionCbcs?: record, commonEncryptionCenc?: record, defaultContentKeyPolicyName?: string, envelopeEncryption?: record, noEncryption?: record}
-export def "subscriptions-resource-groups-providers-microsoft-media-media-services-streaming-policies create" [
+export def "streaming-policies-create" [
   subscription_id: string
   resource_group_name: string
   account_name: string

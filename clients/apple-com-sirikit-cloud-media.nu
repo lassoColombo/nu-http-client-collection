@@ -105,7 +105,7 @@ def report-completer [] { ["local.command.bookmark" "local.command.dislike" "loc
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "configuration get-extension" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "extension-configuration" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -129,7 +129,7 @@ export def commands []: nothing -> table {
 #
 # GET /configuration
 # operationId: extensionConfiguration
-export def "configuration get-extension" [
+export def "extension-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -172,7 +172,7 @@ export def "configuration get-extension" [
 #
 # POST /intent/addMedia
 # operationId: addMediaIntentHandling
-export def "intent-add-media create-handling" [
+export def "add-media-intent-handling" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -217,7 +217,7 @@ export def "intent-add-media create-handling" [
 #
 # POST /intent/playMedia
 # operationId: playMediaIntentHandling
-export def "intent-play-media create-handling" [
+export def "play-media-intent-handling" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -262,7 +262,7 @@ export def "intent-play-media create-handling" [
 #
 # POST /intent/updateMediaAffinity
 # operationId: updateMediaAffinityIntentHandling
-export def "intent-update-media-affinity update-handling" [
+export def "update-media-affinity-intent-handling" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -309,7 +309,7 @@ export def "intent-update-media-affinity update-handling" [
 # operationId: playMediaOnQueue
 # --constraints shape: {allowExplicitContent?: bool, maximumQueueSegmentItemCount?: int, updateUserTasteProfile?: bool}
 # --userActivity shape: {activityType: string, persistentIdentifier?: string, title?: string, userInfo?: record, version: string}
-export def "queues-play-media create" [
+export def "play-media-on-queue" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -359,7 +359,7 @@ export def "queues-play-media create" [
 # --nowPlaying shape: {activityIdentifier?: string, contentIdentifier?: string, offsetInMillis?: int, playbackSpeed?: float, queueIdentifier?: string}
 # --previouslyPlaying shape: {activityIdentifier?: string, contentIdentifier?: string, offsetInMillis?: int, playbackSpeed?: float, queueIdentifier?: string}
 # --userActivity shape: {activityType: string, persistentIdentifier?: string, title?: string, userInfo?: record, version: string}
-export def "queues-update-activity update" [
+export def "update-activity-on-queue" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

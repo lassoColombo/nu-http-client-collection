@@ -108,7 +108,7 @@ def p-qmtype-completer [] { ["MONTH" "QUARTER"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "dfr-rest-services-air-3-yr-download get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-dfr-rest-services-air-3-yr-download" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -131,7 +131,7 @@ export def commands []: nothing -> table {
 # Downloads the complete Air Compliance History Section of the DFR
 #
 # GET /dfr_rest_services.air_3_yr_download
-export def "dfr-rest-services-air-3-yr-download get" [
+export def "get-dfr-rest-services-air-3-yr-download" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -165,7 +165,7 @@ export def "dfr-rest-services-air-3-yr-download get" [
 # Downloads the complete Air Compliance History Section of the DFR
 #
 # POST /dfr_rest_services.air_3_yr_download
-export def "dfr-rest-services-air-3-yr-download create" [
+export def "post-dfr-rest-services-air-3-yr-download" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -199,7 +199,7 @@ export def "dfr-rest-services-air-3-yr-download create" [
 # Downloads NPDES Effluent Violation Information by month and quarter.
 #
 # GET /dfr_rest_services.cwa_3_yr_effluent_download
-export def "dfr-rest-services-cwa-3-yr-effluent-download get" [
+export def "get-dfr-rest-services-cwa-3-yr-effluent-download" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -233,7 +233,7 @@ export def "dfr-rest-services-cwa-3-yr-effluent-download get" [
 # Downloads NPDES Effluent Violation Information by month and quarter.
 #
 # POST /dfr_rest_services.cwa_3_yr_effluent_download
-export def "dfr-rest-services-cwa-3-yr-effluent-download create" [
+export def "post-dfr-rest-services-cwa-3-yr-effluent-download" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -267,7 +267,7 @@ export def "dfr-rest-services-cwa-3-yr-effluent-download create" [
 # Downloads NPDES Compliance Schedule, Permit Schedule and Single Event Violation Information by month and quarter.
 #
 # GET /dfr_rest_services.cwa_3_yr_sepscs_download
-export def "dfr-rest-services-cwa-3-yr-sepscs-download get" [
+export def "get-dfr-rest-services-cwa-3-yr-sepscs-download" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -301,7 +301,7 @@ export def "dfr-rest-services-cwa-3-yr-sepscs-download get" [
 # Downloads NPDES Compliance Schedule, Permit Schedule and Single Event Violation Information by month and quarter.
 #
 # POST /dfr_rest_services.cwa_3_yr_sepscs_download
-export def "dfr-rest-services-cwa-3-yr-sepscs-download create" [
+export def "post-dfr-rest-services-cwa-3-yr-sepscs-download" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -335,7 +335,7 @@ export def "dfr-rest-services-cwa-3-yr-sepscs-download create" [
 # Detailed Facility Report Air Compliance Report Service
 #
 # GET /dfr_rest_services.get_air_compliance
-export def "dfr-rest-services-get-air-compliance get" [
+export def "get-dfr-rest-services-get-air-compliance" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -373,7 +373,7 @@ export def "dfr-rest-services-get-air-compliance get" [
 # Detailed Facility Report Air Compliance Report Service
 #
 # POST /dfr_rest_services.get_air_compliance
-export def "dfr-rest-services-get-air-compliance create" [
+export def "post-dfr-rest-services-get-air-compliance" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -414,7 +414,7 @@ export def "dfr-rest-services-get-air-compliance create" [
 # Detailed Facility Report Air Quality Report Service
 #
 # GET /dfr_rest_services.get_air_quality
-export def "dfr-rest-services-get-air-quality get" [
+export def "get-dfr-rest-services-get-air-quality" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -452,7 +452,7 @@ export def "dfr-rest-services-get-air-quality get" [
 # Detailed Facility Report Air Quality Report Service
 #
 # POST /dfr_rest_services.get_air_quality
-export def "dfr-rest-services-get-air-quality create" [
+export def "post-dfr-rest-services-get-air-quality" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -493,7 +493,7 @@ export def "dfr-rest-services-get-air-quality create" [
 # Placeholder
 #
 # GET /dfr_rest_services.get_aws_docs
-export def "dfr-rest-services-get-aws-docs get" [
+export def "get-dfr-rest-services-get-aws-docs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -531,7 +531,7 @@ export def "dfr-rest-services-get-aws-docs get" [
 # Placeholder
 #
 # POST /dfr_rest_services.get_aws_docs
-export def "dfr-rest-services-get-aws-docs create" [
+export def "post-dfr-rest-services-get-aws-docs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -572,7 +572,7 @@ export def "dfr-rest-services-get-aws-docs create" [
 # Displays Cases related to the Facility
 #
 # GET /dfr_rest_services.get_case_formal_actions
-export def "dfr-rest-services-get-case-formal-actions get" [
+export def "get-dfr-rest-services-get-case-formal-actions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -610,7 +610,7 @@ export def "dfr-rest-services-get-case-formal-actions get" [
 # Displays Cases related to the Facility
 #
 # POST /dfr_rest_services.get_case_formal_actions
-export def "dfr-rest-services-get-case-formal-actions create" [
+export def "post-dfr-rest-services-get-case-formal-actions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -651,7 +651,7 @@ export def "dfr-rest-services-get-case-formal-actions create" [
 # Detailed Facility Report 5 Year Compliance Monitoring History Service
 #
 # GET /dfr_rest_services.get_compliance_history
-export def "dfr-rest-services-get-compliance-history get" [
+export def "get-dfr-rest-services-get-compliance-history" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -689,7 +689,7 @@ export def "dfr-rest-services-get-compliance-history get" [
 # Detailed Facility Report 5 Year Compliance Monitoring History Service
 #
 # POST /dfr_rest_services.get_compliance_history
-export def "dfr-rest-services-get-compliance-history create" [
+export def "post-dfr-rest-services-get-compliance-history" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -730,7 +730,7 @@ export def "dfr-rest-services-get-compliance-history create" [
 # Detailed Facility Report Compliance Summary Service
 #
 # GET /dfr_rest_services.get_compliance_summary
-export def "dfr-rest-services-get-compliance-summary get" [
+export def "get-dfr-rest-services-get-compliance-summary" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -768,7 +768,7 @@ export def "dfr-rest-services-get-compliance-summary get" [
 # Detailed Facility Report Compliance Summary Service
 #
 # POST /dfr_rest_services.get_compliance_summary
-export def "dfr-rest-services-get-compliance-summary create" [
+export def "post-dfr-rest-services-get-compliance-summary" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -809,7 +809,7 @@ export def "dfr-rest-services-get-compliance-summary create" [
 # Downloads a spectific section of the DFR in CSV Format
 #
 # GET /dfr_rest_services.get_csv
-export def "dfr-rest-services-get-csv get" [
+export def "get-dfr-rest-services-get-csv" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -843,7 +843,7 @@ export def "dfr-rest-services-get-csv get" [
 # Downloads a spectific section of the DFR in CSV Format
 #
 # POST /dfr_rest_services.get_csv
-export def "dfr-rest-services-get-csv create" [
+export def "post-dfr-rest-services-get-csv" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -877,7 +877,7 @@ export def "dfr-rest-services-get-csv create" [
 # Detailed Facility Report 3 Year CWA Facility-Level Status Service
 #
 # GET /dfr_rest_services.get_cwa_3yr_compliance
-export def "dfr-rest-services-get-cwa-3yr-compliance get" [
+export def "get-dfr-rest-services-get-cwa-3yr-compliance" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -915,7 +915,7 @@ export def "dfr-rest-services-get-cwa-3yr-compliance get" [
 # Detailed Facility Report 3 Year CWA Facility-Level Status Service
 #
 # POST /dfr_rest_services.get_cwa_3yr_compliance
-export def "dfr-rest-services-get-cwa-3yr-compliance create" [
+export def "post-dfr-rest-services-get-cwa-3yr-compliance" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -956,7 +956,7 @@ export def "dfr-rest-services-get-cwa-3yr-compliance create" [
 # Displays monlthly and quarterly counts of D80 and D90 Effluent Non Reporting Violations Related to the Facility
 #
 # GET /dfr_rest_services.get_cwa_3yr_d80d90_counts
-export def "dfr-rest-services-get-cwa-3yr-d80d90-counts get" [
+export def "get-dfr-rest-services-get-cwa-3yr-d80d90-counts" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -994,7 +994,7 @@ export def "dfr-rest-services-get-cwa-3yr-d80d90-counts get" [
 # Displays monlthly and quarterly counts of D80 and D90 Effluent Non Reporting Violations Related to the Facility
 #
 # POST /dfr_rest_services.get_cwa_3yr_d80d90_counts
-export def "dfr-rest-services-get-cwa-3yr-d80d90-counts create" [
+export def "post-dfr-rest-services-get-cwa-3yr-d80d90-counts" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1035,7 +1035,7 @@ export def "dfr-rest-services-get-cwa-3yr-d80d90-counts create" [
 # Detailed Facility Report CWA CSV Compliance Service
 #
 # GET /dfr_rest_services.get_cwa_cs_compliance
-export def "dfr-rest-services-get-cwa-cs-compliance get" [
+export def "get-dfr-rest-services-get-cwa-cs-compliance" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1073,7 +1073,7 @@ export def "dfr-rest-services-get-cwa-cs-compliance get" [
 # Detailed Facility Report CWA CSV Compliance Service
 #
 # POST /dfr_rest_services.get_cwa_cs_compliance
-export def "dfr-rest-services-get-cwa-cs-compliance create" [
+export def "post-dfr-rest-services-get-cwa-cs-compliance" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1114,7 +1114,7 @@ export def "dfr-rest-services-get-cwa-cs-compliance create" [
 # Detailed Facility Report CWA Effluent ALR Service
 #
 # GET /dfr_rest_services.get_cwa_eff_alr
-export def "dfr-rest-services-get-cwa-eff-alr get" [
+export def "get-dfr-rest-services-get-cwa-eff-alr" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1152,7 +1152,7 @@ export def "dfr-rest-services-get-cwa-eff-alr get" [
 # Detailed Facility Report CWA Effluent ALR Service
 #
 # POST /dfr_rest_services.get_cwa_eff_alr
-export def "dfr-rest-services-get-cwa-eff-alr create" [
+export def "post-dfr-rest-services-get-cwa-eff-alr" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1193,7 +1193,7 @@ export def "dfr-rest-services-get-cwa-eff-alr create" [
 # Placeholder
 #
 # GET /dfr_rest_services.get_cwa_eff_alr_exp
-export def "dfr-rest-services-get-cwa-eff-alr-exp get" [
+export def "get-dfr-rest-services-get-cwa-eff-alr-exp" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1231,7 +1231,7 @@ export def "dfr-rest-services-get-cwa-eff-alr-exp get" [
 # Placeholder
 #
 # POST /dfr_rest_services.get_cwa_eff_alr_exp
-export def "dfr-rest-services-get-cwa-eff-alr-exp create" [
+export def "post-dfr-rest-services-get-cwa-eff-alr-exp" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1272,7 +1272,7 @@ export def "dfr-rest-services-get-cwa-eff-alr-exp create" [
 # Detailed Facility Report CWA Effluent Compliance Service
 #
 # GET /dfr_rest_services.get_cwa_eff_compliance
-export def "dfr-rest-services-get-cwa-eff-compliance get" [
+export def "get-dfr-rest-services-get-cwa-eff-compliance" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1310,7 +1310,7 @@ export def "dfr-rest-services-get-cwa-eff-compliance get" [
 # Detailed Facility Report CWA Effluent Compliance Service
 #
 # POST /dfr_rest_services.get_cwa_eff_compliance
-export def "dfr-rest-services-get-cwa-eff-compliance create" [
+export def "post-dfr-rest-services-get-cwa-eff-compliance" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1351,7 +1351,7 @@ export def "dfr-rest-services-get-cwa-eff-compliance create" [
 # Placeholder
 #
 # GET /dfr_rest_services.get_cwa_eff_compliance_exp
-export def "dfr-rest-services-get-cwa-eff-compliance-exp get" [
+export def "get-dfr-rest-services-get-cwa-eff-compliance-exp" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1389,7 +1389,7 @@ export def "dfr-rest-services-get-cwa-eff-compliance-exp get" [
 # Placeholder
 #
 # POST /dfr_rest_services.get_cwa_eff_compliance_exp
-export def "dfr-rest-services-get-cwa-eff-compliance-exp create" [
+export def "post-dfr-rest-services-get-cwa-eff-compliance-exp" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1430,7 +1430,7 @@ export def "dfr-rest-services-get-cwa-eff-compliance-exp create" [
 # Detailed Facility Report CWA PSV Compliance Service
 #
 # GET /dfr_rest_services.get_cwa_ps_compliance
-export def "dfr-rest-services-get-cwa-ps-compliance get" [
+export def "get-dfr-rest-services-get-cwa-ps-compliance" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1468,7 +1468,7 @@ export def "dfr-rest-services-get-cwa-ps-compliance get" [
 # Detailed Facility Report CWA PSV Compliance Service
 #
 # POST /dfr_rest_services.get_cwa_ps_compliance
-export def "dfr-rest-services-get-cwa-ps-compliance create" [
+export def "post-dfr-rest-services-get-cwa-ps-compliance" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1509,7 +1509,7 @@ export def "dfr-rest-services-get-cwa-ps-compliance create" [
 # Detailed Facility Report CWA RNC Compliance Service
 #
 # GET /dfr_rest_services.get_cwa_rnc_compliance
-export def "dfr-rest-services-get-cwa-rnc-compliance get" [
+export def "get-dfr-rest-services-get-cwa-rnc-compliance" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1547,7 +1547,7 @@ export def "dfr-rest-services-get-cwa-rnc-compliance get" [
 # Detailed Facility Report CWA RNC Compliance Service
 #
 # POST /dfr_rest_services.get_cwa_rnc_compliance
-export def "dfr-rest-services-get-cwa-rnc-compliance create" [
+export def "post-dfr-rest-services-get-cwa-rnc-compliance" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1588,7 +1588,7 @@ export def "dfr-rest-services-get-cwa-rnc-compliance create" [
 # Detailed Facility Report CWA SEV Compliance Service
 #
 # GET /dfr_rest_services.get_cwa_se_compliance
-export def "dfr-rest-services-get-cwa-se-compliance get" [
+export def "get-dfr-rest-services-get-cwa-se-compliance" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1626,7 +1626,7 @@ export def "dfr-rest-services-get-cwa-se-compliance get" [
 # Detailed Facility Report CWA SEV Compliance Service
 #
 # POST /dfr_rest_services.get_cwa_se_compliance
-export def "dfr-rest-services-get-cwa-se-compliance create" [
+export def "post-dfr-rest-services-get-cwa-se-compliance" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1667,7 +1667,7 @@ export def "dfr-rest-services-get-cwa-se-compliance create" [
 # Display detailed D80/D90 information for the facility for a given quarter or month
 #
 # GET /dfr_rest_services.get_d80d90s_details
-export def "dfr-rest-services-get-d80d90s-details get" [
+export def "get-dfr-rest-services-get-d80d90s-details" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1708,7 +1708,7 @@ export def "dfr-rest-services-get-d80d90s-details get" [
 # Display detailed D80/D90 information for the facility for a given quarter or month
 #
 # POST /dfr_rest_services.get_d80d90s_details
-export def "dfr-rest-services-get-d80d90s-details create" [
+export def "post-dfr-rest-services-get-d80d90s-details" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1749,7 +1749,7 @@ export def "dfr-rest-services-get-d80d90s-details create" [
 # Displays 2010 Census and ACS demographics by Facility ID
 #
 # GET /dfr_rest_services.get_demographics_by_id
-export def "dfr-rest-services-get-demographics-by-id get" [
+export def "get-dfr-rest-services-get-demographics-by-id" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1787,7 +1787,7 @@ export def "dfr-rest-services-get-demographics-by-id get" [
 # Displays 2010 Census and ACS demographics by Facility ID
 #
 # POST /dfr_rest_services.get_demographics_by_id
-export def "dfr-rest-services-get-demographics-by-id create" [
+export def "post-dfr-rest-services-get-demographics-by-id" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1828,7 +1828,7 @@ export def "dfr-rest-services-get-demographics-by-id create" [
 # Detailed Facility Report Service
 #
 # GET /dfr_rest_services.get_dfr
-export def "dfr-rest-services-get-dfr get" [
+export def "get-dfr-rest-services-get-dfr" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1867,7 +1867,7 @@ export def "dfr-rest-services-get-dfr get" [
 # Detailed Facility Report Service
 #
 # POST /dfr_rest_services.get_dfr
-export def "dfr-rest-services-get-dfr create" [
+export def "post-dfr-rest-services-get-dfr" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1909,7 +1909,7 @@ export def "dfr-rest-services-get-dfr create" [
 # Detailed Facility Report EJScreen Indexes Service
 #
 # GET /dfr_rest_services.get_ejscreen_indexes
-export def "dfr-rest-services-get-ejscreen-indexes get" [
+export def "get-dfr-rest-services-get-ejscreen-indexes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1947,7 +1947,7 @@ export def "dfr-rest-services-get-ejscreen-indexes get" [
 # Detailed Facility Report EJScreen Indexes Service
 #
 # POST /dfr_rest_services.get_ejscreen_indexes
-export def "dfr-rest-services-get-ejscreen-indexes create" [
+export def "post-dfr-rest-services-get-ejscreen-indexes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1988,7 +1988,7 @@ export def "dfr-rest-services-get-ejscreen-indexes create" [
 # Detailed Facility Report Enforcement Summary Service
 #
 # GET /dfr_rest_services.get_enforcement_summary
-export def "dfr-rest-services-get-enforcement-summary get" [
+export def "get-dfr-rest-services-get-enforcement-summary" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2026,7 +2026,7 @@ export def "dfr-rest-services-get-enforcement-summary get" [
 # Detailed Facility Report Enforcement Summary Service
 #
 # POST /dfr_rest_services.get_enforcement_summary
-export def "dfr-rest-services-get-enforcement-summary create" [
+export def "post-dfr-rest-services-get-enforcement-summary" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2067,7 +2067,7 @@ export def "dfr-rest-services-get-enforcement-summary create" [
 # Displays the dates that data was extracted from native EPA systems for the DFR.
 #
 # GET /dfr_rest_services.get_extract_dates
-export def "dfr-rest-services-get-extract-dates get" [
+export def "get-dfr-rest-services-get-extract-dates" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2105,7 +2105,7 @@ export def "dfr-rest-services-get-extract-dates get" [
 # Displays the dates that data was extracted from native EPA systems for the DFR.
 #
 # POST /dfr_rest_services.get_extract_dates
-export def "dfr-rest-services-get-extract-dates create" [
+export def "post-dfr-rest-services-get-extract-dates" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2146,7 +2146,7 @@ export def "dfr-rest-services-get-extract-dates create" [
 # Detailed Facility Report Formal Actions Service
 #
 # GET /dfr_rest_services.get_formal_actions
-export def "dfr-rest-services-get-formal-actions get" [
+export def "get-dfr-rest-services-get-formal-actions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2184,7 +2184,7 @@ export def "dfr-rest-services-get-formal-actions get" [
 # Detailed Facility Report Formal Actions Service
 #
 # POST /dfr_rest_services.get_formal_actions
-export def "dfr-rest-services-get-formal-actions create" [
+export def "post-dfr-rest-services-get-formal-actions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2225,7 +2225,7 @@ export def "dfr-rest-services-get-formal-actions create" [
 # Detailed Facility Report ICIS Formal Actions Service
 #
 # GET /dfr_rest_services.get_icis_formal_actions
-export def "dfr-rest-services-get-icis-formal-actions get" [
+export def "get-dfr-rest-services-get-icis-formal-actions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2263,7 +2263,7 @@ export def "dfr-rest-services-get-icis-formal-actions get" [
 # Detailed Facility Report ICIS Formal Actions Service
 #
 # POST /dfr_rest_services.get_icis_formal_actions
-export def "dfr-rest-services-get-icis-formal-actions create" [
+export def "post-dfr-rest-services-get-icis-formal-actions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2304,7 +2304,7 @@ export def "dfr-rest-services-get-icis-formal-actions create" [
 # Detailed Facility Report Inspections Summary Service
 #
 # GET /dfr_rest_services.get_inspections
-export def "dfr-rest-services-get-inspections get" [
+export def "get-dfr-rest-services-get-inspections" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2342,7 +2342,7 @@ export def "dfr-rest-services-get-inspections get" [
 # Detailed Facility Report Inspections Summary Service
 #
 # POST /dfr_rest_services.get_inspections
-export def "dfr-rest-services-get-inspections create" [
+export def "post-dfr-rest-services-get-inspections" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2383,7 +2383,7 @@ export def "dfr-rest-services-get-inspections create" [
 # Detailed Facility Report Map Service
 #
 # GET /dfr_rest_services.get_map
-export def "dfr-rest-services-get-map get" [
+export def "get-dfr-rest-services-get-map" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2421,7 +2421,7 @@ export def "dfr-rest-services-get-map get" [
 # Detailed Facility Report Map Service
 #
 # POST /dfr_rest_services.get_map
-export def "dfr-rest-services-get-map create" [
+export def "post-dfr-rest-services-get-map" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2462,7 +2462,7 @@ export def "dfr-rest-services-get-map create" [
 # Detailed Facility Report NAICS Code Service
 #
 # GET /dfr_rest_services.get_naics
-export def "dfr-rest-services-get-naics get" [
+export def "get-dfr-rest-services-get-naics" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2500,7 +2500,7 @@ export def "dfr-rest-services-get-naics get" [
 # Detailed Facility Report NAICS Code Service
 #
 # POST /dfr_rest_services.get_naics
-export def "dfr-rest-services-get-naics create" [
+export def "post-dfr-rest-services-get-naics" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2541,7 +2541,7 @@ export def "dfr-rest-services-get-naics create" [
 # Detailed Facility Report Notices Service
 #
 # GET /dfr_rest_services.get_notices
-export def "dfr-rest-services-get-notices get" [
+export def "get-dfr-rest-services-get-notices" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2579,7 +2579,7 @@ export def "dfr-rest-services-get-notices get" [
 # Detailed Facility Report Notices Service
 #
 # POST /dfr_rest_services.get_notices
-export def "dfr-rest-services-get-notices create" [
+export def "post-dfr-rest-services-get-notices" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2620,7 +2620,7 @@ export def "dfr-rest-services-get-notices create" [
 # Detailed Facility Report Permits Service
 #
 # GET /dfr_rest_services.get_permits
-export def "dfr-rest-services-get-permits get" [
+export def "get-dfr-rest-services-get-permits" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2658,7 +2658,7 @@ export def "dfr-rest-services-get-permits get" [
 # Detailed Facility Report Permits Service
 #
 # POST /dfr_rest_services.get_permits
-export def "dfr-rest-services-get-permits create" [
+export def "post-dfr-rest-services-get-permits" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2699,7 +2699,7 @@ export def "dfr-rest-services-get-permits create" [
 # Detailed Facility Report RCRA Compliance Service
 #
 # GET /dfr_rest_services.get_rcra_compliance
-export def "dfr-rest-services-get-rcra-compliance get" [
+export def "get-dfr-rest-services-get-rcra-compliance" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2737,7 +2737,7 @@ export def "dfr-rest-services-get-rcra-compliance get" [
 # Detailed Facility Report RCRA Compliance Service
 #
 # POST /dfr_rest_services.get_rcra_compliance
-export def "dfr-rest-services-get-rcra-compliance create" [
+export def "post-dfr-rest-services-get-rcra-compliance" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2778,7 +2778,7 @@ export def "dfr-rest-services-get-rcra-compliance create" [
 # Detailed Facility Report SDWA Lead and Copper Service
 #
 # GET /dfr_rest_services.get_sdwa_lead_and_copper
-export def "dfr-rest-services-get-sdwa-lead-and-copper get" [
+export def "get-dfr-rest-services-get-sdwa-lead-and-copper" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2816,7 +2816,7 @@ export def "dfr-rest-services-get-sdwa-lead-and-copper get" [
 # Detailed Facility Report SDWA Lead and Copper Service
 #
 # POST /dfr_rest_services.get_sdwa_lead_and_copper
-export def "dfr-rest-services-get-sdwa-lead-and-copper create" [
+export def "post-dfr-rest-services-get-sdwa-lead-and-copper" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2857,7 +2857,7 @@ export def "dfr-rest-services-get-sdwa-lead-and-copper create" [
 # Detailed Facility Report SDWA Sanitary Surveys Service
 #
 # GET /dfr_rest_services.get_sdwa_sanitary_surveys
-export def "dfr-rest-services-get-sdwa-sanitary-surveys get" [
+export def "get-dfr-rest-services-get-sdwa-sanitary-surveys" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2895,7 +2895,7 @@ export def "dfr-rest-services-get-sdwa-sanitary-surveys get" [
 # Detailed Facility Report SDWA Sanitary Surveys Service
 #
 # POST /dfr_rest_services.get_sdwa_sanitary_surveys
-export def "dfr-rest-services-get-sdwa-sanitary-surveys create" [
+export def "post-dfr-rest-services-get-sdwa-sanitary-surveys" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2936,7 +2936,7 @@ export def "dfr-rest-services-get-sdwa-sanitary-surveys create" [
 # Detailed Facility Report SDWA Sanitary Site Visits Service
 #
 # GET /dfr_rest_services.get_sdwa_site_visits
-export def "dfr-rest-services-get-sdwa-site-visits get" [
+export def "get-dfr-rest-services-get-sdwa-site-visits" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2974,7 +2974,7 @@ export def "dfr-rest-services-get-sdwa-site-visits get" [
 # Detailed Facility Report SDWA Sanitary Site Visits Service
 #
 # POST /dfr_rest_services.get_sdwa_site_visits
-export def "dfr-rest-services-get-sdwa-site-visits create" [
+export def "post-dfr-rest-services-get-sdwa-site-visits" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3015,7 +3015,7 @@ export def "dfr-rest-services-get-sdwa-site-visits create" [
 # Detailed Facility Report SDWA Violations Service
 #
 # GET /dfr_rest_services.get_sdwa_violations
-export def "dfr-rest-services-get-sdwa-violations get" [
+export def "get-dfr-rest-services-get-sdwa-violations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3053,7 +3053,7 @@ export def "dfr-rest-services-get-sdwa-violations get" [
 # Detailed Facility Report SDWA Violations Service
 #
 # POST /dfr_rest_services.get_sdwa_violations
-export def "dfr-rest-services-get-sdwa-violations create" [
+export def "post-dfr-rest-services-get-sdwa-violations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3094,7 +3094,7 @@ export def "dfr-rest-services-get-sdwa-violations create" [
 # Detailed Facility Report SDWIS Compliance Service
 #
 # GET /dfr_rest_services.get_sdwis_compliance
-export def "dfr-rest-services-get-sdwis-compliance get" [
+export def "get-dfr-rest-services-get-sdwis-compliance" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3132,7 +3132,7 @@ export def "dfr-rest-services-get-sdwis-compliance get" [
 # Detailed Facility Report SDWIS Compliance Service
 #
 # POST /dfr_rest_services.get_sdwis_compliance
-export def "dfr-rest-services-get-sdwis-compliance create" [
+export def "post-dfr-rest-services-get-sdwis-compliance" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3173,7 +3173,7 @@ export def "dfr-rest-services-get-sdwis-compliance create" [
 # Detailed Facility Report SIC Code Service
 #
 # GET /dfr_rest_services.get_sic_codes
-export def "dfr-rest-services-get-sic-codes get" [
+export def "get-dfr-rest-services-get-sic-codes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3211,7 +3211,7 @@ export def "dfr-rest-services-get-sic-codes get" [
 # Detailed Facility Report SIC Code Service
 #
 # POST /dfr_rest_services.get_sic_codes
-export def "dfr-rest-services-get-sic-codes create" [
+export def "post-dfr-rest-services-get-sic-codes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3252,7 +3252,7 @@ export def "dfr-rest-services-get-sic-codes create" [
 # Detailed Facility Report Spatial Metadata Service
 #
 # GET /dfr_rest_services.get_spatial_metadata
-export def "dfr-rest-services-get-spatial-metadata get" [
+export def "get-dfr-rest-services-get-spatial-metadata" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3290,7 +3290,7 @@ export def "dfr-rest-services-get-spatial-metadata get" [
 # Detailed Facility Report Spatial Metadata Service
 #
 # POST /dfr_rest_services.get_spatial_metadata
-export def "dfr-rest-services-get-spatial-metadata create" [
+export def "post-dfr-rest-services-get-spatial-metadata" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3331,7 +3331,7 @@ export def "dfr-rest-services-get-spatial-metadata create" [
 # Detailed Facility Report TRI History Service
 #
 # GET /dfr_rest_services.get_tri_history
-export def "dfr-rest-services-get-tri-history get" [
+export def "get-dfr-rest-services-get-tri-history" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3369,7 +3369,7 @@ export def "dfr-rest-services-get-tri-history get" [
 # Detailed Facility Report TRI History Service
 #
 # POST /dfr_rest_services.get_tri_history
-export def "dfr-rest-services-get-tri-history create" [
+export def "post-dfr-rest-services-get-tri-history" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3410,7 +3410,7 @@ export def "dfr-rest-services-get-tri-history create" [
 # Detailed Facility Report TRI Releases Service
 #
 # GET /dfr_rest_services.get_tri_releases
-export def "dfr-rest-services-get-tri-releases get" [
+export def "get-dfr-rest-services-get-tri-releases" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3448,7 +3448,7 @@ export def "dfr-rest-services-get-tri-releases get" [
 # Detailed Facility Report TRI Releases Service
 #
 # POST /dfr_rest_services.get_tri_releases
-export def "dfr-rest-services-get-tri-releases create" [
+export def "post-dfr-rest-services-get-tri-releases" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3489,7 +3489,7 @@ export def "dfr-rest-services-get-tri-releases create" [
 # Detailed Facility Report Tribes Service
 #
 # GET /dfr_rest_services.get_tribes
-export def "dfr-rest-services-get-tribes get" [
+export def "get-dfr-rest-services-get-tribes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3527,7 +3527,7 @@ export def "dfr-rest-services-get-tribes get" [
 # Detailed Facility Report Tribes Service
 #
 # POST /dfr_rest_services.get_tribes
-export def "dfr-rest-services-get-tribes create" [
+export def "post-dfr-rest-services-get-tribes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3568,7 +3568,7 @@ export def "dfr-rest-services-get-tribes create" [
 # Detailed Facility Report Water Quality Service
 #
 # GET /dfr_rest_services.get_water_quality
-export def "dfr-rest-services-get-water-quality get" [
+export def "get-dfr-rest-services-get-water-quality" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3606,7 +3606,7 @@ export def "dfr-rest-services-get-water-quality get" [
 # Detailed Facility Report Water Quality Service
 #
 # POST /dfr_rest_services.get_water_quality
-export def "dfr-rest-services-get-water-quality create" [
+export def "post-dfr-rest-services-get-water-quality" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3647,7 +3647,7 @@ export def "dfr-rest-services-get-water-quality create" [
 # Displays detailed Water Quality information from EPA's Office of Water Systems
 #
 # GET /dfr_rest_services.get_water_quality_details
-export def "dfr-rest-services-get-water-quality-details get" [
+export def "get-dfr-rest-services-get-water-quality-details" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3685,7 +3685,7 @@ export def "dfr-rest-services-get-water-quality-details get" [
 # Displays detailed Water Quality information from EPA's Office of Water Systems
 #
 # POST /dfr_rest_services.get_water_quality_details
-export def "dfr-rest-services-get-water-quality-details create" [
+export def "post-dfr-rest-services-get-water-quality-details" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3726,7 +3726,7 @@ export def "dfr-rest-services-get-water-quality-details create" [
 # Downloads the complete RCRA Compliance History Section of the DFR
 #
 # GET /dfr_rest_services.rcra_3_yr_download
-export def "dfr-rest-services-rcra-3-yr-download get" [
+export def "get-dfr-rest-services-rcra-3-yr-download" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3760,7 +3760,7 @@ export def "dfr-rest-services-rcra-3-yr-download get" [
 # Downloads the complete RCRA Compliance History Section of the DFR
 #
 # POST /dfr_rest_services.rcra_3_yr_download
-export def "dfr-rest-services-rcra-3-yr-download create" [
+export def "post-dfr-rest-services-rcra-3-yr-download" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

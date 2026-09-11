@@ -128,7 +128,7 @@ def volume-retention-mode-completer [] { ["DELETE" "RETAIN"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "2020-08-01-studios-eula-acceptances create-accept" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "accept-eulas" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -152,7 +152,7 @@ export def commands []: nothing -> table {
 #
 # POST /2020-08-01/studios/{studioId}/eula-acceptances
 # operationId: AcceptEulas
-export def "2020-08-01-studios-eula-acceptances create-accept" [
+export def "accept-eulas" [
   studio_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -202,7 +202,7 @@ export def "2020-08-01-studios-eula-acceptances create-accept" [
 #
 # GET /2020-08-01/studios/{studioId}/eula-acceptances
 # operationId: ListEulaAcceptances
-export def "2020-08-01-studios-eula-acceptances list" [
+export def "list-eula-acceptances" [
   studio_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -251,7 +251,7 @@ export def "2020-08-01-studios-eula-acceptances list" [
 # POST /2020-08-01/studios/{studioId}/launch-profiles
 # operationId: CreateLaunchProfile
 # --streamConfiguration shape: {automaticTerminationMode?: any, clipboardMode?: any, ec2InstanceTypes?: any, maxSessionLengthInMinutes?: any, maxStoppedSessionLengthInMinutes?: any, sessionBackup?: any, sessionPersistenceMode?: any, sessionStorage?: any, streamingImageIds?: any, volumeConfiguration?: any}
-export def "2020-08-01-studios-launch-profiles create" [
+export def "create-launch-profile" [
   studio_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -307,7 +307,7 @@ export def "2020-08-01-studios-launch-profiles create" [
 #
 # GET /2020-08-01/studios/{studioId}/launch-profiles
 # operationId: ListLaunchProfiles
-export def "2020-08-01-studios-launch-profiles list" [
+export def "list-launch-profiles" [
   studio_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -357,7 +357,7 @@ export def "2020-08-01-studios-launch-profiles list" [
 #
 # POST /2020-08-01/studios/{studioId}/streaming-images
 # operationId: CreateStreamingImage
-export def "2020-08-01-studios-streaming-images create" [
+export def "create-streaming-image" [
   studio_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -410,7 +410,7 @@ export def "2020-08-01-studios-streaming-images create" [
 #
 # GET /2020-08-01/studios/{studioId}/streaming-images
 # operationId: ListStreamingImages
-export def "2020-08-01-studios-streaming-images list" [
+export def "list-streaming-images" [
   studio_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -458,7 +458,7 @@ export def "2020-08-01-studios-streaming-images list" [
 #
 # POST /2020-08-01/studios/{studioId}/streaming-sessions
 # operationId: CreateStreamingSession
-export def "2020-08-01-studios-streaming-sessions create" [
+export def "create-streaming-session" [
   studio_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -512,7 +512,7 @@ export def "2020-08-01-studios-streaming-sessions create" [
 #
 # GET /2020-08-01/studios/{studioId}/streaming-sessions
 # operationId: ListStreamingSessions
-export def "2020-08-01-studios-streaming-sessions list" [
+export def "list-streaming-sessions" [
   studio_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -562,7 +562,7 @@ export def "2020-08-01-studios-streaming-sessions list" [
 #
 # POST /2020-08-01/studios/{studioId}/streaming-sessions/{sessionId}/streams
 # operationId: CreateStreamingSessionStream
-export def "2020-08-01-studios-streaming-sessions-streams create" [
+export def "create-streaming-session-stream" [
   studio_id: string
   session_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -615,7 +615,7 @@ export def "2020-08-01-studios-streaming-sessions-streams create" [
 # POST /2020-08-01/studios
 # operationId: CreateStudio
 # --studioEncryptionConfiguration shape: {keyArn?: any, keyType?: any}
-export def "2020-08-01-studios create" [
+export def "create-studio" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -668,7 +668,7 @@ export def "2020-08-01-studios create" [
 #
 # GET /2020-08-01/studios
 # operationId: ListStudios
-export def "2020-08-01-studios list" [
+export def "list-studios" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -716,7 +716,7 @@ export def "2020-08-01-studios list" [
 # --configuration shape: {activeDirectoryConfiguration?: any, computeFarmConfiguration?: any, licenseServiceConfiguration?: any, sharedFileSystemConfiguration?: any}
 # --initializationScripts item shape: {launchProfileProtocolVersion?: any, platform?: any, runContext?: any, script?: any}
 # --scriptParameters item shape: {key?: any, value?: any}
-export def "2020-08-01-studios-studio-components create" [
+export def "create-studio-component" [
   studio_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -776,7 +776,7 @@ export def "2020-08-01-studios-studio-components create" [
 #
 # GET /2020-08-01/studios/{studioId}/studio-components
 # operationId: ListStudioComponents
-export def "2020-08-01-studios-studio-components list" [
+export def "list-studio-components" [
   studio_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -826,7 +826,7 @@ export def "2020-08-01-studios-studio-components list" [
 #
 # DELETE /2020-08-01/studios/{studioId}/launch-profiles/{launchProfileId}
 # operationId: DeleteLaunchProfile
-export def "2020-08-01-studios-launch-profiles delete" [
+export def "delete-launch-profile" [
   studio_id: string
   launch_profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -874,7 +874,7 @@ export def "2020-08-01-studios-launch-profiles delete" [
 #
 # GET /2020-08-01/studios/{studioId}/launch-profiles/{launchProfileId}
 # operationId: GetLaunchProfile
-export def "2020-08-01-studios-launch-profiles get" [
+export def "get-launch-profile" [
   studio_id: string
   launch_profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -922,7 +922,7 @@ export def "2020-08-01-studios-launch-profiles get" [
 # PATCH /2020-08-01/studios/{studioId}/launch-profiles/{launchProfileId}
 # operationId: UpdateLaunchProfile
 # --streamConfiguration shape: {automaticTerminationMode?: any, clipboardMode?: any, ec2InstanceTypes?: any, maxSessionLengthInMinutes?: any, maxStoppedSessionLengthInMinutes?: any, sessionBackup?: any, sessionPersistenceMode?: any, sessionStorage?: any, streamingImageIds?: any, volumeConfiguration?: any}
-export def "2020-08-01-studios-launch-profiles update" [
+export def "update-launch-profile" [
   studio_id: string
   launch_profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -978,7 +978,7 @@ export def "2020-08-01-studios-launch-profiles update" [
 #
 # DELETE /2020-08-01/studios/{studioId}/launch-profiles/{launchProfileId}/membership/{principalId}
 # operationId: DeleteLaunchProfileMember
-export def "2020-08-01-studios-launch-profiles-membership delete-member" [
+export def "delete-launch-profile-member" [
   studio_id: string
   launch_profile_id: string
   principal_id: string
@@ -1028,7 +1028,7 @@ export def "2020-08-01-studios-launch-profiles-membership delete-member" [
 #
 # GET /2020-08-01/studios/{studioId}/launch-profiles/{launchProfileId}/membership/{principalId}
 # operationId: GetLaunchProfileMember
-export def "2020-08-01-studios-launch-profiles-membership get-member" [
+export def "get-launch-profile-member" [
   studio_id: string
   launch_profile_id: string
   principal_id: string
@@ -1077,7 +1077,7 @@ export def "2020-08-01-studios-launch-profiles-membership get-member" [
 #
 # PATCH /2020-08-01/studios/{studioId}/launch-profiles/{launchProfileId}/membership/{principalId}
 # operationId: UpdateLaunchProfileMember
-export def "2020-08-01-studios-launch-profiles-membership update-member" [
+export def "update-launch-profile-member" [
   studio_id: string
   launch_profile_id: string
   principal_id: string
@@ -1131,7 +1131,7 @@ export def "2020-08-01-studios-launch-profiles-membership update-member" [
 #
 # DELETE /2020-08-01/studios/{studioId}/streaming-images/{streamingImageId}
 # operationId: DeleteStreamingImage
-export def "2020-08-01-studios-streaming-images delete" [
+export def "delete-streaming-image" [
   studio_id: string
   streaming_image_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1179,7 +1179,7 @@ export def "2020-08-01-studios-streaming-images delete" [
 #
 # GET /2020-08-01/studios/{studioId}/streaming-images/{streamingImageId}
 # operationId: GetStreamingImage
-export def "2020-08-01-studios-streaming-images get" [
+export def "get-streaming-image" [
   studio_id: string
   streaming_image_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1226,7 +1226,7 @@ export def "2020-08-01-studios-streaming-images get" [
 #
 # PATCH /2020-08-01/studios/{studioId}/streaming-images/{streamingImageId}
 # operationId: UpdateStreamingImage
-export def "2020-08-01-studios-streaming-images update" [
+export def "update-streaming-image" [
   studio_id: string
   streaming_image_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1279,7 +1279,7 @@ export def "2020-08-01-studios-streaming-images update" [
 #
 # DELETE /2020-08-01/studios/{studioId}/streaming-sessions/{sessionId}
 # operationId: DeleteStreamingSession
-export def "2020-08-01-studios-streaming-sessions delete" [
+export def "delete-streaming-session" [
   studio_id: string
   session_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1327,7 +1327,7 @@ export def "2020-08-01-studios-streaming-sessions delete" [
 #
 # GET /2020-08-01/studios/{studioId}/streaming-sessions/{sessionId}
 # operationId: GetStreamingSession
-export def "2020-08-01-studios-streaming-sessions get" [
+export def "get-streaming-session" [
   studio_id: string
   session_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1374,7 +1374,7 @@ export def "2020-08-01-studios-streaming-sessions get" [
 #
 # DELETE /2020-08-01/studios/{studioId}
 # operationId: DeleteStudio
-export def "2020-08-01-studios delete" [
+export def "delete-studio" [
   studio_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1420,7 +1420,7 @@ export def "2020-08-01-studios delete" [
 #
 # GET /2020-08-01/studios/{studioId}
 # operationId: GetStudio
-export def "2020-08-01-studios get" [
+export def "get-studio" [
   studio_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1465,7 +1465,7 @@ export def "2020-08-01-studios get" [
 #
 # PATCH /2020-08-01/studios/{studioId}
 # operationId: UpdateStudio
-export def "2020-08-01-studios update" [
+export def "update-studio" [
   studio_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1517,7 +1517,7 @@ export def "2020-08-01-studios update" [
 #
 # DELETE /2020-08-01/studios/{studioId}/studio-components/{studioComponentId}
 # operationId: DeleteStudioComponent
-export def "2020-08-01-studios-studio-components delete" [
+export def "delete-studio-component" [
   studio_id: string
   studio_component_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1565,7 +1565,7 @@ export def "2020-08-01-studios-studio-components delete" [
 #
 # GET /2020-08-01/studios/{studioId}/studio-components/{studioComponentId}
 # operationId: GetStudioComponent
-export def "2020-08-01-studios-studio-components get" [
+export def "get-studio-component" [
   studio_id: string
   studio_component_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1615,7 +1615,7 @@ export def "2020-08-01-studios-studio-components get" [
 # --configuration shape: {activeDirectoryConfiguration?: any, computeFarmConfiguration?: any, licenseServiceConfiguration?: any, sharedFileSystemConfiguration?: any}
 # --initializationScripts item shape: {launchProfileProtocolVersion?: any, platform?: any, runContext?: any, script?: any}
 # --scriptParameters item shape: {key?: any, value?: any}
-export def "2020-08-01-studios-studio-components update" [
+export def "update-studio-component" [
   studio_id: string
   studio_component_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1676,7 +1676,7 @@ export def "2020-08-01-studios-studio-components update" [
 #
 # DELETE /2020-08-01/studios/{studioId}/membership/{principalId}
 # operationId: DeleteStudioMember
-export def "2020-08-01-studios-membership delete-member" [
+export def "delete-studio-member" [
   studio_id: string
   principal_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1724,7 +1724,7 @@ export def "2020-08-01-studios-membership delete-member" [
 #
 # GET /2020-08-01/studios/{studioId}/membership/{principalId}
 # operationId: GetStudioMember
-export def "2020-08-01-studios-membership get-member" [
+export def "get-studio-member" [
   studio_id: string
   principal_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1771,7 +1771,7 @@ export def "2020-08-01-studios-membership get-member" [
 #
 # GET /2020-08-01/eulas/{eulaId}
 # operationId: GetEula
-export def "2020-08-01-eulas get" [
+export def "get-eula" [
   eula_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1816,7 +1816,7 @@ export def "2020-08-01-eulas get" [
 #
 # GET /2020-08-01/studios/{studioId}/launch-profiles/{launchProfileId}/details
 # operationId: GetLaunchProfileDetails
-export def "2020-08-01-studios-launch-profiles-details get" [
+export def "get-launch-profile-details" [
   studio_id: string
   launch_profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1863,7 +1863,7 @@ export def "2020-08-01-studios-launch-profiles-details get" [
 #
 # GET /2020-08-01/studios/{studioId}/launch-profiles/{launchProfileId}/init
 # operationId: GetLaunchProfileInitialization
-export def "2020-08-01-studios-launch-profiles-init get-initialization" [
+export def "get-launch-profile-initialization" [
   studio_id: string
   launch_profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1914,7 +1914,7 @@ export def "2020-08-01-studios-launch-profiles-init get-initialization" [
 #
 # GET /2020-08-01/studios/{studioId}/streaming-session-backups/{backupId}
 # operationId: GetStreamingSessionBackup
-export def "2020-08-01-studios-streaming-session-backups get" [
+export def "get-streaming-session-backup" [
   studio_id: string
   backup_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1961,7 +1961,7 @@ export def "2020-08-01-studios-streaming-session-backups get" [
 #
 # GET /2020-08-01/studios/{studioId}/streaming-sessions/{sessionId}/streams/{streamId}
 # operationId: GetStreamingSessionStream
-export def "2020-08-01-studios-streaming-sessions-streams get" [
+export def "get-streaming-session-stream" [
   studio_id: string
   session_id: string
   stream_id: string
@@ -2010,7 +2010,7 @@ export def "2020-08-01-studios-streaming-sessions-streams get" [
 #
 # GET /2020-08-01/eulas
 # operationId: ListEulas
-export def "2020-08-01-eulas list" [
+export def "list-eulas" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2056,7 +2056,7 @@ export def "2020-08-01-eulas list" [
 #
 # GET /2020-08-01/studios/{studioId}/launch-profiles/{launchProfileId}/membership
 # operationId: ListLaunchProfileMembers
-export def "2020-08-01-studios-launch-profiles-membership list-members" [
+export def "list-launch-profile-members" [
   studio_id: string
   launch_profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2107,7 +2107,7 @@ export def "2020-08-01-studios-launch-profiles-membership list-members" [
 # POST /2020-08-01/studios/{studioId}/launch-profiles/{launchProfileId}/membership
 # operationId: PutLaunchProfileMembers
 # --members item shape: {persona: any, principalId: any}
-export def "2020-08-01-studios-launch-profiles-membership update-members" [
+export def "put-launch-profile-members" [
   studio_id: string
   launch_profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2160,7 +2160,7 @@ export def "2020-08-01-studios-launch-profiles-membership update-members" [
 #
 # GET /2020-08-01/studios/{studioId}/streaming-session-backups
 # operationId: ListStreamingSessionBackups
-export def "2020-08-01-studios-streaming-session-backups list" [
+export def "list-streaming-session-backups" [
   studio_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2208,7 +2208,7 @@ export def "2020-08-01-studios-streaming-session-backups list" [
 #
 # GET /2020-08-01/studios/{studioId}/membership
 # operationId: ListStudioMembers
-export def "2020-08-01-studios-membership list-members" [
+export def "list-studio-members" [
   studio_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2257,7 +2257,7 @@ export def "2020-08-01-studios-membership list-members" [
 # POST /2020-08-01/studios/{studioId}/membership
 # operationId: PutStudioMembers
 # --members item shape: {persona: any, principalId: any}
-export def "2020-08-01-studios-membership update-members" [
+export def "put-studio-members" [
   studio_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2308,7 +2308,7 @@ export def "2020-08-01-studios-membership update-members" [
 #
 # GET /2020-08-01/tags/{resourceArn}
 # operationId: ListTagsForResource
-export def "2020-08-01-tags list-for-resource" [
+export def "list-tags-for-resource" [
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2353,7 +2353,7 @@ export def "2020-08-01-tags list-for-resource" [
 #
 # POST /2020-08-01/tags/{resourceArn}
 # operationId: TagResource
-export def "2020-08-01-tags tag-resource" [
+export def "tag-resource" [
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2402,7 +2402,7 @@ export def "2020-08-01-tags tag-resource" [
 #
 # POST /2020-08-01/studios/{studioId}/streaming-sessions/{sessionId}/start
 # operationId: StartStreamingSession
-export def "2020-08-01-studios-streaming-sessions-start start" [
+export def "start-streaming-session" [
   studio_id: string
   session_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2454,7 +2454,7 @@ export def "2020-08-01-studios-streaming-sessions-start start" [
 #
 # PUT /2020-08-01/studios/{studioId}/sso-configuration
 # operationId: StartStudioSSOConfigurationRepair
-export def "2020-08-01-studios-sso-configuration start-repair" [
+export def "start-studio-sso-configuration-repair" [
   studio_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2500,7 +2500,7 @@ export def "2020-08-01-studios-sso-configuration start-repair" [
 #
 # POST /2020-08-01/studios/{studioId}/streaming-sessions/{sessionId}/stop
 # operationId: StopStreamingSession
-export def "2020-08-01-studios-streaming-sessions-stop stop" [
+export def "stop-streaming-session" [
   studio_id: string
   session_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2552,7 +2552,7 @@ export def "2020-08-01-studios-streaming-sessions-stop stop" [
 #
 # DELETE /2020-08-01/tags/{resourceArn}
 # operationId: UntagResource
-export def "2020-08-01-tags untag-resource" [
+export def "untag-resource" [
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

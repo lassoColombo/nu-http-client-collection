@@ -133,7 +133,7 @@ def auth-scheme-completer [] { ["x-vtex-api-appkey" "x-vtex-api-apptoken"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "checkout-pvt-configuration-window-to-change-seller get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-window-to-change-seller" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -157,7 +157,7 @@ export def commands []: nothing -> table {
 #
 # GET /api/checkout/pvt/configuration/window-to-change-seller
 # operationId: GetWindowToChangeSeller
-export def "checkout-pvt-configuration-window-to-change-seller get" [
+export def "get-window-to-change-seller" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
   --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
@@ -195,7 +195,7 @@ export def "checkout-pvt-configuration-window-to-change-seller get" [
 #
 # POST /api/checkout/pvt/configuration/window-to-change-seller
 # operationId: UpdateWindowToChangeSeller
-export def "checkout-pvt-configuration-window-to-change-seller update" [
+export def "update-window-to-change-seller" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
   --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
@@ -239,7 +239,7 @@ export def "checkout-pvt-configuration-window-to-change-seller update" [
 #
 # GET /api/oms/pvt/admin/reports/completed
 # operationId: StatusCompleted
-export def "oms-pvt-admin-reports-completed get-status" [
+export def "status-completed" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
   --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
@@ -277,7 +277,7 @@ export def "oms-pvt-admin-reports-completed get-status" [
 #
 # GET /api/oms/pvt/admin/reports/inprogress
 # operationId: StatusInProgress
-export def "oms-pvt-admin-reports-inprogress get-status-in-progress" [
+export def "status-in-progress" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
   --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
@@ -315,7 +315,7 @@ export def "oms-pvt-admin-reports-inprogress get-status-in-progress" [
 #
 # GET /api/oms/pvt/feed/orders/status
 # operationId: Getfeedorderstatus
-export def "oms-pvt-feed-orders-status get-feedorderstatus" [
+export def "getfeedorderstatus" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
   --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
@@ -355,7 +355,7 @@ export def "oms-pvt-feed-orders-status get-feedorderstatus" [
 #
 # GET /api/oms/pvt/orders
 # operationId: ListOrders
-export def "oms-pvt-orders list" [
+export def "list-orders" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
   --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
@@ -416,7 +416,7 @@ export def "oms-pvt-orders list" [
 #
 # GET /api/oms/pvt/orders/{orderId}
 # operationId: GetOrder
-export def "oms-pvt-orders get" [
+export def "get-order" [
   order_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -456,7 +456,7 @@ export def "oms-pvt-orders get" [
 #
 # POST /api/oms/pvt/orders/{orderId}/cancel
 # operationId: CancelOrder
-export def "oms-pvt-orders-cancel cancel" [
+export def "cancel-order" [
   order_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -504,7 +504,7 @@ export def "oms-pvt-orders-cancel cancel" [
 # operationId: RegisterChange
 # --itemsAdded item shape: {id: string, price: int, quantity: int}
 # --itemsRemoved item shape: {id: string, price: int, quantity: int}
-export def "oms-pvt-orders-changes create" [
+export def "register-change" [
   order_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -555,7 +555,7 @@ export def "oms-pvt-orders-changes create" [
 #
 # GET /api/oms/pvt/orders/{orderId}/conversation-message
 # operationId: GetConversation
-export def "oms-pvt-orders-conversation-message get" [
+export def "get-conversation" [
   order_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -597,7 +597,7 @@ export def "oms-pvt-orders-conversation-message get" [
 #
 # POST /api/oms/pvt/orders/{orderId}/interactions
 # operationId: AddLog
-export def "oms-pvt-orders-interactions create-log" [
+export def "add-log" [
   order_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -645,7 +645,7 @@ export def "oms-pvt-orders-interactions create-log" [
 # POST /api/oms/pvt/orders/{orderId}/invoice
 # operationId: InvoiceNotification
 # --items item shape: {description?: string, id: string, price: int, quantity: int}
-export def "oms-pvt-orders-invoice create-notification" [
+export def "invoice-notification" [
   order_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -702,7 +702,7 @@ export def "oms-pvt-orders-invoice create-notification" [
 #
 # PATCH /api/oms/pvt/orders/{orderId}/invoice/{invoiceNumber}
 # operationId: Updatepartialinvoice.SendTrackingNumber
-export def "oms-pvt-orders-invoice send-tracking-number" [
+export def "updatepartialinvoice-send-tracking-number" [
   order_id: string
   invoice_number: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -754,7 +754,7 @@ export def "oms-pvt-orders-invoice send-tracking-number" [
 # PUT /api/oms/pvt/orders/{orderId}/invoice/{invoiceNumber}/tracking
 # operationId: UpdateTrackingStatus
 # --events item shape: {city: string, date: string, description: string, state: string}
-export def "oms-pvt-orders-invoice-tracking update-status" [
+export def "update-tracking-status" [
   order_id: string
   invoice_number: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -804,7 +804,7 @@ export def "oms-pvt-orders-invoice-tracking update-status" [
 #
 # GET /api/oms/pvt/orders/{orderId}/payment-transaction
 # operationId: GetPaymenttransaction
-export def "oms-pvt-orders-payment-transaction get-paymenttransaction" [
+export def "get-paymenttransaction" [
   order_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -844,7 +844,7 @@ export def "oms-pvt-orders-payment-transaction get-paymenttransaction" [
 #
 # POST /api/oms/pvt/orders/{orderId}/payments/{paymentId}/payment-notification
 # operationId: SendPaymentNotification
-export def "oms-pvt-orders-payments-payment-notification send" [
+export def "send-payment-notification" [
   order_id: string
   payment_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -886,7 +886,7 @@ export def "oms-pvt-orders-payments-payment-notification send" [
 #
 # POST /api/oms/pvt/orders/{orderId}/start-handling
 # operationId: StartHandling
-export def "oms-pvt-orders-start-handling start" [
+export def "start-handling" [
   order_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -926,7 +926,7 @@ export def "oms-pvt-orders-start-handling start" [
 #
 # GET /api/oms/user/orders
 # operationId: Userorderslist
-export def "oms-user-orders get-userorderslist" [
+export def "userorderslist" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
   --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
@@ -968,7 +968,7 @@ export def "oms-user-orders get-userorderslist" [
 #
 # GET /api/oms/user/orders/{orderId}
 # operationId: Userorderdetails
-export def "oms-user-orders get-userorderdetails" [
+export def "userorderdetails" [
   order_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -1010,7 +1010,7 @@ export def "oms-user-orders get-userorderdetails" [
 #
 # POST /api/orders/expressions/jsonata
 # operationId: TestJSONataExpression
-export def "orders-expressions-jsonata test-jso-nata" [
+export def "test-jso-nata-expression" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
   --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
@@ -1055,7 +1055,7 @@ export def "orders-expressions-jsonata test-jso-nata" [
 #
 # GET /api/orders/feed
 # operationId: Getfeedorderstatus1
-export def "orders-feed get-getfeedorderstatus1" [
+export def "getfeedorderstatus1" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
   --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
@@ -1095,7 +1095,7 @@ export def "orders-feed get-getfeedorderstatus1" [
 #
 # POST /api/orders/feed
 # operationId: Commititemfeedorderstatus
-export def "orders-feed create-commititemfeedorderstatus" [
+export def "commititemfeedorderstatus" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
   --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
@@ -1139,7 +1139,7 @@ export def "orders-feed create-commititemfeedorderstatus" [
 #
 # DELETE /api/orders/feed/config
 # operationId: FeedConfigurationDelete
-export def "orders-feed-config delete-configuration" [
+export def "feed-configuration-delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
   --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
@@ -1177,7 +1177,7 @@ export def "orders-feed-config delete-configuration" [
 #
 # GET /api/orders/feed/config
 # operationId: GetFeedConfiguration
-export def "orders-feed-config get-configuration" [
+export def "get-feed-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
   --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
@@ -1217,7 +1217,7 @@ export def "orders-feed-config get-configuration" [
 # operationId: FeedConfiguration
 # --filter shape: {disableSingleFire?: bool, expression?: string, status?: list<string>, type: string}
 # --queue shape: {MessageRetentionPeriodInSeconds: int, visibilityTimeoutInSeconds: int}
-export def "orders-feed-config create-configuration" [
+export def "feed-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
   --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
@@ -1262,7 +1262,7 @@ export def "orders-feed-config create-configuration" [
 #
 # DELETE /api/orders/hook/config
 # operationId: DeleteHookConfiguration
-export def "orders-hook-config delete-configuration" [
+export def "delete-hook-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
   --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
@@ -1300,7 +1300,7 @@ export def "orders-hook-config delete-configuration" [
 #
 # GET /api/orders/hook/config
 # operationId: GetHookConfiguration
-export def "orders-hook-config get-configuration" [
+export def "get-hook-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
   --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
@@ -1344,7 +1344,7 @@ export def "orders-hook-config get-configuration" [
 # operationId: HookConfiguration
 # --filter shape: {disableSingleFire?: bool, expression?: string, status?: list<string>, type: string}
 # --hook shape: {headers: record, url: string}
-export def "orders-hook-config create-configuration" [
+export def "hook-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
   --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)

@@ -109,7 +109,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "days-supply get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "days-supply-days-supply-get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -133,7 +133,7 @@ export def commands []: nothing -> table {
 #
 # GET /daysSupply
 # operationId: daysSupply_daysSupply_get
-export def "days-supply get" [
+export def "days-supply-days-supply-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -171,7 +171,7 @@ export def "days-supply get" [
 #
 # GET /daysToSell
 # operationId: daysToSell_daysToSell_get
-export def "days-to-sell get" [
+export def "days-to-sell-days-to-sell-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -209,7 +209,7 @@ export def "days-to-sell get" [
 #
 # GET /getBrands
 # operationId: getBrandNames_getBrands_get
-export def "get-brands get-names" [
+export def "get-brand-names-get-brands-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -245,7 +245,7 @@ export def "get-brands get-names" [
 #
 # GET /getDealers
 # operationId: getDealers_getDealers_get
-export def "get-dealers get" [
+export def "get-dealers-get-dealers-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -282,7 +282,7 @@ export def "get-dealers get" [
 #
 # GET /getDealersByID
 # operationId: getDealers_getDealersByID_get
-export def "get-dealers-by-id get" [
+export def "get-dealers-get-dealers-by-id-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -319,7 +319,7 @@ export def "get-dealers-by-id get" [
 #
 # GET /getDealersByRegion
 # operationId: getDealers_getDealersByRegion_get
-export def "get-dealers-by-region get" [
+export def "get-dealers-get-dealers-by-region-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -357,7 +357,7 @@ export def "get-dealers-by-region get" [
 #
 # GET /getInactiveModels
 # operationId: getModelNamesAll_getInactiveModels_get
-export def "get-inactive-models list-names" [
+export def "get-model-names-all-get-inactive-models-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -394,7 +394,7 @@ export def "get-inactive-models list-names" [
 #
 # GET /getModels
 # operationId: getModelNames_getModels_get
-export def "get-models get-names" [
+export def "get-model-names-get-models-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -431,7 +431,7 @@ export def "get-models get-names" [
 #
 # GET /getRegionBrandMarketShare
 # operationId: getRegionBrandMarketShare_getRegionBrandMarketShare_get
-export def "get-region-brand-market-share get" [
+export def "get-region-brand-market-share-get-region-brand-market-share-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -469,7 +469,7 @@ export def "get-region-brand-market-share get" [
 #
 # GET /getRegionMarketShare
 # operationId: getRegionMarketShare_getRegionMarketShare_get
-export def "get-region-market-share get" [
+export def "get-region-market-share-get-region-market-share-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -506,7 +506,7 @@ export def "get-region-market-share get" [
 #
 # GET /getRegions
 # operationId: getRegions_getRegions_get
-export def "get-regions get" [
+export def "get-regions-get-regions-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -542,7 +542,7 @@ export def "get-regions get" [
 #
 # GET /getSubUserKeys
 # operationId: getSubUserKeys_getSubUserKeys_get
-export def "get-sub-user-keys get" [
+export def "get-sub-user-keys-get-sub-user-keys-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -579,7 +579,7 @@ export def "get-sub-user-keys get" [
 #
 # GET /getToken
 # operationId: makeToken_getToken_get
-export def "get-token get-make" [
+export def "make-token-get-token-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -616,7 +616,7 @@ export def "get-token get-make" [
 #
 # POST /getToken
 # operationId: makeToken_getToken_post
-export def "get-token create-make" [
+export def "make-token-get-token-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -653,7 +653,7 @@ export def "get-token create-make" [
 #
 # GET /listPrice
 # operationId: getAvgListPrice_listPrice_get
-export def "list-price get-avg" [
+export def "get-avg-list-price-list-price-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -691,7 +691,7 @@ export def "list-price get-avg" [
 #
 # GET /listings
 # operationId: getListingsByDealer_listings_get
-export def "listings get-by-dealer" [
+export def "get-listings-by-dealer-listings-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -730,7 +730,7 @@ export def "listings get-by-dealer" [
 #
 # GET /listings2
 # operationId: getListings2_listings2_get
-export def "listings2 get" [
+export def "get-listings2-listings2-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -783,7 +783,7 @@ export def "listings2 get" [
 #
 # GET /listingsByDate
 # operationId: getListingsByDealer_listingsByDate_get
-export def "listings-by-date get-dealer" [
+export def "get-listings-by-dealer-listings-by-date-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -824,7 +824,7 @@ export def "listings-by-date get-dealer" [
 #
 # GET /listingsByRegion
 # operationId: getListingsByRegion_listingsByRegion_get
-export def "listings-by-region get" [
+export def "get-listings-by-region-listings-by-region-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -865,7 +865,7 @@ export def "listings-by-region get" [
 #
 # GET /listingsByRegionAndDate
 # operationId: getListingsByRegionAndDate_listingsByRegionAndDate_get
-export def "listings-by-region-and-date get" [
+export def "get-listings-by-region-and-date-listings-by-region-and-date-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -907,7 +907,7 @@ export def "listings-by-region-and-date get" [
 #
 # GET /listingsByZipCode
 # operationId: listingsByZipCode_listingsByZipCode_get
-export def "listings-by-zip-code get" [
+export def "listings-by-zip-code-listings-by-zip-code-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -947,7 +947,7 @@ export def "listings-by-zip-code get" [
 #
 # GET /listingsByZipCodeAndDate
 # operationId: listingsByZipCodeAndDate_listingsByZipCodeAndDate_get
-export def "listings-by-zip-code-and-date get" [
+export def "listings-by-zip-code-and-date-listings-by-zip-code-and-date-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -989,7 +989,7 @@ export def "listings-by-zip-code-and-date get" [
 #
 # POST /makeSubUserKey
 # operationId: makeSubUserKey_makeSubUserKey_post
-export def "make-sub-user-key create" [
+export def "make-sub-user-key-make-sub-user-key-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1031,7 +1031,7 @@ export def "make-sub-user-key create" [
 #
 # GET /modelYearDist
 # operationId: getModelUsedDist_modelYearDist_get
-export def "model-year-dist get-used" [
+export def "get-model-used-dist-model-year-dist-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1070,7 +1070,7 @@ export def "model-year-dist get-used" [
 #
 # GET /regionDailySales
 # operationId: getDealerSales_regionDailySales_get
-export def "region-daily-sales get-dealer" [
+export def "get-dealer-sales-region-daily-sales-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1109,7 +1109,7 @@ export def "region-daily-sales get-dealer" [
 #
 # GET /regionSales
 # operationId: getDealerSales_regionSales_get
-export def "region-sales get-dealer" [
+export def "get-dealer-sales-region-sales-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1148,7 +1148,7 @@ export def "region-sales get-dealer" [
 #
 # PUT /revokeSubUserKey
 # operationId: revokeSubUserKey_revokeSubUserKey_put
-export def "revoke-sub-user-key update" [
+export def "revoke-sub-user-key-revoke-sub-user-key-put" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1186,7 +1186,7 @@ export def "revoke-sub-user-key update" [
 #
 # GET /salePrice
 # operationId: getAvgSalePrice_salePrice_get
-export def "sale-price get-avg" [
+export def "get-avg-sale-price-sale-price-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1224,7 +1224,7 @@ export def "sale-price get-avg" [
 #
 # GET /salePriceHistogram
 # operationId: getModelSaleBuckets_salePriceHistogram_get
-export def "sale-price-histogram get-model-buckets" [
+export def "get-model-sale-buckets-sale-price-histogram-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1263,7 +1263,7 @@ export def "sale-price-histogram get-model-buckets" [
 #
 # GET /similarSalePrice
 # operationId: getMarket3_similarSalePrice_get
-export def "similar-sale-price get-market3" [
+export def "get-market3-similar-sale-price-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1303,7 +1303,7 @@ export def "similar-sale-price get-market3" [
 #
 # GET /topModels
 # operationId: getTopModels_topModels_get
-export def "top-models get" [
+export def "get-top-models-top-models-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1340,7 +1340,7 @@ export def "top-models get" [
 #
 # GET /valuation
 # operationId: getMarket4_valuation_get
-export def "valuation get-market4" [
+export def "get-market4-valuation-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1391,7 +1391,7 @@ export def "valuation get-market4" [
 #
 # GET /vehicleHistory
 # operationId: getHistory2_vehicleHistory_get
-export def "vehicle-history get-history2" [
+export def "get-history2-vehicle-history-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1428,7 +1428,7 @@ export def "vehicle-history get-history2" [
 #
 # GET /vehicleSeen
 # operationId: getVehicleSeen_vehicleSeen_get
-export def "vehicle-seen get" [
+export def "get-vehicle-seen-vehicle-seen-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1466,7 +1466,7 @@ export def "vehicle-seen get" [
 #
 # GET /vinDecode
 # operationId: vinDecode_vinDecode_get
-export def "vin-decode get" [
+export def "vin-decode-vin-decode-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

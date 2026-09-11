@@ -157,7 +157,7 @@ def size-completer [] { ["icon" "medium" "preview" "thumb"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "files-files create-upload" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "post-files-v3-files-upload" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -181,7 +181,7 @@ export def commands []: nothing -> table {
 #
 # POST /files/v3/files
 # operationId: post-/files/v3/files_upload
-export def "files-files create-upload" [
+export def "post-files-v3-files-upload" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -226,7 +226,7 @@ export def "files-files create-upload" [
 #
 # POST /files/v3/files/import-from-url/async
 # operationId: post-/files/v3/files/import-from-url/async_importFromUrl
-export def "files-files-import-from-url-async create" [
+export def "post-files-v3-files-import-from-url-async-import-from-url" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -272,7 +272,7 @@ export def "files-files-import-from-url-async create" [
 #
 # GET /files/v3/files/import-from-url/async/tasks/{taskId}/status
 # operationId: get-/files/v3/files/import-from-url/async/tasks/{taskId}/status_checkImport
-export def "files-files-import-from-url-async-tasks-status get-check" [
+export def "get-files-v3-files-import-from-url-async-tasks-status-check-import" [
   task_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -308,7 +308,7 @@ export def "files-files-import-from-url-async-tasks-status get-check" [
 #
 # GET /files/v3/files/search
 # operationId: get-/files/v3/files/search_doSearch
-export def "files-files-search get-do" [
+export def "get-files-v3-files-search-do-search" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -367,7 +367,7 @@ export def "files-files-search get-do" [
 #
 # DELETE /files/v3/files/{fileId}
 # operationId: delete-/files/v3/files/{fileId}_archive
-export def "files-files delete-archive" [
+export def "delete-files-v3-files-archive" [
   file_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -403,7 +403,7 @@ export def "files-files delete-archive" [
 #
 # GET /files/v3/files/{fileId}
 # operationId: get-/files/v3/files/{fileId}_getById
-export def "files-files get" [
+export def "get-files-v3-files-get-by-id" [
   file_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -441,7 +441,7 @@ export def "files-files get" [
 #
 # PATCH /files/v3/files/{fileId}
 # operationId: patch-/files/v3/files/{fileId}_updateProperties
-export def "files-files update-properties" [
+export def "patch-files-v3-files-update-properties" [
   file_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -485,7 +485,7 @@ export def "files-files update-properties" [
 #
 # PUT /files/v3/files/{fileId}
 # operationId: put-/files/v3/files/{fileId}_replace
-export def "files-files update" [
+export def "put-files-v3-files-replace" [
   file_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -529,7 +529,7 @@ export def "files-files update" [
 #
 # DELETE /files/v3/files/{fileId}/gdpr-delete
 # operationId: delete-/files/v3/files/{fileId}/gdpr-delete_archiveGDPR
-export def "files-files-gdpr-delete archive" [
+export def "delete-files-v3-files-gdpr-delete-archive-gdpr" [
   file_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -565,7 +565,7 @@ export def "files-files-gdpr-delete archive" [
 #
 # GET /files/v3/files/{fileId}/signed-url
 # operationId: get-/files/v3/files/{fileId}/signed-url_getSignedUrl
-export def "files-files-signed-url get" [
+export def "get-files-v3-files-signed-url-get-signed-url" [
   file_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -605,7 +605,7 @@ export def "files-files-signed-url get" [
 #
 # POST /files/v3/folders
 # operationId: post-/files/v3/folders_create
-export def "files-folders create" [
+export def "post-files-v3-folders-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -645,7 +645,7 @@ export def "files-folders create" [
 #
 # GET /files/v3/folders/search
 # operationId: get-/files/v3/folders/search_doSearch
-export def "files-folders-search get-do" [
+export def "get-files-v3-folders-search-do-search" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -695,7 +695,7 @@ export def "files-folders-search get-do" [
 #
 # POST /files/v3/folders/update/async
 # operationId: post-/files/v3/folders/update/async_updateProperties
-export def "files-folders-update-async create-properties" [
+export def "post-files-v3-folders-update-async-update-properties" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -735,7 +735,7 @@ export def "files-folders-update-async create-properties" [
 #
 # GET /files/v3/folders/update/async/tasks/{taskId}/status
 # operationId: get-/files/v3/folders/update/async/tasks/{taskId}/status_checkUpdateStatus
-export def "files-folders-update-async-tasks-status get-check" [
+export def "get-files-v3-folders-update-async-tasks-status-check-update-status" [
   task_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -771,7 +771,7 @@ export def "files-folders-update-async-tasks-status get-check" [
 #
 # DELETE /files/v3/folders/{folderId}
 # operationId: delete-/files/v3/folders/{folderId}_archive
-export def "files-folders delete-archive" [
+export def "delete-files-v3-folders-archive" [
   folder_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -807,7 +807,7 @@ export def "files-folders delete-archive" [
 #
 # GET /files/v3/folders/{folderId}
 # operationId: get-/files/v3/folders/{folderId}_getById
-export def "files-folders get" [
+export def "get-files-v3-folders-get-by-id" [
   folder_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -845,7 +845,7 @@ export def "files-folders get" [
 #
 # DELETE /files/v3/folders/{folderPath}
 # operationId: delete-/files/v3/folders/{folderPath}_archiveByPath
-export def "files-folders delete-path-archive-by-path" [
+export def "delete-files-v3-folders-archive-by-path" [
   folder_path: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -881,7 +881,7 @@ export def "files-folders delete-path-archive-by-path" [
 #
 # GET /files/v3/folders/{folderPath}
 # operationId: get-/files/v3/folders/{folderPath}_getByPath
-export def "files-folders get-path-by-path" [
+export def "get-files-v3-folders-get-by-path" [
   folder_path: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

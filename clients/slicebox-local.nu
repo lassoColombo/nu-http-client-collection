@@ -145,7 +145,7 @@ def accept-completer [] { ["application/json" "application/octet-stream"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "anonymization-anonymize create" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "post-anonymization-anonymize" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -168,7 +168,7 @@ export def commands []: nothing -> table {
 # anonymize the images corresponding to the supplied list of image IDs (each paired with a list of DICOM tag translation). This route corresponds to repeated use of the route /images/{id}/anonymize.
 #
 # POST /anonymization/anonymize
-export def "anonymization-anonymize create" [
+export def "post-anonymization-anonymize" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -206,7 +206,7 @@ export def "anonymization-anonymize create" [
 # get a list of anonymization keys, each specifying how vital DICOM attributes have been anonymized for a particular image
 #
 # GET /anonymization/keys
-export def "anonymization-keys list" [
+export def "get-anonymization-keys" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -246,7 +246,7 @@ export def "anonymization-keys list" [
 # export all anonymization keys as a csv file
 #
 # GET /anonymization/keys/export/csv
-export def "anonymization-keys-export-csv get" [
+export def "get-anonymization-keys-export-csv" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -282,7 +282,7 @@ export def "anonymization-keys-export-csv get" [
 # POST /anonymization/keys/query
 # --order shape: {orderAscending?: bool, orderBy?: string}
 # --queryProperties item shape: {operator?: string, propertyName?: string, propertyValue?: string}
-export def "anonymization-keys-query create" [
+export def "post-anonymization-keys-query" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -323,7 +323,7 @@ export def "anonymization-keys-query create" [
 # delete an anonymization key that is no longer of interest
 #
 # DELETE /anonymization/keys/{id}
-export def "anonymization-keys delete" [
+export def "delete-anonymization-keys-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -359,7 +359,7 @@ export def "anonymization-keys delete" [
 # get the anonymization key with the supplied ID
 #
 # GET /anonymization/keys/{id}
-export def "anonymization-keys get" [
+export def "get-anonymization-keys-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -395,7 +395,7 @@ export def "anonymization-keys get" [
 # get pointers to the images corresponding to the anonymization key with the supplied ID
 #
 # GET /anonymization/keys/{id}/keyvalues
-export def "anonymization-keys-keyvalues get" [
+export def "get-anonymization-keys-id-keyvalues" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -431,7 +431,7 @@ export def "anonymization-keys-keyvalues get" [
 # list all supported anonymization options defining an anonymization profile
 #
 # GET /anonymization/options
-export def "anonymization-options get" [
+export def "get-anonymization-options" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -465,7 +465,7 @@ export def "anonymization-options get" [
 # get a list of box connections
 #
 # GET /boxes
-export def "boxes get" [
+export def "get-boxes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -503,7 +503,7 @@ export def "boxes get" [
 #
 # POST /boxes/connect
 # --defaultProfile shape: {options?: list}
-export def "boxes-connect create" [
+export def "post-boxes-connect" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -544,7 +544,7 @@ export def "boxes-connect create" [
 #
 # POST /boxes/createconnection
 # --defaultProfile shape: {options?: list}
-export def "boxes-create-connection create" [
+export def "post-boxes-createconnection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -583,7 +583,7 @@ export def "boxes-create-connection create" [
 # get incoming transactions (finished, currently receiving, waiting or failed)
 #
 # GET /boxes/incoming
-export def "boxes-incoming get" [
+export def "get-boxes-incoming" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -620,7 +620,7 @@ export def "boxes-incoming get" [
 # delete an incoming transaction. If a currently active transaction is deleted, a new transaction with the remainder of the images is created when receiving the next incoming image.
 #
 # DELETE /boxes/incoming/{id}
-export def "boxes-incoming delete" [
+export def "delete-boxes-incoming-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -656,7 +656,7 @@ export def "boxes-incoming delete" [
 # get the received images corresponding to the incoming transaction with the supplied ID
 #
 # GET /boxes/incoming/{id}/images
-export def "boxes-incoming-images get" [
+export def "get-boxes-incoming-id-images" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -692,7 +692,7 @@ export def "boxes-incoming-images get" [
 # get outgoing transactions (finished, currently sending, waiting or failed)
 #
 # GET /boxes/outgoing
-export def "boxes-outgoing get" [
+export def "get-boxes-outgoing" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -729,7 +729,7 @@ export def "boxes-outgoing get" [
 # delete an outgoing transaction. This will stop ongoing transactions.
 #
 # DELETE /boxes/outgoing/{id}
-export def "boxes-outgoing delete" [
+export def "delete-boxes-outgoing-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -765,7 +765,7 @@ export def "boxes-outgoing delete" [
 # get the sent images corresponding to the outgoing transaction with the supplied ID
 #
 # GET /boxes/outgoing/{id}/images
-export def "boxes-outgoing-images get" [
+export def "get-boxes-outgoing-id-images" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -801,7 +801,7 @@ export def "boxes-outgoing-images get" [
 # Delete the remote box with the supplied ID
 #
 # DELETE /boxes/{id}
-export def "boxes delete" [
+export def "delete-boxes-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -839,7 +839,7 @@ export def "boxes delete" [
 # POST /boxes/{id}/send
 # --imageTagValuesSet item shape: {imageId?: int, tagValues?: list}
 # --profile shape: {options?: list}
-export def "boxes-send create" [
+export def "post-boxes-id-send" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -880,7 +880,7 @@ export def "boxes-send create" [
 # Returns a list of currently available destinations. Possible destinations are box - sending data to a remote box, and scu - sending data a receiving SCP.
 #
 # GET /destinations
-export def "destinations get" [
+export def "get-destinations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -914,7 +914,7 @@ export def "destinations get" [
 # get a list of watch directories. Each watch directory and its sub-directories are watched for incoming DICOM files, which are read and imported into slicebox.
 #
 # GET /directorywatches
-export def "directorywatches get" [
+export def "get-directorywatches" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -951,7 +951,7 @@ export def "directorywatches get" [
 # add a new directory to watch for incoming DICOM files
 #
 # POST /directorywatches
-export def "directorywatches create" [
+export def "post-directorywatches" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -990,7 +990,7 @@ export def "directorywatches create" [
 # stop watching and remove the directory corresponding to the supplied ID
 #
 # DELETE /directorywatches/{id}
-export def "directorywatches delete" [
+export def "delete-directorywatches-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1026,7 +1026,7 @@ export def "directorywatches delete" [
 # Get a list of source to filter associations.
 #
 # GET /filtering/associations
-export def "filtering-associations get" [
+export def "get-filtering-associations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1063,7 +1063,7 @@ export def "filtering-associations get" [
 # Inserts or updates a source <-> filter associations. If the specified Source already has an association this is updated, otherwise a new is inserted.
 #
 # POST /filtering/associations
-export def "filtering-associations create" [
+export def "post-filtering-associations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1104,7 +1104,7 @@ export def "filtering-associations create" [
 # remove the source <-> filter association corresponding to the supplied ID
 #
 # DELETE /filtering/associations/{id}
-export def "filtering-associations delete" [
+export def "delete-filtering-associations-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1140,7 +1140,7 @@ export def "filtering-associations delete" [
 # List defined filters
 #
 # GET /filtering/filters
-export def "filtering-filters get" [
+export def "get-filtering-filters" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1178,7 +1178,7 @@ export def "filtering-filters get" [
 #
 # POST /filtering/filters
 # --tags item shape: {previous?: record, tag?: int}
-export def "filtering-filters create" [
+export def "post-filtering-filters" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1219,7 +1219,7 @@ export def "filtering-filters create" [
 # remove the filter corresponding to the supplied ID
 #
 # DELETE /filtering/filters/{id}
-export def "filtering-filters delete" [
+export def "delete-filtering-filters-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1255,7 +1255,7 @@ export def "filtering-filters delete" [
 # List tagpaths for the selected filter
 #
 # GET /filtering/filters/{id}/tagpaths
-export def "filtering-filters-tagpaths get" [
+export def "get-filtering-filters-id-tagpaths" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1292,7 +1292,7 @@ export def "filtering-filters-tagpaths get" [
 #
 # POST /filtering/filters/{id}/tagpaths
 # --previous shape: {item?: string, previous?: record, tag?: int}
-export def "filtering-filters-tagpaths create" [
+export def "post-filtering-filters-id-tagpaths" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1333,7 +1333,7 @@ export def "filtering-filters-tagpaths create" [
 # remove the tagpath corresponding to the supplied ID
 #
 # DELETE /filtering/filters/{id}/tagpaths/{tagpathid}
-export def "filtering-filters-tagpaths delete" [
+export def "delete-filtering-filters-id-tagpaths-tagpathid" [
   id: int
   tagpathid: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -1371,7 +1371,7 @@ export def "filtering-filters-tagpaths delete" [
 # remove the forwarding rule corresponding to the supplied ID
 #
 # DELETE /forwarding/rule/{id}
-export def "forwarding-rule delete" [
+export def "delete-forwarding-rule-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1407,7 +1407,7 @@ export def "forwarding-rule delete" [
 # get a list of all forwarding rules. A forwarding rule specifies the automatic forwarding of images from a source (SCP, BOX, etc.) to a destimation (BOX, SCU, etc.)
 #
 # GET /forwarding/rules
-export def "forwarding-rules get" [
+export def "get-forwarding-rules" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1446,7 +1446,7 @@ export def "forwarding-rules get" [
 # POST /forwarding/rules
 # --destination shape: {destinationId?: int, destinationName?: string, destinationType?: string}
 # --source shape: {sourceId?: int, sourceName?: string, sourceType?: string}
-export def "forwarding-rules create" [
+export def "post-forwarding-rules" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1487,7 +1487,7 @@ export def "forwarding-rules create" [
 # add a DICOM dataset to slicebox
 #
 # POST /images
-export def "images create" [
+export def "post-images" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1527,7 +1527,7 @@ export def "images create" [
 # bulk delete a sequence of images according to the supplied image IDs. This is the same as a sequence of DELETE requests to /images/{id}
 #
 # POST /images/delete
-export def "images-delete create" [
+export def "post-images-delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1565,7 +1565,7 @@ export def "images-delete create" [
 # download the export set with the supplied export set ID as a zip archive
 #
 # GET /images/export
-export def "images-export get" [
+export def "get-images-export" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1600,7 +1600,7 @@ export def "images-export get" [
 # create an export set, a group of image IDs of images to export. The export set will contain the selected images. The export set is available for download 12 hours before it is automatically deleted.
 #
 # POST /images/export
-export def "images-export create" [
+export def "post-images-export" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1638,7 +1638,7 @@ export def "images-export create" [
 # add a JPEG image to slicebox. The image data will be wrapped in a DICOM file and added as a new series belonging to the study with the supplied ID
 #
 # POST /images/jpeg
-export def "images-jpeg create" [
+export def "post-images-jpeg" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1679,7 +1679,7 @@ export def "images-jpeg create" [
 # Delete the image with the supplied ID
 #
 # DELETE /images/{id}
-export def "images delete" [
+export def "delete-images-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1715,7 +1715,7 @@ export def "images delete" [
 # fetch dataset corresponding to the supplied image ID
 #
 # GET /images/{id}
-export def "images get" [
+export def "get-images-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1752,7 +1752,7 @@ export def "images get" [
 # PUT /images/{id}/anonymize
 # --profile shape: {options?: list}
 # --tagValues item shape: {tagPath?: record, value?: string}
-export def "images-anonymize update" [
+export def "put-images-id-anonymize" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1795,7 +1795,7 @@ export def "images-anonymize update" [
 # POST /images/{id}/anonymized
 # --profile shape: {options?: list}
 # --tagValues item shape: {tagPath?: record, value?: string}
-export def "images-anonymized create" [
+export def "post-images-id-anonymized" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1836,7 +1836,7 @@ export def "images-anonymized create" [
 # list all DICOM attributes of the dataset corresponding to the supplied image ID
 #
 # GET /images/{id}/attributes
-export def "images-attributes get" [
+export def "get-images-id-attributes" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1872,7 +1872,7 @@ export def "images-attributes get" [
 # get basic information about the pixel data of an image
 #
 # GET /images/{id}/imageinformation
-export def "images-imageinformation get" [
+export def "get-images-id-imageinformation" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1908,7 +1908,7 @@ export def "images-imageinformation get" [
 # modify and/or insert image attributes according to the input tagpath-value mappings
 #
 # PUT /images/{id}/modify
-export def "images-modify update" [
+export def "put-images-id-modify" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1948,7 +1948,7 @@ export def "images-modify update" [
 # get a PNG image representation of the image corresponding to the supplied ID
 #
 # GET /images/{id}/png
-export def "images-png get" [
+export def "get-images-id-png" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1988,7 +1988,7 @@ export def "images-png get" [
 # Returns a list of available import sessions.
 #
 # GET /import/sessions
-export def "import-sessions list" [
+export def "get-import-sessions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2025,7 +2025,7 @@ export def "import-sessions list" [
 # create a new import sessions
 #
 # POST /import/sessions
-export def "import-sessions create" [
+export def "post-import-sessions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2071,7 +2071,7 @@ export def "import-sessions create" [
 # deletes the import session with the supplied ID
 #
 # DELETE /import/sessions/{id}
-export def "import-sessions delete" [
+export def "delete-import-sessions-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2107,7 +2107,7 @@ export def "import-sessions delete" [
 # Returns the import sessions with the supplied ID
 #
 # GET /import/sessions/{id}
-export def "import-sessions get" [
+export def "get-import-sessions-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2143,7 +2143,7 @@ export def "import-sessions get" [
 # get the imported images corresponding to the import session with the supplied ID
 #
 # GET /import/sessions/{id}/images
-export def "import-sessions-images get" [
+export def "get-import-sessions-id-images" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2179,7 +2179,7 @@ export def "import-sessions-images get" [
 # add a DICOM dataset to the import session with the supplied ID
 #
 # POST /import/sessions/{id}/images
-export def "import-sessions-images create" [
+export def "post-import-sessions-id-images" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2221,7 +2221,7 @@ export def "import-sessions-images create" [
 # delete all log messages
 #
 # DELETE /log
-export def "log delete" [
+export def "delete-log" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2255,7 +2255,7 @@ export def "log delete" [
 # get a list of slicebox log messages
 #
 # GET /log
-export def "log get" [
+export def "get-log" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2294,7 +2294,7 @@ export def "log get" [
 # Delete the log entry with the supplied ID
 #
 # DELETE /log/{id}
-export def "log delete-by-id" [
+export def "delete-log-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2330,7 +2330,7 @@ export def "log delete-by-id" [
 # Returns a list of flattened metadata on the patient, study and series levels
 #
 # GET /metadata/flatseries
-export def "metadata-flatseries list" [
+export def "get-metadata-flatseries" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2376,7 +2376,7 @@ export def "metadata-flatseries list" [
 # --filters shape: {seriesTagIds?: list<int>, seriesTypeIds?: list<int>, sourceRefs?: list}
 # --order shape: {orderAscending?: bool, orderBy?: string}
 # --queryProperties item shape: {operator?: string, propertyName?: string, propertyValue?: string}
-export def "metadata-flatseries-query create" [
+export def "post-metadata-flatseries-query" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2418,7 +2418,7 @@ export def "metadata-flatseries-query create" [
 # Return the flat series with the supplied ID
 #
 # GET /metadata/flatseries/{id}
-export def "metadata-flatseries get" [
+export def "get-metadata-flatseries-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2454,7 +2454,7 @@ export def "metadata-flatseries get" [
 # Returns a list of metadata on the image level of the DICOM hierarchy
 #
 # GET /metadata/images
-export def "metadata-images list" [
+export def "get-metadata-images" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2495,7 +2495,7 @@ export def "metadata-images list" [
 # --filters shape: {seriesTagIds?: list<int>, seriesTypeIds?: list<int>, sourceRefs?: list}
 # --order shape: {orderAscending?: bool, orderBy?: string}
 # --queryProperties item shape: {operator?: string, propertyName?: string, propertyValue?: string}
-export def "metadata-images-query create" [
+export def "post-metadata-images-query" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2537,7 +2537,7 @@ export def "metadata-images-query create" [
 # Return the image with the supplied ID
 #
 # GET /metadata/images/{id}
-export def "metadata-images get" [
+export def "get-metadata-images-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2573,7 +2573,7 @@ export def "metadata-images get" [
 # Returns a list of metadata on the patient level of the DICOM hierarchy
 #
 # GET /metadata/patients
-export def "metadata-patients list" [
+export def "get-metadata-patients" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2619,7 +2619,7 @@ export def "metadata-patients list" [
 # --filters shape: {seriesTagIds?: list<int>, seriesTypeIds?: list<int>, sourceRefs?: list}
 # --order shape: {orderAscending?: bool, orderBy?: string}
 # --queryProperties item shape: {operator?: string, propertyName?: string, propertyValue?: string}
-export def "metadata-patients-query create" [
+export def "post-metadata-patients-query" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2661,7 +2661,7 @@ export def "metadata-patients-query create" [
 # Return the patient with the supplied ID
 #
 # GET /metadata/patients/{id}
-export def "metadata-patients get" [
+export def "get-metadata-patients-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2697,7 +2697,7 @@ export def "metadata-patients get" [
 # Returns all images for the patient with the supplied patient ID
 #
 # GET /metadata/patients/{id}/images
-export def "metadata-patients-images get" [
+export def "get-metadata-patients-id-images" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2737,7 +2737,7 @@ export def "metadata-patients-images get" [
 # Returns a list of metadata on the series level of the DICOM hierarchy
 #
 # GET /metadata/series
-export def "metadata-series list" [
+export def "get-metadata-series" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2781,7 +2781,7 @@ export def "metadata-series list" [
 # --filters shape: {seriesTagIds?: list<int>, seriesTypeIds?: list<int>, sourceRefs?: list}
 # --order shape: {orderAscending?: bool, orderBy?: string}
 # --queryProperties item shape: {operator?: string, propertyName?: string, propertyValue?: string}
-export def "metadata-series-query create" [
+export def "post-metadata-series-query" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2823,7 +2823,7 @@ export def "metadata-series-query create" [
 # Return the series with the supplied ID
 #
 # GET /metadata/series/{id}
-export def "metadata-series get" [
+export def "get-metadata-series-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2859,7 +2859,7 @@ export def "metadata-series get" [
 # get the list of series tags for the series with the supplied ID.
 #
 # GET /metadata/series/{id}/seriestags
-export def "metadata-series-seriestags get" [
+export def "get-metadata-series-id-seriestags" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2895,7 +2895,7 @@ export def "metadata-series-seriestags get" [
 # add a series tag to the series with the supplied ID
 #
 # POST /metadata/series/{id}/seriestags
-export def "metadata-series-seriestags create" [
+export def "post-metadata-series-id-seriestags" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2936,7 +2936,7 @@ export def "metadata-series-seriestags create" [
 # Delete all series types for the series with the supplied ID
 #
 # DELETE /metadata/series/{id}/seriestypes
-export def "metadata-series-seriestypes delete-by-id" [
+export def "delete-metadata-series-id-seriestypes" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2972,7 +2972,7 @@ export def "metadata-series-seriestypes delete-by-id" [
 # get the list of series types for the series with the supplied ID.
 #
 # GET /metadata/series/{id}/seriestypes
-export def "metadata-series-seriestypes get" [
+export def "get-metadata-series-id-seriestypes" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3008,7 +3008,7 @@ export def "metadata-series-seriestypes get" [
 # Return the source of the series with the supplied ID
 #
 # GET /metadata/series/{id}/source
-export def "metadata-series-source get" [
+export def "get-metadata-series-id-source" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3044,7 +3044,7 @@ export def "metadata-series-source get" [
 # Delete the series tag with the supplied series tag ID from the series with the supplied series ID
 #
 # DELETE /metadata/series/{seriesId}/seriestags/{seriesTagId}
-export def "metadata-series-seriestags delete" [
+export def "delete-metadata-series-series-id-seriestags-series-tag-id" [
   series_id: int
   series_tag_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -3082,7 +3082,7 @@ export def "metadata-series-seriestags delete" [
 # Delete the series type with the supplied series type ID from the series with the supplied series ID
 #
 # DELETE /metadata/series/{seriesId}/seriestypes/{seriesTypeId}
-export def "metadata-series-seriestypes delete-by-series-id-series-type-id" [
+export def "delete-metadata-series-series-id-seriestypes-series-type-id" [
   series_id: int
   series_type_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -3120,7 +3120,7 @@ export def "metadata-series-seriestypes delete-by-series-id-series-type-id" [
 # Add the series type with the supplied series type ID to the series with the supplied series ID
 #
 # PUT /metadata/series/{seriesId}/seriestypes/{seriesTypeId}
-export def "metadata-series-seriestypes update" [
+export def "put-metadata-series-series-id-seriestypes-series-type-id" [
   series_id: int
   series_type_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -3158,7 +3158,7 @@ export def "metadata-series-seriestypes update" [
 # Returns a list of series tags currently currently in use.
 #
 # GET /metadata/seriestags
-export def "metadata-seriestags get" [
+export def "get-metadata-seriestags" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3192,7 +3192,7 @@ export def "metadata-seriestags get" [
 # Returns a list of metadata on the study level of the DICOM hierarchy
 #
 # GET /metadata/studies
-export def "metadata-studies list" [
+export def "get-metadata-studies" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3236,7 +3236,7 @@ export def "metadata-studies list" [
 # --filters shape: {seriesTagIds?: list<int>, seriesTypeIds?: list<int>, sourceRefs?: list}
 # --order shape: {orderAscending?: bool, orderBy?: string}
 # --queryProperties item shape: {operator?: string, propertyName?: string, propertyValue?: string}
-export def "metadata-studies-query create" [
+export def "post-metadata-studies-query" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3278,7 +3278,7 @@ export def "metadata-studies-query create" [
 # Return the study with the supplied ID
 #
 # GET /metadata/studies/{id}
-export def "metadata-studies get" [
+export def "get-metadata-studies-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3314,7 +3314,7 @@ export def "metadata-studies get" [
 # Returns all images for the study with the supplied study ID
 #
 # GET /metadata/studies/{id}/images
-export def "metadata-studies-images get" [
+export def "get-metadata-studies-id-images" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3354,7 +3354,7 @@ export def "metadata-studies-images get" [
 # get a list of DICOM SCPs. Each SCP is a server for receiving DICOM images from e.g. a PACS system.
 #
 # GET /scps
-export def "scps get" [
+export def "get-scps" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3391,7 +3391,7 @@ export def "scps get" [
 # add a new SCP for receiving DICOM images
 #
 # POST /scps
-export def "scps create" [
+export def "post-scps" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3432,7 +3432,7 @@ export def "scps create" [
 # shut down and remove the SCP corresponding to the supplied ID
 #
 # DELETE /scps/{id}
-export def "scps delete" [
+export def "delete-scps-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3468,7 +3468,7 @@ export def "scps delete" [
 # get a list of DICOM SCUs. Each SCU is a client for sending DICOM images to an SCP, e.g. a PACS system.
 #
 # GET /scus
-export def "scus get" [
+export def "get-scus" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3505,7 +3505,7 @@ export def "scus get" [
 # add a new SCU for sending DICOM images
 #
 # POST /scus
-export def "scus create" [
+export def "post-scus" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3547,7 +3547,7 @@ export def "scus create" [
 # remove the SCU corresponding to the supplied ID
 #
 # DELETE /scus/{id}
-export def "scus delete" [
+export def "delete-scus-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3583,7 +3583,7 @@ export def "scus delete" [
 # send the images with the supplied image IDs to a DICOM SCP using the the SCU with the supplied scu ID
 #
 # POST /scus/{id}/send
-export def "scus-send create" [
+export def "post-scus-id-send" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3623,7 +3623,7 @@ export def "scus-send create" [
 # get a list of all added series types. By filtering search results for certain series types, it is easier for applications to ensure that they read images of applicable types.
 #
 # GET /seriestypes
-export def "seriestypes get" [
+export def "get-seriestypes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3660,7 +3660,7 @@ export def "seriestypes get" [
 # add a new series type
 #
 # POST /seriestypes
-export def "seriestypes create" [
+export def "post-seriestypes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3699,7 +3699,7 @@ export def "seriestypes create" [
 # get a list of rules for assigning series types to series. A rule connects to a series of attributes with values and a resulting series type. If a series has the required values of the listed attributes, it is assigned to the series type of the rule.
 #
 # GET /seriestypes/rules
-export def "seriestypes-rules get" [
+export def "get-seriestypes-rules" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3735,7 +3735,7 @@ export def "seriestypes-rules get" [
 # add a new series type rule
 #
 # POST /seriestypes/rules
-export def "seriestypes-rules create" [
+export def "post-seriestypes-rules" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3774,7 +3774,7 @@ export def "seriestypes-rules create" [
 # get the status of the internal process of updating series types for series following a change of series types, rules or attributes.
 #
 # GET /seriestypes/rules/updatestatus
-export def "seriestypes-rules-update-status get" [
+export def "get-seriestypes-rules-updatestatus" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3808,7 +3808,7 @@ export def "seriestypes-rules-update-status get" [
 # remove the series type rule corresponding to the supplied ID
 #
 # DELETE /seriestypes/rules/{id}
-export def "seriestypes-rules delete" [
+export def "delete-seriestypes-rules-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3844,7 +3844,7 @@ export def "seriestypes-rules delete" [
 # get the list of attributes for the series type rule with the supplied ID.
 #
 # GET /seriestypes/rules/{id}/attributes
-export def "seriestypes-rules-attributes get" [
+export def "get-seriestypes-rules-id-attributes" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3880,7 +3880,7 @@ export def "seriestypes-rules-attributes get" [
 # add a new series type rule attribute
 #
 # POST /seriestypes/rules/{id}/attributes
-export def "seriestypes-rules-attributes create" [
+export def "post-seriestypes-rules-id-attributes" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3925,7 +3925,7 @@ export def "seriestypes-rules-attributes create" [
 # remove the series type rule attribute corresponding to the supplied series type and attribute IDs
 #
 # DELETE /seriestypes/rules/{ruleId}/attributes/{attributeId}
-export def "seriestypes-rules-attributes delete" [
+export def "delete-seriestypes-rules-rule-id-attributes-attribute-id" [
   rule_id: int
   attribute_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -3963,7 +3963,7 @@ export def "seriestypes-rules-attributes delete" [
 # submit a query for seriestypes for a list of series
 #
 # POST /seriestypes/series/query
-export def "seriestypes-series-query create" [
+export def "post-seriestypes-series-query" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4001,7 +4001,7 @@ export def "seriestypes-series-query create" [
 # remove the series type corresponding to the supplied ID
 #
 # DELETE /seriestypes/{id}
-export def "seriestypes delete" [
+export def "delete-seriestypes-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4037,7 +4037,7 @@ export def "seriestypes delete" [
 # request an asynchronous update of all series, labelling appropriate series with the series type corresponding to the supplied ID.
 #
 # PUT /seriestypes/{id}
-export def "seriestypes update" [
+export def "put-seriestypes-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4073,7 +4073,7 @@ export def "seriestypes update" [
 # Returns a list of currently available data sources. Possible source types are user - data imported by an API call by a user, box - data received from a remote box, directory - data imported via a watched directory, import - data imported into slicebox using import sessions, or scp - data received from a PACS.
 #
 # GET /sources
-export def "sources get" [
+export def "get-sources" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4107,7 +4107,7 @@ export def "sources get" [
 # No-op route for checking whether the service is alive or not
 #
 # GET /system/health
-export def "system-health get" [
+export def "get-system-health" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4141,7 +4141,7 @@ export def "system-health get" [
 # stop and shut down slicebox
 #
 # POST /system/stop
-export def "system-stop create" [
+export def "post-system-stop" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4175,7 +4175,7 @@ export def "system-stop create" [
 # add an image (dataset) as part of a transaction. This method is used when sending images using the push method to a public slicebox.
 #
 # POST /transactions/{token}/image
-export def "transactions-image create" [
+export def "post-transactions-token-image" [
   token_arg: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4219,7 +4219,7 @@ export def "transactions-image create" [
 # fetch an image from the connected box as part of a transaction. This method is used when sending images using the poll method from a public slicebox.
 #
 # GET /transactions/{token}/outgoing
-export def "transactions-outgoing get" [
+export def "get-transactions-token-outgoing" [
   token_arg: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4259,7 +4259,7 @@ export def "transactions-outgoing get" [
 # POST /transactions/{token}/outgoing/done
 # --image shape: {id?: int, imageId?: int, outgoingTransactionId?: int, sent?: bool, sequenceNumber?: int}
 # --transaction shape: {boxId?: int, boxName?: string, id?: int, profile?: record, sentImageCount?: int, status?: string, totalImageCount?: int, updated?: int}
-export def "transactions-outgoing-done create" [
+export def "post-transactions-token-outgoing-done" [
   token_arg: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4301,7 +4301,7 @@ export def "transactions-outgoing-done create" [
 #
 # POST /transactions/{token}/outgoing/failed
 # --transactionImage shape: {image?: record, transaction?: record}
-export def "transactions-outgoing-failed create" [
+export def "post-transactions-token-outgoing-failed" [
   token_arg: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4342,7 +4342,7 @@ export def "transactions-outgoing-failed create" [
 # get next outgoing transaction and image (information on the next image that the connected box wishes to send to you), if any. This method is used when sending images using the poll method from a public slicebox.
 #
 # GET /transactions/{token}/outgoing/poll
-export def "transactions-outgoing-poll get" [
+export def "get-transactions-token-outgoing-poll" [
   token_arg: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4378,7 +4378,7 @@ export def "transactions-outgoing-poll get" [
 # get the status of the remote incoming transaction with the supplied transaction ID
 #
 # GET /transactions/{token}/status
-export def "transactions-status get" [
+export def "get-transactions-token-status" [
   token_arg: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4416,7 +4416,7 @@ export def "transactions-status get" [
 # update the status of the transaction with the supplied ID
 #
 # PUT /transactions/{token}/status
-export def "transactions-status update" [
+export def "put-transactions-token-status" [
   token_arg: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4458,7 +4458,7 @@ export def "transactions-status update" [
 # Returns all users of slicebox
 #
 # GET /users
-export def "users get" [
+export def "get-users" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4495,7 +4495,7 @@ export def "users get" [
 # Creates a new user. Dupicates are accepted but not added.
 #
 # POST /users
-export def "users create" [
+export def "post-users" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4535,7 +4535,7 @@ export def "users create" [
 # obtain information on the currently logged in user as specified by the supplied session cookie, IP address and user agent.
 #
 # GET /users/current
-export def "users-current get" [
+export def "get-users-current" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4569,7 +4569,7 @@ export def "users-current get" [
 # Obtain a session cookie that can be used to authenticate future API calls from the present IP address and with the present user agent.
 #
 # POST /users/login
-export def "users-login create" [
+export def "post-users-login" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4608,7 +4608,7 @@ export def "users-login create" [
 # Logout the current user by responding with a delete cookie header removing the session cookie for this user.
 #
 # POST /users/logout
-export def "users-logout create" [
+export def "post-users-logout" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4642,7 +4642,7 @@ export def "users-logout create" [
 # deletes a single user based on the ID supplied
 #
 # DELETE /users/{id}
-export def "users delete" [
+export def "delete-users-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

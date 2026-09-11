@@ -105,7 +105,7 @@ def transaction-type-completer [] { ["READ_AND_WRITE" "READ_ONLY"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "add-lf-tags-to-resource create" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "add-lf-tags-to-resource" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -131,7 +131,7 @@ export def commands []: nothing -> table {
 # operationId: AddLFTagsToResource
 # --Resource shape: {Catalog?: any, Database?: any, Table?: any, TableWithColumns?: any, DataLocation?: any, DataCellsFilter?: any, LFTag?: any, LFTagPolicy?: any}
 # --LFTags item shape: {CatalogId?: any, TagKey: any, TagValues: any}
-export def "add-lf-tags-to-resource create" [
+export def "add-lf-tags-to-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -180,7 +180,7 @@ export def "add-lf-tags-to-resource create" [
 #
 # POST /AssumeDecoratedRoleWithSAML
 # operationId: AssumeDecoratedRoleWithSAML
-export def "assume-decorated-role-with-saml create" [
+export def "assume-decorated-role-with-saml" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -231,7 +231,7 @@ export def "assume-decorated-role-with-saml create" [
 # POST /BatchGrantPermissions
 # operationId: BatchGrantPermissions
 # --Entries item shape: {Id: any, Principal?: any, Resource?: any, Permissions?: any, PermissionsWithGrantOption?: any}
-export def "batch-grant-permissions create" [
+export def "batch-grant-permissions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -280,7 +280,7 @@ export def "batch-grant-permissions create" [
 # POST /BatchRevokePermissions
 # operationId: BatchRevokePermissions
 # --Entries item shape: {Id: any, Principal?: any, Resource?: any, Permissions?: any, PermissionsWithGrantOption?: any}
-export def "batch-revoke-permissions delete" [
+export def "batch-revoke-permissions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -328,7 +328,7 @@ export def "batch-revoke-permissions delete" [
 #
 # POST /CancelTransaction
 # operationId: CancelTransaction
-export def "cancel-transaction cancel" [
+export def "cancel-transaction" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -375,7 +375,7 @@ export def "cancel-transaction cancel" [
 #
 # POST /CommitTransaction
 # operationId: CommitTransaction
-export def "commit-transaction commit" [
+export def "commit-transaction" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -423,7 +423,7 @@ export def "commit-transaction commit" [
 # POST /CreateDataCellsFilter
 # operationId: CreateDataCellsFilter
 # --TableData shape: {TableCatalogId?: any, DatabaseName?: any, TableName?: any, Name?: any, RowFilter?: any, ColumnNames?: any, ColumnWildcard?: any, VersionId?: any}
-export def "create-data-cells-filter create" [
+export def "create-data-cells-filter" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -470,7 +470,7 @@ export def "create-data-cells-filter create" [
 #
 # POST /CreateLFTag
 # operationId: CreateLFTag
-export def "create-lf-tag create" [
+export def "create-lf-tag" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -519,7 +519,7 @@ export def "create-lf-tag create" [
 #
 # POST /DeleteDataCellsFilter
 # operationId: DeleteDataCellsFilter
-export def "delete-data-cells-filter delete" [
+export def "delete-data-cells-filter" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -569,7 +569,7 @@ export def "delete-data-cells-filter delete" [
 #
 # POST /DeleteLFTag
 # operationId: DeleteLFTag
-export def "delete-lf-tag delete" [
+export def "delete-lf-tag" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -618,7 +618,7 @@ export def "delete-lf-tag delete" [
 # POST /DeleteObjectsOnCancel
 # operationId: DeleteObjectsOnCancel
 # --Objects item shape: {Uri: any, ETag?: any}
-export def "delete-objects-on-cancel delete" [
+export def "delete-objects-on-cancel" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -669,7 +669,7 @@ export def "delete-objects-on-cancel delete" [
 #
 # POST /DeregisterResource
 # operationId: DeregisterResource
-export def "deregister-resource create" [
+export def "deregister-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -716,7 +716,7 @@ export def "deregister-resource create" [
 #
 # POST /DescribeResource
 # operationId: DescribeResource
-export def "describe-resource get" [
+export def "describe-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -763,7 +763,7 @@ export def "describe-resource get" [
 #
 # POST /DescribeTransaction
 # operationId: DescribeTransaction
-export def "describe-transaction get" [
+export def "describe-transaction" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -810,7 +810,7 @@ export def "describe-transaction get" [
 #
 # POST /ExtendTransaction
 # operationId: ExtendTransaction
-export def "extend-transaction create" [
+export def "extend-transaction" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -857,7 +857,7 @@ export def "extend-transaction create" [
 #
 # POST /GetDataCellsFilter
 # operationId: GetDataCellsFilter
-export def "get-data-cells-filter get" [
+export def "get-data-cells-filter" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -907,7 +907,7 @@ export def "get-data-cells-filter get" [
 #
 # POST /GetDataLakeSettings
 # operationId: GetDataLakeSettings
-export def "get-data-lake-settings get" [
+export def "get-data-lake-settings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -954,7 +954,7 @@ export def "get-data-lake-settings get" [
 #
 # POST /GetEffectivePermissionsForPath
 # operationId: GetEffectivePermissionsForPath
-export def "get-effective-permissions-for-path get" [
+export def "get-effective-permissions-for-path" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1007,7 +1007,7 @@ export def "get-effective-permissions-for-path get" [
 #
 # POST /GetLFTag
 # operationId: GetLFTag
-export def "get-lf-tag get" [
+export def "get-lf-tag" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1055,7 +1055,7 @@ export def "get-lf-tag get" [
 #
 # POST /GetQueryState
 # operationId: GetQueryState
-export def "get-query-state get" [
+export def "get-query-state" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1102,7 +1102,7 @@ export def "get-query-state get" [
 #
 # POST /GetQueryStatistics
 # operationId: GetQueryStatistics
-export def "get-query-statistics get" [
+export def "get-query-statistics" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1150,7 +1150,7 @@ export def "get-query-statistics get" [
 # POST /GetResourceLFTags
 # operationId: GetResourceLFTags
 # --Resource shape: {Catalog?: any, Database?: any, Table?: any, TableWithColumns?: any, DataLocation?: any, DataCellsFilter?: any, LFTag?: any, LFTagPolicy?: any}
-export def "get-resource-lf-tags get" [
+export def "get-resource-lf-tags" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1199,7 +1199,7 @@ export def "get-resource-lf-tags get" [
 #
 # POST /GetTableObjects
 # operationId: GetTableObjects
-export def "get-table-objects get" [
+export def "get-table-objects" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1258,7 +1258,7 @@ export def "get-table-objects get" [
 # operationId: GetTemporaryGluePartitionCredentials
 # --Partition shape: {Values?: any}
 # --AuditContext shape: {AdditionalAuditContext?: any}
-export def "get-temporary-glue-partition-credentials get" [
+export def "get-temporary-glue-partition-credentials" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1311,7 +1311,7 @@ export def "get-temporary-glue-partition-credentials get" [
 # POST /GetTemporaryGlueTableCredentials
 # operationId: GetTemporaryGlueTableCredentials
 # --AuditContext shape: {AdditionalAuditContext?: any}
-export def "get-temporary-glue-table-credentials get" [
+export def "get-temporary-glue-table-credentials" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1362,7 +1362,7 @@ export def "get-temporary-glue-table-credentials get" [
 #
 # POST /GetWorkUnitResults
 # operationId: GetWorkUnitResults
-export def "get-work-unit-results get" [
+export def "get-work-unit-results" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1411,7 +1411,7 @@ export def "get-work-unit-results get" [
 #
 # POST /GetWorkUnits
 # operationId: GetWorkUnits
-export def "get-work-units get" [
+export def "get-work-units" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1465,7 +1465,7 @@ export def "get-work-units get" [
 # operationId: GrantPermissions
 # --Principal shape: {DataLakePrincipalIdentifier?: any}
 # --Resource shape: {Catalog?: any, Database?: any, Table?: any, TableWithColumns?: any, DataLocation?: any, DataCellsFilter?: any, LFTag?: any, LFTagPolicy?: any}
-export def "grant-permissions create" [
+export def "grant-permissions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1517,7 +1517,7 @@ export def "grant-permissions create" [
 # POST /ListDataCellsFilter
 # operationId: ListDataCellsFilter
 # --Table shape: {CatalogId?: any, DatabaseName?: any, Name?: any, TableWildcard?: any}
-export def "list-data-cells-filter list" [
+export def "list-data-cells-filter" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1569,7 +1569,7 @@ export def "list-data-cells-filter list" [
 #
 # POST /ListLFTags
 # operationId: ListLFTags
-export def "list-lf-tags list" [
+export def "list-lf-tags" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1624,7 +1624,7 @@ export def "list-lf-tags list" [
 # operationId: ListPermissions
 # --Principal shape: {DataLakePrincipalIdentifier?: any}
 # --Resource shape: {Catalog?: any, Database?: any, Table?: any, TableWithColumns?: any, DataLocation?: any, DataCellsFilter?: any, LFTag?: any, LFTagPolicy?: any}
-export def "list-permissions list" [
+export def "list-permissions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1681,7 +1681,7 @@ export def "list-permissions list" [
 # POST /ListResources
 # operationId: ListResources
 # --FilterConditionList item shape: {Field?: any, ComparisonOperator?: any, StringValueList?: any}
-export def "list-resources list" [
+export def "list-resources" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1733,7 +1733,7 @@ export def "list-resources list" [
 #
 # POST /ListTableStorageOptimizers
 # operationId: ListTableStorageOptimizers
-export def "list-table-storage-optimizers list" [
+export def "list-table-storage-optimizers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1788,7 +1788,7 @@ export def "list-table-storage-optimizers list" [
 #
 # POST /ListTransactions
 # operationId: ListTransactions
-export def "list-transactions list" [
+export def "list-transactions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1842,7 +1842,7 @@ export def "list-transactions list" [
 # POST /PutDataLakeSettings
 # operationId: PutDataLakeSettings
 # --DataLakeSettings shape: {DataLakeAdmins?: any, CreateDatabaseDefaultPermissions?: any, CreateTableDefaultPermissions?: any, Parameters?: any, TrustedResourceOwners?: any, AllowExternalDataFiltering?: any, ExternalDataFilteringAllowList?: any, AuthorizedSessionTagValueList?: any}
-export def "put-data-lake-settings update" [
+export def "put-data-lake-settings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1890,7 +1890,7 @@ export def "put-data-lake-settings update" [
 #
 # POST /RegisterResource
 # operationId: RegisterResource
-export def "register-resource create" [
+export def "register-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1942,7 +1942,7 @@ export def "register-resource create" [
 # operationId: RemoveLFTagsFromResource
 # --Resource shape: {Catalog?: any, Database?: any, Table?: any, TableWithColumns?: any, DataLocation?: any, DataCellsFilter?: any, LFTag?: any, LFTagPolicy?: any}
 # --LFTags item shape: {CatalogId?: any, TagKey: any, TagValues: any}
-export def "remove-lf-tags-from-resource delete" [
+export def "remove-lf-tags-from-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1993,7 +1993,7 @@ export def "remove-lf-tags-from-resource delete" [
 # operationId: RevokePermissions
 # --Principal shape: {DataLakePrincipalIdentifier?: any}
 # --Resource shape: {Catalog?: any, Database?: any, Table?: any, TableWithColumns?: any, DataLocation?: any, DataCellsFilter?: any, LFTag?: any, LFTagPolicy?: any}
-export def "revoke-permissions delete" [
+export def "revoke-permissions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2045,7 +2045,7 @@ export def "revoke-permissions delete" [
 # POST /SearchDatabasesByLFTags
 # operationId: SearchDatabasesByLFTags
 # --Expression item shape: {TagKey: any, TagValues: any}
-export def "search-databases-by-lf-tags list" [
+export def "search-databases-by-lf-tags" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2099,7 +2099,7 @@ export def "search-databases-by-lf-tags list" [
 # POST /SearchTablesByLFTags
 # operationId: SearchTablesByLFTags
 # --Expression item shape: {TagKey: any, TagValues: any}
-export def "search-tables-by-lf-tags list" [
+export def "search-tables-by-lf-tags" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2153,7 +2153,7 @@ export def "search-tables-by-lf-tags list" [
 # POST /StartQueryPlanning
 # operationId: StartQueryPlanning
 # --QueryPlanningContext shape: {CatalogId?: any, DatabaseName?: any, QueryAsOfTime?: any, QueryParameters?: any, TransactionId?: any}
-export def "start-query-planning start" [
+export def "start-query-planning" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2201,7 +2201,7 @@ export def "start-query-planning start" [
 #
 # POST /StartTransaction
 # operationId: StartTransaction
-export def "start-transaction start" [
+export def "start-transaction" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2249,7 +2249,7 @@ export def "start-transaction start" [
 # POST /UpdateDataCellsFilter
 # operationId: UpdateDataCellsFilter
 # --TableData shape: {TableCatalogId?: any, DatabaseName?: any, TableName?: any, Name?: any, RowFilter?: any, ColumnNames?: any, ColumnWildcard?: any, VersionId?: any}
-export def "update-data-cells-filter update" [
+export def "update-data-cells-filter" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2296,7 +2296,7 @@ export def "update-data-cells-filter update" [
 #
 # POST /UpdateLFTag
 # operationId: UpdateLFTag
-export def "update-lf-tag update" [
+export def "update-lf-tag" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2346,7 +2346,7 @@ export def "update-lf-tag update" [
 #
 # POST /UpdateResource
 # operationId: UpdateResource
-export def "update-resource update" [
+export def "update-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2396,7 +2396,7 @@ export def "update-resource update" [
 # POST /UpdateTableObjects
 # operationId: UpdateTableObjects
 # --WriteOperations item shape: {AddObject?: any, DeleteObject?: any}
-export def "update-table-objects update" [
+export def "update-table-objects" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2447,7 +2447,7 @@ export def "update-table-objects update" [
 #
 # POST /UpdateTableStorageOptimizer
 # operationId: UpdateTableStorageOptimizer
-export def "update-table-storage-optimizer update" [
+export def "update-table-storage-optimizer" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

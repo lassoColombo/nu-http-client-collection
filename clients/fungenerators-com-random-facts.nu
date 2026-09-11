@@ -110,7 +110,7 @@ def auth-scheme-completer [] { ["x-fungenerators-api-secret"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "fact delete" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "delete-fact" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -133,7 +133,7 @@ export def commands []: nothing -> table {
 # Delete a Fact entry identified by the id.
 #
 # DELETE /fact
-export def "fact delete" [
+export def "delete-fact" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -168,7 +168,7 @@ export def "fact delete" [
 # Get a Fact belonging to the id.
 #
 # GET /fact
-export def "fact get" [
+export def "get-fact" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -203,7 +203,7 @@ export def "fact get" [
 # Add a Fact entry to the database (private collection).
 #
 # PUT /fact
-export def "fact update" [
+export def "put-fact" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -241,7 +241,7 @@ export def "fact update" [
 # Get a random Fact.
 #
 # GET /fact/categories
-export def "fact-categories get" [
+export def "get-fact-categories" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -276,7 +276,7 @@ export def "fact-categories get" [
 # Get fact of the day for the given category.
 #
 # GET /fact/fod
-export def "fact-fod get" [
+export def "get-fact-fod" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -311,7 +311,7 @@ export def "fact-fod get" [
 # Get the list of supported fact of the day categories.
 #
 # GET /fact/fod/categories
-export def "fact-fod-categories get" [
+export def "get-fact-fod-categories" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -344,7 +344,7 @@ export def "fact-fod-categories get" [
 # Get a random fact about a number
 #
 # GET /fact/numbers
-export def "fact-numbers get" [
+export def "get-fact-numbers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -379,7 +379,7 @@ export def "fact-numbers get" [
 # Returns a random ( famous/ relatively famous ) person born on a given day and month
 #
 # GET /fact/onthisday/born
-export def "fact-onthisday-born get" [
+export def "get-fact-onthisday-born" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -415,7 +415,7 @@ export def "fact-onthisday-born get" [
 # Returns a random ( famous/ relatively famous ) person died on a given day and month
 #
 # GET /fact/onthisday/died
-export def "fact-onthisday-died get" [
+export def "get-fact-onthisday-died" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -451,7 +451,7 @@ export def "fact-onthisday-died get" [
 # Returns a random ( famous/ relatively famous ) historic event on a given day and month
 #
 # GET /fact/onthisday/event
-export def "fact-onthisday-event get" [
+export def "get-fact-onthisday-event" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -487,7 +487,7 @@ export def "fact-onthisday-event get" [
 # Get a random Fact for a given category(optional) and subcategory(optional).
 #
 # GET /fact/random
-export def "fact-random get" [
+export def "get-fact-random" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -523,7 +523,7 @@ export def "fact-random get" [
 # Search for random Fact which has the text in the query, for a given category(optional) and subcategory(optional).
 #
 # GET /fact/search
-export def "fact-search get" [
+export def "get-fact-search" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

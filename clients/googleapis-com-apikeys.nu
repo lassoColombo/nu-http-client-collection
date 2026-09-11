@@ -129,7 +129,7 @@ def alt-completer [] { ["json" "media" "proto"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "keys-lookup-key get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "apikeys-keys-lookup-key" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -153,7 +153,7 @@ export def commands []: nothing -> table {
 #
 # GET /v2/keys:lookupKey
 # operationId: apikeys.keys.lookupKey
-export def "keys-lookup-key get" [
+export def "apikeys-keys-lookup-key" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -200,7 +200,7 @@ export def "keys-lookup-key get" [
 #
 # DELETE /v2/{name}
 # operationId: apikeys.projects.locations.keys.delete
-export def "projects delete" [
+export def "apikeys-projects-locations-keys-delete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -249,7 +249,7 @@ export def "projects delete" [
 #
 # GET /v2/{name}
 # operationId: apikeys.projects.locations.keys.get
-export def "projects get" [
+export def "apikeys-projects-locations-keys-get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -298,7 +298,7 @@ export def "projects get" [
 # PATCH /v2/{name}
 # operationId: apikeys.projects.locations.keys.patch
 # --restrictions shape: {androidKeyRestrictions?: record, apiTargets?: list, browserKeyRestrictions?: record, iosKeyRestrictions?: record, serverKeyRestrictions?: record}
-export def "projects update" [
+export def "apikeys-projects-locations-keys-patch" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -353,7 +353,7 @@ export def "projects update" [
 #
 # GET /v2/{name}/keyString
 # operationId: apikeys.projects.locations.keys.getKeyString
-export def "key-string get" [
+export def "apikeys-projects-locations-keys-get-key-string" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -401,7 +401,7 @@ export def "key-string get" [
 #
 # POST /v2/{name}:undelete
 # operationId: apikeys.projects.locations.keys.undelete
-export def "projects create-undelete" [
+export def "apikeys-projects-locations-keys-undelete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -453,7 +453,7 @@ export def "projects create-undelete" [
 #
 # GET /v2/{parent}/keys
 # operationId: apikeys.projects.locations.keys.list
-export def "keys list" [
+export def "apikeys-projects-locations-keys-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -505,7 +505,7 @@ export def "keys list" [
 # POST /v2/{parent}/keys
 # operationId: apikeys.projects.locations.keys.create
 # --restrictions shape: {androidKeyRestrictions?: record, apiTargets?: list, browserKeyRestrictions?: record, iosKeyRestrictions?: record, serverKeyRestrictions?: record}
-export def "keys create" [
+export def "apikeys-projects-locations-keys-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)

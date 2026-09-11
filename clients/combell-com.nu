@@ -121,7 +121,7 @@ def file-format-completer [] { ["pfx"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "accounts list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-accounts" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -145,7 +145,7 @@ export def commands []: nothing -> table {
 #
 # GET /accounts
 # operationId: GetAccounts
-export def "accounts list" [
+export def "get-accounts" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -184,7 +184,7 @@ export def "accounts list" [
 #
 # POST /accounts
 # operationId: CreateAccount
-export def "accounts create" [
+export def "create-account" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -224,7 +224,7 @@ export def "accounts create" [
 #
 # GET /accounts/{accountId}
 # operationId: GetAccount
-export def "accounts get" [
+export def "get-account" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -261,7 +261,7 @@ export def "accounts get" [
 # Get records
 #
 # GET /dns/{domainName}/records
-export def "dns-records list" [
+export def "get-dns-domain-name-records" [
   domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -303,7 +303,7 @@ export def "dns-records list" [
 # Create a record
 #
 # POST /dns/{domainName}/records
-export def "dns-records create" [
+export def "post-dns-domain-name-records" [
   domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -354,7 +354,7 @@ export def "dns-records create" [
 # Delete a record
 #
 # DELETE /dns/{domainName}/records/{recordId}
-export def "dns-records delete" [
+export def "delete-dns-domain-name-records-record-id" [
   domain_name: string
   record_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -394,7 +394,7 @@ export def "dns-records delete" [
 # Get specific record
 #
 # GET /dns/{domainName}/records/{recordId}
-export def "dns-records get" [
+export def "get-dns-domain-name-records-record-id" [
   domain_name: string
   record_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -434,7 +434,7 @@ export def "dns-records get" [
 # Edit a record
 #
 # PUT /dns/{domainName}/records/{recordId}
-export def "dns-records update" [
+export def "put-dns-domain-name-records-record-id" [
   domain_name: string
   record_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -489,7 +489,7 @@ export def "dns-records update" [
 #
 # GET /domains
 # operationId: GetDomains
-export def "domains list" [
+export def "get-domains" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -527,7 +527,7 @@ export def "domains list" [
 # POST /domains/registrations
 # operationId: Register
 # --registrant shape: {address?: string, city?: string, company_name?: string, country_code?: string, email?: string, enterprise_number?: string, extra_fields?: list, fax?: string, first_name?: string, language_code?: string, last_name?: string, phone?: string, postal_code?: string}
-export def "domains-registrations create" [
+export def "register" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -568,7 +568,7 @@ export def "domains-registrations create" [
 # POST /domains/transfers
 # operationId: Transfer
 # --registrant shape: {address?: string, city?: string, company_name?: string, country_code?: string, email?: string, enterprise_number?: string, extra_fields?: list, fax?: string, first_name?: string, language_code?: string, last_name?: string, phone?: string, postal_code?: string}
-export def "domains-transfers create" [
+export def "transfer" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -609,7 +609,7 @@ export def "domains-transfers create" [
 #
 # GET /domains/{domainName}
 # operationId: GetDomain
-export def "domains get" [
+export def "get-domain" [
   domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -647,7 +647,7 @@ export def "domains get" [
 #
 # PUT /domains/{domainName}/nameservers
 # operationId: EditNameServers
-export def "domains-nameservers update-edit-name-servers" [
+export def "edit-name-servers" [
   domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -690,7 +690,7 @@ export def "domains-nameservers update-edit-name-servers" [
 #
 # PUT /domains/{domainName}/renew
 # operationId: ConfigureDomain
-export def "domains-renew update-configure" [
+export def "configure-domain" [
   domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -732,7 +732,7 @@ export def "domains-renew update-configure" [
 #
 # GET /linuxhostings
 # operationId: GetLinuxHostings
-export def "linuxhostings get-linux-hostings" [
+export def "get-linux-hostings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -769,7 +769,7 @@ export def "linuxhostings get-linux-hostings" [
 #
 # GET /linuxhostings/{domainName}
 # operationId: GetLinuxHosting
-export def "linuxhostings get-linux-hosting" [
+export def "get-linux-hosting" [
   domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -807,7 +807,7 @@ export def "linuxhostings get-linux-hosting" [
 #
 # PUT /linuxhostings/{domainName}/ftp/configuration
 # operationId: ConfigureFtp
-export def "linuxhostings-ftp-configuration update-configure" [
+export def "configure-ftp" [
   domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -849,7 +849,7 @@ export def "linuxhostings-ftp-configuration update-configure" [
 #
 # PUT /linuxhostings/{domainName}/phpsettings/apcu
 # operationId: ChangeApcu
-export def "linuxhostings-phpsettings-apcu update-change" [
+export def "change-apcu" [
   domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -892,7 +892,7 @@ export def "linuxhostings-phpsettings-apcu update-change" [
 #
 # GET /linuxhostings/{domainName}/phpsettings/availableversions
 # operationId: GetAvailablePhpVersions
-export def "linuxhostings-phpsettings-availableversions get-available-php-versions" [
+export def "get-available-php-versions" [
   domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -930,7 +930,7 @@ export def "linuxhostings-phpsettings-availableversions get-available-php-versio
 #
 # PUT /linuxhostings/{domainName}/phpsettings/memorylimit
 # operationId: ChangePhpMemoryLimit
-export def "linuxhostings-phpsettings-memorylimit update-change-php-memory-limit" [
+export def "change-php-memory-limit" [
   domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -972,7 +972,7 @@ export def "linuxhostings-phpsettings-memorylimit update-change-php-memory-limit
 #
 # PUT /linuxhostings/{domainName}/phpsettings/version
 # operationId: ChangePhpVersion
-export def "linuxhostings-phpsettings-version version-change-php" [
+export def "change-php-version" [
   domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1014,7 +1014,7 @@ export def "linuxhostings-phpsettings-version version-change-php" [
 #
 # GET /linuxhostings/{domainName}/scheduledtasks
 # operationId: GetScheduledTasks
-export def "linuxhostings-scheduledtasks get-scheduled-tasks" [
+export def "get-scheduled-tasks" [
   domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1052,7 +1052,7 @@ export def "linuxhostings-scheduledtasks get-scheduled-tasks" [
 #
 # POST /linuxhostings/{domainName}/scheduledtasks
 # operationId: AddScheduledTasks
-export def "linuxhostings-scheduledtasks create-scheduled-tasks" [
+export def "add-scheduled-tasks" [
   domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1097,7 +1097,7 @@ export def "linuxhostings-scheduledtasks create-scheduled-tasks" [
 #
 # DELETE /linuxhostings/{domainName}/scheduledtasks/{scheduledTaskId}
 # operationId: DeleteScheduledTask
-export def "linuxhostings-scheduledtasks delete-scheduled-task" [
+export def "delete-scheduled-task" [
   domain_name: string
   scheduled_task_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1138,7 +1138,7 @@ export def "linuxhostings-scheduledtasks delete-scheduled-task" [
 #
 # GET /linuxhostings/{domainName}/scheduledtasks/{scheduledTaskId}
 # operationId: GetScheduledTask
-export def "linuxhostings-scheduledtasks get-scheduled-task" [
+export def "get-scheduled-task" [
   domain_name: string
   scheduled_task_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1179,7 +1179,7 @@ export def "linuxhostings-scheduledtasks get-scheduled-task" [
 #
 # PUT /linuxhostings/{domainName}/scheduledtasks/{scheduledTaskId}
 # operationId: ConfigureScheduledTask
-export def "linuxhostings-scheduledtasks update-configure-scheduled-task" [
+export def "configure-scheduled-task" [
   domain_name: string
   scheduled_task_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1227,7 +1227,7 @@ export def "linuxhostings-scheduledtasks update-configure-scheduled-task" [
 #
 # PUT /linuxhostings/{domainName}/settings/gzipcompression
 # operationId: ChangeGzipCompression
-export def "linuxhostings-settings-gzipcompression update-change-gzip-compression" [
+export def "change-gzip-compression" [
   domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1269,7 +1269,7 @@ export def "linuxhostings-settings-gzipcompression update-change-gzip-compressio
 #
 # POST /linuxhostings/{domainName}/sites/{siteName}/hostheaders
 # operationId: CreateHostHeader
-export def "linuxhostings-sites-hostheaders create-host-header" [
+export def "create-host-header" [
   domain_name: string
   site_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1314,7 +1314,7 @@ export def "linuxhostings-sites-hostheaders create-host-header" [
 #
 # PUT /linuxhostings/{domainName}/sites/{siteName}/http2/configuration
 # operationId: ConfigureHttp2
-export def "linuxhostings-sites-http2-configuration update-configure" [
+export def "configure-http2" [
   domain_name: string
   site_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1359,7 +1359,7 @@ export def "linuxhostings-sites-http2-configuration update-configure" [
 #
 # PUT /linuxhostings/{domainName}/ssh/configuration
 # operationId: ConfigureSsh
-export def "linuxhostings-ssh-configuration update-configure" [
+export def "configure-ssh" [
   domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1401,7 +1401,7 @@ export def "linuxhostings-ssh-configuration update-configure" [
 #
 # GET /linuxhostings/{domainName}/ssh/keys
 # operationId: GetSshKeys
-export def "linuxhostings-ssh-keys get" [
+export def "get-ssh-keys" [
   domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1439,7 +1439,7 @@ export def "linuxhostings-ssh-keys get" [
 #
 # POST /linuxhostings/{domainName}/ssh/keys
 # operationId: AddSshKey
-export def "linuxhostings-ssh-keys create" [
+export def "add-ssh-key" [
   domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1481,7 +1481,7 @@ export def "linuxhostings-ssh-keys create" [
 #
 # DELETE /linuxhostings/{domainName}/ssh/keys/{fingerprint}
 # operationId: DeleteSshKey
-export def "linuxhostings-ssh-keys delete" [
+export def "delete-ssh-key" [
   domain_name: string
   fingerprint: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1521,7 +1521,7 @@ export def "linuxhostings-ssh-keys delete" [
 #
 # PUT /linuxhostings/{domainName}/sslsettings/{hostname}/autoredirect
 # operationId: ChangeAutoRedirect
-export def "linuxhostings-sslsettings-autoredirect update-change-auto-redirect" [
+export def "change-auto-redirect" [
   domain_name: string
   hostname: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1565,7 +1565,7 @@ export def "linuxhostings-sslsettings-autoredirect update-change-auto-redirect" 
 #
 # PUT /linuxhostings/{domainName}/sslsettings/{hostname}/letsencrypt
 # operationId: ChangeLetsEncrypt
-export def "linuxhostings-sslsettings-letsencrypt update-change-lets-encrypt" [
+export def "change-lets-encrypt" [
   domain_name: string
   hostname: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1609,7 +1609,7 @@ export def "linuxhostings-sslsettings-letsencrypt update-change-lets-encrypt" [
 #
 # POST /linuxhostings/{domainName}/subsites
 # operationId: CreateSubsite
-export def "linuxhostings-subsites create" [
+export def "create-subsite" [
   domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1652,7 +1652,7 @@ export def "linuxhostings-subsites create" [
 #
 # DELETE /linuxhostings/{domainName}/subsites/{siteName}
 # operationId: DeleteSubsite
-export def "linuxhostings-subsites delete" [
+export def "delete-subsite" [
   domain_name: string
   site_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1693,7 +1693,7 @@ export def "linuxhostings-subsites delete" [
 #
 # GET /mailboxes
 # operationId: GetMailboxes
-export def "mailboxes get" [
+export def "get-mailboxes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1729,7 +1729,7 @@ export def "mailboxes get" [
 #
 # POST /mailboxes
 # operationId: CreateMailbox
-export def "mailboxes create-mailbox" [
+export def "create-mailbox" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1769,7 +1769,7 @@ export def "mailboxes create-mailbox" [
 #
 # DELETE /mailboxes/{mailboxName}
 # operationId: DeleteMailbox
-export def "mailboxes delete-mailbox" [
+export def "delete-mailbox" [
   mailbox_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1807,7 +1807,7 @@ export def "mailboxes delete-mailbox" [
 #
 # GET /mailboxes/{mailboxName}
 # operationId: GetMailbox
-export def "mailboxes get-mailbox" [
+export def "get-mailbox" [
   mailbox_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1845,7 +1845,7 @@ export def "mailboxes get-mailbox" [
 #
 # PUT /mailboxes/{mailboxName}/autoforward
 # operationId: ConfigureMailboxAutoForward
-export def "mailboxes-autoforward update-configure-mailbox-auto-forward" [
+export def "configure-mailbox-auto-forward" [
   mailbox_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1889,7 +1889,7 @@ export def "mailboxes-autoforward update-configure-mailbox-auto-forward" [
 #
 # PUT /mailboxes/{mailboxName}/autoreply
 # operationId: ConfigureMailboxAutoReply
-export def "mailboxes-autoreply update-configure-mailbox-auto-reply" [
+export def "configure-mailbox-auto-reply" [
   mailbox_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1933,7 +1933,7 @@ export def "mailboxes-autoreply update-configure-mailbox-auto-reply" [
 #
 # PUT /mailboxes/{mailboxName}/password
 # operationId: ChangeMailboxPassword
-export def "mailboxes-password update-change-mailbox" [
+export def "change-mailbox-password" [
   mailbox_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1975,7 +1975,7 @@ export def "mailboxes-password update-change-mailbox" [
 #
 # GET /mailzones/{domainName}
 # operationId: GetMailZone
-export def "mailzones get-mail-zone" [
+export def "get-mail-zone" [
   domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2013,7 +2013,7 @@ export def "mailzones get-mail-zone" [
 #
 # POST /mailzones/{domainName}/aliases
 # operationId: CreateAlias
-export def "mailzones-aliases create-alias" [
+export def "create-alias" [
   domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2056,7 +2056,7 @@ export def "mailzones-aliases create-alias" [
 #
 # DELETE /mailzones/{domainName}/aliases/{emailAddress}
 # operationId: DeleteAlias
-export def "mailzones-aliases delete-alias" [
+export def "delete-alias" [
   domain_name: string
   email_address: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2097,7 +2097,7 @@ export def "mailzones-aliases delete-alias" [
 #
 # PUT /mailzones/{domainName}/aliases/{emailAddress}
 # operationId: ConfigureAlias
-export def "mailzones-aliases update-configure-alias" [
+export def "configure-alias" [
   domain_name: string
   email_address: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2142,7 +2142,7 @@ export def "mailzones-aliases update-configure-alias" [
 #
 # PUT /mailzones/{domainName}/antispam
 # operationId: ConfigureAntiSpam
-export def "mailzones-antispam update-configure-anti-spam" [
+export def "configure-anti-spam" [
   domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2184,7 +2184,7 @@ export def "mailzones-antispam update-configure-anti-spam" [
 #
 # POST /mailzones/{domainName}/catchall
 # operationId: CreateCatchAll
-export def "mailzones-catchall create-catch-list" [
+export def "create-catch-all" [
   domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2226,7 +2226,7 @@ export def "mailzones-catchall create-catch-list" [
 #
 # DELETE /mailzones/{domainName}/catchall/{emailAddress}
 # operationId: DeleteCatchAll
-export def "mailzones-catchall delete-catch-list" [
+export def "delete-catch-all" [
   domain_name: string
   email_address: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2267,7 +2267,7 @@ export def "mailzones-catchall delete-catch-list" [
 #
 # POST /mailzones/{domainName}/smtpdomains
 # operationId: CreateSmtpDomain
-export def "mailzones-smtpdomains create-smtp-domain" [
+export def "create-smtp-domain" [
   domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2309,7 +2309,7 @@ export def "mailzones-smtpdomains create-smtp-domain" [
 #
 # DELETE /mailzones/{domainName}/smtpdomains/{hostname}
 # operationId: DeleteSmtpDomain
-export def "mailzones-smtpdomains delete-smtp-domain" [
+export def "delete-smtp-domain" [
   domain_name: string
   hostname: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2349,7 +2349,7 @@ export def "mailzones-smtpdomains delete-smtp-domain" [
 #
 # PUT /mailzones/{domainName}/smtpdomains/{hostname}
 # operationId: ConfigureSmtpDomain
-export def "mailzones-smtpdomains update-configure-smtp-domain" [
+export def "configure-smtp-domain" [
   domain_name: string
   hostname: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2393,7 +2393,7 @@ export def "mailzones-smtpdomains update-configure-smtp-domain" [
 #
 # GET /mysqldatabases
 # operationId: GetMySqlDatabases
-export def "mysqldatabases get-my-sql-databases" [
+export def "get-my-sql-databases" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2430,7 +2430,7 @@ export def "mysqldatabases get-my-sql-databases" [
 #
 # POST /mysqldatabases
 # operationId: CreateMySqlDatabase
-export def "mysqldatabases create-my-sql-database" [
+export def "create-my-sql-database" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2470,7 +2470,7 @@ export def "mysqldatabases create-my-sql-database" [
 #
 # DELETE /mysqldatabases/{databaseName}
 # operationId: DeleteDatabase
-export def "mysqldatabases delete-database" [
+export def "delete-database" [
   database_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2508,7 +2508,7 @@ export def "mysqldatabases delete-database" [
 #
 # GET /mysqldatabases/{databaseName}
 # operationId: GetMySqlDatabase
-export def "mysqldatabases get-my-sql-database" [
+export def "get-my-sql-database" [
   database_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2546,7 +2546,7 @@ export def "mysqldatabases get-my-sql-database" [
 #
 # GET /mysqldatabases/{databaseName}/users
 # operationId: GetDatabaseUsers
-export def "mysqldatabases-users get-database" [
+export def "get-database-users" [
   database_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2584,7 +2584,7 @@ export def "mysqldatabases-users get-database" [
 #
 # POST /mysqldatabases/{databaseName}/users
 # operationId: CreateMySqlUser
-export def "mysqldatabases-users create-my-sql" [
+export def "create-my-sql-user" [
   database_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2627,7 +2627,7 @@ export def "mysqldatabases-users create-my-sql" [
 #
 # DELETE /mysqldatabases/{databaseName}/users/{userName}
 # operationId: DeleteDatabaseUser
-export def "mysqldatabases-users delete-database" [
+export def "delete-database-user" [
   database_name: string
   user_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2668,7 +2668,7 @@ export def "mysqldatabases-users delete-database" [
 #
 # PUT /mysqldatabases/{databaseName}/users/{userName}/password
 # operationId: ChangeDatabaseUserPassword
-export def "mysqldatabases-users-password update-change-database" [
+export def "change-database-user-password" [
   database_name: string
   user_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2713,7 +2713,7 @@ export def "mysqldatabases-users-password update-change-database" [
 #
 # PUT /mysqldatabases/{databaseName}/users/{userName}/status
 # operationId: ChangeDatabaseUserStatus
-export def "mysqldatabases-users-status update-change-database" [
+export def "change-database-user-status" [
   database_name: string
   user_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2757,7 +2757,7 @@ export def "mysqldatabases-users-status update-change-database" [
 # Detail of a provisioning job
 #
 # GET /provisioningjobs/{jobId}
-export def "provisioningjobs get" [
+export def "get-provisioningjobs-job-id" [
   job_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2795,7 +2795,7 @@ export def "provisioningjobs get" [
 #
 # GET /servicepacks
 # operationId: Servicepacks
-export def "servicepacks get" [
+export def "servicepacks" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2829,7 +2829,7 @@ export def "servicepacks get" [
 #
 # GET /ssh
 # operationId: GetAllSshKeys
-export def "ssh get-list-keys" [
+export def "get-all-ssh-keys" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2866,7 +2866,7 @@ export def "ssh get-list-keys" [
 #
 # GET /sslcertificaterequests
 # operationId: GetSslCertificateRequests
-export def "sslcertificaterequests get-ssl-certificate-requests" [
+export def "get-ssl-certificate-requests" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2904,7 +2904,7 @@ export def "sslcertificaterequests get-ssl-certificate-requests" [
 # POST /sslcertificaterequests
 # operationId: AddSslCertificateRequest
 # --additional_validation_attributes item shape: {name?: string, value?: string}
-export def "sslcertificaterequests create-ssl-certificate-request" [
+export def "add-ssl-certificate-request" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2945,7 +2945,7 @@ export def "sslcertificaterequests create-ssl-certificate-request" [
 #
 # GET /sslcertificaterequests/{id}
 # operationId: GetSslCertificateRequest
-export def "sslcertificaterequests get-ssl-certificate-request" [
+export def "get-ssl-certificate-request" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2981,7 +2981,7 @@ export def "sslcertificaterequests get-ssl-certificate-request" [
 #
 # PUT /sslcertificaterequests/{id}
 # operationId: VerifySslCertificateRequestDomainValidations
-export def "sslcertificaterequests verify-ssl-certificate-request-domain-validations" [
+export def "verify-ssl-certificate-request-domain-validations" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3017,7 +3017,7 @@ export def "sslcertificaterequests verify-ssl-certificate-request-domain-validat
 #
 # GET /sslcertificates
 # operationId: GetSslCertificates
-export def "sslcertificates get-ssl-certificates" [
+export def "get-ssl-certificates" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3054,7 +3054,7 @@ export def "sslcertificates get-ssl-certificates" [
 #
 # GET /sslcertificates/{sha1Fingerprint}
 # operationId: GetSslCertificate
-export def "sslcertificates get-ssl-certificate" [
+export def "get-ssl-certificate" [
   sha1_fingerprint: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3092,7 +3092,7 @@ export def "sslcertificates get-ssl-certificate" [
 #
 # GET /sslcertificates/{sha1Fingerprint}/download
 # operationId: DownloadCertificate
-export def "sslcertificates-download download-certificate" [
+export def "download-certificate" [
   sha1_fingerprint: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3132,7 +3132,7 @@ export def "sslcertificates-download download-certificate" [
 #
 # GET /windowshostings
 # operationId: GetWindowsHostings
-export def "windowshostings get-windows-hostings" [
+export def "get-windows-hostings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3169,7 +3169,7 @@ export def "windowshostings get-windows-hostings" [
 #
 # GET /windowshostings/{domainName}
 # operationId: GetWindowsHosting
-export def "windowshostings get-windows-hosting" [
+export def "get-windows-hosting" [
   domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

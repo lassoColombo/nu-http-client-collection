@@ -99,7 +99,7 @@ def accept-completer [] { ["application/json" "application/x-yaml" "application/
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "about get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-about" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -122,7 +122,7 @@ export def commands []: nothing -> table {
 # Metadata about this API&#58; version number, release date and available languages. Metadata requests are NOT billed.
 #
 # GET /about
-export def "about get" [
+export def "get-about" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -158,7 +158,7 @@ export def "about get" [
 # The entropy calculator - alias ec -, analyzes a password and calculates its entropy. Entropy calculator requests are billed.
 #
 # GET /ec
-export def "ec get" [
+export def "get-ec" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

@@ -112,7 +112,7 @@ def data-format-completer [] { ["DELIMITED_TEXT"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "workbooks-tables-rows-batchcreate create-batch" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "batch-create-table-rows" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -137,7 +137,7 @@ export def commands []: nothing -> table {
 # POST /workbooks/{workbookId}/tables/{tableId}/rows/batchcreate
 # operationId: BatchCreateTableRows
 # --rowsToCreate item shape: {batchItemId: any, cellsToCreate: any}
-export def "workbooks-tables-rows-batchcreate create-batch" [
+export def "batch-create-table-rows" [
   workbook_id: string
   table_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -189,7 +189,7 @@ export def "workbooks-tables-rows-batchcreate create-batch" [
 #
 # POST /workbooks/{workbookId}/tables/{tableId}/rows/batchdelete
 # operationId: BatchDeleteTableRows
-export def "workbooks-tables-rows-batchdelete delete-batch" [
+export def "batch-delete-table-rows" [
   workbook_id: string
   table_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -242,7 +242,7 @@ export def "workbooks-tables-rows-batchdelete delete-batch" [
 # POST /workbooks/{workbookId}/tables/{tableId}/rows/batchupdate
 # operationId: BatchUpdateTableRows
 # --rowsToUpdate item shape: {rowId: any, cellsToUpdate: any}
-export def "workbooks-tables-rows-batchupdate update-batch" [
+export def "batch-update-table-rows" [
   workbook_id: string
   table_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -295,7 +295,7 @@ export def "workbooks-tables-rows-batchupdate update-batch" [
 # POST /workbooks/{workbookId}/tables/{tableId}/rows/batchupsert
 # operationId: BatchUpsertTableRows
 # --rowsToUpsert item shape: {batchItemId: any, filter: any, cellsToUpdate: any}
-export def "workbooks-tables-rows-batchupsert update-batch" [
+export def "batch-upsert-table-rows" [
   workbook_id: string
   table_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -347,7 +347,7 @@ export def "workbooks-tables-rows-batchupsert update-batch" [
 #
 # GET /workbooks/{workbookId}/tables/{tableId}/import/{jobId}
 # operationId: DescribeTableDataImportJob
-export def "workbooks-tables-import get-data-job" [
+export def "describe-table-data-import-job" [
   workbook_id: string
   table_id: string
   job_id: string
@@ -396,7 +396,7 @@ export def "workbooks-tables-import get-data-job" [
 #
 # POST /screendata
 # operationId: GetScreenData
-export def "screendata get-screen-data" [
+export def "get-screen-data" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -448,7 +448,7 @@ export def "screendata get-screen-data" [
 #
 # POST /workbooks/{workbookId}/apps/{appId}/screens/{screenId}/automations/{automationId}
 # operationId: InvokeScreenAutomation
-export def "workbooks-apps-screens-automations create-invoke" [
+export def "invoke-screen-automation" [
   workbook_id: string
   app_id: string
   screen_id: string
@@ -505,7 +505,7 @@ export def "workbooks-apps-screens-automations create-invoke" [
 #
 # GET /workbooks/{workbookId}/tables/{tableId}/columns
 # operationId: ListTableColumns
-export def "workbooks-tables-columns list" [
+export def "list-table-columns" [
   workbook_id: string
   table_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -554,7 +554,7 @@ export def "workbooks-tables-columns list" [
 #
 # POST /workbooks/{workbookId}/tables/{tableId}/rows/list
 # operationId: ListTableRows
-export def "workbooks-tables-rows-list list" [
+export def "list-table-rows" [
   workbook_id: string
   table_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -610,7 +610,7 @@ export def "workbooks-tables-rows-list list" [
 #
 # GET /workbooks/{workbookId}/tables
 # operationId: ListTables
-export def "workbooks-tables list" [
+export def "list-tables" [
   workbook_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -658,7 +658,7 @@ export def "workbooks-tables list" [
 #
 # GET /tags/{resourceArn}
 # operationId: ListTagsForResource
-export def "tags list-for-resource" [
+export def "list-tags-for-resource" [
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -703,7 +703,7 @@ export def "tags list-for-resource" [
 #
 # POST /tags/{resourceArn}
 # operationId: TagResource
-export def "tags tag-resource" [
+export def "tag-resource" [
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -753,7 +753,7 @@ export def "tags tag-resource" [
 # POST /workbooks/{workbookId}/tables/{tableId}/rows/query
 # operationId: QueryTableRows
 # --filterFormula shape: {formula?: any, contextRowId?: any}
-export def "workbooks-tables-rows-query list" [
+export def "query-table-rows" [
   workbook_id: string
   table_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -811,7 +811,7 @@ export def "workbooks-tables-rows-query list" [
 # operationId: StartTableDataImportJob
 # --dataSource shape: {dataSourceConfig?: any}
 # --importOptions shape: {destinationOptions?: any, delimitedTextOptions?: any}
-export def "workbooks-tables-import start-data-job" [
+export def "start-table-data-import-job" [
   workbook_id: string
   table_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -865,7 +865,7 @@ export def "workbooks-tables-import start-data-job" [
 #
 # DELETE /tags/{resourceArn}
 # operationId: UntagResource
-export def "tags untag-resource" [
+export def "untag-resource" [
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

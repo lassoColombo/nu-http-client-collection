@@ -117,7 +117,7 @@ def status-completer [] { ["accepted" "buffered" "deleted" "delivered" "expired"
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "reports list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "list-reports" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -141,7 +141,7 @@ export def commands []: nothing -> table {
 #
 # GET /v2/reports
 # operationId: list-reports
-export def "reports list" [
+export def "list-reports" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -181,7 +181,7 @@ export def "reports list" [
 # POST /v2/reports
 # Discriminator (request): product
 # operationId: create-async-report
-export def "reports create-async" [
+export def "create-async-report" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -219,7 +219,7 @@ export def "reports create-async" [
 #
 # GET /v2/reports/records
 # operationId: get-records
-export def "reports-records get" [
+export def "get-records" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -263,7 +263,7 @@ export def "reports-records get" [
 #
 # DELETE /v2/reports/{report_id}
 # operationId: cancel-report
-export def "reports cancel" [
+export def "cancel-report" [
   report_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -299,7 +299,7 @@ export def "reports cancel" [
 #
 # GET /v2/reports/{report_id}
 # operationId: get-report
-export def "reports get" [
+export def "get-report" [
   report_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -335,7 +335,7 @@ export def "reports get" [
 #
 # GET /v3/media/{file_id}
 # operationId: download-report
-export def "media download-report" [
+export def "download-report" [
   file_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

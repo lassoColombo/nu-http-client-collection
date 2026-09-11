@@ -99,7 +99,7 @@ def accept-completer [] { ["application/json" "text/json" "text/plain"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "chapter get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-api-chapter-chapter-number" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -122,7 +122,7 @@ export def commands []: nothing -> table {
 # Returns a single chapter overview by chapter number.
 #
 # GET /api/Chapter/{chapterNumber}
-export def "chapter get" [
+export def "get-api-chapter-chapter-number" [
   chapter_number: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -158,7 +158,7 @@ export def "chapter get" [
 # Returns a list of index terms by start letter.
 #
 # GET /api/IndexTerm/browse
-export def "index-term-browse get" [
+export def "get-api-index-term-browse" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -196,7 +196,7 @@ export def "index-term-browse get" [
 # Returns an index term by id.
 #
 # GET /api/IndexTerm/{indexTermId}
-export def "index-term get" [
+export def "get-api-index-term-index-term-id" [
   index_term_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -232,7 +232,7 @@ export def "index-term get" [
 # Returns a list of all parts.
 #
 # GET /api/Part
-export def "part list" [
+export def "get-api-part" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -266,7 +266,7 @@ export def "part list" [
 # Returns a part by part number.
 #
 # GET /api/Part/{partNumber}
-export def "part get" [
+export def "get-api-part-part-number" [
   part_number: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -302,7 +302,7 @@ export def "part get" [
 # Returns a list of index terms which contain the search term.
 #
 # GET /api/Search/IndexTermSearchResults/{searchTerm}
-export def "search-index-term-search-results get" [
+export def "get-api-search-index-term-search-results-search-term" [
   search_term: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -341,7 +341,7 @@ export def "search-index-term-search-results get" [
 # Returns a section overview by reference.
 #
 # GET /api/Search/Paragraph/{reference}
-export def "search-paragraph get" [
+export def "get-api-search-paragraph-reference" [
   reference: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -377,7 +377,7 @@ export def "search-paragraph get" [
 # Returns a list of paragraphs which contain the search term.
 #
 # GET /api/Search/ParagraphSearchResults/{searchTerm}
-export def "search-paragraph-search-results get" [
+export def "get-api-search-paragraph-search-results-search-term" [
   search_term: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -416,7 +416,7 @@ export def "search-paragraph-search-results get" [
 # Returns a list of sections which contain the search term.
 #
 # GET /api/Search/SectionSearchResults/{searchTerm}
-export def "search-section-search-results get" [
+export def "get-api-search-section-search-results-search-term" [
   search_term: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -455,7 +455,7 @@ export def "search-section-search-results get" [
 # Returns a section by section id.
 #
 # GET /api/Section/{sectionId}
-export def "section list" [
+export def "get-api-section-section-id" [
   section_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -491,7 +491,7 @@ export def "section list" [
 # Returns a section overview by section id and step.
 #
 # GET /api/Section/{sectionId},{step}
-export def "section get" [
+export def "get-api-section-section-id-step" [
   section_id: int
   step: int
   --base-url(-b): string@base-url-completer # API base URL

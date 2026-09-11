@@ -126,7 +126,7 @@ def x-amz-target-completer-25 [] { ["Route53AutoNaming_v20170314.UpdateService"]
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "api create-http-namespace" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "create-http-namespace" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -150,7 +150,7 @@ export def commands []: nothing -> table {
 #
 # POST /
 # operationId: CreateHttpNamespace
-export def "api create-http-namespace" [
+export def "create-http-namespace" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -201,7 +201,7 @@ export def "api create-http-namespace" [
 #
 # POST /
 # operationId: CreatePrivateDnsNamespace
-export def "api create-private-dns-namespace" [
+export def "create-private-dns-namespace" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -254,7 +254,7 @@ export def "api create-private-dns-namespace" [
 #
 # POST /
 # operationId: CreatePublicDnsNamespace
-export def "api create-public-dns-namespace" [
+export def "create-public-dns-namespace" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -306,7 +306,7 @@ export def "api create-public-dns-namespace" [
 #
 # POST /
 # operationId: CreateService
-export def "api create-service" [
+export def "create-service" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -362,7 +362,7 @@ export def "api create-service" [
 #
 # POST /
 # operationId: DeleteNamespace
-export def "api delete-namespace" [
+export def "delete-namespace" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -410,7 +410,7 @@ export def "api delete-namespace" [
 #
 # POST /
 # operationId: DeleteService
-export def "api delete-service" [
+export def "delete-service" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -458,7 +458,7 @@ export def "api delete-service" [
 #
 # POST /
 # operationId: DeregisterInstance
-export def "api create-deregister-instance" [
+export def "deregister-instance" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -507,7 +507,7 @@ export def "api create-deregister-instance" [
 #
 # POST /
 # operationId: DiscoverInstances
-export def "api create-discover-instances" [
+export def "discover-instances" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -560,7 +560,7 @@ export def "api create-discover-instances" [
 #
 # POST /
 # operationId: GetInstance
-export def "api get-instance" [
+export def "get-instance" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -609,7 +609,7 @@ export def "api get-instance" [
 #
 # POST /
 # operationId: GetInstancesHealthStatus
-export def "api get-instances-health-status" [
+export def "get-instances-health-status" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -663,7 +663,7 @@ export def "api get-instances-health-status" [
 #
 # POST /
 # operationId: GetNamespace
-export def "api get-namespace" [
+export def "get-namespace" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -711,7 +711,7 @@ export def "api get-namespace" [
 #
 # POST /
 # operationId: GetOperation
-export def "api get-operation" [
+export def "get-operation" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -759,7 +759,7 @@ export def "api get-operation" [
 #
 # POST /
 # operationId: GetService
-export def "api get-service" [
+export def "get-service" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -807,7 +807,7 @@ export def "api get-service" [
 #
 # POST /
 # operationId: ListInstances
-export def "api list-instances" [
+export def "list-instances" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -860,7 +860,7 @@ export def "api list-instances" [
 #
 # POST /
 # operationId: ListNamespaces
-export def "api list-namespaces" [
+export def "list-namespaces" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -913,7 +913,7 @@ export def "api list-namespaces" [
 #
 # POST /
 # operationId: ListOperations
-export def "api list-operations" [
+export def "list-operations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -966,7 +966,7 @@ export def "api list-operations" [
 #
 # POST /
 # operationId: ListServices
-export def "api list-services" [
+export def "list-services" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1019,7 +1019,7 @@ export def "api list-services" [
 #
 # POST /
 # operationId: ListTagsForResource
-export def "api list-tags-for-resource" [
+export def "list-tags-for-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1067,7 +1067,7 @@ export def "api list-tags-for-resource" [
 #
 # POST /
 # operationId: RegisterInstance
-export def "api create-instance" [
+export def "register-instance" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1118,7 +1118,7 @@ export def "api create-instance" [
 #
 # POST /
 # operationId: TagResource
-export def "api tag-resource" [
+export def "tag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1167,7 +1167,7 @@ export def "api tag-resource" [
 #
 # POST /
 # operationId: UntagResource
-export def "api untag-resource" [
+export def "untag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1216,7 +1216,7 @@ export def "api untag-resource" [
 #
 # POST /
 # operationId: UpdateHttpNamespace
-export def "api update-http-namespace" [
+export def "update-http-namespace" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1266,7 +1266,7 @@ export def "api update-http-namespace" [
 #
 # POST /
 # operationId: UpdateInstanceCustomHealthStatus
-export def "api update-instance-custom-health-status" [
+export def "update-instance-custom-health-status" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1316,7 +1316,7 @@ export def "api update-instance-custom-health-status" [
 #
 # POST /
 # operationId: UpdatePrivateDnsNamespace
-export def "api update-private-dns-namespace" [
+export def "update-private-dns-namespace" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1366,7 +1366,7 @@ export def "api update-private-dns-namespace" [
 #
 # POST /
 # operationId: UpdatePublicDnsNamespace
-export def "api update-public-dns-namespace" [
+export def "update-public-dns-namespace" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1416,7 +1416,7 @@ export def "api update-public-dns-namespace" [
 #
 # POST /
 # operationId: UpdateService
-export def "api update-service" [
+export def "update-service" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

@@ -124,7 +124,7 @@ def certificate-purpose-completer [] { ["clientAuthentication" "serverAuthentica
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-devices-operations list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "operations-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -148,7 +148,7 @@ export def commands []: nothing -> table {
 #
 # GET /providers/Microsoft.Devices/operations
 # operationId: Operations_List
-export def "providers-microsoft-devices-operations list" [
+export def "operations-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -184,7 +184,7 @@ export def "providers-microsoft-devices-operations list" [
 #
 # POST /subscriptions/{subscriptionId}/providers/Microsoft.Devices/checkProvisioningServiceNameAvailability
 # operationId: IotDpsResource_CheckProvisioningServiceNameAvailability
-export def "subscriptions-providers-microsoft-devices-check-provisioning-service-name-availability check-iot-dps-resource" [
+export def "iot-dps-resource-check-provisioning-service-name-availability" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -226,7 +226,7 @@ export def "subscriptions-providers-microsoft-devices-check-provisioning-service
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Devices/provisioningServices
 # operationId: IotDpsResource_ListBySubscription
-export def "subscriptions-providers-microsoft-devices-provisioning-services list-iot-dps-resource" [
+export def "iot-dps-resource-list-by-subscription" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -264,7 +264,7 @@ export def "subscriptions-providers-microsoft-devices-provisioning-services list
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Devices/provisioningServices
 # operationId: IotDpsResource_ListByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-devices-provisioning-services list-iot-dps" [
+export def "iot-dps-resource-list-by-resource-group" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -304,7 +304,7 @@ export def "subscriptions-resource-groups-providers-microsoft-devices-provisioni
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Devices/provisioningServices/{provisioningServiceName}
 # operationId: IotDpsResource_Delete
-export def "subscriptions-resource-groups-providers-microsoft-devices-provisioning-services delete-iot-dps" [
+export def "iot-dps-resource-delete" [
   subscription_id: string
   resource_group_name: string
   provisioning_service_name: string
@@ -346,7 +346,7 @@ export def "subscriptions-resource-groups-providers-microsoft-devices-provisioni
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Devices/provisioningServices/{provisioningServiceName}
 # operationId: IotDpsResource_Get
-export def "subscriptions-resource-groups-providers-microsoft-devices-provisioning-services get-iot-dps" [
+export def "iot-dps-resource-get" [
   subscription_id: string
   resource_group_name: string
   provisioning_service_name: string
@@ -388,7 +388,7 @@ export def "subscriptions-resource-groups-providers-microsoft-devices-provisioni
 #
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Devices/provisioningServices/{provisioningServiceName}
 # operationId: IotDpsResource_Update
-export def "subscriptions-resource-groups-providers-microsoft-devices-provisioning-services update-iot-dps" [
+export def "iot-dps-resource-update" [
   subscription_id: string
   resource_group_name: string
   provisioning_service_name: string
@@ -436,7 +436,7 @@ export def "subscriptions-resource-groups-providers-microsoft-devices-provisioni
 # operationId: IotDpsResource_CreateOrUpdate
 # --properties shape: {allocationPolicy?: "Hashed"|"GeoLatency"|"Static", authorizationPolicies?: list, iotHubs?: list, provisioningState?: string, state?: "Activating"|"Active"|"Deleting"|"Deleted"|"ActivationFailed"|"DeletionFailed"|"Transitioning"|"Suspending"|"Suspended"|"Resuming"|"FailingOver"|"FailoverFailed"}
 # --sku shape: {capacity?: int, name?: "S1"}
-export def "subscriptions-resource-groups-providers-microsoft-devices-provisioning-services create-iot-dps-or-update" [
+export def "iot-dps-resource-create-or-update" [
   subscription_id: string
   resource_group_name: string
   provisioning_service_name: string
@@ -486,7 +486,7 @@ export def "subscriptions-resource-groups-providers-microsoft-devices-provisioni
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Devices/provisioningServices/{provisioningServiceName}/certificates
 # operationId: DpsCertificate_List
-export def "subscriptions-resource-groups-providers-microsoft-devices-provisioning-services-certificates list-dps" [
+export def "dps-certificate-list" [
   subscription_id: string
   resource_group_name: string
   provisioning_service_name: string
@@ -528,7 +528,7 @@ export def "subscriptions-resource-groups-providers-microsoft-devices-provisioni
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Devices/provisioningServices/{provisioningServiceName}/certificates/{certificateName}
 # operationId: DpsCertificate_Delete
-export def "subscriptions-resource-groups-providers-microsoft-devices-provisioning-services-certificates delete-dps" [
+export def "dps-certificate-delete" [
   subscription_id: string
   resource_group_name: string
   provisioning_service_name: string
@@ -583,7 +583,7 @@ export def "subscriptions-resource-groups-providers-microsoft-devices-provisioni
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Devices/provisioningServices/{provisioningServiceName}/certificates/{certificateName}
 # operationId: DpsCertificate_Get
-export def "subscriptions-resource-groups-providers-microsoft-devices-provisioning-services-certificates get-dps" [
+export def "dps-certificate-get" [
   subscription_id: string
   resource_group_name: string
   provisioning_service_name: string
@@ -630,7 +630,7 @@ export def "subscriptions-resource-groups-providers-microsoft-devices-provisioni
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Devices/provisioningServices/{provisioningServiceName}/certificates/{certificateName}
 # operationId: DpsCertificate_CreateOrUpdate
-export def "subscriptions-resource-groups-providers-microsoft-devices-provisioning-services-certificates create-dps-or-update" [
+export def "dps-certificate-create-or-update" [
   subscription_id: string
   resource_group_name: string
   provisioning_service_name: string
@@ -681,7 +681,7 @@ export def "subscriptions-resource-groups-providers-microsoft-devices-provisioni
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Devices/provisioningServices/{provisioningServiceName}/certificates/{certificateName}/generateVerificationCode
 # operationId: DpsCertificate_GenerateVerificationCode
-export def "subscriptions-resource-groups-providers-microsoft-devices-provisioning-services-certificates-generate-verification-code generate-dps" [
+export def "dps-certificate-generate-verification-code" [
   subscription_id: string
   resource_group_name: string
   provisioning_service_name: string
@@ -736,7 +736,7 @@ export def "subscriptions-resource-groups-providers-microsoft-devices-provisioni
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Devices/provisioningServices/{provisioningServiceName}/certificates/{certificateName}/verify
 # operationId: DpsCertificate_VerifyCertificate
-export def "subscriptions-resource-groups-providers-microsoft-devices-provisioning-services-certificates-verify verify-dps" [
+export def "dps-certificate-verify-certificate" [
   subscription_id: string
   resource_group_name: string
   provisioning_service_name: string
@@ -795,7 +795,7 @@ export def "subscriptions-resource-groups-providers-microsoft-devices-provisioni
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Devices/provisioningServices/{provisioningServiceName}/keys/{keyName}/listkeys
 # operationId: IotDpsResource_ListKeysForKeyName
-export def "subscriptions-resource-groups-providers-microsoft-devices-provisioning-services-keys-listkeys list-iot-dps-for-name" [
+export def "iot-dps-resource-list-keys-for-key-name" [
   subscription_id: string
   resource_group_name: string
   provisioning_service_name: string
@@ -839,7 +839,7 @@ export def "subscriptions-resource-groups-providers-microsoft-devices-provisioni
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Devices/provisioningServices/{provisioningServiceName}/listkeys
 # operationId: IotDpsResource_ListKeys
-export def "subscriptions-resource-groups-providers-microsoft-devices-provisioning-services-listkeys list-iot-dps-keys" [
+export def "iot-dps-resource-list-keys" [
   subscription_id: string
   resource_group_name: string
   provisioning_service_name: string
@@ -881,7 +881,7 @@ export def "subscriptions-resource-groups-providers-microsoft-devices-provisioni
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Devices/provisioningServices/{provisioningServiceName}/operationresults/{operationId}
 # operationId: IotDpsResource_GetOperationResult
-export def "subscriptions-resource-groups-providers-microsoft-devices-provisioning-services-operationresults get-iot-dps-operation-result" [
+export def "iot-dps-resource-get-operation-result" [
   subscription_id: string
   resource_group_name: string
   provisioning_service_name: string
@@ -926,7 +926,7 @@ export def "subscriptions-resource-groups-providers-microsoft-devices-provisioni
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Devices/provisioningServices/{provisioningServiceName}/skus
 # operationId: IotDpsResource_listValidSkus
-export def "subscriptions-resource-groups-providers-microsoft-devices-provisioning-services-skus list-iot-dps-valid" [
+export def "iot-dps-resource-list-valid-skus" [
   subscription_id: string
   resource_group_name: string
   provisioning_service_name: string

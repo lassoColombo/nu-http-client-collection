@@ -124,7 +124,7 @@ def action-completer [] { ["Acquire" "Break" "Change" "Release" "Renew"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resource-groups-providers-microsoft-storage-storage-accounts-blob-services list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "blob-services-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -148,7 +148,7 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Storage/storageAccounts/{accountName}/blobServices
 # operationId: BlobServices_List
-export def "subscriptions-resource-groups-providers-microsoft-storage-storage-accounts-blob-services list" [
+export def "blob-services-list" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -190,7 +190,7 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-storage-ac
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Storage/storageAccounts/{accountName}/blobServices/default/containers
 # operationId: BlobContainers_List
-export def "subscriptions-resource-groups-providers-microsoft-storage-storage-accounts-blob-services-default-containers list" [
+export def "blob-containers-list" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -235,7 +235,7 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-storage-ac
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Storage/storageAccounts/{accountName}/blobServices/default/containers/{containerName}
 # operationId: BlobContainers_Delete
-export def "subscriptions-resource-groups-providers-microsoft-storage-storage-accounts-blob-services-default-containers delete" [
+export def "blob-containers-delete" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -279,7 +279,7 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-storage-ac
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Storage/storageAccounts/{accountName}/blobServices/default/containers/{containerName}
 # operationId: BlobContainers_Get
-export def "subscriptions-resource-groups-providers-microsoft-storage-storage-accounts-blob-services-default-containers get" [
+export def "blob-containers-get" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -324,7 +324,7 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-storage-ac
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Storage/storageAccounts/{accountName}/blobServices/default/containers/{containerName}
 # operationId: BlobContainers_Update
 # --properties shape: {immutabilityPolicy?: any, legalHold?: any, metadata?: record, publicAccess?: "Container"|"Blob"|"None"}
-export def "subscriptions-resource-groups-providers-microsoft-storage-storage-accounts-blob-services-default-containers update" [
+export def "blob-containers-update" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -373,7 +373,7 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-storage-ac
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Storage/storageAccounts/{accountName}/blobServices/default/containers/{containerName}
 # operationId: BlobContainers_Create
 # --properties shape: {immutabilityPolicy?: any, legalHold?: any, metadata?: record, publicAccess?: "Container"|"Blob"|"None"}
-export def "subscriptions-resource-groups-providers-microsoft-storage-storage-accounts-blob-services-default-containers create" [
+export def "blob-containers-create" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -421,7 +421,7 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-storage-ac
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Storage/storageAccounts/{accountName}/blobServices/default/containers/{containerName}/clearLegalHold
 # operationId: BlobContainers_ClearLegalHold
-export def "subscriptions-resource-groups-providers-microsoft-storage-storage-accounts-blob-services-default-containers-clear-legal-hold create" [
+export def "blob-containers-clear-legal-hold" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -470,7 +470,7 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-storage-ac
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Storage/storageAccounts/{accountName}/blobServices/default/containers/{containerName}/immutabilityPolicies/default/extend
 # operationId: BlobContainers_ExtendImmutabilityPolicy
 # --properties shape: {immutabilityPeriodSinceCreationInDays: int}
-export def "subscriptions-resource-groups-providers-microsoft-storage-storage-accounts-blob-services-default-containers-immutability-policies-default-extend create-policy" [
+export def "blob-containers-extend-immutability-policy" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -521,7 +521,7 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-storage-ac
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Storage/storageAccounts/{accountName}/blobServices/default/containers/{containerName}/immutabilityPolicies/default/lock
 # operationId: BlobContainers_LockImmutabilityPolicy
-export def "subscriptions-resource-groups-providers-microsoft-storage-storage-accounts-blob-services-default-containers-immutability-policies-default-lock lock-policy" [
+export def "blob-containers-lock-immutability-policy" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -568,7 +568,7 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-storage-ac
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Storage/storageAccounts/{accountName}/blobServices/default/containers/{containerName}/immutabilityPolicies/{immutabilityPolicyName}
 # operationId: BlobContainers_DeleteImmutabilityPolicy
-export def "subscriptions-resource-groups-providers-microsoft-storage-storage-accounts-blob-services-default-containers-immutability-policies delete-policy" [
+export def "blob-containers-delete-immutability-policy" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -617,7 +617,7 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-storage-ac
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Storage/storageAccounts/{accountName}/blobServices/default/containers/{containerName}/immutabilityPolicies/{immutabilityPolicyName}
 # operationId: BlobContainers_GetImmutabilityPolicy
-export def "subscriptions-resource-groups-providers-microsoft-storage-storage-accounts-blob-services-default-containers-immutability-policies get-policy" [
+export def "blob-containers-get-immutability-policy" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -667,7 +667,7 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-storage-ac
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Storage/storageAccounts/{accountName}/blobServices/default/containers/{containerName}/immutabilityPolicies/{immutabilityPolicyName}
 # operationId: BlobContainers_CreateOrUpdateImmutabilityPolicy
 # --properties shape: {immutabilityPeriodSinceCreationInDays: int}
-export def "subscriptions-resource-groups-providers-microsoft-storage-storage-accounts-blob-services-default-containers-immutability-policies create-or-update-policy" [
+export def "blob-containers-create-or-update-immutability-policy" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -720,7 +720,7 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-storage-ac
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Storage/storageAccounts/{accountName}/blobServices/default/containers/{containerName}/lease
 # operationId: BlobContainers_Lease
-export def "subscriptions-resource-groups-providers-microsoft-storage-storage-accounts-blob-services-default-containers-lease create" [
+export def "blob-containers-lease" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -772,7 +772,7 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-storage-ac
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Storage/storageAccounts/{accountName}/blobServices/default/containers/{containerName}/setLegalHold
 # operationId: BlobContainers_SetLegalHold
-export def "subscriptions-resource-groups-providers-microsoft-storage-storage-accounts-blob-services-default-containers-set-legal-hold update" [
+export def "blob-containers-set-legal-hold" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -820,7 +820,7 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-storage-ac
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Storage/storageAccounts/{accountName}/blobServices/{BlobServicesName}
 # operationId: BlobServices_GetServiceProperties
-export def "subscriptions-resource-groups-providers-microsoft-storage-storage-accounts-blob-services get-properties" [
+export def "blob-services-get-service-properties" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -865,7 +865,7 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-storage-ac
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Storage/storageAccounts/{accountName}/blobServices/{BlobServicesName}
 # operationId: BlobServices_SetServiceProperties
 # --properties shape: {automaticSnapshotPolicyEnabled?: bool, changeFeed?: any, cors?: any, defaultServiceVersion?: string, deleteRetentionPolicy?: any}
-export def "subscriptions-resource-groups-providers-microsoft-storage-storage-accounts-blob-services update-properties" [
+export def "blob-services-set-service-properties" [
   subscription_id: string
   resource_group_name: string
   account_name: string

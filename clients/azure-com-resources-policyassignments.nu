@@ -110,7 +110,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-providers-microsoft-authorization-policy-assignments list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "policy-assignments-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -134,7 +134,7 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Authorization/policyAssignments
 # operationId: PolicyAssignments_List
-export def "subscriptions-providers-microsoft-authorization-policy-assignments list" [
+export def "policy-assignments-list" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -173,7 +173,7 @@ export def "subscriptions-providers-microsoft-authorization-policy-assignments l
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Authorization/policyAssignments
 # operationId: PolicyAssignments_ListForResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-authorization-policy-assignments list" [
+export def "policy-assignments-list-for-resource-group" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -214,7 +214,7 @@ export def "subscriptions-resource-groups-providers-microsoft-authorization-poli
 #
 # GET /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/{resourceProviderNamespace}/{parentResourcePath}/{resourceType}/{resourceName}/providers/Microsoft.Authorization/policyAssignments
 # operationId: PolicyAssignments_ListForResource
-export def "subscriptions-resourcegroups-providers-providers-microsoft-authorization-policy-assignments list-for-resource" [
+export def "policy-assignments-list-for-resource" [
   subscription_id: string
   resource_group_name: string
   resource_provider_namespace: string
@@ -263,7 +263,7 @@ export def "subscriptions-resourcegroups-providers-providers-microsoft-authoriza
 #
 # DELETE /{policyAssignmentId}
 # operationId: PolicyAssignments_DeleteById
-export def "policy-assignments delete" [
+export def "policy-assignments-delete-by-id" [
   policy_assignment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -301,7 +301,7 @@ export def "policy-assignments delete" [
 #
 # GET /{policyAssignmentId}
 # operationId: PolicyAssignments_GetById
-export def "policy-assignments get" [
+export def "policy-assignments-get-by-id" [
   policy_assignment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -342,7 +342,7 @@ export def "policy-assignments get" [
 # --identity shape: {type?: "SystemAssigned"|"None"}
 # --properties shape: {description?: string, displayName?: string, enforcementMode?: "Default"|"DoNotEnforce", metadata?: record, notScopes?: list<string>, parameters?: record, policyDefinitionId?: string, scope?: string}
 # --sku shape: {name: string, tier?: string}
-export def "policy-assignments create" [
+export def "policy-assignments-create-by-id" [
   policy_assignment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -387,7 +387,7 @@ export def "policy-assignments create" [
 #
 # DELETE /{scope}/providers/Microsoft.Authorization/policyAssignments/{policyAssignmentName}
 # operationId: PolicyAssignments_Delete
-export def "providers-microsoft-authorization-policy-assignments delete" [
+export def "policy-assignments-delete" [
   scope: string
   policy_assignment_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -427,7 +427,7 @@ export def "providers-microsoft-authorization-policy-assignments delete" [
 #
 # GET /{scope}/providers/Microsoft.Authorization/policyAssignments/{policyAssignmentName}
 # operationId: PolicyAssignments_Get
-export def "providers-microsoft-authorization-policy-assignments get" [
+export def "policy-assignments-get" [
   scope: string
   policy_assignment_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -470,7 +470,7 @@ export def "providers-microsoft-authorization-policy-assignments get" [
 # --identity shape: {type?: "SystemAssigned"|"None"}
 # --properties shape: {description?: string, displayName?: string, enforcementMode?: "Default"|"DoNotEnforce", metadata?: record, notScopes?: list<string>, parameters?: record, policyDefinitionId?: string, scope?: string}
 # --sku shape: {name: string, tier?: string}
-export def "providers-microsoft-authorization-policy-assignments create" [
+export def "policy-assignments-create" [
   scope: string
   policy_assignment_name: string
   --base-url(-b): string@base-url-completer # API base URL

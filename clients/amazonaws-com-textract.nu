@@ -113,7 +113,7 @@ def x-amz-target-completer-12 [] { ["Textract.StartLendingAnalysis"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "api create-analyze-document" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "analyze-document" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -137,7 +137,7 @@ export def commands []: nothing -> table {
 #
 # POST /
 # operationId: AnalyzeDocument
-export def "api create-analyze-document" [
+export def "analyze-document" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -189,7 +189,7 @@ export def "api create-analyze-document" [
 # POST /
 # operationId: AnalyzeExpense
 # --Document shape: {Bytes?: any, S3Object?: any}
-export def "api create-analyze-expense" [
+export def "analyze-expense" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -237,7 +237,7 @@ export def "api create-analyze-expense" [
 #
 # POST /
 # operationId: AnalyzeID
-export def "api create-analyze" [
+export def "analyze-id" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -285,7 +285,7 @@ export def "api create-analyze" [
 #
 # POST /
 # operationId: DetectDocumentText
-export def "api create-detect-document-text" [
+export def "detect-document-text" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -333,7 +333,7 @@ export def "api create-detect-document-text" [
 #
 # POST /
 # operationId: GetDocumentAnalysis
-export def "api get-document-analysis" [
+export def "get-document-analysis" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -383,7 +383,7 @@ export def "api get-document-analysis" [
 #
 # POST /
 # operationId: GetDocumentTextDetection
-export def "api get-document-text-detection" [
+export def "get-document-text-detection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -433,7 +433,7 @@ export def "api get-document-text-detection" [
 #
 # POST /
 # operationId: GetExpenseAnalysis
-export def "api get-expense-analysis" [
+export def "get-expense-analysis" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -483,7 +483,7 @@ export def "api get-expense-analysis" [
 #
 # POST /
 # operationId: GetLendingAnalysis
-export def "api get-lending-analysis" [
+export def "get-lending-analysis" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -533,7 +533,7 @@ export def "api get-lending-analysis" [
 #
 # POST /
 # operationId: GetLendingAnalysisSummary
-export def "api get-lending-analysis-summary" [
+export def "get-lending-analysis-summary" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -582,7 +582,7 @@ export def "api get-lending-analysis-summary" [
 # POST /
 # operationId: StartDocumentAnalysis
 # --QueriesConfig shape: {Queries: any}
-export def "api start-document-analysis" [
+export def "start-document-analysis" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -637,7 +637,7 @@ export def "api start-document-analysis" [
 #
 # POST /
 # operationId: StartDocumentTextDetection
-export def "api start-document-text-detection" [
+export def "start-document-text-detection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -690,7 +690,7 @@ export def "api start-document-text-detection" [
 #
 # POST /
 # operationId: StartExpenseAnalysis
-export def "api start-expense-analysis" [
+export def "start-expense-analysis" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -746,7 +746,7 @@ export def "api start-expense-analysis" [
 # --DocumentLocation shape: {S3Object?: any}
 # --NotificationChannel shape: {SNSTopicArn: any, RoleArn: any}
 # --OutputConfig shape: {S3Bucket: any, S3Prefix?: any}
-export def "api start-lending-analysis" [
+export def "start-lending-analysis" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

@@ -118,7 +118,7 @@ def employee-gender-completer [] { ["diverse" "female" "male"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "company-attendances get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-company-attendances" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -141,7 +141,7 @@ export def commands []: nothing -> table {
 # This endpoint is responsible for fetching attendance data for the company employees. It is possible to paginate results, filter by period, the date and/or time it was updated, and/or specific employees. The result will contain a list of attendance periods, structured as defined here.
 #
 # GET /company/attendances
-export def "company-attendances get" [
+export def "get-company-attendances" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -183,7 +183,7 @@ export def "company-attendances get" [
 #
 # POST /company/attendances
 # --attendances item shape: {break: int, comment: string, date: string, employee: int, end_time: string, start_time: string}
-export def "company-attendances create" [
+export def "post-company-attendances" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -220,7 +220,7 @@ export def "company-attendances create" [
 # This endpoint is responsible for deleting attendance data for the company employees.
 #
 # DELETE /company/attendances/{id}
-export def "company-attendances delete" [
+export def "delete-company-attendances-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -255,7 +255,7 @@ export def "company-attendances delete" [
 # This endpoint is responsible for updating attendance data for the company employees. Attributes are not required and if not specified, the current value will be used. It is not possible to change the employee id.
 #
 # PATCH /company/attendances/{id}
-export def "company-attendances update" [
+export def "patch-company-attendances-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -298,7 +298,7 @@ export def "company-attendances update" [
 # List Employees
 #
 # GET /company/employees
-export def "company-employees list" [
+export def "get-company-employees" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -331,7 +331,7 @@ export def "company-employees list" [
 # Create an employee
 #
 # POST /company/employees
-export def "company-employees create" [
+export def "post-company-employees" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -376,7 +376,7 @@ export def "company-employees create" [
 # Show employee by ID
 #
 # GET /company/employees/{employee_id}
-export def "company-employees get" [
+export def "get-company-employees-employee-id" [
   employee_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -411,7 +411,7 @@ export def "company-employees get" [
 # Show employee profile picture
 #
 # GET /company/employees/{employee_id}/profile-picture/{width}
-export def "company-employees-profile-picture get" [
+export def "get-company-employees-employee-id-profile-picture-width" [
   employee_id: int
   width: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -448,7 +448,7 @@ export def "company-employees-profile-picture get" [
 # Provides a list of available time-off types, for example 'Paid vacation', 'Parental leave' or 'Home office'
 #
 # GET /company/time-off-types
-export def "company-time-off-types get" [
+export def "get-company-time-off-types" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -484,7 +484,7 @@ export def "company-time-off-types get" [
 # This endpoint is responsible for fetching absence data for the company employees. It is possible to paginate results, filter by period and/or specific employees. The result will contain a list of absence periods, structured as defined here.
 #
 # GET /company/time-offs
-export def "company-time-offs list" [
+export def "get-company-time-offs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -525,7 +525,7 @@ export def "company-time-offs list" [
 # This endpoint is responsible for adding absence data for the company employees.
 #
 # POST /company/time-offs
-export def "company-time-offs create" [
+export def "post-company-time-offs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -568,7 +568,7 @@ export def "company-time-offs create" [
 # This endpoint is responsible for deleting absence period data for the company employees.
 #
 # DELETE /company/time-offs/{id}
-export def "company-time-offs delete" [
+export def "delete-company-time-offs-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -603,7 +603,7 @@ export def "company-time-offs delete" [
 # Absence Period
 #
 # GET /company/time-offs/{id}
-export def "company-time-offs get" [
+export def "get-company-time-offs-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

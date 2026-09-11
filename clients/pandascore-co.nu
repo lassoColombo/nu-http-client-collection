@@ -99,7 +99,7 @@ def auth-scheme-completer [] { ["bearer" "query-token"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "additions get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-additions" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -123,7 +123,7 @@ export def commands []: nothing -> table {
 #
 # GET /additions
 # operationId: get_additions
-export def "additions get" [
+export def "get-additions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -163,7 +163,7 @@ export def "additions get" [
 #
 # GET /changes
 # operationId: get_changes
-export def "changes get" [
+export def "get-changes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -203,7 +203,7 @@ export def "changes get" [
 #
 # GET /deletions
 # operationId: get_deletions
-export def "deletions get" [
+export def "get-deletions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -243,7 +243,7 @@ export def "deletions get" [
 #
 # GET /incidents
 # operationId: get_incidents
-export def "incidents get" [
+export def "get-incidents" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -283,7 +283,7 @@ export def "incidents get" [
 #
 # GET /leagues
 # operationId: get_leagues
-export def "leagues list" [
+export def "get-leagues" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -324,7 +324,7 @@ export def "leagues list" [
 #
 # GET /leagues/{league_id_or_slug}
 # operationId: get_leagues_leagueIdOrSlug
-export def "leagues get" [
+export def "get-leagues-league-id-or-slug" [
   league_id_or_slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -360,7 +360,7 @@ export def "leagues get" [
 #
 # GET /leagues/{league_id_or_slug}/matches
 # operationId: get_leagues_leagueIdOrSlug_matches
-export def "leagues-matches get" [
+export def "get-leagues-league-id-or-slug-matches" [
   league_id_or_slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -403,7 +403,7 @@ export def "leagues-matches get" [
 #
 # GET /leagues/{league_id_or_slug}/matches/past
 # operationId: get_leagues_leagueIdOrSlug_matches_past
-export def "leagues-matches-past get" [
+export def "get-leagues-league-id-or-slug-matches-past" [
   league_id_or_slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -446,7 +446,7 @@ export def "leagues-matches-past get" [
 #
 # GET /leagues/{league_id_or_slug}/matches/running
 # operationId: get_leagues_leagueIdOrSlug_matches_running
-export def "leagues-matches-running get" [
+export def "get-leagues-league-id-or-slug-matches-running" [
   league_id_or_slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -489,7 +489,7 @@ export def "leagues-matches-running get" [
 #
 # GET /leagues/{league_id_or_slug}/matches/upcoming
 # operationId: get_leagues_leagueIdOrSlug_matches_upcoming
-export def "leagues-matches-upcoming get" [
+export def "get-leagues-league-id-or-slug-matches-upcoming" [
   league_id_or_slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -532,7 +532,7 @@ export def "leagues-matches-upcoming get" [
 #
 # GET /leagues/{league_id_or_slug}/series
 # operationId: get_leagues_leagueIdOrSlug_series
-export def "leagues-series get" [
+export def "get-leagues-league-id-or-slug-series" [
   league_id_or_slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -575,7 +575,7 @@ export def "leagues-series get" [
 #
 # GET /leagues/{league_id_or_slug}/tournaments
 # operationId: get_leagues_leagueIdOrSlug_tournaments
-export def "leagues-tournaments get" [
+export def "get-leagues-league-id-or-slug-tournaments" [
   league_id_or_slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -618,7 +618,7 @@ export def "leagues-tournaments get" [
 #
 # GET /lives
 # operationId: get_lives
-export def "lives get" [
+export def "get-lives" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -655,7 +655,7 @@ export def "lives get" [
 #
 # GET /matches
 # operationId: get_matches
-export def "matches list" [
+export def "get-matches" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -696,7 +696,7 @@ export def "matches list" [
 #
 # GET /matches/past
 # operationId: get_matches_past
-export def "matches-past get" [
+export def "get-matches-past" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -737,7 +737,7 @@ export def "matches-past get" [
 #
 # GET /matches/running
 # operationId: get_matches_running
-export def "matches-running get" [
+export def "get-matches-running" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -778,7 +778,7 @@ export def "matches-running get" [
 #
 # GET /matches/upcoming
 # operationId: get_matches_upcoming
-export def "matches-upcoming get" [
+export def "get-matches-upcoming" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -819,7 +819,7 @@ export def "matches-upcoming get" [
 #
 # GET /matches/{match_id_or_slug}
 # operationId: get_matches_matchIdOrSlug
-export def "matches get" [
+export def "get-matches-match-id-or-slug" [
   match_id_or_slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -855,7 +855,7 @@ export def "matches get" [
 #
 # GET /matches/{match_id_or_slug}/opponents
 # operationId: get_matches_matchIdOrSlug_opponents
-export def "matches-opponents get" [
+export def "get-matches-match-id-or-slug-opponents" [
   match_id_or_slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -891,7 +891,7 @@ export def "matches-opponents get" [
 #
 # GET /players
 # operationId: get_players
-export def "players list" [
+export def "get-players" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -932,7 +932,7 @@ export def "players list" [
 #
 # GET /players/{player_id_or_slug}
 # operationId: get_players_playerIdOrSlug
-export def "players get" [
+export def "get-players-player-id-or-slug" [
   player_id_or_slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -968,7 +968,7 @@ export def "players get" [
 #
 # GET /players/{player_id_or_slug}/matches
 # operationId: get_players_playerIdOrSlug_matches
-export def "players-matches get" [
+export def "get-players-player-id-or-slug-matches" [
   player_id_or_slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1011,7 +1011,7 @@ export def "players-matches get" [
 #
 # GET /series
 # operationId: get_series
-export def "series list" [
+export def "get-series" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1052,7 +1052,7 @@ export def "series list" [
 #
 # GET /series/past
 # operationId: get_series_past
-export def "series-past get" [
+export def "get-series-past" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1093,7 +1093,7 @@ export def "series-past get" [
 #
 # GET /series/running
 # operationId: get_series_running
-export def "series-running get" [
+export def "get-series-running" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1134,7 +1134,7 @@ export def "series-running get" [
 #
 # GET /series/upcoming
 # operationId: get_series_upcoming
-export def "series-upcoming get" [
+export def "get-series-upcoming" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1175,7 +1175,7 @@ export def "series-upcoming get" [
 #
 # GET /series/{serie_id_or_slug}
 # operationId: get_series_serieIdOrSlug
-export def "series get" [
+export def "get-series-serie-id-or-slug" [
   serie_id_or_slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1211,7 +1211,7 @@ export def "series get" [
 #
 # GET /series/{serie_id_or_slug}/matches
 # operationId: get_series_serieIdOrSlug_matches
-export def "series-matches get" [
+export def "get-series-serie-id-or-slug-matches" [
   serie_id_or_slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1254,7 +1254,7 @@ export def "series-matches get" [
 #
 # GET /series/{serie_id_or_slug}/matches/past
 # operationId: get_series_serieIdOrSlug_matches_past
-export def "series-matches-past get" [
+export def "get-series-serie-id-or-slug-matches-past" [
   serie_id_or_slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1297,7 +1297,7 @@ export def "series-matches-past get" [
 #
 # GET /series/{serie_id_or_slug}/matches/running
 # operationId: get_series_serieIdOrSlug_matches_running
-export def "series-matches-running get" [
+export def "get-series-serie-id-or-slug-matches-running" [
   serie_id_or_slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1340,7 +1340,7 @@ export def "series-matches-running get" [
 #
 # GET /series/{serie_id_or_slug}/matches/upcoming
 # operationId: get_series_serieIdOrSlug_matches_upcoming
-export def "series-matches-upcoming get" [
+export def "get-series-serie-id-or-slug-matches-upcoming" [
   serie_id_or_slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1383,7 +1383,7 @@ export def "series-matches-upcoming get" [
 #
 # GET /series/{serie_id_or_slug}/players
 # operationId: get_series_serieIdOrSlug_players
-export def "series-players get" [
+export def "get-series-serie-id-or-slug-players" [
   serie_id_or_slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1426,7 +1426,7 @@ export def "series-players get" [
 #
 # GET /series/{serie_id_or_slug}/tournaments
 # operationId: get_series_serieIdOrSlug_tournaments
-export def "series-tournaments get" [
+export def "get-series-serie-id-or-slug-tournaments" [
   serie_id_or_slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1469,7 +1469,7 @@ export def "series-tournaments get" [
 #
 # GET /teams
 # operationId: get_teams
-export def "teams list" [
+export def "get-teams" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1510,7 +1510,7 @@ export def "teams list" [
 #
 # GET /teams/{team_id_or_slug}
 # operationId: get_teams_teamIdOrSlug
-export def "teams get" [
+export def "get-teams-team-id-or-slug" [
   team_id_or_slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1546,7 +1546,7 @@ export def "teams get" [
 #
 # GET /teams/{team_id_or_slug}/leagues
 # operationId: get_teams_teamIdOrSlug_leagues
-export def "teams-leagues get" [
+export def "get-teams-team-id-or-slug-leagues" [
   team_id_or_slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1589,7 +1589,7 @@ export def "teams-leagues get" [
 #
 # GET /teams/{team_id_or_slug}/matches
 # operationId: get_teams_teamIdOrSlug_matches
-export def "teams-matches get" [
+export def "get-teams-team-id-or-slug-matches" [
   team_id_or_slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1632,7 +1632,7 @@ export def "teams-matches get" [
 #
 # GET /teams/{team_id_or_slug}/series
 # operationId: get_teams_teamIdOrSlug_series
-export def "teams-series get" [
+export def "get-teams-team-id-or-slug-series" [
   team_id_or_slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1675,7 +1675,7 @@ export def "teams-series get" [
 #
 # GET /teams/{team_id_or_slug}/tournaments
 # operationId: get_teams_teamIdOrSlug_tournaments
-export def "teams-tournaments get" [
+export def "get-teams-team-id-or-slug-tournaments" [
   team_id_or_slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1718,7 +1718,7 @@ export def "teams-tournaments get" [
 #
 # GET /tournaments
 # operationId: get_tournaments
-export def "tournaments list" [
+export def "get-tournaments" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1759,7 +1759,7 @@ export def "tournaments list" [
 #
 # GET /tournaments/past
 # operationId: get_tournaments_past
-export def "tournaments-past get" [
+export def "get-tournaments-past" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1800,7 +1800,7 @@ export def "tournaments-past get" [
 #
 # GET /tournaments/running
 # operationId: get_tournaments_running
-export def "tournaments-running get" [
+export def "get-tournaments-running" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1841,7 +1841,7 @@ export def "tournaments-running get" [
 #
 # GET /tournaments/upcoming
 # operationId: get_tournaments_upcoming
-export def "tournaments-upcoming get" [
+export def "get-tournaments-upcoming" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1882,7 +1882,7 @@ export def "tournaments-upcoming get" [
 #
 # GET /tournaments/{tournament_id_or_slug}
 # operationId: get_tournaments_tournamentIdOrSlug
-export def "tournaments get" [
+export def "get-tournaments-tournament-id-or-slug" [
   tournament_id_or_slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1918,7 +1918,7 @@ export def "tournaments get" [
 #
 # GET /tournaments/{tournament_id_or_slug}/brackets
 # operationId: get_tournaments_tournamentIdOrSlug_brackets
-export def "tournaments-brackets get" [
+export def "get-tournaments-tournament-id-or-slug-brackets" [
   tournament_id_or_slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1961,7 +1961,7 @@ export def "tournaments-brackets get" [
 #
 # GET /tournaments/{tournament_id_or_slug}/matches
 # operationId: get_tournaments_tournamentIdOrSlug_matches
-export def "tournaments-matches get" [
+export def "get-tournaments-tournament-id-or-slug-matches" [
   tournament_id_or_slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2004,7 +2004,7 @@ export def "tournaments-matches get" [
 #
 # GET /tournaments/{tournament_id_or_slug}/players
 # operationId: get_tournaments_tournamentIdOrSlug_players
-export def "tournaments-players get" [
+export def "get-tournaments-tournament-id-or-slug-players" [
   tournament_id_or_slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2047,7 +2047,7 @@ export def "tournaments-players get" [
 #
 # GET /tournaments/{tournament_id_or_slug}/rosters
 # operationId: get_tournaments_tournamentIdOrSlug_rosters
-export def "tournaments-rosters get" [
+export def "get-tournaments-tournament-id-or-slug-rosters" [
   tournament_id_or_slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2083,7 +2083,7 @@ export def "tournaments-rosters get" [
 #
 # GET /tournaments/{tournament_id_or_slug}/standings
 # operationId: get_tournaments_tournamentIdOrSlug_standings
-export def "tournaments-standings get" [
+export def "get-tournaments-tournament-id-or-slug-standings" [
   tournament_id_or_slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2122,7 +2122,7 @@ export def "tournaments-standings get" [
 #
 # GET /tournaments/{tournament_id_or_slug}/teams
 # operationId: get_tournaments_tournamentIdOrSlug_teams
-export def "tournaments-teams get" [
+export def "get-tournaments-tournament-id-or-slug-teams" [
   tournament_id_or_slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2165,7 +2165,7 @@ export def "tournaments-teams get" [
 #
 # GET /videogames
 # operationId: get_videogames
-export def "videogames list" [
+export def "get-videogames" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2202,7 +2202,7 @@ export def "videogames list" [
 #
 # GET /videogames/{videogame_id_or_slug}
 # operationId: get_videogames_videogameIdOrSlug
-export def "videogames get" [
+export def "get-videogames-videogame-id-or-slug" [
   videogame_id_or_slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2237,7 +2237,7 @@ export def "videogames get" [
 # GET /videogames/{videogame_id_or_slug}/leagues
 #
 # operationId: get_videogames_videogameIdOrSlug_leagues
-export def "videogames-leagues get" [
+export def "get-videogames-videogame-id-or-slug-leagues" [
   videogame_id_or_slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2280,7 +2280,7 @@ export def "videogames-leagues get" [
 #
 # GET /videogames/{videogame_id_or_slug}/series
 # operationId: get_videogames_videogameIdOrSlug_series
-export def "videogames-series get" [
+export def "get-videogames-videogame-id-or-slug-series" [
   videogame_id_or_slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2323,7 +2323,7 @@ export def "videogames-series get" [
 #
 # GET /videogames/{videogame_id_or_slug}/tournaments
 # operationId: get_videogames_videogameIdOrSlug_tournaments
-export def "videogames-tournaments get" [
+export def "get-videogames-videogame-id-or-slug-tournaments" [
   videogame_id_or_slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2366,7 +2366,7 @@ export def "videogames-tournaments get" [
 #
 # GET /videogames/{videogame_id_or_slug}/versions
 # operationId: get_videogames_videogameIdOrSlug_versions
-export def "videogames-versions get" [
+export def "get-videogames-videogame-id-or-slug-versions" [
   videogame_id_or_slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

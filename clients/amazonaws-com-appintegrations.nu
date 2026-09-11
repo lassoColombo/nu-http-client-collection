@@ -116,7 +116,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "data-integrations create" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "create-data-integration" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -142,7 +142,7 @@ export def commands []: nothing -> table {
 # operationId: CreateDataIntegration
 # --ScheduleConfig shape: {FirstExecutionFrom?: any, Object?: any, ScheduleExpression?: any}
 # --FileConfiguration shape: {Folders?: any, Filters?: any}
-export def "data-integrations create" [
+export def "create-data-integration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -197,7 +197,7 @@ export def "data-integrations create" [
 #
 # GET /dataIntegrations
 # operationId: ListDataIntegrations
-export def "data-integrations list" [
+export def "list-data-integrations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -244,7 +244,7 @@ export def "data-integrations list" [
 # POST /eventIntegrations
 # operationId: CreateEventIntegration
 # --EventFilter shape: {Source?: any}
-export def "event-integrations create" [
+export def "create-event-integration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -296,7 +296,7 @@ export def "event-integrations create" [
 #
 # GET /eventIntegrations
 # operationId: ListEventIntegrations
-export def "event-integrations list" [
+export def "list-event-integrations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -342,7 +342,7 @@ export def "event-integrations list" [
 #
 # DELETE /dataIntegrations/{Identifier}
 # operationId: DeleteDataIntegration
-export def "data-integrations delete" [
+export def "delete-data-integration" [
   identifier: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -387,7 +387,7 @@ export def "data-integrations delete" [
 #
 # GET /dataIntegrations/{Identifier}
 # operationId: GetDataIntegration
-export def "data-integrations get" [
+export def "get-data-integration" [
   identifier: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -432,7 +432,7 @@ export def "data-integrations get" [
 #
 # PATCH /dataIntegrations/{Identifier}
 # operationId: UpdateDataIntegration
-export def "data-integrations update" [
+export def "update-data-integration" [
   identifier: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -482,7 +482,7 @@ export def "data-integrations update" [
 #
 # DELETE /eventIntegrations/{Name}
 # operationId: DeleteEventIntegration
-export def "event-integrations delete" [
+export def "delete-event-integration" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -527,7 +527,7 @@ export def "event-integrations delete" [
 #
 # GET /eventIntegrations/{Name}
 # operationId: GetEventIntegration
-export def "event-integrations get" [
+export def "get-event-integration" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -572,7 +572,7 @@ export def "event-integrations get" [
 #
 # PATCH /eventIntegrations/{Name}
 # operationId: UpdateEventIntegration
-export def "event-integrations update" [
+export def "update-event-integration" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -621,7 +621,7 @@ export def "event-integrations update" [
 #
 # GET /dataIntegrations/{Identifier}/associations
 # operationId: ListDataIntegrationAssociations
-export def "data-integrations-associations list" [
+export def "list-data-integration-associations" [
   identifier: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -669,7 +669,7 @@ export def "data-integrations-associations list" [
 #
 # GET /eventIntegrations/{Name}/associations
 # operationId: ListEventIntegrationAssociations
-export def "event-integrations-associations list" [
+export def "list-event-integration-associations" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -717,7 +717,7 @@ export def "event-integrations-associations list" [
 #
 # GET /tags/{resourceArn}
 # operationId: ListTagsForResource
-export def "tags list-for-resource" [
+export def "list-tags-for-resource" [
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -762,7 +762,7 @@ export def "tags list-for-resource" [
 #
 # POST /tags/{resourceArn}
 # operationId: TagResource
-export def "tags tag-resource" [
+export def "tag-resource" [
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -811,7 +811,7 @@ export def "tags tag-resource" [
 #
 # DELETE /tags/{resourceArn}
 # operationId: UntagResource
-export def "tags untag-resource" [
+export def "untag-resource" [
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

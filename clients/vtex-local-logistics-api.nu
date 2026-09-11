@@ -127,7 +127,7 @@ def auth-scheme-completer [] { ["x-vtex-api-appkey" "x-vtex-api-apptoken"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "logistics-capacity-resources-carriercapacity-typeshipping-policy-id-time-frames get-by-capacity-type-shipping-policy-id" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-api-logistics-capacity-resources-carrier-capacity-type-shipping-policy-id-time-frames" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -150,7 +150,7 @@ export def commands []: nothing -> table {
 # Search capacity reservations in time range
 #
 # GET /api/logistics-capacity/resources/carrier@{capacityType}@{shippingPolicyId}/time-frames
-export def "logistics-capacity-resources-carriercapacity-typeshipping-policy-id-time-frames get-by-capacity-type-shipping-policy-id" [
+export def "get-api-logistics-capacity-resources-carrier-capacity-type-shipping-policy-id-time-frames" [
   capacity_type: string
   shipping_policy_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -194,7 +194,7 @@ export def "logistics-capacity-resources-carriercapacity-typeshipping-policy-id-
 # Get capacity reservation usage by window
 #
 # GET /api/logistics-capacity/resources/carrier@{capacityType}@{shippingPolicyId}/time-frames/{windowDay}F{windowStartTime}T{windowEndTime}
-export def "logistics-capacity-resources-carriercapacity-typeshipping-policy-id-time-frames get-by-capacity-type-shipping-policy-id-window-day-window-start-time-window-end-time" [
+export def "get-api-logistics-capacity-resources-carrier-capacity-type-shipping-policy-id-time-frames-window-day-f-window-start-time-t-window-end-time" [
   capacity_type: string
   shipping_policy_id: string
   window_day: string
@@ -242,7 +242,7 @@ export def "logistics-capacity-resources-carriercapacity-typeshipping-policy-id-
 #
 # POST /api/logistics/pvt/configuration/carriers/{carrierId}/adddayofweekblocked
 # operationId: AddBlockedDeliveryWindows
-export def "logistics-pvt-configuration-carriers-adddayofweekblocked create-blocked-delivery-windows" [
+export def "add-blocked-delivery-windows" [
   carrier_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -288,7 +288,7 @@ export def "logistics-pvt-configuration-carriers-adddayofweekblocked create-bloc
 #
 # GET /api/logistics/pvt/configuration/carriers/{carrierId}/getdayofweekblocked
 # operationId: RetrieveBlockedDeliveryWindows
-export def "logistics-pvt-configuration-carriers-get-dayofweekblocked get-blocked-delivery-windows" [
+export def "retrieve-blocked-delivery-windows" [
   carrier_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -328,7 +328,7 @@ export def "logistics-pvt-configuration-carriers-get-dayofweekblocked get-blocke
 #
 # POST /api/logistics/pvt/configuration/carriers/{carrierId}/removedayofweekblocked
 # operationId: RemoveBlockedDeliveryWindows
-export def "logistics-pvt-configuration-carriers-remove-dayofweekblocked delete-blocked-delivery-windows" [
+export def "remove-blocked-delivery-windows" [
   carrier_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -374,7 +374,7 @@ export def "logistics-pvt-configuration-carriers-remove-dayofweekblocked delete-
 #
 # GET /api/logistics/pvt/configuration/docks
 # operationId: AllDocks
-export def "logistics-pvt-configuration-docks list" [
+export def "all-docks" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
   --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
@@ -413,7 +413,7 @@ export def "logistics-pvt-configuration-docks list" [
 # POST /api/logistics/pvt/configuration/docks
 # operationId: Create/UpdateDock
 # --address shape: {city: string, complement: string, coordinates: list, country: record, neighborhood: string, number: string, postalCode: string, state: string, street: string}
-export def "logistics-pvt-configuration-docks create-update" [
+export def "create-update-dock" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
   --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
@@ -466,7 +466,7 @@ export def "logistics-pvt-configuration-docks create-update" [
 #
 # DELETE /api/logistics/pvt/configuration/docks/{dockId}
 # operationId: Dock
-export def "logistics-pvt-configuration-docks delete" [
+export def "dock" [
   dock_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -506,7 +506,7 @@ export def "logistics-pvt-configuration-docks delete" [
 #
 # GET /api/logistics/pvt/configuration/docks/{dockId}
 # operationId: DockById
-export def "logistics-pvt-configuration-docks get" [
+export def "dock-by-id" [
   dock_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -546,7 +546,7 @@ export def "logistics-pvt-configuration-docks get" [
 #
 # POST /api/logistics/pvt/configuration/docks/{dockId}/activation
 # operationId: ActivateDock
-export def "logistics-pvt-configuration-docks-activation create-activate" [
+export def "activate-dock" [
   dock_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -586,7 +586,7 @@ export def "logistics-pvt-configuration-docks-activation create-activate" [
 #
 # POST /api/logistics/pvt/configuration/docks/{dockId}/deactivation
 # operationId: DeactivateDock
-export def "logistics-pvt-configuration-docks-deactivation create-deactivate" [
+export def "deactivate-dock" [
   dock_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -626,7 +626,7 @@ export def "logistics-pvt-configuration-docks-deactivation create-deactivate" [
 #
 # POST /api/logistics/pvt/configuration/freights/{carrierId}/values/update
 # operationId: Create/UpdateFreightValues
-export def "logistics-pvt-configuration-freights-values-update create" [
+export def "create-update-freight-values" [
   carrier_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -672,7 +672,7 @@ export def "logistics-pvt-configuration-freights-values-update create" [
 #
 # GET /api/logistics/pvt/configuration/freights/{carrierId}/{cep}/values
 # operationId: FreightValues
-export def "logistics-pvt-configuration-freights-values get" [
+export def "freight-values" [
   carrier_id: string
   cep: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -714,7 +714,7 @@ export def "logistics-pvt-configuration-freights-values get" [
 #
 # GET /api/logistics/pvt/configuration/geoshape
 # operationId: PagedPolygons
-export def "logistics-pvt-configuration-geoshape get-paged-polygons" [
+export def "paged-polygons" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
   --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
@@ -756,7 +756,7 @@ export def "logistics-pvt-configuration-geoshape get-paged-polygons" [
 # PUT /api/logistics/pvt/configuration/geoshape
 # operationId: CreateUpdatePolygon
 # --geoShape shape: {coordinates: list}
-export def "logistics-pvt-configuration-geoshape create-update-polygon" [
+export def "create-update-polygon" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
   --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
@@ -801,7 +801,7 @@ export def "logistics-pvt-configuration-geoshape create-update-polygon" [
 #
 # DELETE /api/logistics/pvt/configuration/geoshape/{polygonName}
 # operationId: DeletePolygon
-export def "logistics-pvt-configuration-geoshape delete-polygon" [
+export def "delete-polygon" [
   polygon_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -841,7 +841,7 @@ export def "logistics-pvt-configuration-geoshape delete-polygon" [
 #
 # GET /api/logistics/pvt/configuration/geoshape/{polygonName}
 # operationId: PolygonbyId
-export def "logistics-pvt-configuration-geoshape get-polygonby" [
+export def "polygonby-id" [
   polygon_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -881,7 +881,7 @@ export def "logistics-pvt-configuration-geoshape get-polygonby" [
 #
 # GET /api/logistics/pvt/configuration/holidays
 # operationId: AllHolidays
-export def "logistics-pvt-configuration-holidays list" [
+export def "all-holidays" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
   --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
@@ -919,7 +919,7 @@ export def "logistics-pvt-configuration-holidays list" [
 #
 # DELETE /api/logistics/pvt/configuration/holidays/{holidayId}
 # operationId: Holiday
-export def "logistics-pvt-configuration-holidays delete" [
+export def "holiday" [
   holiday_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -959,7 +959,7 @@ export def "logistics-pvt-configuration-holidays delete" [
 #
 # GET /api/logistics/pvt/configuration/holidays/{holidayId}
 # operationId: HolidayById
-export def "logistics-pvt-configuration-holidays get" [
+export def "holiday-by-id" [
   holiday_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -999,7 +999,7 @@ export def "logistics-pvt-configuration-holidays get" [
 #
 # PUT /api/logistics/pvt/configuration/holidays/{holidayId}
 # operationId: Create/UpdateHoliday
-export def "logistics-pvt-configuration-holidays create-update" [
+export def "create-update-holiday" [
   holiday_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -1046,7 +1046,7 @@ export def "logistics-pvt-configuration-holidays create-update" [
 #
 # GET /api/logistics/pvt/configuration/pickuppoints
 # operationId: ListAllPickupPpoints
-export def "logistics-pvt-configuration-pickuppoints list-pickup-ppoints" [
+export def "list-all-pickup-ppoints" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
   --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
@@ -1084,7 +1084,7 @@ export def "logistics-pvt-configuration-pickuppoints list-pickup-ppoints" [
 #
 # GET /api/logistics/pvt/configuration/pickuppoints/_search
 # operationId: Getpaged
-export def "logistics-pvt-configuration-pickuppoints-search get-paged" [
+export def "getpaged" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
   --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
@@ -1126,7 +1126,7 @@ export def "logistics-pvt-configuration-pickuppoints-search get-paged" [
 #
 # DELETE /api/logistics/pvt/configuration/pickuppoints/{pickupPointId}
 # operationId: Delete
-export def "logistics-pvt-configuration-pickuppoints delete" [
+export def "delete" [
   pickup_point_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -1166,7 +1166,7 @@ export def "logistics-pvt-configuration-pickuppoints delete" [
 #
 # GET /api/logistics/pvt/configuration/pickuppoints/{pickupPointId}
 # operationId: GetById
-export def "logistics-pvt-configuration-pickuppoints get" [
+export def "get-by-id" [
   pickup_point_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -1208,7 +1208,7 @@ export def "logistics-pvt-configuration-pickuppoints get" [
 # operationId: CreateUpdatePickupPoint
 # --address shape: {city: string, complement: string, country: record, location: record, neighborhood: string, number: string, postalCode: string, reference: string, state: string, street: string}
 # --businessHours item shape: {closingTime: string, dayOfWeek: int, openingTime: string}
-export def "logistics-pvt-configuration-pickuppoints create-update-pickup-point" [
+export def "create-update-pickup-point" [
   pickup_point_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -1263,7 +1263,7 @@ export def "logistics-pvt-configuration-pickuppoints create-update-pickup-point"
 #
 # GET /api/logistics/pvt/configuration/warehouses
 # operationId: AllWarehouses
-export def "logistics-pvt-configuration-warehouses list" [
+export def "all-warehouses" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
   --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
@@ -1302,7 +1302,7 @@ export def "logistics-pvt-configuration-warehouses list" [
 # POST /api/logistics/pvt/configuration/warehouses
 # operationId: Create/UpdateWarehouse
 # --warehouseDocks item shape: {cost: string, costToDisplay: string, dockId: string, name: string, time: string, translateDays: string}
-export def "logistics-pvt-configuration-warehouses create-update" [
+export def "create-update-warehouse" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
   --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
@@ -1348,7 +1348,7 @@ export def "logistics-pvt-configuration-warehouses create-update" [
 #
 # DELETE /api/logistics/pvt/configuration/warehouses/{warehouseId}
 # operationId: RemoveWarehouse
-export def "logistics-pvt-configuration-warehouses delete" [
+export def "remove-warehouse" [
   warehouse_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -1388,7 +1388,7 @@ export def "logistics-pvt-configuration-warehouses delete" [
 #
 # GET /api/logistics/pvt/configuration/warehouses/{warehouseId}
 # operationId: WarehouseById
-export def "logistics-pvt-configuration-warehouses get" [
+export def "warehouse-by-id" [
   warehouse_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -1428,7 +1428,7 @@ export def "logistics-pvt-configuration-warehouses get" [
 #
 # POST /api/logistics/pvt/configuration/warehouses/{warehouseId}/activation
 # operationId: ActivateWarehouse
-export def "logistics-pvt-configuration-warehouses-activation create-activate" [
+export def "activate-warehouse" [
   warehouse_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -1468,7 +1468,7 @@ export def "logistics-pvt-configuration-warehouses-activation create-activate" [
 #
 # POST /api/logistics/pvt/configuration/warehouses/{warehouseId}/deactivation
 # operationId: DeactivateWarehouse
-export def "logistics-pvt-configuration-warehouses-deactivation create-deactivate" [
+export def "deactivate-warehouse" [
   warehouse_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -1508,7 +1508,7 @@ export def "logistics-pvt-configuration-warehouses-deactivation create-deactivat
 #
 # GET /api/logistics/pvt/inventory/items/{itemId}/warehouses/{warehouseId}/dispatched
 # operationId: Getinventorywithdispatchedreservations
-export def "logistics-pvt-inventory-items-warehouses-dispatched get-inventorywithdispatchedreservations" [
+export def "getinventorywithdispatchedreservations" [
   item_id: string
   warehouse_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1550,7 +1550,7 @@ export def "logistics-pvt-inventory-items-warehouses-dispatched get-inventorywit
 #
 # GET /api/logistics/pvt/inventory/items/{skuId}/docks/{dockId}
 # operationId: Inventoryperdock
-export def "logistics-pvt-inventory-items-docks get-inventoryperdock" [
+export def "inventoryperdock" [
   sku_id: string
   dock_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1592,7 +1592,7 @@ export def "logistics-pvt-inventory-items-docks get-inventoryperdock" [
 #
 # GET /api/logistics/pvt/inventory/items/{skuId}/docks/{dockId}/warehouses/{warehouseId}
 # operationId: Inventoryperdockandwarehouse
-export def "logistics-pvt-inventory-items-docks-warehouses get-inventoryperdockandwarehouse" [
+export def "inventoryperdockandwarehouse" [
   sku_id: string
   dock_id: string
   warehouse_id: string
@@ -1636,7 +1636,7 @@ export def "logistics-pvt-inventory-items-docks-warehouses get-inventoryperdocka
 #
 # GET /api/logistics/pvt/inventory/items/{skuId}/warehouses/{warehouseId}
 # operationId: Inventoryperwarehouse
-export def "logistics-pvt-inventory-items-warehouses get-inventoryperwarehouse" [
+export def "inventoryperwarehouse" [
   sku_id: string
   warehouse_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1678,7 +1678,7 @@ export def "logistics-pvt-inventory-items-warehouses get-inventoryperwarehouse" 
 #
 # GET /api/logistics/pvt/inventory/items/{skuId}/warehouses/{warehouseId}/supplyLots
 # operationId: GetSupplyLots
-export def "logistics-pvt-inventory-items-warehouses-supply-lots get" [
+export def "get-supply-lots" [
   sku_id: string
   warehouse_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1720,7 +1720,7 @@ export def "logistics-pvt-inventory-items-warehouses-supply-lots get" [
 #
 # PUT /api/logistics/pvt/inventory/items/{skuId}/warehouses/{warehouseId}/supplyLots/{supplyLotId}
 # operationId: SaveSupplyLot
-export def "logistics-pvt-inventory-items-warehouses-supply-lots update-save" [
+export def "save-supply-lot" [
   sku_id: string
   warehouse_id: string
   supply_lot_id: string
@@ -1772,7 +1772,7 @@ export def "logistics-pvt-inventory-items-warehouses-supply-lots update-save" [
 #
 # POST /api/logistics/pvt/inventory/items/{skuId}/warehouses/{warehouseId}/supplyLots/{supplyLotId}/transfer
 # operationId: TransferSupplyLot
-export def "logistics-pvt-inventory-items-warehouses-supply-lots-transfer create" [
+export def "transfer-supply-lot" [
   sku_id: string
   warehouse_id: string
   supply_lot_id: string
@@ -1817,7 +1817,7 @@ export def "logistics-pvt-inventory-items-warehouses-supply-lots-transfer create
 # POST /api/logistics/pvt/inventory/reservations
 # operationId: CreateReservation
 # --deliveryItemOptions item shape: {aditionalTimeBlockedDays: string, deliveryWindows: list<string>, dockId: string, dockTime: string, item: record, listPrice: float, location: record, promotionalPrice: float, slaType: string, slaTypeName: string, timeToDockPlusDockTime: string, totalTime: string, transitTime: string, wareHouseId: string}
-export def "logistics-pvt-inventory-reservations create" [
+export def "create-reservation" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
   --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
@@ -1864,7 +1864,7 @@ export def "logistics-pvt-inventory-reservations create" [
 #
 # GET /api/logistics/pvt/inventory/reservations/{reservationId}
 # operationId: ReservationById
-export def "logistics-pvt-inventory-reservations get" [
+export def "reservation-by-id" [
   reservation_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -1904,7 +1904,7 @@ export def "logistics-pvt-inventory-reservations get" [
 #
 # POST /api/logistics/pvt/inventory/reservations/{reservationId}/acknowledge
 # operationId: AcknowledgmentReservation
-export def "logistics-pvt-inventory-reservations-acknowledge create-acknowledgment" [
+export def "acknowledgment-reservation" [
   reservation_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -1944,7 +1944,7 @@ export def "logistics-pvt-inventory-reservations-acknowledge create-acknowledgme
 #
 # POST /api/logistics/pvt/inventory/reservations/{reservationId}/cancel
 # operationId: CancelReservation
-export def "logistics-pvt-inventory-reservations-cancel cancel" [
+export def "cancel-reservation" [
   reservation_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -1984,7 +1984,7 @@ export def "logistics-pvt-inventory-reservations-cancel cancel" [
 #
 # POST /api/logistics/pvt/inventory/reservations/{reservationId}/confirm
 # operationId: ConfirmReservation
-export def "logistics-pvt-inventory-reservations-confirm confirm" [
+export def "confirm-reservation" [
   reservation_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -2024,7 +2024,7 @@ export def "logistics-pvt-inventory-reservations-confirm confirm" [
 #
 # GET /api/logistics/pvt/inventory/reservations/{warehouseId}/{skuId}
 # operationId: ReservationbyWarehouseandSku
-export def "logistics-pvt-inventory-reservations get-reservationby-warehouseand-sku" [
+export def "reservationby-warehouseand-sku" [
   warehouse_id: string
   sku_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2066,7 +2066,7 @@ export def "logistics-pvt-inventory-reservations get-reservationby-warehouseand-
 #
 # GET /api/logistics/pvt/inventory/skus/{skuId}
 # operationId: InventoryBySku
-export def "logistics-pvt-inventory-skus get" [
+export def "inventory-by-sku" [
   sku_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -2106,7 +2106,7 @@ export def "logistics-pvt-inventory-skus get" [
 #
 # PUT /api/logistics/pvt/inventory/skus/{skuId}/warehouses/{warehouseId}
 # operationId: UpdateInventoryBySkuandWarehouse
-export def "logistics-pvt-inventory-skus-warehouses update-by-skuand" [
+export def "update-inventory-by-skuand-warehouse" [
   sku_id: string
   warehouse_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2156,7 +2156,7 @@ export def "logistics-pvt-inventory-skus-warehouses update-by-skuand" [
 # List shipping policies
 #
 # GET /api/logistics/pvt/shipping-policies
-export def "logistics-pvt-shipping-policies list" [
+export def "get-api-logistics-pvt-shipping-policies" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
   --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
@@ -2204,7 +2204,7 @@ export def "logistics-pvt-shipping-policies list" [
 # --modalSettings shape: {modals: list, useOnlyItemsWithDefinedModal: bool}
 # --pickupPointsSettings shape: {pickupPointIds: list, pickupPointTags: list, sellers: list}
 # --weekendAndHolidays shape: {holiday: bool, saturday: bool, sunday: bool}
-export def "logistics-pvt-shipping-policies create" [
+export def "post-api-logistics-pvt-shipping-policies" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
   --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
@@ -2261,7 +2261,7 @@ export def "logistics-pvt-shipping-policies create" [
 # Delete shipping policies by ID
 #
 # DELETE /api/logistics/pvt/shipping-policies/{id}
-export def "logistics-pvt-shipping-policies delete" [
+export def "delete-api-logistics-pvt-shipping-policies-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -2300,7 +2300,7 @@ export def "logistics-pvt-shipping-policies delete" [
 # Retrieve shipping policy by ID
 #
 # GET /api/logistics/pvt/shipping-policies/{id}
-export def "logistics-pvt-shipping-policies get" [
+export def "get-api-logistics-pvt-shipping-policies-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -2341,7 +2341,7 @@ export def "logistics-pvt-shipping-policies get" [
 # PUT /api/logistics/pvt/shipping-policies/{id}
 # --deliveryScheduleSettings shape: {dayOfWeekForDelivery: list, maxRangeDelivery: float, useDeliverySchedule: bool}
 # --maxDimension shape: {largestMeasure: float, maxMeasureSum: float}
-export def "logistics-pvt-shipping-policies update" [
+export def "put-api-logistics-pvt-shipping-policies-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -2392,7 +2392,7 @@ export def "logistics-pvt-shipping-policies update" [
 #
 # POST /api/logistics/pvt/shipping/calculate
 # operationId: CalculateSLA
-export def "logistics-pvt-shipping-calculate create-sla" [
+export def "calculate-sla" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
   --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)

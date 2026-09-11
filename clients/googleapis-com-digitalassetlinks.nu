@@ -106,7 +106,7 @@ def alt-completer [] { ["json" "media" "proto"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "assetlinks-bulk-check check" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "digitalassetlinks-assetlinks-bulk-check" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -133,7 +133,7 @@ export def commands []: nothing -> table {
 # --defaultSource shape: {androidApp?: record, web?: record}
 # --defaultTarget shape: {androidApp?: record, web?: record}
 # --statements item shape: {relation?: string, source?: record, target?: record}
-export def "assetlinks-bulk-check check" [
+export def "digitalassetlinks-assetlinks-bulk-check" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -188,7 +188,7 @@ export def "assetlinks-bulk-check check" [
 #
 # GET /v1/assetlinks:check
 # operationId: digitalassetlinks.assetlinks.check
-export def "assetlinks-check check" [
+export def "digitalassetlinks-assetlinks-check" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -241,7 +241,7 @@ export def "assetlinks-check check" [
 #
 # GET /v1/statements:list
 # operationId: digitalassetlinks.statements.list
-export def "statements-list list" [
+export def "digitalassetlinks-statements-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

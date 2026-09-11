@@ -108,7 +108,7 @@ def algorithm-completer [] { ["alternative_route" "round_trip"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "cluster create-solve-clustering-problem" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "solve-clustering-problem" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -134,7 +134,7 @@ export def commands []: nothing -> table {
 # operationId: solveClusteringProblem
 # --configuration shape: {clustering?: record, response_type?: string, routing?: record}
 # --customers item shape: {address?: record, id?: string, quantity?: float}
-export def "cluster create-solve-clustering-problem" [
+export def "solve-clustering-problem" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -175,7 +175,7 @@ export def "cluster create-solve-clustering-problem" [
 # operationId: asyncClusteringProblem
 # --configuration shape: {clustering?: record, response_type?: string, routing?: record}
 # --customers item shape: {address?: record, id?: string, quantity?: float}
-export def "cluster-calculate create-async-clustering-problem" [
+export def "async-clustering-problem" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -214,7 +214,7 @@ export def "cluster-calculate create-async-clustering-problem" [
 #
 # GET /cluster/solution/{jobId}
 # operationId: getClusterSolution
-export def "cluster-solution get" [
+export def "get-cluster-solution" [
   job_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -250,7 +250,7 @@ export def "cluster-solution get" [
 #
 # GET /geocode
 # operationId: getGeocode
-export def "geocode get" [
+export def "get-geocode" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -292,7 +292,7 @@ export def "geocode get" [
 #
 # GET /isochrone
 # operationId: getIsochrone
-export def "isochrone get" [
+export def "get-isochrone" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -334,7 +334,7 @@ export def "isochrone get" [
 #
 # POST /match
 # operationId: postGPX
-export def "match create-gpx" [
+export def "post-gpx" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -371,7 +371,7 @@ export def "match create-gpx" [
 #
 # GET /matrix
 # operationId: getMatrix
-export def "matrix get" [
+export def "get-matrix" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -420,7 +420,7 @@ export def "matrix get" [
 #
 # POST /matrix
 # operationId: postMatrix
-export def "matrix create" [
+export def "post-matrix" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -471,7 +471,7 @@ export def "matrix create" [
 #
 # POST /matrix/calculate
 # operationId: calculateMatrix
-export def "matrix-calculate create" [
+export def "calculate-matrix" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -522,7 +522,7 @@ export def "matrix-calculate create" [
 #
 # GET /matrix/solution/{jobId}
 # operationId: getMatrixSolution
-export def "matrix-solution get" [
+export def "get-matrix-solution" [
   job_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -558,7 +558,7 @@ export def "matrix-solution get" [
 #
 # GET /route
 # operationId: getRoute
-export def "route get" [
+export def "get-route" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -620,7 +620,7 @@ export def "route get" [
 #
 # POST /route
 # operationId: postRoute
-export def "route create" [
+export def "post-route" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -682,7 +682,7 @@ export def "route create" [
 # Coverage information
 #
 # GET /route/info
-export def "route-info get" [
+export def "get-route-info" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -725,7 +725,7 @@ export def "route-info get" [
 # --vehicle_types item shape: {capacity?: list<int>, consider_traffic?: bool, cost_per_activation?: float, cost_per_meter?: float, cost_per_second?: float, network_data_provider?: "openstreetmap"|"tomtom", profile?: any, service_time_factor?: float, speed_factor?: float, type_id: string}
 # --vehicles item shape: {break?: any, earliest_start?: int, end_address?: record, latest_end?: int, max_activities?: int, max_distance?: int, max_driving_time?: int, max_jobs?: int, min_jobs?: int, move_to_end_address?: bool, return_to_depot?: bool, skills?: list<string>, start_address: record, type_id?: string, vehicle_id: string}
 @deprecated --flag algorithm
-export def "vrp create-solve" [
+export def "solve-vrp" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -780,7 +780,7 @@ export def "vrp create-solve" [
 # --vehicle_types item shape: {capacity?: list<int>, consider_traffic?: bool, cost_per_activation?: float, cost_per_meter?: float, cost_per_second?: float, network_data_provider?: "openstreetmap"|"tomtom", profile?: any, service_time_factor?: float, speed_factor?: float, type_id: string}
 # --vehicles item shape: {break?: any, earliest_start?: int, end_address?: record, latest_end?: int, max_activities?: int, max_distance?: int, max_driving_time?: int, max_jobs?: int, min_jobs?: int, move_to_end_address?: bool, return_to_depot?: bool, skills?: list<string>, start_address: record, type_id?: string, vehicle_id: string}
 @deprecated --flag algorithm
-export def "vrp-optimize create-async" [
+export def "async-vrp" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -826,7 +826,7 @@ export def "vrp-optimize create-async" [
 #
 # GET /vrp/solution/{jobId}
 # operationId: getSolution
-export def "vrp-solution get" [
+export def "get-solution" [
   job_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

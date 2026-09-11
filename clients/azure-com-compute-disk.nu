@@ -124,7 +124,7 @@ def access-completer [] { ["None" "Read" "Write"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-providers-microsoft-compute-disks list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "disks-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -148,7 +148,7 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Compute/disks
 # operationId: Disks_List
-export def "subscriptions-providers-microsoft-compute-disks list" [
+export def "disks-list" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -186,7 +186,7 @@ export def "subscriptions-providers-microsoft-compute-disks list" [
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Compute/snapshots
 # operationId: Snapshots_List
-export def "subscriptions-providers-microsoft-compute-snapshots list" [
+export def "snapshots-list" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -224,7 +224,7 @@ export def "subscriptions-providers-microsoft-compute-snapshots list" [
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/disks
 # operationId: Disks_ListByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-compute-disks list" [
+export def "disks-list-by-resource-group" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -264,7 +264,7 @@ export def "subscriptions-resource-groups-providers-microsoft-compute-disks list
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/disks/{diskName}
 # operationId: Disks_Delete
-export def "subscriptions-resource-groups-providers-microsoft-compute-disks delete" [
+export def "disks-delete" [
   subscription_id: string
   resource_group_name: string
   disk_name: string
@@ -306,7 +306,7 @@ export def "subscriptions-resource-groups-providers-microsoft-compute-disks dele
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/disks/{diskName}
 # operationId: Disks_Get
-export def "subscriptions-resource-groups-providers-microsoft-compute-disks get" [
+export def "disks-get" [
   subscription_id: string
   resource_group_name: string
   disk_name: string
@@ -350,7 +350,7 @@ export def "subscriptions-resource-groups-providers-microsoft-compute-disks get"
 # operationId: Disks_Update
 # --properties shape: {diskIOPSReadWrite?: int, diskMBpsReadWrite?: int, diskSizeGB?: int, encryptionSettingsCollection?: any, osType?: "Windows"|"Linux"}
 # --sku shape: {name?: "Standard_LRS"|"Premium_LRS"|"StandardSSD_LRS"|"UltraSSD_LRS"}
-export def "subscriptions-resource-groups-providers-microsoft-compute-disks update" [
+export def "disks-update" [
   subscription_id: string
   resource_group_name: string
   disk_name: string
@@ -400,7 +400,7 @@ export def "subscriptions-resource-groups-providers-microsoft-compute-disks upda
 # operationId: Disks_CreateOrUpdate
 # --properties shape: {creationData: any, diskIOPSReadWrite?: int, diskMBpsReadWrite?: int, diskSizeGB?: int, encryptionSettingsCollection?: any, hyperVGeneration?: "V1"|"V2", osType?: "Windows"|"Linux"}
 # --sku shape: {name?: "Standard_LRS"|"Premium_LRS"|"StandardSSD_LRS"|"UltraSSD_LRS"}
-export def "subscriptions-resource-groups-providers-microsoft-compute-disks create-or-update" [
+export def "disks-create-or-update" [
   subscription_id: string
   resource_group_name: string
   disk_name: string
@@ -450,7 +450,7 @@ export def "subscriptions-resource-groups-providers-microsoft-compute-disks crea
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/disks/{diskName}/beginGetAccess
 # operationId: Disks_GrantAccess
-export def "subscriptions-resource-groups-providers-microsoft-compute-disks-begin-get-access create-grant" [
+export def "disks-grant-access" [
   subscription_id: string
   resource_group_name: string
   disk_name: string
@@ -497,7 +497,7 @@ export def "subscriptions-resource-groups-providers-microsoft-compute-disks-begi
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/disks/{diskName}/endGetAccess
 # operationId: Disks_RevokeAccess
-export def "subscriptions-resource-groups-providers-microsoft-compute-disks-end-get-access delete" [
+export def "disks-revoke-access" [
   subscription_id: string
   resource_group_name: string
   disk_name: string
@@ -539,7 +539,7 @@ export def "subscriptions-resource-groups-providers-microsoft-compute-disks-end-
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/snapshots
 # operationId: Snapshots_ListByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-compute-snapshots list" [
+export def "snapshots-list-by-resource-group" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -579,7 +579,7 @@ export def "subscriptions-resource-groups-providers-microsoft-compute-snapshots 
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/snapshots/{snapshotName}
 # operationId: Snapshots_Delete
-export def "subscriptions-resource-groups-providers-microsoft-compute-snapshots delete" [
+export def "snapshots-delete" [
   subscription_id: string
   resource_group_name: string
   snapshot_name: string
@@ -621,7 +621,7 @@ export def "subscriptions-resource-groups-providers-microsoft-compute-snapshots 
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/snapshots/{snapshotName}
 # operationId: Snapshots_Get
-export def "subscriptions-resource-groups-providers-microsoft-compute-snapshots get" [
+export def "snapshots-get" [
   subscription_id: string
   resource_group_name: string
   snapshot_name: string
@@ -665,7 +665,7 @@ export def "subscriptions-resource-groups-providers-microsoft-compute-snapshots 
 # operationId: Snapshots_Update
 # --properties shape: {diskSizeGB?: int, encryptionSettingsCollection?: any, osType?: "Windows"|"Linux"}
 # --sku shape: {name?: "Standard_LRS"|"Premium_LRS"|"Standard_ZRS"}
-export def "subscriptions-resource-groups-providers-microsoft-compute-snapshots update" [
+export def "snapshots-update" [
   subscription_id: string
   resource_group_name: string
   snapshot_name: string
@@ -715,7 +715,7 @@ export def "subscriptions-resource-groups-providers-microsoft-compute-snapshots 
 # operationId: Snapshots_CreateOrUpdate
 # --properties shape: {creationData: any, diskSizeGB?: int, encryptionSettingsCollection?: any, hyperVGeneration?: "V1"|"V2", incremental?: bool, osType?: "Windows"|"Linux"}
 # --sku shape: {name?: "Standard_LRS"|"Premium_LRS"|"Standard_ZRS"}
-export def "subscriptions-resource-groups-providers-microsoft-compute-snapshots create-or-update" [
+export def "snapshots-create-or-update" [
   subscription_id: string
   resource_group_name: string
   snapshot_name: string
@@ -764,7 +764,7 @@ export def "subscriptions-resource-groups-providers-microsoft-compute-snapshots 
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/snapshots/{snapshotName}/beginGetAccess
 # operationId: Snapshots_GrantAccess
-export def "subscriptions-resource-groups-providers-microsoft-compute-snapshots-begin-get-access create-grant" [
+export def "snapshots-grant-access" [
   subscription_id: string
   resource_group_name: string
   snapshot_name: string
@@ -811,7 +811,7 @@ export def "subscriptions-resource-groups-providers-microsoft-compute-snapshots-
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/snapshots/{snapshotName}/endGetAccess
 # operationId: Snapshots_RevokeAccess
-export def "subscriptions-resource-groups-providers-microsoft-compute-snapshots-end-get-access delete" [
+export def "snapshots-revoke-access" [
   subscription_id: string
   resource_group_name: string
   snapshot_name: string

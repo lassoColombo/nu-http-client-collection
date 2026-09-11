@@ -116,7 +116,7 @@ def benefit-doc-type-completer [] { ["ADOPTION_CERTIFICATE" "BIRTH_CERTIFICATE" 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "account-aadhaar-generate-otp create-generatere-kyc-aadhar-using" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "generatere-kyc-aadhar-otp-using-post" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -140,7 +140,7 @@ export def commands []: nothing -> table {
 #
 # POST /v1/account/aadhaar/generateOTP
 # operationId: generatereKycAadharOTPUsingPOST
-export def "account-aadhaar-generate-otp create-generatere-kyc-aadhar-using" [
+export def "generatere-kyc-aadhar-otp-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -178,7 +178,7 @@ export def "account-aadhaar-generate-otp create-generatere-kyc-aadhar-using" [
 #
 # POST /v1/account/aadhaar/verifyOTP
 # operationId: verifyAadharOTPOnlyUsingPOST_1
-export def "account-aadhaar-verify-otp create-aadhar-only-using" [
+export def "verify-aadhar-otp-only-using-post-1" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -222,7 +222,7 @@ export def "account-aadhaar-verify-otp create-aadhar-only-using" [
 #
 # GET /v1/account/benefits
 # operationId: getBenefitsUsingGET
-export def "account-benefits get-using" [
+export def "get-benefits-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -260,7 +260,7 @@ export def "account-benefits get-using" [
 #
 # POST /v1/account/change/passwd/byAadhaar
 # operationId: changePasswordViaAadharUsingPOST
-export def "account-change-passwd-by-aadhaar create-password-via-aadhar-using" [
+export def "change-password-via-aadhar-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -304,7 +304,7 @@ export def "account-change-passwd-by-aadhaar create-password-via-aadhar-using" [
 #
 # POST /v1/account/change/passwd/byMobile
 # operationId: changePasswordViaMobileUsingPOST
-export def "account-change-passwd-by-mobile create-password-via-using" [
+export def "change-password-via-mobile-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -348,7 +348,7 @@ export def "account-change-passwd-by-mobile create-password-via-using" [
 #
 # GET /v1/account/change/passwd/generateAadhaarOTP
 # operationId: generateAadharOTPUsingGET
-export def "account-change-passwd-generate-aadhaar-otp get-aadhar-using" [
+export def "generate-aadhar-otp-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -386,7 +386,7 @@ export def "account-change-passwd-generate-aadhaar-otp get-aadhar-using" [
 #
 # GET /v1/account/change/passwd/generateMobileOTP
 # operationId: generateMobileOTPUsingGET
-export def "account-change-passwd-generate-mobile-otp get-using" [
+export def "generate-mobile-otp-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -424,7 +424,7 @@ export def "account-change-passwd-generate-mobile-otp get-using" [
 #
 # POST /v1/account/change/password
 # operationId: changePasswordViaUsingPOST
-export def "account-change-password create-via-using" [
+export def "change-password-via-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -467,7 +467,7 @@ export def "account-change-password create-via-using" [
 #
 # GET /v1/account/getCard
 # operationId: generateCardUsingGET
-export def "account-get-card generate" [
+export def "generate-card-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -505,7 +505,7 @@ export def "account-get-card generate" [
 #
 # GET /v1/account/getPngCard
 # operationId: generatePngCardUsingGET
-export def "account-get-png-card generate" [
+export def "generate-png-card-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -543,7 +543,7 @@ export def "account-get-png-card generate" [
 #
 # GET /v1/account/getSvgCard
 # operationId: generateSvgCardUsingGET
-export def "account-get-svg-card generate" [
+export def "generate-svg-card-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -581,7 +581,7 @@ export def "account-get-svg-card generate" [
 #
 # DELETE /v1/account/profile
 # operationId: deleteAccountUsingDELETE
-export def "account-profile delete-using" [
+export def "delete-account-using-delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -619,7 +619,7 @@ export def "account-profile delete-using" [
 #
 # GET /v1/account/profile
 # operationId: getAccountInformationUsingGET
-export def "account-profile get-information-using" [
+export def "get-account-information-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -657,7 +657,7 @@ export def "account-profile get-information-using" [
 #
 # POST /v1/account/profile
 # operationId: updateAccountInformationUsingPOST
-export def "account-profile update-information-using-create" [
+export def "update-account-information-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -716,7 +716,7 @@ export def "account-profile update-information-using-create" [
 #
 # GET /v1/account/qrCode
 # operationId: getQrCodeUsingGET
-export def "account-qr-code get-using" [
+export def "get-qr-code-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -755,7 +755,7 @@ export def "account-qr-code get-using" [
 #
 # POST /v1/account/token
 # operationId: validateTokenUsingPOST
-export def "account-token validate-using-create" [
+export def "validate-token-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -796,7 +796,7 @@ export def "account-token validate-using-create" [
 #
 # POST /v1/auth/authPassword
 # operationId: authenticateWithPasswordUsingPOST
-export def "auth-auth-password create-authenticate-with-using" [
+export def "authenticate-with-password-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -838,7 +838,7 @@ export def "auth-auth-password create-authenticate-with-using" [
 #
 # POST /v1/auth/authWithMobile
 # operationId: authenticateUserUsingPOST
-export def "auth-auth-with-mobile create-authenticate-user-using" [
+export def "authenticate-user-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -879,7 +879,7 @@ export def "auth-auth-with-mobile create-authenticate-user-using" [
 #
 # POST /v1/auth/authWithMobileToken
 # operationId: authWithMobileTokenUsingPOST
-export def "auth-auth-with-mobile-token create-using" [
+export def "auth-with-mobile-token-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -925,7 +925,7 @@ export def "auth-auth-with-mobile-token create-using" [
 #
 # GET /v1/auth/cert
 # operationId: certUsingGET
-export def "auth-cert get-using" [
+export def "cert-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -962,7 +962,7 @@ export def "auth-cert get-using" [
 #
 # POST /v1/auth/confirmWithAadhaarBio
 # operationId: confirmWithAadhaarBioUsingPOST
-export def "auth-confirm-with-aadhaar-bio create-using" [
+export def "confirm-with-aadhaar-bio-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1006,7 +1006,7 @@ export def "auth-confirm-with-aadhaar-bio create-using" [
 #
 # POST /v1/auth/confirmWithAadhaarOtp
 # operationId: confirmWithAadhaarOtpUsingPOST
-export def "auth-confirm-with-aadhaar-otp create-using" [
+export def "confirm-with-aadhaar-otp-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1048,7 +1048,7 @@ export def "auth-confirm-with-aadhaar-otp create-using" [
 #
 # POST /v1/auth/confirmWithDemographics
 # operationId: confirmWithDemographicsUsingPOST
-export def "auth-confirm-with-demographics create-using" [
+export def "confirm-with-demographics-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1092,7 +1092,7 @@ export def "auth-confirm-with-demographics create-using" [
 #
 # POST /v1/auth/confirmWithMobileOTP
 # operationId: confirmWithMobileUsingPOST
-export def "auth-confirm-with-mobile-otp create-using" [
+export def "confirm-with-mobile-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1134,7 +1134,7 @@ export def "auth-confirm-with-mobile-otp create-using" [
 #
 # POST /v1/auth/confirmWithPassword
 # operationId: authAccountPasswordRequestUsingPOST
-export def "auth-confirm-with-password request-account-using-create" [
+export def "auth-account-password-request-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1176,7 +1176,7 @@ export def "auth-confirm-with-password request-account-using-create" [
 #
 # POST /v1/auth/init
 # operationId: initiateAuthUsingPOST
-export def "auth-init create-initiate-using" [
+export def "initiate-auth-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1218,7 +1218,7 @@ export def "auth-init create-initiate-using" [
 #
 # POST /v1/auth/resendAuthOTP
 # operationId: resendAuthMobileOTPUsingPOST
-export def "auth-resend-auth-otp create-mobile-using" [
+export def "resend-auth-mobile-otp-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1259,7 +1259,7 @@ export def "auth-resend-auth-otp create-mobile-using" [
 #
 # POST /v1/forgot/healthId/aadhaar
 # operationId: retrievalHealthIdByAadharUsingPOST
-export def "forgot-health-id-aadhaar create-retrieval-by-aadhar-using" [
+export def "retrieval-health-id-by-aadhar-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1301,7 +1301,7 @@ export def "forgot-health-id-aadhaar create-retrieval-by-aadhar-using" [
 #
 # POST /v1/forgot/healthId/aadhaar/generateOtp
 # operationId: generateAadharOTPUsingPOST_1
-export def "forgot-health-id-aadhaar-generate-otp create-aadhar-using" [
+export def "generate-aadhar-otp-using-post-1" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1342,7 +1342,7 @@ export def "forgot-health-id-aadhaar-generate-otp create-aadhar-using" [
 #
 # POST /v1/forgot/healthId/mobile
 # operationId: retrievalHealthIdByMobileUsingPOST
-export def "forgot-health-id-mobile create-retrieval-by-using" [
+export def "retrieval-health-id-by-mobile-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1392,7 +1392,7 @@ export def "forgot-health-id-mobile create-retrieval-by-using" [
 #
 # POST /v1/forgot/healthId/mobile/generateOtp
 # operationId: generateMobileOTPUsingPOST
-export def "forgot-health-id-mobile-generate-otp create-using" [
+export def "generate-mobile-otp-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1433,7 +1433,7 @@ export def "forgot-health-id-mobile-generate-otp create-using" [
 #
 # GET /v1/ha/lgd/districts
 # operationId: getDistrictsInStateUsingGET
-export def "ha-lgd-districts get-in-state-using" [
+export def "get-districts-in-state-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1472,7 +1472,7 @@ export def "ha-lgd-districts get-in-state-using" [
 #
 # GET /v1/ha/lgd/states
 # operationId: getStatesUsingGET
-export def "ha-lgd-states get-using" [
+export def "get-states-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1509,7 +1509,7 @@ export def "ha-lgd-states get-using" [
 #
 # DELETE /v1/ha/tags
 # operationId: deleteTagUsingDELETE
-export def "ha-tags delete-using" [
+export def "delete-tag-using-delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1550,7 +1550,7 @@ export def "ha-tags delete-using" [
 #
 # GET /v1/ha/tags
 # operationId: getTagsUsingGET
-export def "ha-tags get-using" [
+export def "get-tags-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1588,7 +1588,7 @@ export def "ha-tags get-using" [
 #
 # POST /v1/ha/tags
 # operationId: addTagUsingPOST
-export def "ha-tags create-using" [
+export def "add-tag-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1630,7 +1630,7 @@ export def "ha-tags create-using" [
 #
 # POST /v1/health/facility/authenticate
 # operationId: authenticateHealthFacilityUsingPOST
-export def "health-facility-authenticate create-using" [
+export def "authenticate-health-facility-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1672,7 +1672,7 @@ export def "health-facility-authenticate create-using" [
 #
 # POST /v1/health/facility/change/password
 # operationId: changePasswordUsingPOST
-export def "health-facility-change-password create-using" [
+export def "change-password-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1715,7 +1715,7 @@ export def "health-facility-change-password create-using" [
 #
 # POST /v1/health/facility/createHealthIdWithPreVerified
 # operationId: createAadhaarAccountUsingPOST_1
-export def "health-facility-create-health-id-with-pre-verified create-aadhaar-account-using" [
+export def "create-aadhaar-account-using-post-1" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1763,7 +1763,7 @@ export def "health-facility-create-health-id-with-pre-verified create-aadhaar-ac
 #
 # POST /v1/health/facility/generate/password
 # operationId: generatePasswordUsingPOST
-export def "health-facility-generate-password create-using" [
+export def "generate-password-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1804,7 +1804,7 @@ export def "health-facility-generate-password create-using" [
 #
 # POST /v1/health/facility/generateOtp
 # operationId: generateFacilityOTPUsingPOST
-export def "health-facility-generate-otp create-using" [
+export def "generate-facility-otp-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1846,7 +1846,7 @@ export def "health-facility-generate-otp create-using" [
 #
 # GET /v1/health/facility/getSvgCard
 # operationId: generateSvgCardUsingGET_1
-export def "health-facility-get-svg-card generate" [
+export def "generate-svg-card-using-get-1" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1885,7 +1885,7 @@ export def "health-facility-get-svg-card generate" [
 #
 # POST /v1/health/facility/reset/password
 # operationId: resetPasswordUsingPOST
-export def "health-facility-reset-password create-using" [
+export def "reset-password-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1926,7 +1926,7 @@ export def "health-facility-reset-password create-using" [
 #
 # POST /v1/hid/benefit/aadhaar/generateOtp
 # operationId: generateAadharOTPUsingPOST_2
-export def "hid-benefit-aadhaar-generate-otp create-aadhar-using" [
+export def "generate-aadhar-otp-using-post-2" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1967,7 +1967,7 @@ export def "hid-benefit-aadhaar-generate-otp create-aadhar-using" [
 #
 # POST /v1/hid/benefit/aadhaar/verifyAadharOtp
 # operationId: verifyAadharOtpUsingPOST
-export def "hid-benefit-aadhaar-verify-aadhar-otp create-using" [
+export def "verify-aadhar-otp-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2015,7 +2015,7 @@ export def "hid-benefit-aadhaar-verify-aadhar-otp create-using" [
 #
 # POST /v1/hid/benefit/aadhaar/verifyBio
 # operationId: verifyBioUsingPOST
-export def "hid-benefit-aadhaar-verify-bio create-using" [
+export def "verify-bio-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2064,7 +2064,7 @@ export def "hid-benefit-aadhaar-verify-bio create-using" [
 #
 # POST /v1/hid/benefit/createHealthId/demo/auth
 # operationId: createHealthIdByDemoAuthUsingPOST
-export def "hid-benefit-create-health-id-demo-auth create-by-using" [
+export def "create-health-id-by-demo-auth-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2114,7 +2114,7 @@ export def "hid-benefit-create-health-id-demo-auth create-by-using" [
 #
 # POST /v1/hid/benefit/delink
 # operationId: delinkHidBenefitUsingPOST
-export def "hid-benefit-delink create-using" [
+export def "delink-hid-benefit-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2156,7 +2156,7 @@ export def "hid-benefit-delink create-using" [
 #
 # POST /v1/hid/benefit/link
 # operationId: linkHidBenefitUsingPOST
-export def "hid-benefit-link create-using" [
+export def "link-hid-benefit-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2201,7 +2201,7 @@ export def "hid-benefit-link create-using" [
 #
 # POST /v1/hid/benefit/mobile/createHealthId
 # operationId: createHealthIdByMobileUsingPOST
-export def "hid-benefit-mobile-create-health-id create-by-using" [
+export def "create-health-id-by-mobile-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2255,7 +2255,7 @@ export def "hid-benefit-mobile-create-health-id create-by-using" [
 #
 # POST /v1/hid/benefit/mobile/generateOtp
 # operationId: generateMobileOtpUsingPOST
-export def "hid-benefit-mobile-generate-otp create-using" [
+export def "generate-mobile-otp-using-post-1" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2296,7 +2296,7 @@ export def "hid-benefit-mobile-generate-otp create-using" [
 #
 # POST /v1/hid/benefit/notify/benefit
 # operationId: notifyBenefitUsingPOST
-export def "hid-benefit-notify-benefit create-using" [
+export def "notify-benefit-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2347,7 +2347,7 @@ export def "hid-benefit-notify-benefit create-using" [
 #
 # POST /v1/hid/benefit/search/aadhaar
 # operationId: findByAadharUsingPOST
-export def "hid-benefit-search-aadhaar find-by-aadhar-using-create" [
+export def "find-by-aadhar-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2388,7 +2388,7 @@ export def "hid-benefit-search-aadhaar find-by-aadhar-using-create" [
 #
 # POST /v1/hid/benefit/search/healthIdNumber
 # operationId: findByHealthIdUsingPOST
-export def "hid-benefit-search-health-id-number find-by-using-create" [
+export def "find-by-health-id-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2430,7 +2430,7 @@ export def "hid-benefit-search-health-id-number find-by-using-create" [
 #
 # POST /v1/hid/benefit/update/mobile
 # operationId: updateMobileInformationUsingPOST
-export def "hid-benefit-update-mobile create-information-using" [
+export def "update-mobile-information-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2472,7 +2472,7 @@ export def "hid-benefit-update-mobile create-information-using" [
 #
 # POST /v1/hid/benefit/update/profile
 # operationId: updateAccountInformationUsingPOST_1
-export def "hid-benefit-update-profile create-account-information-using" [
+export def "update-account-information-using-post-1" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2531,7 +2531,7 @@ export def "hid-benefit-update-profile create-account-information-using" [
 #
 # POST /v1/hid/benefit/update/status
 # operationId: updateStatusUsingPOST
-export def "hid-benefit-update-status create-using" [
+export def "update-status-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2572,7 +2572,7 @@ export def "hid-benefit-update-status create-using" [
 #
 # POST /v1/registration/aadhaar/createHealthIdWithAadhaarOtp
 # operationId: verifyAadharOTPUsingPOST
-export def "registration-aadhaar-create-health-id-with-aadhaar-otp verify-aadhar-using-create" [
+export def "verify-aadhar-otp-using-post-1" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2623,7 +2623,7 @@ export def "registration-aadhaar-create-health-id-with-aadhaar-otp verify-aadhar
 #
 # POST /v1/registration/aadhaar/createHealthIdWithPreVerified
 # operationId: createAadhaarAccountUsingPOST
-export def "registration-aadhaar-create-health-id-with-pre-verified create-account-using" [
+export def "create-aadhaar-account-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2671,7 +2671,7 @@ export def "registration-aadhaar-create-health-id-with-pre-verified create-accou
 #
 # POST /v1/registration/aadhaar/generateMobileOTP
 # operationId: generateMobileOTPForTxnUsingPOST
-export def "registration-aadhaar-generate-mobile-otp create-for-txn-using" [
+export def "generate-mobile-otp-for-txn-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2713,7 +2713,7 @@ export def "registration-aadhaar-generate-mobile-otp create-for-txn-using" [
 #
 # POST /v1/registration/aadhaar/generateOtp
 # operationId: generateAadharOTPUsingPOST
-export def "registration-aadhaar-generate-otp create-aadhar-using" [
+export def "generate-aadhar-otp-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2754,7 +2754,7 @@ export def "registration-aadhaar-generate-otp create-aadhar-using" [
 #
 # POST /v1/registration/aadhaar/resendAadhaarOtp
 # operationId: resendAadharOTPUsingPOST
-export def "registration-aadhaar-resend-aadhaar-otp create-aadhar-using" [
+export def "resend-aadhar-otp-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2795,7 +2795,7 @@ export def "registration-aadhaar-resend-aadhaar-otp create-aadhar-using" [
 #
 # POST /v1/registration/aadhaar/search/aadhar
 # operationId: getHealthIdNumbersByAadharUsingPOST
-export def "registration-aadhaar-search-aadhar get-health-numbers-by-using-create" [
+export def "get-health-id-numbers-by-aadhar-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2836,7 +2836,7 @@ export def "registration-aadhaar-search-aadhar get-health-numbers-by-using-creat
 #
 # POST /v1/registration/aadhaar/verifyBio
 # operationId: verifyAadharBioUsingPOST
-export def "registration-aadhaar-verify-bio create-aadhar-using" [
+export def "verify-aadhar-bio-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2880,7 +2880,7 @@ export def "registration-aadhaar-verify-bio create-aadhar-using" [
 #
 # POST /v1/registration/aadhaar/verifyMobileOTP
 # operationId: verifyMobileOTPForTxnUsingPOST
-export def "registration-aadhaar-verify-mobile-otp create-for-txn-using" [
+export def "verify-mobile-otp-for-txn-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2922,7 +2922,7 @@ export def "registration-aadhaar-verify-mobile-otp create-for-txn-using" [
 #
 # POST /v1/registration/aadhaar/verifyOTP
 # operationId: verifyAadharOTPOnlyUsingPOST
-export def "registration-aadhaar-verify-otp create-aadhar-only-using" [
+export def "verify-aadhar-otp-only-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2965,7 +2965,7 @@ export def "registration-aadhaar-verify-otp create-aadhar-only-using" [
 #
 # POST /v1/registration/mobile/createHealthId
 # operationId: verifyUserViaMobileUsingPOST
-export def "registration-mobile-create-health-id verify-user-via-using-create" [
+export def "verify-user-via-mobile-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3028,7 +3028,7 @@ export def "registration-mobile-create-health-id verify-user-via-using-create" [
 #
 # POST /v1/registration/mobile/generateOtp
 # operationId: generateMobileOTPUsingPOST_1
-export def "registration-mobile-generate-otp create-using" [
+export def "generate-mobile-otp-using-post-1-1" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3069,7 +3069,7 @@ export def "registration-mobile-generate-otp create-using" [
 #
 # POST /v1/registration/mobile/resendOtp
 # operationId: resentOtpUsingPOST
-export def "registration-mobile-resend-otp create-resent-using" [
+export def "resent-otp-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3110,7 +3110,7 @@ export def "registration-mobile-resend-otp create-resent-using" [
 #
 # POST /v1/registration/mobile/verifyOtp
 # operationId: verifyMobileOTPUsingPOST
-export def "registration-mobile-verify-otp create-using" [
+export def "verify-mobile-otp-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3152,7 +3152,7 @@ export def "registration-mobile-verify-otp create-using" [
 #
 # POST /v1/search/existsByHealthId
 # operationId: searchUserByUseridUsingPOST
-export def "search-exists-by-health-id create-user-userid-using" [
+export def "search-user-by-userid-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3193,7 +3193,7 @@ export def "search-exists-by-health-id create-user-userid-using" [
 #
 # POST /v1/search/searchByHealthId
 # operationId: searchUserByAccountUsingPOST
-export def "search-search-by-health-id create-user-account-using" [
+export def "search-user-by-account-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3234,7 +3234,7 @@ export def "search-search-by-health-id create-user-account-using" [
 #
 # POST /v1/search/searchByMobile
 # operationId: searchUserByMobileUsingPOST
-export def "search-search-by-mobile create-user-using" [
+export def "search-user-by-mobile-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

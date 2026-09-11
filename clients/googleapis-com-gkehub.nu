@@ -130,7 +130,7 @@ def infrastructure-type-completer [] { ["INFRASTRUCTURE_TYPE_UNSPECIFIED" "MULTI
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "v1beta1 delete" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "gkehub-projects-locations-operations-delete" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -154,7 +154,7 @@ export def commands []: nothing -> table {
 #
 # DELETE /v1beta1/{name}
 # operationId: gkehub.projects.locations.operations.delete
-export def "v1beta1 delete" [
+export def "gkehub-projects-locations-operations-delete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -204,7 +204,7 @@ export def "v1beta1 delete" [
 #
 # GET /v1beta1/{name}
 # operationId: gkehub.projects.locations.operations.get
-export def "v1beta1 get" [
+export def "gkehub-projects-locations-operations-get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -256,7 +256,7 @@ export def "v1beta1 get" [
 # --endpoint shape: {applianceCluster?: record, edgeCluster?: record, gkeCluster?: record, kubernetesMetadata?: record, kubernetesResource?: record, multiCloudCluster?: record, onPremCluster?: record}
 # --monitoringConfig shape: {cluster?: string, clusterHash?: string, kubernetesMetricsPrefix?: string, location?: string, projectId?: string}
 # --state shape: {description?: string, updateTime?: string}
-export def "v1beta1 update" [
+export def "gkehub-projects-locations-memberships-patch" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -317,7 +317,7 @@ export def "v1beta1 update" [
 #
 # GET /v1beta1/{name}/locations
 # operationId: gkehub.projects.locations.list
-export def "v1beta1-locations list" [
+export def "gkehub-projects-locations-list" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -368,7 +368,7 @@ export def "v1beta1-locations list" [
 #
 # GET /v1beta1/{name}/operations
 # operationId: gkehub.projects.locations.operations.list
-export def "v1beta1-operations list" [
+export def "gkehub-projects-locations-operations-list" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -419,7 +419,7 @@ export def "v1beta1-operations list" [
 #
 # POST /v1beta1/{name}:cancel
 # operationId: gkehub.projects.locations.operations.cancel
-export def "v1beta1 cancel" [
+export def "gkehub-projects-locations-operations-cancel" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -471,7 +471,7 @@ export def "v1beta1 cancel" [
 #
 # GET /v1beta1/{name}:generateConnectManifest
 # operationId: gkehub.projects.locations.memberships.generateConnectManifest
-export def "v1beta1 generate-connect-manifest" [
+export def "gkehub-projects-locations-memberships-generate-connect-manifest" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -526,7 +526,7 @@ export def "v1beta1 generate-connect-manifest" [
 #
 # GET /v1beta1/{name}:generateExclusivityManifest
 # operationId: gkehub.projects.locations.memberships.generateExclusivityManifest
-export def "v1beta1 generate-exclusivity-manifest" [
+export def "gkehub-projects-locations-memberships-generate-exclusivity-manifest" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -576,7 +576,7 @@ export def "v1beta1 generate-exclusivity-manifest" [
 #
 # GET /v1beta1/{parent}/memberships
 # operationId: gkehub.projects.locations.memberships.list
-export def "v1beta1-memberships list" [
+export def "gkehub-projects-locations-memberships-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -632,7 +632,7 @@ export def "v1beta1-memberships list" [
 # --endpoint shape: {applianceCluster?: record, edgeCluster?: record, gkeCluster?: record, kubernetesMetadata?: record, kubernetesResource?: record, multiCloudCluster?: record, onPremCluster?: record}
 # --monitoringConfig shape: {cluster?: string, clusterHash?: string, kubernetesMetricsPrefix?: string, location?: string, projectId?: string}
 # --state shape: {description?: string, updateTime?: string}
-export def "v1beta1-memberships create" [
+export def "gkehub-projects-locations-memberships-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -693,7 +693,7 @@ export def "v1beta1-memberships create" [
 #
 # GET /v1beta1/{parent}/memberships:validateExclusivity
 # operationId: gkehub.projects.locations.memberships.validateExclusivity
-export def "v1beta1-memberships-validate-exclusivity validate" [
+export def "gkehub-projects-locations-memberships-validate-exclusivity" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -743,7 +743,7 @@ export def "v1beta1-memberships-validate-exclusivity validate" [
 #
 # GET /v1beta1/{resource}:getIamPolicy
 # operationId: gkehub.projects.locations.memberships.getIamPolicy
-export def "v1beta1 get-iam-policy" [
+export def "gkehub-projects-locations-memberships-get-iam-policy" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -793,7 +793,7 @@ export def "v1beta1 get-iam-policy" [
 # POST /v1beta1/{resource}:setIamPolicy
 # operationId: gkehub.projects.locations.memberships.setIamPolicy
 # --policy shape: {auditConfigs?: list, bindings?: list, etag?: string, version?: int}
-export def "v1beta1 update-iam-policy" [
+export def "gkehub-projects-locations-memberships-set-iam-policy" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -846,7 +846,7 @@ export def "v1beta1 update-iam-policy" [
 #
 # POST /v1beta1/{resource}:testIamPermissions
 # operationId: gkehub.projects.locations.memberships.testIamPermissions
-export def "v1beta1 test-iam-permissions" [
+export def "gkehub-projects-locations-memberships-test-iam-permissions" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)

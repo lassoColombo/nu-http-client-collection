@@ -131,7 +131,7 @@ def gateway-list-options-gateway-type-completer [] { ["GATEWAY" "GATEWAY_TYPE_UN
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "projects delete" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "cloudiot-projects-locations-registries-devices-delete" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -155,7 +155,7 @@ export def commands []: nothing -> table {
 #
 # DELETE /v1/{name}
 # operationId: cloudiot.projects.locations.registries.devices.delete
-export def "projects delete" [
+export def "cloudiot-projects-locations-registries-devices-delete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -203,7 +203,7 @@ export def "projects delete" [
 #
 # GET /v1/{name}
 # operationId: cloudiot.projects.locations.registries.devices.get
-export def "projects get" [
+export def "cloudiot-projects-locations-registries-devices-get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -257,7 +257,7 @@ export def "projects get" [
 # --gatewayConfig shape: {gatewayAuthMethod?: "GATEWAY_AUTH_METHOD_UNSPECIFIED"|"ASSOCIATION_ONLY"|"DEVICE_AUTH_TOKEN_ONLY"|"ASSOCIATION_AND_DEVICE_AUTH_TOKEN", gatewayType?: "GATEWAY_TYPE_UNSPECIFIED"|"GATEWAY"|"NON_GATEWAY", lastAccessedGatewayId?: string, lastAccessedGatewayTime?: string}
 # --lastErrorStatus shape: {code?: int, details?: list, message?: string}
 # --state shape: {binaryData?: string, updateTime?: string}
-export def "projects update" [
+export def "cloudiot-projects-locations-registries-devices-patch" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -326,7 +326,7 @@ export def "projects update" [
 #
 # GET /v1/{name}/configVersions
 # operationId: cloudiot.projects.locations.registries.devices.configVersions.list
-export def "config-versions list" [
+export def "cloudiot-projects-locations-registries-devices-config-versions-list" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -375,7 +375,7 @@ export def "config-versions list" [
 #
 # GET /v1/{name}/states
 # operationId: cloudiot.projects.locations.registries.devices.states.list
-export def "states list" [
+export def "cloudiot-projects-locations-registries-devices-states-list" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -424,7 +424,7 @@ export def "states list" [
 #
 # POST /v1/{name}:modifyCloudToDeviceConfig
 # operationId: cloudiot.projects.locations.registries.devices.modifyCloudToDeviceConfig
-export def "projects create-modify-cloud-to-device-config" [
+export def "cloudiot-projects-locations-registries-devices-modify-cloud-to-device-config" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -477,7 +477,7 @@ export def "projects create-modify-cloud-to-device-config" [
 #
 # POST /v1/{name}:sendCommandToDevice
 # operationId: cloudiot.projects.locations.registries.devices.sendCommandToDevice
-export def "projects send-command-to-device" [
+export def "cloudiot-projects-locations-registries-devices-send-command-to-device" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -530,7 +530,7 @@ export def "projects send-command-to-device" [
 #
 # GET /v1/{parent}/devices
 # operationId: cloudiot.projects.locations.registries.groups.devices.list
-export def "devices list" [
+export def "cloudiot-projects-locations-registries-groups-devices-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -591,7 +591,7 @@ export def "devices list" [
 # --gatewayConfig shape: {gatewayAuthMethod?: "GATEWAY_AUTH_METHOD_UNSPECIFIED"|"ASSOCIATION_ONLY"|"DEVICE_AUTH_TOKEN_ONLY"|"ASSOCIATION_AND_DEVICE_AUTH_TOKEN", gatewayType?: "GATEWAY_TYPE_UNSPECIFIED"|"GATEWAY"|"NON_GATEWAY", lastAccessedGatewayId?: string, lastAccessedGatewayTime?: string}
 # --lastErrorStatus shape: {code?: int, details?: list, message?: string}
 # --state shape: {binaryData?: string, updateTime?: string}
-export def "devices create" [
+export def "cloudiot-projects-locations-registries-devices-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -659,7 +659,7 @@ export def "devices create" [
 #
 # GET /v1/{parent}/registries
 # operationId: cloudiot.projects.locations.registries.list
-export def "registries list" [
+export def "cloudiot-projects-locations-registries-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -714,7 +714,7 @@ export def "registries list" [
 # --httpConfig shape: {httpEnabledState?: "HTTP_STATE_UNSPECIFIED"|"HTTP_ENABLED"|"HTTP_DISABLED"}
 # --mqttConfig shape: {mqttEnabledState?: "MQTT_STATE_UNSPECIFIED"|"MQTT_ENABLED"|"MQTT_DISABLED"}
 # --stateNotificationConfig shape: {pubsubTopicName?: string}
-export def "registries create" [
+export def "cloudiot-projects-locations-registries-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -773,7 +773,7 @@ export def "registries create" [
 #
 # POST /v1/{parent}:bindDeviceToGateway
 # operationId: cloudiot.projects.locations.registries.bindDeviceToGateway
-export def "projects create-bind-device-to-gateway" [
+export def "cloudiot-projects-locations-registries-bind-device-to-gateway" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -826,7 +826,7 @@ export def "projects create-bind-device-to-gateway" [
 #
 # POST /v1/{parent}:unbindDeviceFromGateway
 # operationId: cloudiot.projects.locations.registries.unbindDeviceFromGateway
-export def "projects create-unbind-device-from-gateway" [
+export def "cloudiot-projects-locations-registries-unbind-device-from-gateway" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -880,7 +880,7 @@ export def "projects create-unbind-device-from-gateway" [
 # POST /v1/{resource}:getIamPolicy
 # operationId: cloudiot.projects.locations.registries.groups.getIamPolicy
 # --options shape: {requestedPolicyVersion?: int}
-export def "projects get-iam-policy" [
+export def "cloudiot-projects-locations-registries-groups-get-iam-policy" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -933,7 +933,7 @@ export def "projects get-iam-policy" [
 # POST /v1/{resource}:setIamPolicy
 # operationId: cloudiot.projects.locations.registries.groups.setIamPolicy
 # --policy shape: {bindings?: list, etag?: string, version?: int}
-export def "projects update-iam-policy" [
+export def "cloudiot-projects-locations-registries-groups-set-iam-policy" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -985,7 +985,7 @@ export def "projects update-iam-policy" [
 #
 # POST /v1/{resource}:testIamPermissions
 # operationId: cloudiot.projects.locations.registries.groups.testIamPermissions
-export def "projects test-iam-permissions" [
+export def "cloudiot-projects-locations-registries-groups-test-iam-permissions" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)

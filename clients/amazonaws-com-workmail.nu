@@ -180,7 +180,7 @@ def x-amz-target-completer-79 [] { ["WorkMailService.UpdateResource"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "api create-associate-delegate-to-resource" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "associate-delegate-to-resource" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -204,7 +204,7 @@ export def commands []: nothing -> table {
 #
 # POST /
 # operationId: AssociateDelegateToResource
-export def "api create-associate-delegate-to-resource" [
+export def "associate-delegate-to-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -254,7 +254,7 @@ export def "api create-associate-delegate-to-resource" [
 #
 # POST /
 # operationId: AssociateMemberToGroup
-export def "api create-associate-member-to-group" [
+export def "associate-member-to-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -304,7 +304,7 @@ export def "api create-associate-member-to-group" [
 #
 # POST /
 # operationId: AssumeImpersonationRole
-export def "api create-assume-impersonation-role" [
+export def "assume-impersonation-role" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -353,7 +353,7 @@ export def "api create-assume-impersonation-role" [
 #
 # POST /
 # operationId: CancelMailboxExportJob
-export def "api cancel-mailbox-export-job" [
+export def "cancel-mailbox-export-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -403,7 +403,7 @@ export def "api cancel-mailbox-export-job" [
 #
 # POST /
 # operationId: CreateAlias
-export def "api create-alias" [
+export def "create-alias" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -453,7 +453,7 @@ export def "api create-alias" [
 #
 # POST /
 # operationId: CreateAvailabilityConfiguration
-export def "api create-availability-configuration" [
+export def "create-availability-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -505,7 +505,7 @@ export def "api create-availability-configuration" [
 #
 # POST /
 # operationId: CreateGroup
-export def "api create-group" [
+export def "create-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -554,7 +554,7 @@ export def "api create-group" [
 #
 # POST /
 # operationId: CreateImpersonationRole
-export def "api create-impersonation-role" [
+export def "create-impersonation-role" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -607,7 +607,7 @@ export def "api create-impersonation-role" [
 #
 # POST /
 # operationId: CreateMobileDeviceAccessRule
-export def "api create-mobile-device-access-rule" [
+export def "create-mobile-device-access-rule" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -667,7 +667,7 @@ export def "api create-mobile-device-access-rule" [
 #
 # POST /
 # operationId: CreateOrganization
-export def "api create-organization" [
+export def "create-organization" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -720,7 +720,7 @@ export def "api create-organization" [
 #
 # POST /
 # operationId: CreateResource
-export def "api create-resource" [
+export def "create-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -770,7 +770,7 @@ export def "api create-resource" [
 #
 # POST /
 # operationId: CreateUser
-export def "api create-user" [
+export def "create-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -821,7 +821,7 @@ export def "api create-user" [
 #
 # POST /
 # operationId: DeleteAccessControlRule
-export def "api delete-access-control-rule" [
+export def "delete-access-control-rule" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -870,7 +870,7 @@ export def "api delete-access-control-rule" [
 #
 # POST /
 # operationId: DeleteAlias
-export def "api delete-alias" [
+export def "delete-alias" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -920,7 +920,7 @@ export def "api delete-alias" [
 #
 # POST /
 # operationId: DeleteAvailabilityConfiguration
-export def "api delete-availability-configuration" [
+export def "delete-availability-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -969,7 +969,7 @@ export def "api delete-availability-configuration" [
 #
 # POST /
 # operationId: DeleteEmailMonitoringConfiguration
-export def "api delete-email-monitoring-configuration" [
+export def "delete-email-monitoring-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1017,7 +1017,7 @@ export def "api delete-email-monitoring-configuration" [
 #
 # POST /
 # operationId: DeleteGroup
-export def "api delete-group" [
+export def "delete-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1066,7 +1066,7 @@ export def "api delete-group" [
 #
 # POST /
 # operationId: DeleteImpersonationRole
-export def "api delete-impersonation-role" [
+export def "delete-impersonation-role" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1115,7 +1115,7 @@ export def "api delete-impersonation-role" [
 #
 # POST /
 # operationId: DeleteMailboxPermissions
-export def "api delete-mailbox-permissions" [
+export def "delete-mailbox-permissions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1165,7 +1165,7 @@ export def "api delete-mailbox-permissions" [
 #
 # POST /
 # operationId: DeleteMobileDeviceAccessOverride
-export def "api delete-mobile-device-access-override" [
+export def "delete-mobile-device-access-override" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1215,7 +1215,7 @@ export def "api delete-mobile-device-access-override" [
 #
 # POST /
 # operationId: DeleteMobileDeviceAccessRule
-export def "api delete-mobile-device-access-rule" [
+export def "delete-mobile-device-access-rule" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1264,7 +1264,7 @@ export def "api delete-mobile-device-access-rule" [
 #
 # POST /
 # operationId: DeleteOrganization
-export def "api delete-organization" [
+export def "delete-organization" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1314,7 +1314,7 @@ export def "api delete-organization" [
 #
 # POST /
 # operationId: DeleteResource
-export def "api delete-resource" [
+export def "delete-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1363,7 +1363,7 @@ export def "api delete-resource" [
 #
 # POST /
 # operationId: DeleteRetentionPolicy
-export def "api delete-retention-policy" [
+export def "delete-retention-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1412,7 +1412,7 @@ export def "api delete-retention-policy" [
 #
 # POST /
 # operationId: DeleteUser
-export def "api delete-user" [
+export def "delete-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1461,7 +1461,7 @@ export def "api delete-user" [
 #
 # POST /
 # operationId: DeregisterFromWorkMail
-export def "api create-deregister-from-work-mail" [
+export def "deregister-from-work-mail" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1510,7 +1510,7 @@ export def "api create-deregister-from-work-mail" [
 #
 # POST /
 # operationId: DeregisterMailDomain
-export def "api create-deregister-mail-domain" [
+export def "deregister-mail-domain" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1559,7 +1559,7 @@ export def "api create-deregister-mail-domain" [
 #
 # POST /
 # operationId: DescribeEmailMonitoringConfiguration
-export def "api get-email-monitoring-configuration" [
+export def "describe-email-monitoring-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1607,7 +1607,7 @@ export def "api get-email-monitoring-configuration" [
 #
 # POST /
 # operationId: DescribeGroup
-export def "api get-group" [
+export def "describe-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1656,7 +1656,7 @@ export def "api get-group" [
 #
 # POST /
 # operationId: DescribeInboundDmarcSettings
-export def "api get-inbound-dmarc-settings" [
+export def "describe-inbound-dmarc-settings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1704,7 +1704,7 @@ export def "api get-inbound-dmarc-settings" [
 #
 # POST /
 # operationId: DescribeMailboxExportJob
-export def "api get-mailbox-export-job" [
+export def "describe-mailbox-export-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1753,7 +1753,7 @@ export def "api get-mailbox-export-job" [
 #
 # POST /
 # operationId: DescribeOrganization
-export def "api get-organization" [
+export def "describe-organization" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1801,7 +1801,7 @@ export def "api get-organization" [
 #
 # POST /
 # operationId: DescribeResource
-export def "api get-resource" [
+export def "describe-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1850,7 +1850,7 @@ export def "api get-resource" [
 #
 # POST /
 # operationId: DescribeUser
-export def "api get-user" [
+export def "describe-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1899,7 +1899,7 @@ export def "api get-user" [
 #
 # POST /
 # operationId: DisassociateDelegateFromResource
-export def "api create-disassociate-delegate-from-resource" [
+export def "disassociate-delegate-from-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1949,7 +1949,7 @@ export def "api create-disassociate-delegate-from-resource" [
 #
 # POST /
 # operationId: DisassociateMemberFromGroup
-export def "api create-disassociate-member-from-group" [
+export def "disassociate-member-from-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1999,7 +1999,7 @@ export def "api create-disassociate-member-from-group" [
 #
 # POST /
 # operationId: GetAccessControlEffect
-export def "api get-access-control-effect" [
+export def "get-access-control-effect" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2051,7 +2051,7 @@ export def "api get-access-control-effect" [
 #
 # POST /
 # operationId: GetDefaultRetentionPolicy
-export def "api get-default-retention-policy" [
+export def "get-default-retention-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2099,7 +2099,7 @@ export def "api get-default-retention-policy" [
 #
 # POST /
 # operationId: GetImpersonationRole
-export def "api get-impersonation-role" [
+export def "get-impersonation-role" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2148,7 +2148,7 @@ export def "api get-impersonation-role" [
 #
 # POST /
 # operationId: GetImpersonationRoleEffect
-export def "api get-impersonation-role-effect" [
+export def "get-impersonation-role-effect" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2198,7 +2198,7 @@ export def "api get-impersonation-role-effect" [
 #
 # POST /
 # operationId: GetMailDomain
-export def "api get-mail-domain" [
+export def "get-mail-domain" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2247,7 +2247,7 @@ export def "api get-mail-domain" [
 #
 # POST /
 # operationId: GetMailboxDetails
-export def "api get-mailbox-details" [
+export def "get-mailbox-details" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2296,7 +2296,7 @@ export def "api get-mailbox-details" [
 #
 # POST /
 # operationId: GetMobileDeviceAccessEffect
-export def "api get-mobile-device-access-effect" [
+export def "get-mobile-device-access-effect" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2348,7 +2348,7 @@ export def "api get-mobile-device-access-effect" [
 #
 # POST /
 # operationId: GetMobileDeviceAccessOverride
-export def "api get-mobile-device-access-override" [
+export def "get-mobile-device-access-override" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2398,7 +2398,7 @@ export def "api get-mobile-device-access-override" [
 #
 # POST /
 # operationId: ListAccessControlRules
-export def "api list-access-control-rules" [
+export def "list-access-control-rules" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2446,7 +2446,7 @@ export def "api list-access-control-rules" [
 #
 # POST /
 # operationId: ListAliases
-export def "api list-aliases" [
+export def "list-aliases" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2500,7 +2500,7 @@ export def "api list-aliases" [
 #
 # POST /
 # operationId: ListAvailabilityConfigurations
-export def "api list-availability-configurations" [
+export def "list-availability-configurations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2553,7 +2553,7 @@ export def "api list-availability-configurations" [
 #
 # POST /
 # operationId: ListGroupMembers
-export def "api list-group-members" [
+export def "list-group-members" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2607,7 +2607,7 @@ export def "api list-group-members" [
 #
 # POST /
 # operationId: ListGroups
-export def "api list-groups" [
+export def "list-groups" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2660,7 +2660,7 @@ export def "api list-groups" [
 #
 # POST /
 # operationId: ListImpersonationRoles
-export def "api list-impersonation-roles" [
+export def "list-impersonation-roles" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2713,7 +2713,7 @@ export def "api list-impersonation-roles" [
 #
 # POST /
 # operationId: ListMailDomains
-export def "api list-mail-domains" [
+export def "list-mail-domains" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2766,7 +2766,7 @@ export def "api list-mail-domains" [
 #
 # POST /
 # operationId: ListMailboxExportJobs
-export def "api list-mailbox-export-jobs" [
+export def "list-mailbox-export-jobs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2819,7 +2819,7 @@ export def "api list-mailbox-export-jobs" [
 #
 # POST /
 # operationId: ListMailboxPermissions
-export def "api list-mailbox-permissions" [
+export def "list-mailbox-permissions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2873,7 +2873,7 @@ export def "api list-mailbox-permissions" [
 #
 # POST /
 # operationId: ListMobileDeviceAccessOverrides
-export def "api list-mobile-device-access-overrides" [
+export def "list-mobile-device-access-overrides" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2928,7 +2928,7 @@ export def "api list-mobile-device-access-overrides" [
 #
 # POST /
 # operationId: ListMobileDeviceAccessRules
-export def "api list-mobile-device-access-rules" [
+export def "list-mobile-device-access-rules" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2976,7 +2976,7 @@ export def "api list-mobile-device-access-rules" [
 #
 # POST /
 # operationId: ListOrganizations
-export def "api list-organizations" [
+export def "list-organizations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3028,7 +3028,7 @@ export def "api list-organizations" [
 #
 # POST /
 # operationId: ListResourceDelegates
-export def "api list-resource-delegates" [
+export def "list-resource-delegates" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3082,7 +3082,7 @@ export def "api list-resource-delegates" [
 #
 # POST /
 # operationId: ListResources
-export def "api list-resources" [
+export def "list-resources" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3135,7 +3135,7 @@ export def "api list-resources" [
 #
 # POST /
 # operationId: ListTagsForResource
-export def "api list-tags-for-resource" [
+export def "list-tags-for-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3183,7 +3183,7 @@ export def "api list-tags-for-resource" [
 #
 # POST /
 # operationId: ListUsers
-export def "api list-users" [
+export def "list-users" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3236,7 +3236,7 @@ export def "api list-users" [
 #
 # POST /
 # operationId: PutAccessControlRule
-export def "api update-access-control-rule" [
+export def "put-access-control-rule" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3295,7 +3295,7 @@ export def "api update-access-control-rule" [
 #
 # POST /
 # operationId: PutEmailMonitoringConfiguration
-export def "api update-email-monitoring-configuration" [
+export def "put-email-monitoring-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3345,7 +3345,7 @@ export def "api update-email-monitoring-configuration" [
 #
 # POST /
 # operationId: PutInboundDmarcSettings
-export def "api update-inbound-dmarc-settings" [
+export def "put-inbound-dmarc-settings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3394,7 +3394,7 @@ export def "api update-inbound-dmarc-settings" [
 #
 # POST /
 # operationId: PutMailboxPermissions
-export def "api update-mailbox-permissions" [
+export def "put-mailbox-permissions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3445,7 +3445,7 @@ export def "api update-mailbox-permissions" [
 #
 # POST /
 # operationId: PutMobileDeviceAccessOverride
-export def "api update-mobile-device-access-override" [
+export def "put-mobile-device-access-override" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3497,7 +3497,7 @@ export def "api update-mobile-device-access-override" [
 #
 # POST /
 # operationId: PutRetentionPolicy
-export def "api update-retention-policy" [
+export def "put-retention-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3549,7 +3549,7 @@ export def "api update-retention-policy" [
 #
 # POST /
 # operationId: RegisterMailDomain
-export def "api create-mail-domain" [
+export def "register-mail-domain" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3599,7 +3599,7 @@ export def "api create-mail-domain" [
 #
 # POST /
 # operationId: RegisterToWorkMail
-export def "api create-to-work-mail" [
+export def "register-to-work-mail" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3649,7 +3649,7 @@ export def "api create-to-work-mail" [
 #
 # POST /
 # operationId: ResetPassword
-export def "api reset-password" [
+export def "reset-password" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3699,7 +3699,7 @@ export def "api reset-password" [
 #
 # POST /
 # operationId: StartMailboxExportJob
-export def "api start-mailbox-export-job" [
+export def "start-mailbox-export-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3754,7 +3754,7 @@ export def "api start-mailbox-export-job" [
 #
 # POST /
 # operationId: TagResource
-export def "api tag-resource" [
+export def "tag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3805,7 +3805,7 @@ export def "api tag-resource" [
 # operationId: TestAvailabilityConfiguration
 # --EwsProvider shape: {EwsEndpoint: any, EwsUsername: any, EwsPassword: any}
 # --LambdaProvider shape: {LambdaArn: any}
-export def "api test-availability-configuration" [
+export def "test-availability-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3856,7 +3856,7 @@ export def "api test-availability-configuration" [
 #
 # POST /
 # operationId: UntagResource
-export def "api untag-resource" [
+export def "untag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3905,7 +3905,7 @@ export def "api untag-resource" [
 #
 # POST /
 # operationId: UpdateAvailabilityConfiguration
-export def "api update-availability-configuration" [
+export def "update-availability-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3956,7 +3956,7 @@ export def "api update-availability-configuration" [
 #
 # POST /
 # operationId: UpdateDefaultMailDomain
-export def "api update-default-mail-domain" [
+export def "update-default-mail-domain" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4005,7 +4005,7 @@ export def "api update-default-mail-domain" [
 #
 # POST /
 # operationId: UpdateImpersonationRole
-export def "api update-impersonation-role" [
+export def "update-impersonation-role" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4058,7 +4058,7 @@ export def "api update-impersonation-role" [
 #
 # POST /
 # operationId: UpdateMailboxQuota
-export def "api update-mailbox-quota" [
+export def "update-mailbox-quota" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4108,7 +4108,7 @@ export def "api update-mailbox-quota" [
 #
 # POST /
 # operationId: UpdateMobileDeviceAccessRule
-export def "api update-mobile-device-access-rule" [
+export def "update-mobile-device-access-rule" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4168,7 +4168,7 @@ export def "api update-mobile-device-access-rule" [
 #
 # POST /
 # operationId: UpdatePrimaryEmailAddress
-export def "api update-primary-email-address" [
+export def "update-primary-email-address" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4218,7 +4218,7 @@ export def "api update-primary-email-address" [
 #
 # POST /
 # operationId: UpdateResource
-export def "api update-resource" [
+export def "update-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

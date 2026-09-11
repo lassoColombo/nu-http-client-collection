@@ -117,7 +117,7 @@ def accept-completer [] { ["application/json" "application/xml"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "blacklist-content-type delete-items" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "delete-blacklist-items" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -141,7 +141,7 @@ export def commands []: nothing -> table {
 #
 # DELETE /blacklist.{content_type}
 # operationId: deleteBlacklistItems
-export def "blacklist-content-type delete-items" [
+export def "delete-blacklist-items" [
   content_type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -184,7 +184,7 @@ export def "blacklist-content-type delete-items" [
 #
 # GET /blacklist.{content_type}
 # operationId: getBlacklist
-export def "blacklist-content-type get" [
+export def "get-blacklist" [
   content_type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -223,7 +223,7 @@ export def "blacklist-content-type get" [
 #
 # POST /blacklist.{content_type}
 # operationId: addBlacklist
-export def "blacklist-content-type create" [
+export def "add-blacklist" [
   content_type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -266,7 +266,7 @@ export def "blacklist-content-type create" [
 #
 # PUT /blacklist.{content_type}
 # operationId: updateBlacklist
-export def "blacklist-content-type update" [
+export def "update-blacklist" [
   content_type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -309,7 +309,7 @@ export def "blacklist-content-type update" [
 #
 # DELETE /categories.{content_type}
 # operationId: deleteCategories
-export def "categories-content-type delete" [
+export def "delete-categories" [
   content_type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -352,7 +352,7 @@ export def "categories-content-type delete" [
 #
 # GET /categories.{content_type}
 # operationId: getCategories
-export def "categories-content-type get" [
+export def "get-categories" [
   content_type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -391,7 +391,7 @@ export def "categories-content-type get" [
 #
 # POST /categories.{content_type}
 # operationId: addCategories
-export def "categories-content-type create" [
+export def "add-categories" [
   content_type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -434,7 +434,7 @@ export def "categories-content-type create" [
 #
 # PUT /categories.{content_type}
 # operationId: updateCategories
-export def "categories-content-type update" [
+export def "update-categories" [
   content_type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -477,7 +477,7 @@ export def "categories-content-type update" [
 #
 # POST /collection.{content_type}
 # operationId: queueCollection
-export def "collection-content-type create-queue" [
+export def "queue-collection" [
   content_type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -520,7 +520,7 @@ export def "collection-content-type create-queue" [
 #
 # GET /collection/processed.{content_type}
 # operationId: retrieveProcessedCollections
-export def "collection-processed-content-type get" [
+export def "retrieve-processed-collections" [
   content_type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -559,7 +559,7 @@ export def "collection-processed-content-type get" [
 #
 # DELETE /collection/{collection_id}.{content_type}
 # operationId: cancelCollection
-export def "collection cancel" [
+export def "cancel-collection" [
   collection_id: string
   content_type: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -600,7 +600,7 @@ export def "collection cancel" [
 #
 # GET /collection/{collection_id}.{content_type}
 # operationId: receiveCollectionAnalyticData
-export def "collection receive-analytic-data" [
+export def "receive-collection-analytic-data" [
   collection_id: string
   content_type: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -641,7 +641,7 @@ export def "collection receive-analytic-data" [
 #
 # DELETE /configurations.{content_type}
 # operationId: deleteConfigurations
-export def "configurations-content-type delete" [
+export def "delete-configurations" [
   content_type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -682,7 +682,7 @@ export def "configurations-content-type delete" [
 #
 # GET /configurations.{content_type}
 # operationId: getConfigurations
-export def "configurations-content-type get" [
+export def "get-configurations" [
   content_type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -719,7 +719,7 @@ export def "configurations-content-type get" [
 #
 # POST /configurations.{content_type}
 # operationId: addConfigurations
-export def "configurations-content-type create" [
+export def "add-configurations" [
   content_type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -760,7 +760,7 @@ export def "configurations-content-type create" [
 #
 # PUT /configurations.{content_type}
 # operationId: updateConfigurations
-export def "configurations-content-type update" [
+export def "update-configurations" [
   content_type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -801,7 +801,7 @@ export def "configurations-content-type update" [
 #
 # POST /document.{content_type}
 # operationId: queueDocument
-export def "document-content-type create-queue" [
+export def "queue-document" [
   content_type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -844,7 +844,7 @@ export def "document-content-type create-queue" [
 #
 # POST /document/batch.{content_type}
 # operationId: queueBatchOfDocuments
-export def "document-batch-content-type create-queue" [
+export def "queue-batch-of-documents" [
   content_type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -887,7 +887,7 @@ export def "document-batch-content-type create-queue" [
 #
 # GET /document/processed.{content_type}
 # operationId: retrieveProcessedDocuments
-export def "document-processed-content-type get" [
+export def "retrieve-processed-documents" [
   content_type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -926,7 +926,7 @@ export def "document-processed-content-type get" [
 #
 # DELETE /document/{document_id}.{content_type}
 # operationId: cancelDocument
-export def "document cancel" [
+export def "cancel-document" [
   document_id: string
   content_type: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -967,7 +967,7 @@ export def "document cancel" [
 #
 # GET /document/{document_id}.{content_type}
 # operationId: receiveDocumentAnalyticData
-export def "document receive-analytic-data" [
+export def "receive-document-analytic-data" [
   document_id: string
   content_type: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1008,7 +1008,7 @@ export def "document receive-analytic-data" [
 #
 # DELETE /entities.{content_type}
 # operationId: deleteEntities
-export def "entities-content-type delete" [
+export def "delete-entities" [
   content_type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1045,7 +1045,7 @@ export def "entities-content-type delete" [
 #
 # GET /entities.{content_type}
 # operationId: getEntities
-export def "entities-content-type get" [
+export def "get-entities" [
   content_type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1084,7 +1084,7 @@ export def "entities-content-type get" [
 #
 # POST /entities.{content_type}
 # operationId: addEntities
-export def "entities-content-type create" [
+export def "add-entities" [
   content_type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1127,7 +1127,7 @@ export def "entities-content-type create" [
 #
 # PUT /entities.{content_type}
 # operationId: updateEntities
-export def "entities-content-type update" [
+export def "update-entities" [
   content_type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1170,7 +1170,7 @@ export def "entities-content-type update" [
 #
 # GET /features.{content_type}
 # operationId: getFeatures
-export def "features-content-type get" [
+export def "get-features" [
   content_type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1209,7 +1209,7 @@ export def "features-content-type get" [
 #
 # DELETE /phrases.{content_type}
 # operationId: deletePhrases
-export def "phrases-content-type delete" [
+export def "delete-phrases" [
   content_type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1252,7 +1252,7 @@ export def "phrases-content-type delete" [
 #
 # GET /phrases.{content_type}
 # operationId: getPhrases
-export def "phrases-content-type get" [
+export def "get-phrases" [
   content_type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1291,7 +1291,7 @@ export def "phrases-content-type get" [
 #
 # POST /phrases.{content_type}
 # operationId: addPhrases
-export def "phrases-content-type create" [
+export def "add-phrases" [
   content_type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1334,7 +1334,7 @@ export def "phrases-content-type create" [
 #
 # PUT /phrases.{content_type}
 # operationId: updatePhrases
-export def "phrases-content-type update" [
+export def "update-phrases" [
   content_type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1377,7 +1377,7 @@ export def "phrases-content-type update" [
 #
 # DELETE /queries.{content_type}
 # operationId: deleteQueries
-export def "queries-content-type delete" [
+export def "delete-queries" [
   content_type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1420,7 +1420,7 @@ export def "queries-content-type delete" [
 #
 # GET /queries.{content_type}
 # operationId: getQueries
-export def "queries-content-type get" [
+export def "get-queries" [
   content_type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1459,7 +1459,7 @@ export def "queries-content-type get" [
 #
 # POST /queries.{content_type}
 # operationId: addQueries
-export def "queries-content-type create" [
+export def "add-queries" [
   content_type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1502,7 +1502,7 @@ export def "queries-content-type create" [
 #
 # PUT /queries.{content_type}
 # operationId: updateQueries
-export def "queries-content-type update" [
+export def "update-queries" [
   content_type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1545,7 +1545,7 @@ export def "queries-content-type update" [
 #
 # GET /statistics.{content_type}
 # operationId: getStatistic
-export def "statistics-content-type get" [
+export def "get-statistic" [
   content_type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1585,7 +1585,7 @@ export def "statistics-content-type get" [
 #
 # GET /status.{content_type}
 # operationId: getStatus
-export def "status-content-type get" [
+export def "get-status" [
   content_type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1622,7 +1622,7 @@ export def "status-content-type get" [
 #
 # GET /subscription.{content_type}
 # operationId: getSubscription
-export def "subscription-content-type get" [
+export def "get-subscription" [
   content_type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1659,7 +1659,7 @@ export def "subscription-content-type get" [
 #
 # DELETE /taxonomy.{content_type}
 # operationId: deleteTaxonomy
-export def "taxonomy-content-type delete" [
+export def "delete-taxonomy" [
   content_type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1702,7 +1702,7 @@ export def "taxonomy-content-type delete" [
 #
 # GET /taxonomy.{content_type}
 # operationId: getTaxonomy
-export def "taxonomy-content-type get" [
+export def "get-taxonomy" [
   content_type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1741,7 +1741,7 @@ export def "taxonomy-content-type get" [
 #
 # POST /taxonomy.{content_type}
 # operationId: addTaxonomy
-export def "taxonomy-content-type create" [
+export def "add-taxonomy" [
   content_type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1784,7 +1784,7 @@ export def "taxonomy-content-type create" [
 #
 # PUT /taxonomy.{content_type}
 # operationId: updateTaxonomy
-export def "taxonomy-content-type update" [
+export def "update-taxonomy" [
   content_type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

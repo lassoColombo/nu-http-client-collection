@@ -124,7 +124,7 @@ def name-completer [] { ["password1" "password2"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resource-groups-providers-microsoft-container-registry-registries-generate-credentials generate" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "registries-generate-credentials" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -148,7 +148,7 @@ export def commands []: nothing -> table {
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ContainerRegistry/registries/{registryName}/generateCredentials
 # operationId: Registries_GenerateCredentials
-export def "subscriptions-resource-groups-providers-microsoft-container-registry-registries-generate-credentials generate" [
+export def "registries-generate-credentials" [
   subscription_id: string
   resource_group_name: string
   registry_name: string
@@ -196,7 +196,7 @@ export def "subscriptions-resource-groups-providers-microsoft-container-registry
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ContainerRegistry/registries/{registryName}/scopeMaps
 # operationId: ScopeMaps_List
-export def "subscriptions-resource-groups-providers-microsoft-container-registry-registries-scope-maps list" [
+export def "scope-maps-list" [
   subscription_id: string
   resource_group_name: string
   registry_name: string
@@ -238,7 +238,7 @@ export def "subscriptions-resource-groups-providers-microsoft-container-registry
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ContainerRegistry/registries/{registryName}/scopeMaps/{scopeMapName}
 # operationId: ScopeMaps_Delete
-export def "subscriptions-resource-groups-providers-microsoft-container-registry-registries-scope-maps delete" [
+export def "scope-maps-delete" [
   subscription_id: string
   resource_group_name: string
   registry_name: string
@@ -282,7 +282,7 @@ export def "subscriptions-resource-groups-providers-microsoft-container-registry
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ContainerRegistry/registries/{registryName}/scopeMaps/{scopeMapName}
 # operationId: ScopeMaps_Get
-export def "subscriptions-resource-groups-providers-microsoft-container-registry-registries-scope-maps get" [
+export def "scope-maps-get" [
   subscription_id: string
   resource_group_name: string
   registry_name: string
@@ -327,7 +327,7 @@ export def "subscriptions-resource-groups-providers-microsoft-container-registry
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ContainerRegistry/registries/{registryName}/scopeMaps/{scopeMapName}
 # operationId: ScopeMaps_Update
 # --properties shape: {actions?: list<string>, description?: string}
-export def "subscriptions-resource-groups-providers-microsoft-container-registry-registries-scope-maps update" [
+export def "scope-maps-update" [
   subscription_id: string
   resource_group_name: string
   registry_name: string
@@ -376,7 +376,7 @@ export def "subscriptions-resource-groups-providers-microsoft-container-registry
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ContainerRegistry/registries/{registryName}/scopeMaps/{scopeMapName}
 # operationId: ScopeMaps_Create
 # --properties shape: {actions: list<string>, description?: string}
-export def "subscriptions-resource-groups-providers-microsoft-container-registry-registries-scope-maps create" [
+export def "scope-maps-create" [
   subscription_id: string
   resource_group_name: string
   registry_name: string
@@ -424,7 +424,7 @@ export def "subscriptions-resource-groups-providers-microsoft-container-registry
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ContainerRegistry/registries/{registryName}/tokens
 # operationId: Tokens_List
-export def "subscriptions-resource-groups-providers-microsoft-container-registry-registries-tokens list" [
+export def "tokens-list" [
   subscription_id: string
   resource_group_name: string
   registry_name: string
@@ -466,7 +466,7 @@ export def "subscriptions-resource-groups-providers-microsoft-container-registry
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ContainerRegistry/registries/{registryName}/tokens/{tokenName}
 # operationId: Tokens_Delete
-export def "subscriptions-resource-groups-providers-microsoft-container-registry-registries-tokens delete" [
+export def "tokens-delete" [
   subscription_id: string
   resource_group_name: string
   registry_name: string
@@ -510,7 +510,7 @@ export def "subscriptions-resource-groups-providers-microsoft-container-registry
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ContainerRegistry/registries/{registryName}/tokens/{tokenName}
 # operationId: Tokens_Get
-export def "subscriptions-resource-groups-providers-microsoft-container-registry-registries-tokens get" [
+export def "tokens-get" [
   subscription_id: string
   resource_group_name: string
   registry_name: string
@@ -555,7 +555,7 @@ export def "subscriptions-resource-groups-providers-microsoft-container-registry
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ContainerRegistry/registries/{registryName}/tokens/{tokenName}
 # operationId: Tokens_Update
 # --properties shape: {credentials?: record, scopeMapId?: string, status?: "enabled"|"disabled"}
-export def "subscriptions-resource-groups-providers-microsoft-container-registry-registries-tokens update" [
+export def "tokens-update" [
   subscription_id: string
   resource_group_name: string
   registry_name: string
@@ -604,7 +604,7 @@ export def "subscriptions-resource-groups-providers-microsoft-container-registry
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ContainerRegistry/registries/{registryName}/tokens/{tokenName}
 # operationId: Tokens_Create
 # --properties shape: {credentials?: record, objectId?: string, scopeMapId?: string, status?: "enabled"|"disabled"}
-export def "subscriptions-resource-groups-providers-microsoft-container-registry-registries-tokens create" [
+export def "tokens-create" [
   subscription_id: string
   resource_group_name: string
   registry_name: string

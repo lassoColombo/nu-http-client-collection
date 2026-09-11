@@ -122,7 +122,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resource-groups-providers-microsoft-sql-servers-databases-sync-groups-sync-members list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "sync-members-list-by-sync-group" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -146,7 +146,7 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/servers/{serverName}/databases/{databaseName}/syncGroups/{syncGroupName}/syncMembers
 # operationId: SyncMembers_ListBySyncGroup
-export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databases-sync-groups-sync-members list" [
+export def "sync-members-list-by-sync-group" [
   subscription_id: string
   resource_group_name: string
   server_name: string
@@ -192,7 +192,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databa
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/servers/{serverName}/databases/{databaseName}/syncGroups/{syncGroupName}/syncMembers/{syncMemberName}
 # operationId: SyncMembers_Delete
-export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databases-sync-groups-sync-members delete" [
+export def "sync-members-delete" [
   subscription_id: string
   resource_group_name: string
   server_name: string
@@ -240,7 +240,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databa
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/servers/{serverName}/databases/{databaseName}/syncGroups/{syncGroupName}/syncMembers/{syncMemberName}
 # operationId: SyncMembers_Get
-export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databases-sync-groups-sync-members get" [
+export def "sync-members-get" [
   subscription_id: string
   resource_group_name: string
   server_name: string
@@ -289,7 +289,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databa
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/servers/{serverName}/databases/{databaseName}/syncGroups/{syncGroupName}/syncMembers/{syncMemberName}
 # operationId: SyncMembers_Update
 # --properties shape: {databaseName?: string, databaseType?: "AzureSqlDatabase"|"SqlServerDatabase", password?: string, serverName?: string, sqlServerDatabaseId?: string, syncAgentId?: string, syncDirection?: "Bidirectional"|"OneWayMemberToHub"|"OneWayHubToMember", userName?: string}
-export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databases-sync-groups-sync-members update" [
+export def "sync-members-update" [
   subscription_id: string
   resource_group_name: string
   server_name: string
@@ -342,7 +342,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databa
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/servers/{serverName}/databases/{databaseName}/syncGroups/{syncGroupName}/syncMembers/{syncMemberName}
 # operationId: SyncMembers_CreateOrUpdate
 # --properties shape: {databaseName?: string, databaseType?: "AzureSqlDatabase"|"SqlServerDatabase", password?: string, serverName?: string, sqlServerDatabaseId?: string, syncAgentId?: string, syncDirection?: "Bidirectional"|"OneWayMemberToHub"|"OneWayHubToMember", userName?: string}
-export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databases-sync-groups-sync-members create-or-update" [
+export def "sync-members-create-or-update" [
   subscription_id: string
   resource_group_name: string
   server_name: string
@@ -394,7 +394,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databa
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/servers/{serverName}/databases/{databaseName}/syncGroups/{syncGroupName}/syncMembers/{syncMemberName}/refreshSchema
 # operationId: SyncMembers_RefreshMemberSchema
-export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databases-sync-groups-sync-members-refresh-schema sync" [
+export def "sync-members-refresh-member-schema" [
   subscription_id: string
   resource_group_name: string
   server_name: string
@@ -442,7 +442,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databa
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/servers/{serverName}/databases/{databaseName}/syncGroups/{syncGroupName}/syncMembers/{syncMemberName}/schemas
 # operationId: SyncMembers_ListMemberSchemas
-export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databases-sync-groups-sync-members-schemas list" [
+export def "sync-members-list-member-schemas" [
   subscription_id: string
   resource_group_name: string
   server_name: string

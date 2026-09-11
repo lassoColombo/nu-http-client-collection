@@ -116,7 +116,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-providers-microsoft-network-express-route-ports list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "express-route-ports-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -140,7 +140,7 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Network/ExpressRoutePorts
 # operationId: ExpressRoutePorts_List
-export def "subscriptions-providers-microsoft-network-express-route-ports list" [
+export def "express-route-ports-list" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -178,7 +178,7 @@ export def "subscriptions-providers-microsoft-network-express-route-ports list" 
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Network/ExpressRoutePortsLocations
 # operationId: ExpressRoutePortsLocations_List
-export def "subscriptions-providers-microsoft-network-express-route-ports-locations list" [
+export def "express-route-ports-locations-list" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -216,7 +216,7 @@ export def "subscriptions-providers-microsoft-network-express-route-ports-locati
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Network/ExpressRoutePortsLocations/{locationName}
 # operationId: ExpressRoutePortsLocations_Get
-export def "subscriptions-providers-microsoft-network-express-route-ports-locations get" [
+export def "express-route-ports-locations-get" [
   subscription_id: string
   location_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -256,7 +256,7 @@ export def "subscriptions-providers-microsoft-network-express-route-ports-locati
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/ExpressRoutePorts
 # operationId: ExpressRoutePorts_ListByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-network-express-route-ports list" [
+export def "express-route-ports-list-by-resource-group" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -296,7 +296,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-express-ro
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/ExpressRoutePorts/{expressRoutePortName}
 # operationId: ExpressRoutePorts_Delete
-export def "subscriptions-resource-groups-providers-microsoft-network-express-route-ports delete" [
+export def "express-route-ports-delete" [
   subscription_id: string
   resource_group_name: string
   express_route_port_name: string
@@ -338,7 +338,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-express-ro
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/ExpressRoutePorts/{expressRoutePortName}
 # operationId: ExpressRoutePorts_Get
-export def "subscriptions-resource-groups-providers-microsoft-network-express-route-ports get" [
+export def "express-route-ports-get" [
   subscription_id: string
   resource_group_name: string
   express_route_port_name: string
@@ -380,7 +380,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-express-ro
 #
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/ExpressRoutePorts/{expressRoutePortName}
 # operationId: ExpressRoutePorts_UpdateTags
-export def "subscriptions-resource-groups-providers-microsoft-network-express-route-ports update-tags" [
+export def "express-route-ports-update-tags" [
   subscription_id: string
   resource_group_name: string
   express_route_port_name: string
@@ -428,7 +428,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-express-ro
 # operationId: ExpressRoutePorts_CreateOrUpdate
 # --identity shape: {type?: "SystemAssigned"|"UserAssigned"|"SystemAssigned, UserAssigned"|"None", userAssignedIdentities?: record}
 # --properties shape: {bandwidthInGbps?: int, encapsulation?: "Dot1Q"|"QinQ", links?: list, peeringLocation?: string, resourceGuid?: string}
-export def "subscriptions-resource-groups-providers-microsoft-network-express-route-ports create-or-update" [
+export def "express-route-ports-create-or-update" [
   subscription_id: string
   resource_group_name: string
   express_route_port_name: string
@@ -478,7 +478,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-express-ro
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/ExpressRoutePorts/{expressRoutePortName}/links
 # operationId: ExpressRouteLinks_List
-export def "subscriptions-resource-groups-providers-microsoft-network-express-route-ports-links list" [
+export def "express-route-links-list" [
   subscription_id: string
   resource_group_name: string
   express_route_port_name: string
@@ -520,7 +520,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-express-ro
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/ExpressRoutePorts/{expressRoutePortName}/links/{linkName}
 # operationId: ExpressRouteLinks_Get
-export def "subscriptions-resource-groups-providers-microsoft-network-express-route-ports-links get" [
+export def "express-route-links-get" [
   subscription_id: string
   resource_group_name: string
   express_route_port_name: string

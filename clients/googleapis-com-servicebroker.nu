@@ -135,7 +135,7 @@ def alt-completer [] { ["json" "media" "proto"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "v1beta1 delete" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "servicebroker-projects-brokers-v2-service-instances-service-bindings-delete" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -159,7 +159,7 @@ export def commands []: nothing -> table {
 #
 # DELETE /v1beta1/{name}
 # operationId: servicebroker.projects.brokers.v2.service_instances.service_bindings.delete
-export def "v1beta1 delete" [
+export def "servicebroker-projects-brokers-v2-service-instances-service-bindings-delete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -210,7 +210,7 @@ export def "v1beta1 delete" [
 #
 # GET /v1beta1/{name}
 # operationId: servicebroker.projects.brokers.v2.service_instances.service_bindings.get
-export def "v1beta1 get" [
+export def "servicebroker-projects-brokers-v2-service-instances-service-bindings-get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -260,7 +260,7 @@ export def "v1beta1 get" [
 #
 # PATCH /v1beta1/{name}
 # operationId: servicebroker.projects.brokers.v2.service_instances.patch
-export def "v1beta1 update" [
+export def "servicebroker-projects-brokers-v2-service-instances-patch" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -324,7 +324,7 @@ export def "v1beta1 update" [
 #
 # GET /v1beta1/{name}/last_operation
 # operationId: servicebroker.projects.brokers.v2.service_instances.service_bindings.getLast_operation
-export def "v1beta1-last-operation get" [
+export def "servicebroker-projects-brokers-v2-service-instances-service-bindings-get-last-operation" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -375,7 +375,7 @@ export def "v1beta1-last-operation get" [
 #
 # GET /v1beta1/{parent}/bindings
 # operationId: servicebroker.projects.brokers.instances.bindings.list
-export def "v1beta1-bindings list" [
+export def "servicebroker-projects-brokers-instances-bindings-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -425,7 +425,7 @@ export def "v1beta1-bindings list" [
 #
 # GET /v1beta1/{parent}/brokers
 # operationId: servicebroker.projects.brokers.list
-export def "v1beta1-brokers list" [
+export def "servicebroker-projects-brokers-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -475,7 +475,7 @@ export def "v1beta1-brokers list" [
 #
 # POST /v1beta1/{parent}/brokers
 # operationId: servicebroker.projects.brokers.create
-export def "v1beta1-brokers create" [
+export def "servicebroker-projects-brokers-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -530,7 +530,7 @@ export def "v1beta1-brokers create" [
 #
 # GET /v1beta1/{parent}/instances
 # operationId: servicebroker.projects.brokers.instances.list
-export def "v1beta1-instances list" [
+export def "servicebroker-projects-brokers-instances-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -580,7 +580,7 @@ export def "v1beta1-instances list" [
 #
 # PUT /v1beta1/{parent}/service_bindings/{binding_id}
 # operationId: servicebroker.projects.brokers.v2.service_instances.service_bindings.create
-export def "v1beta1-service-bindings create" [
+export def "servicebroker-projects-brokers-v2-service-instances-service-bindings-create" [
   parent: string
   binding_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -642,7 +642,7 @@ export def "v1beta1-service-bindings create" [
 #
 # GET /v1beta1/{parent}/v2/catalog
 # operationId: servicebroker.projects.brokers.v2.catalog.list
-export def "v1beta1-catalog list" [
+export def "servicebroker-projects-brokers-v2-catalog-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -692,7 +692,7 @@ export def "v1beta1-catalog list" [
 #
 # PUT /v1beta1/{parent}/v2/service_instances/{instance_id}
 # operationId: servicebroker.projects.brokers.v2.service_instances.create
-export def "v1beta1-service-instances create" [
+export def "servicebroker-projects-brokers-v2-service-instances-create" [
   parent: string
   instance_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -758,7 +758,7 @@ export def "v1beta1-service-instances create" [
 #
 # GET /v1beta1/{resource}:getIamPolicy
 # operationId: servicebroker.getIamPolicy
-export def "v1beta1 get-iam-policy" [
+export def "servicebroker-get-iam-policy" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -808,7 +808,7 @@ export def "v1beta1 get-iam-policy" [
 # POST /v1beta1/{resource}:setIamPolicy
 # operationId: servicebroker.setIamPolicy
 # --policy shape: {bindings?: list, etag?: string, version?: int}
-export def "v1beta1 update-iam-policy" [
+export def "servicebroker-set-iam-policy" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -860,7 +860,7 @@ export def "v1beta1 update-iam-policy" [
 #
 # POST /v1beta1/{resource}:testIamPermissions
 # operationId: servicebroker.testIamPermissions
-export def "v1beta1 test-iam-permissions" [
+export def "servicebroker-test-iam-permissions" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)

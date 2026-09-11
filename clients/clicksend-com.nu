@@ -117,7 +117,7 @@ def auth-scheme-completer [] { ["basic" "basic-credentials"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "account get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-account" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -141,7 +141,7 @@ export def commands []: nothing -> table {
 #
 # GET /account
 # operationId: Get account
-export def "account get" [
+export def "get-account" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -175,7 +175,7 @@ export def "account get" [
 #
 # POST /account
 # operationId: Create a new account
-export def "account create-new" [
+export def "create-a-new-account" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -220,7 +220,7 @@ export def "account create-new" [
 #
 # PUT /account
 # operationId: Update Account
-export def "account update" [
+export def "update-account" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -269,7 +269,7 @@ export def "account update" [
 #
 # PUT /account-verify/send
 # operationId: Send account activation token
-export def "account-verify-send send-activation-token" [
+export def "send-account-activation-token" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -309,7 +309,7 @@ export def "account-verify-send send-activation-token" [
 #
 # PUT /account-verify/verify/{activation_token}
 # operationId: Verify new account
-export def "account-verify-verify verify-new" [
+export def "verify-new-account" [
   activation_token: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -345,7 +345,7 @@ export def "account-verify-verify verify-new" [
 #
 # GET /account/usage/{year}/{month}/{type}
 # operationId: Account Usage
-export def "account-usage get" [
+export def "account-usage" [
   year: float
   month: float
   type: string
@@ -384,7 +384,7 @@ export def "account-usage get" [
 # List Rules
 #
 # GET /automations/email/receipt
-export def "automations-email-receipt list" [
+export def "get-automations-email-receipt" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -417,7 +417,7 @@ export def "automations-email-receipt list" [
 # Create a New Rule
 #
 # POST /automations/email/receipt
-export def "automations-email-receipt create" [
+export def "post-automations-email-receipt" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -458,7 +458,7 @@ export def "automations-email-receipt create" [
 # Delete a Rule
 #
 # DELETE /automations/email/receipt/{rule_id}
-export def "automations-email-receipt delete" [
+export def "delete-automations-email-receipt-rule-id" [
   rule_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -493,7 +493,7 @@ export def "automations-email-receipt delete" [
 # Get a Specific Rule
 #
 # GET /automations/email/receipt/{rule_id}
-export def "automations-email-receipt get" [
+export def "get-automations-email-receipt-rule-id" [
   rule_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -528,7 +528,7 @@ export def "automations-email-receipt get" [
 # Update a Rule
 #
 # PUT /automations/email/receipt/{rule_id}
-export def "automations-email-receipt update" [
+export def "put-automations-email-receipt-rule-id" [
   rule_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -571,7 +571,7 @@ export def "automations-email-receipt update" [
 # List rules
 #
 # GET /automations/fax/inbound
-export def "automations-fax-inbound list" [
+export def "get-automations-fax-inbound" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -604,7 +604,7 @@ export def "automations-fax-inbound list" [
 # Create a new rule
 #
 # POST /automations/fax/inbound
-export def "automations-fax-inbound create" [
+export def "post-automations-fax-inbound" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -645,7 +645,7 @@ export def "automations-fax-inbound create" [
 # Delete a rule
 #
 # DELETE /automations/fax/inbound/{inbound_rule_id}
-export def "automations-fax-inbound delete" [
+export def "delete-automations-fax-inbound-inbound-rule-id" [
   inbound_rule_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -680,7 +680,7 @@ export def "automations-fax-inbound delete" [
 # Get a specific rule
 #
 # GET /automations/fax/inbound/{inbound_rule_id}
-export def "automations-fax-inbound get" [
+export def "get-automations-fax-inbound-inbound-rule-id" [
   inbound_rule_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -715,7 +715,7 @@ export def "automations-fax-inbound get" [
 # Update a rule
 #
 # PUT /automations/fax/inbound/{inbound_rule_id}
-export def "automations-fax-inbound update" [
+export def "put-automations-fax-inbound-inbound-rule-id" [
   inbound_rule_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -759,7 +759,7 @@ export def "automations-fax-inbound update" [
 #
 # GET /automations/fax/receipts
 # operationId: List Rules
-export def "automations-fax-receipts list-rules" [
+export def "list-rules" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -793,7 +793,7 @@ export def "automations-fax-receipts list-rules" [
 #
 # POST /automations/fax/receipts
 # operationId: Create a New Rule
-export def "automations-fax-receipts create-new-rule" [
+export def "create-a-new-rule" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -835,7 +835,7 @@ export def "automations-fax-receipts create-new-rule" [
 #
 # DELETE /automations/fax/receipts/{rule_id}
 # operationId: Delete a Rule
-export def "automations-fax-receipts delete" [
+export def "delete-a-rule" [
   rule_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -871,7 +871,7 @@ export def "automations-fax-receipts delete" [
 #
 # GET /automations/fax/receipts/{rule_id}
 # operationId: Get a Specific Rule
-export def "automations-fax-receipts get-specific" [
+export def "get-a-specific-rule" [
   rule_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -907,7 +907,7 @@ export def "automations-fax-receipts get-specific" [
 #
 # PUT /automations/fax/receipts/{rule_id}
 # operationId: Update a Rule
-export def "automations-fax-receipts update" [
+export def "update-a-rule" [
   rule_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -951,7 +951,7 @@ export def "automations-fax-receipts update" [
 #
 # GET /automations/sms/inbound
 # operationId: List rules
-export def "automations-sms-inbound list-rules" [
+export def "list-rules-1" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -985,7 +985,7 @@ export def "automations-sms-inbound list-rules" [
 #
 # POST /automations/sms/inbound/
 # operationId: Create a new rule
-export def "automations-sms-inbound create-new-rule" [
+export def "create-a-new-rule-1" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1029,7 +1029,7 @@ export def "automations-sms-inbound create-new-rule" [
 #
 # DELETE /automations/sms/inbound/{inbound_rule_id}
 # operationId: Delete a rule
-export def "automations-sms-inbound delete" [
+export def "delete-a-rule-1" [
   inbound_rule_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1065,7 +1065,7 @@ export def "automations-sms-inbound delete" [
 #
 # GET /automations/sms/inbound/{inbound_rule_id}
 # operationId: Get a specific rule
-export def "automations-sms-inbound get-specific" [
+export def "get-a-specific-rule-1" [
   inbound_rule_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1101,7 +1101,7 @@ export def "automations-sms-inbound get-specific" [
 #
 # PUT /automations/sms/inbound/{inbound_rule_id}
 # operationId: Update a rule
-export def "automations-sms-inbound update" [
+export def "update-a-rule-1" [
   inbound_rule_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1145,7 +1145,7 @@ export def "automations-sms-inbound update" [
 # List rules
 #
 # GET /automations/sms/receipts
-export def "automations-sms-receipts list" [
+export def "get-automations-sms-receipts" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1178,7 +1178,7 @@ export def "automations-sms-receipts list" [
 # Create a new rule
 #
 # POST /automations/sms/receipts
-export def "automations-sms-receipts create" [
+export def "post-automations-sms-receipts" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1219,7 +1219,7 @@ export def "automations-sms-receipts create" [
 # Delete a rule
 #
 # DELETE /automations/sms/receipts/{receipt_rule_id}
-export def "automations-sms-receipts delete" [
+export def "delete-automations-sms-receipts-receipt-rule-id" [
   receipt_rule_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1254,7 +1254,7 @@ export def "automations-sms-receipts delete" [
 # Get a specific rule
 #
 # GET /automations/sms/receipts/{receipt_rule_id}
-export def "automations-sms-receipts get" [
+export def "get-automations-sms-receipts-receipt-rule-id" [
   receipt_rule_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1289,7 +1289,7 @@ export def "automations-sms-receipts get" [
 # Update a rule
 #
 # PUT /automations/sms/receipts/{receipt_rule_id}
-export def "automations-sms-receipts update" [
+export def "put-automations-sms-receipts-receipt-rule-id" [
   receipt_rule_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1332,7 +1332,7 @@ export def "automations-sms-receipts update" [
 # List rules
 #
 # GET /automations/voice/receipts
-export def "automations-voice-receipts list" [
+export def "get-automations-voice-receipts" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1365,7 +1365,7 @@ export def "automations-voice-receipts list" [
 # Create a new rule
 #
 # POST /automations/voice/receipts
-export def "automations-voice-receipts create" [
+export def "post-automations-voice-receipts" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1406,7 +1406,7 @@ export def "automations-voice-receipts create" [
 # Delete a rule
 #
 # DELETE /automations/voice/receipts/{receipt_rule_id}
-export def "automations-voice-receipts delete" [
+export def "delete-automations-voice-receipts-receipt-rule-id" [
   receipt_rule_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1441,7 +1441,7 @@ export def "automations-voice-receipts delete" [
 # Get a specific rule
 #
 # GET /automations/voice/receipts/{receipt_rule_id}
-export def "automations-voice-receipts get" [
+export def "get-automations-voice-receipts-receipt-rule-id" [
   receipt_rule_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1476,7 +1476,7 @@ export def "automations-voice-receipts get" [
 # Update a rule
 #
 # PUT /automations/voice/receipts/{receipt_rule_id}
-export def "automations-voice-receipts update" [
+export def "put-automations-voice-receipts-receipt-rule-id" [
   receipt_rule_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1520,7 +1520,7 @@ export def "automations-voice-receipts update" [
 #
 # GET /contact-suggestions
 # operationId: List Contact Suggestions
-export def "contact-suggestions list" [
+export def "list-contact-suggestions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1554,7 +1554,7 @@ export def "contact-suggestions list" [
 #
 # GET /countries
 # operationId: Get all Countries
-export def "countries get-list" [
+export def "get-all-countries" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1588,7 +1588,7 @@ export def "countries get-list" [
 #
 # GET /delivery-issues
 # operationId: Get Delivery Issues
-export def "delivery-issues get" [
+export def "get-delivery-issues" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1622,7 +1622,7 @@ export def "delivery-issues get" [
 #
 # POST /delivery-issues
 # operationId: Create Delivery Issue
-export def "delivery-issues create" [
+export def "create-delivery-issue" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1664,7 +1664,7 @@ export def "delivery-issues create" [
 #
 # GET /email-campaigns
 # operationId: Get All Email Campaigns
-export def "email-campaigns get-list" [
+export def "get-all-email-campaigns" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1698,7 +1698,7 @@ export def "email-campaigns get-list" [
 #
 # POST /email-campaigns/price
 # operationId: Calculate Price
-export def "email-campaigns-price create-calculate" [
+export def "calculate-price" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1742,7 +1742,7 @@ export def "email-campaigns-price create-calculate" [
 #
 # POST /email-campaigns/send
 # operationId: Create Email Campaign
-export def "email-campaigns-send create" [
+export def "create-email-campaign" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1786,7 +1786,7 @@ export def "email-campaigns-send create" [
 #
 # GET /email-campaigns/{campaign_id}/history
 # operationId: Get Specific Email Campaign History
-export def "email-campaigns-history get-specific" [
+export def "get-specific-email-campaign-history" [
   campaign_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1822,7 +1822,7 @@ export def "email-campaigns-history get-specific" [
 #
 # GET /email-campaigns/{email_campaign_id}
 # operationId: Get Specific Email Campaign
-export def "email-campaigns get-specific" [
+export def "get-specific-email-campaign" [
   email_campaign_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1858,7 +1858,7 @@ export def "email-campaigns get-specific" [
 #
 # PUT /email-campaigns/{email_campaign_id}
 # operationId: Update Email Campaign
-export def "email-campaigns update" [
+export def "update-email-campaign" [
   email_campaign_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1904,7 +1904,7 @@ export def "email-campaigns update" [
 #
 # PUT /email-campaigns/{email_campaign_id}/cancel
 # operationId: Cancel Email Campaign
-export def "email-campaigns-cancel cancel" [
+export def "cancel-email-campaign" [
   email_campaign_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1940,7 +1940,7 @@ export def "email-campaigns-cancel cancel" [
 #
 # PUT /email/address-verify/{email_address_id}/send
 # operationId: Send Verification Token
-export def "email-address-verify-send send-verification-token" [
+export def "send-verification-token" [
   email_address_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1976,7 +1976,7 @@ export def "email-address-verify-send send-verification-token" [
 #
 # PUT /email/address-verify/{email_address_id}/verify/{activation_token}
 # operationId: Verify Allowed Email Address
-export def "email-address-verify-verify verify-allowed" [
+export def "verify-allowed-email-address" [
   email_address_id: float
   activation_token: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2014,7 +2014,7 @@ export def "email-address-verify-verify verify-allowed" [
 #
 # GET /email/addresses
 # operationId: Get All Allowed Email Addresses
-export def "email-addresses get-list-allowed" [
+export def "get-all-allowed-email-addresses" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2048,7 +2048,7 @@ export def "email-addresses get-list-allowed" [
 #
 # POST /email/addresses
 # operationId: Create Allowed Email Address
-export def "email-addresses create-allowed-address" [
+export def "create-allowed-email-address" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2087,7 +2087,7 @@ export def "email-addresses create-allowed-address" [
 #
 # DELETE /email/addresses/{email_address_id}
 # operationId: Delete Allowed Email Address
-export def "email-addresses delete-allowed" [
+export def "delete-allowed-email-address" [
   email_address_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2123,7 +2123,7 @@ export def "email-addresses delete-allowed" [
 #
 # GET /email/addresses/{email_address_id}
 # operationId: Get Specific Allowed Email Address
-export def "email-addresses get-specific-allowed" [
+export def "get-specific-allowed-email-address" [
   email_address_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2159,7 +2159,7 @@ export def "email-addresses get-specific-allowed" [
 #
 # GET /email/history
 # operationId: Email History
-export def "email-history get" [
+export def "email-history" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2193,7 +2193,7 @@ export def "email-history get" [
 #
 # GET /email/history/export?filename={filename}
 # operationId: Export History
-export def "email-history-export-filenamefilename export" [
+export def "export-history" [
   filename: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2229,7 +2229,7 @@ export def "email-history-export-filenamefilename export" [
 #
 # GET /email/master-templates
 # operationId: Get All Master Email Templates
-export def "email-master-templates get-list" [
+export def "get-all-master-email-templates" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2263,7 +2263,7 @@ export def "email-master-templates get-list" [
 #
 # GET /email/master-templates-categories
 # operationId: Get All Master Template Categories
-export def "email-master-templates-categories get-list" [
+export def "get-all-master-template-categories" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2297,7 +2297,7 @@ export def "email-master-templates-categories get-list" [
 #
 # GET /email/master-templates-categories/{category_id}
 # operationId: Get Specific Email Template Category
-export def "email-master-templates-categories get-specific" [
+export def "get-specific-email-template-category" [
   category_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2333,7 +2333,7 @@ export def "email-master-templates-categories get-specific" [
 #
 # GET /email/master-templates-categories/{category_id}/master-templates
 # operationId: Get All Templates For Category
-export def "email-master-templates-categories-master-templates get-list" [
+export def "get-all-templates-for-category" [
   category_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2369,7 +2369,7 @@ export def "email-master-templates-categories-master-templates get-list" [
 #
 # GET /email/master-templates/{template_id}
 # operationId: Get Specific Master Template
-export def "email-master-templates get-specific" [
+export def "get-specific-master-template" [
   template_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2405,7 +2405,7 @@ export def "email-master-templates get-specific" [
 #
 # POST /email/price
 # operationId: Email Price
-export def "email-price create" [
+export def "email-price" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2449,7 +2449,7 @@ export def "email-price create" [
 # Add a Test Delivery Receipt
 #
 # POST /email/receipts
-export def "email-receipts create" [
+export def "post-email-receipts" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2487,7 +2487,7 @@ export def "email-receipts create" [
 #
 # POST /email/send
 # operationId: Email Send
-export def "email-send send" [
+export def "email-send" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2532,7 +2532,7 @@ export def "email-send send" [
 #
 # GET /email/templates
 # operationId: Get All Email Templates
-export def "email-templates get-list" [
+export def "get-all-email-templates" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2566,7 +2566,7 @@ export def "email-templates get-list" [
 #
 # POST /email/templates
 # operationId: Create New Email Template from Master Template
-export def "email-templates create-new-from-master" [
+export def "create-new-email-template-from-master-template" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2605,7 +2605,7 @@ export def "email-templates create-new-from-master" [
 #
 # POST /email/templates-images/{template_id}
 # operationId: Upload Image to Specific Template
-export def "email-templates-images upload-to-specific" [
+export def "upload-image-to-specific-template" [
   template_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2646,7 +2646,7 @@ export def "email-templates-images upload-to-specific" [
 #
 # DELETE /email/templates/{template_id}
 # operationId: Delete Email Template
-export def "email-templates delete" [
+export def "delete-email-template" [
   template_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2682,7 +2682,7 @@ export def "email-templates delete" [
 #
 # GET /email/templates/{template_id}
 # operationId: Get Specific Email Template
-export def "email-templates get-specific" [
+export def "get-specific-email-template" [
   template_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2718,7 +2718,7 @@ export def "email-templates get-specific" [
 #
 # PUT /email/templates/{template_id}
 # operationId: Update an Email Template
-export def "email-templates update" [
+export def "update-an-email-template" [
   template_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2759,7 +2759,7 @@ export def "email-templates update" [
 #
 # GET /fax/history/export?filename={filename}
 # operationId: Export Fax History
-export def "fax-history-export-filenamefilename export" [
+export def "export-fax-history" [
   filename: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2795,7 +2795,7 @@ export def "fax-history-export-filenamefilename export" [
 #
 # GET /fax/history?date_from={date_from}&date_to={date_to}&q={q}&order_by={order_by}
 # operationId: Get Fax History
-export def "fax-history-date-fromdate-fromdate-todate-toqqorder-byorder-by get-history" [
+export def "get-fax-history" [
   date_from: float
   date_to: float
   q: string
@@ -2836,7 +2836,7 @@ export def "fax-history-date-fromdate-fromdate-todate-toqqorder-byorder-by get-h
 # Calculate Price
 #
 # POST /fax/price
-export def "fax-price create" [
+export def "post-fax-price" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2883,7 +2883,7 @@ export def "fax-price create" [
 #
 # GET /fax/receipts
 # operationId: List of Fax Delivery Receipts
-export def "fax-receipts list-of-delivery" [
+export def "list-of-fax-delivery-receipts" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2917,7 +2917,7 @@ export def "fax-receipts list-of-delivery" [
 #
 # POST /fax/receipts
 # operationId: Add a Test Delivery Receipt
-export def "fax-receipts create-test-delivery" [
+export def "add-a-test-delivery-receipt" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2955,7 +2955,7 @@ export def "fax-receipts create-test-delivery" [
 #
 # PUT /fax/receipts-read
 # operationId: Mark Fax Delivery Receipts as read
-export def "fax-receipts-read get-mark-delivery" [
+export def "mark-fax-delivery-receipts-as-read" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2993,7 +2993,7 @@ export def "fax-receipts-read get-mark-delivery" [
 #
 # GET /fax/receipts/{message_id}
 # operationId: Get a Specific Fax Delivery Receipt
-export def "fax-receipts get-specific-delivery" [
+export def "get-a-specific-fax-delivery-receipt" [
   message_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3029,7 +3029,7 @@ export def "fax-receipts get-specific-delivery" [
 #
 # POST /fax/send
 # operationId: Send Fax
-export def "fax-send send" [
+export def "send-fax" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3076,7 +3076,7 @@ export def "fax-send send" [
 #
 # PUT /forgot-password
 # operationId: Forgot Password
-export def "forgot-password update" [
+export def "forgot-password" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3114,7 +3114,7 @@ export def "forgot-password update" [
 #
 # PUT /forgot-password/verify
 # operationId: Verify Forgot Password
-export def "forgot-password-verify verify" [
+export def "verify-forgot-password" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3154,7 +3154,7 @@ export def "forgot-password-verify verify" [
 #
 # PUT /forgot-username
 # operationId: Forgot Username
-export def "forgot-username update" [
+export def "forgot-username" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3194,7 +3194,7 @@ export def "forgot-username update" [
 #
 # GET /lists
 # operationId: Get all Contact Lists
-export def "lists get-list-contact" [
+export def "get-all-contact-lists" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3228,7 +3228,7 @@ export def "lists get-list-contact" [
 #
 # POST /lists
 # operationId: Create a new contact list
-export def "lists create-new-contact" [
+export def "create-a-new-contact-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3266,7 +3266,7 @@ export def "lists create-new-contact" [
 #
 # PUT /lists/{from_list_id}/contacts/{contact_id}/{to_list_id}
 # operationId: Transfer a Contact
-export def "lists-contacts update-transfer" [
+export def "transfer-a-contact" [
   from_list_id: float
   contact_id: float
   to_list_id: float
@@ -3306,7 +3306,7 @@ export def "lists-contacts update-transfer" [
 #
 # DELETE /lists/{list_id}
 # operationId: Delete a specific contact list
-export def "lists delete-specific-contact" [
+export def "delete-a-specific-contact-list" [
   list_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3342,7 +3342,7 @@ export def "lists delete-specific-contact" [
 #
 # GET /lists/{list_id}
 # operationId: Get a specific contact list
-export def "lists get-specific-contact" [
+export def "get-a-specific-contact-list" [
   list_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3378,7 +3378,7 @@ export def "lists get-specific-contact" [
 #
 # PUT /lists/{list_id}
 # operationId: Update a specific contact list
-export def "lists update-specific-contact" [
+export def "update-a-specific-contact-list" [
   list_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3418,7 +3418,7 @@ export def "lists update-specific-contact" [
 #
 # GET /lists/{list_id}/contacts
 # operationId: Get all Contacts in a List
-export def "lists-contacts get-list" [
+export def "get-all-contacts-in-a-list" [
   list_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3454,7 +3454,7 @@ export def "lists-contacts get-list" [
 #
 # POST /lists/{list_id}/contacts
 # operationId: Create a new contact
-export def "lists-contacts create-new" [
+export def "create-a-new-contact" [
   list_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3509,7 +3509,7 @@ export def "lists-contacts create-new" [
 #
 # DELETE /lists/{list_id}/contacts/{contact_id}
 # operationId: Delete a specific contact
-export def "lists-contacts delete-specific" [
+export def "delete-a-specific-contact" [
   list_id: float
   contact_id: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -3547,7 +3547,7 @@ export def "lists-contacts delete-specific" [
 #
 # GET /lists/{list_id}/contacts/{contact_id}
 # operationId: Get a specific contact
-export def "lists-contacts get-specific" [
+export def "get-a-specific-contact" [
   list_id: float
   contact_id: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -3585,7 +3585,7 @@ export def "lists-contacts get-specific" [
 #
 # PUT /lists/{list_id}/contacts/{contact_id}
 # operationId: Update a specific contact
-export def "lists-contacts update-specific" [
+export def "update-a-specific-contact" [
   list_id: float
   contact_id: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -3642,7 +3642,7 @@ export def "lists-contacts update-specific" [
 #
 # GET /lists/{list_id}/export?filename={filename}
 # operationId: Export Contacts List
-export def "lists-export-filenamefilename export-contacts" [
+export def "export-contacts-list" [
   list_id: string
   filename: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3680,7 +3680,7 @@ export def "lists-export-filenamefilename export-contacts" [
 #
 # POST /lists/{list_id}/import
 # operationId: Import Contacts to List
-export def "lists-import import-contacts" [
+export def "import-contacts-to-list" [
   list_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3721,7 +3721,7 @@ export def "lists-import import-contacts" [
 #
 # POST /lists/{list_id}/import-csv-preview
 # operationId: Show CSV Import File Preview
-export def "lists-import-csv-preview import-show-file" [
+export def "show-csv-import-file-preview" [
   list_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3761,7 +3761,7 @@ export def "lists-import-csv-preview import-show-file" [
 #
 # GET /lists/{list_id}/import-fields
 # operationId: Get List of Acceptable Import Fields
-export def "lists-import-fields get-of-acceptable" [
+export def "get-list-of-acceptable-import-fields" [
   list_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3797,7 +3797,7 @@ export def "lists-import-fields get-of-acceptable" [
 #
 # PUT /lists/{list_id}/remove-duplicates
 # operationId: Remove Duplicate Contacts
-export def "lists-remove-duplicates delete-contacts" [
+export def "remove-duplicate-contacts" [
   list_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3837,7 +3837,7 @@ export def "lists-remove-duplicates delete-contacts" [
 #
 # PUT /lists/{list_id}/remove-opted-out-contacts/{opt_out_list_id}
 # operationId: Remove Opted Out Contacts
-export def "lists-remove-opted-out-contacts delete" [
+export def "remove-opted-out-contacts" [
   list_id: float
   opt_out_list_id: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -3875,7 +3875,7 @@ export def "lists-remove-opted-out-contacts delete" [
 #
 # PUT /mms/cancel-all
 # operationId: Cancel All MMS
-export def "mms-cancel-all cancel" [
+export def "cancel-all-mms" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3909,7 +3909,7 @@ export def "mms-cancel-all cancel" [
 #
 # GET /mms/history/export?filename={filename}
 # operationId: Export MMS History
-export def "mms-history-export-filenamefilename export" [
+export def "export-mms-history" [
   filename: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3945,7 +3945,7 @@ export def "mms-history-export-filenamefilename export" [
 #
 # GET /mms/history?q={q}&order_by={order_by}&date_from={date_from}&date_to={date_to}
 # operationId: Get MMS History
-export def "mms-history-qqorder-byorder-bydate-fromdate-fromdate-todate-to get-history" [
+export def "get-mms-history" [
   q: string
   order_by: string
   date_from: string
@@ -3987,7 +3987,7 @@ export def "mms-history-qqorder-byorder-bydate-fromdate-fromdate-todate-to get-h
 #
 # POST /mms/price
 # operationId: Get Price
-export def "mms-price get" [
+export def "get-price" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4035,7 +4035,7 @@ export def "mms-price get" [
 #
 # GET /mms/receipts
 # operationId: Get all Delivery Receipts
-export def "mms-receipts get-list-delivery" [
+export def "get-all-delivery-receipts" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4069,7 +4069,7 @@ export def "mms-receipts get-list-delivery" [
 #
 # PUT /mms/receipts-read
 # operationId: Mark Receipts As Read
-export def "mms-receipts-read get-mark" [
+export def "mark-receipts-as-read" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4103,7 +4103,7 @@ export def "mms-receipts-read get-mark" [
 #
 # GET /mms/receipts/{message_id}
 # operationId: Get Delivery Receipt
-export def "mms-receipts get-delivery" [
+export def "get-delivery-receipt" [
   message_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4139,7 +4139,7 @@ export def "mms-receipts get-delivery" [
 #
 # POST /mms/send
 # operationId: Send MMS
-export def "mms-send send" [
+export def "send-mms" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4187,7 +4187,7 @@ export def "mms-send send" [
 #
 # PUT /mms/{message_id}/cancel
 # operationId: Cancel MMS
-export def "mms-cancel cancel" [
+export def "cancel-mms" [
   message_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4223,7 +4223,7 @@ export def "mms-cancel cancel" [
 #
 # GET /numbers
 # operationId: Get all Dedicated Numbers
-export def "numbers get-list-dedicated" [
+export def "get-all-dedicated-numbers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4257,7 +4257,7 @@ export def "numbers get-list-dedicated" [
 #
 # POST /numbers/buy/{dedicated_number}
 # operationId: Buy dedicated number
-export def "numbers-buy create" [
+export def "buy-dedicated-number" [
   dedicated_number: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4293,7 +4293,7 @@ export def "numbers-buy create" [
 #
 # GET /numbers/search/{country}?{search}=1&{search_type}=2
 # operationId: Search Dedicated Numbers by Country
-export def "numbers-search list-dedicated" [
+export def "search-dedicated-numbers-by-country" [
   country: string
   search: string
   search_type: float
@@ -4333,7 +4333,7 @@ export def "numbers-search list-dedicated" [
 #
 # GET /post/direct-mail/campaigns
 # operationId: List Direct Mail Campaigns
-export def "post-direct-mail-campaigns list" [
+export def "list-direct-mail-campaigns" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4367,7 +4367,7 @@ export def "post-direct-mail-campaigns list" [
 #
 # POST /post/direct-mail/campaigns/price
 # operationId: Calculate Direct Mail Campaign Price
-export def "post-direct-mail-campaigns-price create-calculate" [
+export def "calculate-direct-mail-campaign-price" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4410,7 +4410,7 @@ export def "post-direct-mail-campaigns-price create-calculate" [
 #
 # POST /post/direct-mail/campaigns/send
 # operationId: Create New Campaign
-export def "post-direct-mail-campaigns-send create-new" [
+export def "create-new-campaign" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4453,7 +4453,7 @@ export def "post-direct-mail-campaigns-send create-new" [
 #
 # GET /post/direct-mail/locations/search/{country}/?q={query}
 # operationId: Search Locations
-export def "post-direct-mail-locations-search-qquery list" [
+export def "search-locations" [
   country: string
   query: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4491,7 +4491,7 @@ export def "post-direct-mail-locations-search-qquery list" [
 #
 # POST /post/letters/detect-address
 # operationId: Detect Address
-export def "post-letters-detect-address create" [
+export def "detect-address" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4530,7 +4530,7 @@ export def "post-letters-detect-address create" [
 #
 # GET /post/letters/history
 # operationId: Get Post Letter History
-export def "post-letters-history get" [
+export def "get-post-letter-history" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4564,7 +4564,7 @@ export def "post-letters-history get" [
 #
 # GET /post/letters/history/export?filename={filename}
 # operationId: Export Post Letter History
-export def "post-letters-history-export-filenamefilename export" [
+export def "export-post-letter-history" [
   filename: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4599,7 +4599,7 @@ export def "post-letters-history-export-filenamefilename export" [
 # Calculate Price
 #
 # POST /post/letters/price
-export def "post-letters-price create" [
+export def "post-post-letters-price" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4642,7 +4642,7 @@ export def "post-letters-price create" [
 #
 # POST /post/letters/send
 # operationId: Send Post Letter
-export def "post-letters-send send" [
+export def "send-post-letter" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4685,7 +4685,7 @@ export def "post-letters-send send" [
 #
 # GET /post/postcards/export?filename={filename}
 # operationId: Export Postcard History
-export def "post-post-cards-export-filenamefilename export-postcard-history" [
+export def "export-postcard-history" [
   filename: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4721,7 +4721,7 @@ export def "post-post-cards-export-filenamefilename export-postcard-history" [
 #
 # GET /post/postcards/history
 # operationId: Get Postcard History
-export def "post-post-cards-history get-postcard" [
+export def "get-postcard-history" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4755,7 +4755,7 @@ export def "post-post-cards-history get-postcard" [
 #
 # POST /post/postcards/price
 # operationId: Calculate Pricing
-export def "post-post-cards-price create-calculate-pricing" [
+export def "calculate-pricing" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4794,7 +4794,7 @@ export def "post-post-cards-price create-calculate-pricing" [
 #
 # POST /post/postcards/send
 # operationId: Send Postcard
-export def "post-post-cards-send send-postcard" [
+export def "send-postcard" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4833,7 +4833,7 @@ export def "post-post-cards-send send-postcard" [
 #
 # GET /post/return-addresses
 # operationId: Get List of Post Return Addresses
-export def "post-return-addresses get-list" [
+export def "get-list-of-post-return-addresses" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4867,7 +4867,7 @@ export def "post-return-addresses get-list" [
 #
 # POST /post/return-addresses
 # operationId: Create a Post Return Address
-export def "post-return-addresses create-address" [
+export def "create-a-post-return-address" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4911,7 +4911,7 @@ export def "post-return-addresses create-address" [
 #
 # DELETE /post/return-addresses/{return_address_id}
 # operationId: Delete Post Return Address
-export def "post-return-addresses delete" [
+export def "delete-post-return-address" [
   return_address_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4947,7 +4947,7 @@ export def "post-return-addresses delete" [
 #
 # GET /post/return-addresses/{return_address_id}
 # operationId: Get Post Return Address
-export def "post-return-addresses get" [
+export def "get-post-return-address" [
   return_address_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4983,7 +4983,7 @@ export def "post-return-addresses get" [
 #
 # PUT /post/return-addresses/{return_address_id}
 # operationId: Update Post Return Address
-export def "post-return-addresses update" [
+export def "update-post-return-address" [
   return_address_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5029,7 +5029,7 @@ export def "post-return-addresses update" [
 #
 # GET /pricing/{country}?currency={currency}
 # operationId: Get Country Pricing
-export def "pricing get" [
+export def "get-country-pricing" [
   country: string
   currency: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5067,7 +5067,7 @@ export def "pricing get" [
 #
 # GET /recharge/credit-card
 # operationId: Get Credit Card info
-export def "recharge-credit-card get" [
+export def "get-credit-card-info" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5101,7 +5101,7 @@ export def "recharge-credit-card get" [
 #
 # PUT /recharge/credit-card
 # operationId: Update Credit Card info
-export def "recharge-credit-card update-get" [
+export def "update-credit-card-info" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5144,7 +5144,7 @@ export def "recharge-credit-card update-get" [
 #
 # GET /recharge/packages?country={country}
 # operationId: List of Packages
-export def "recharge-packages-countrycountry list-of-packages" [
+export def "list-of-packages" [
   country: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5180,7 +5180,7 @@ export def "recharge-packages-countrycountry list-of-packages" [
 #
 # PUT /recharge/purchase/{package_id}
 # operationId: Purchase a Package
-export def "recharge-purchase update" [
+export def "purchase-a-package" [
   package_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5216,7 +5216,7 @@ export def "recharge-purchase update" [
 #
 # GET /recharge/transactions
 # operationId: Get Transactions
-export def "recharge-transactions get" [
+export def "get-transactions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5250,7 +5250,7 @@ export def "recharge-transactions get" [
 #
 # GET /recharge/transactions/{transaction_id}
 # operationId: Get a specific transaction
-export def "recharge-transactions get-specific" [
+export def "get-a-specific-transaction" [
   transaction_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5286,7 +5286,7 @@ export def "recharge-transactions get-specific" [
 #
 # GET /referral/accounts
 # operationId: Get List of Referral Accounts
-export def "referral-accounts get-list" [
+export def "get-list-of-referral-accounts" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5320,7 +5320,7 @@ export def "referral-accounts get-list" [
 #
 # GET /reseller
 # operationId: Get Reseller Setting
-export def "reseller get-setting" [
+export def "get-reseller-setting" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5354,7 +5354,7 @@ export def "reseller get-setting" [
 #
 # PUT /reseller
 # operationId: Update Reseller Setting
-export def "reseller update-setting" [
+export def "update-reseller-setting" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5400,7 +5400,7 @@ export def "reseller update-setting" [
 #
 # GET /reseller/accounts
 # operationId: List of Reseller Accounts
-export def "reseller-accounts list" [
+export def "list-of-reseller-accounts" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5434,7 +5434,7 @@ export def "reseller-accounts list" [
 #
 # POST /reseller/accounts
 # operationId: Create Reseller Account
-export def "reseller-accounts create" [
+export def "create-reseller-account" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5479,7 +5479,7 @@ export def "reseller-accounts create" [
 #
 # POST /reseller/accounts-public
 # operationId: Create Reseller Account - Public
-export def "reseller-accounts-public create" [
+export def "create-reseller-account-public" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5525,7 +5525,7 @@ export def "reseller-accounts-public create" [
 #
 # GET /reseller/accounts/{client_user_id}
 # operationId: Get Reseller Account
-export def "reseller-accounts get" [
+export def "get-reseller-account" [
   client_user_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5561,7 +5561,7 @@ export def "reseller-accounts get" [
 #
 # PUT /reseller/accounts/{client_user_id}
 # operationId: Update Reseller Account
-export def "reseller-accounts update" [
+export def "update-reseller-account" [
   client_user_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5608,7 +5608,7 @@ export def "reseller-accounts update" [
 #
 # PUT /reseller/transfer-credit
 # operationId: Transfer Credit
-export def "reseller-transfer-credit update" [
+export def "transfer-credit" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5648,7 +5648,7 @@ export def "reseller-transfer-credit update" [
 #
 # GET /reseller/{subdomain}
 # operationId: Reseller By Subdomain
-export def "reseller get" [
+export def "reseller-by-subdomain" [
   subdomain: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5684,7 +5684,7 @@ export def "reseller get" [
 #
 # GET /sdk-download/{type}
 # operationId: SDK Download
-export def "sdk-download download" [
+export def "sdk-download" [
   type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5720,7 +5720,7 @@ export def "sdk-download download" [
 #
 # GET /search/contacts-lists?q={q}
 # operationId: Search Contacts-Lists
-export def "search-contacts-lists-qq list-lists" [
+export def "search-contacts-lists" [
   q: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5756,7 +5756,7 @@ export def "search-contacts-lists-qq list-lists" [
 #
 # GET /sms-campaigns
 # operationId: Get list of SMS Campaigns
-export def "sms-campaigns get-list" [
+export def "get-list-of-sms-campaigns" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5790,7 +5790,7 @@ export def "sms-campaigns get-list" [
 #
 # POST /sms-campaigns/price
 # operationId: Calculate Price for SMS Campaign
-export def "sms-campaigns-price create-calculate" [
+export def "calculate-price-for-sms-campaign" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5831,7 +5831,7 @@ export def "sms-campaigns-price create-calculate" [
 #
 # POST /sms-campaigns/send
 # operationId: Use Short URL
-export def "sms-campaigns-send create-use-short-url" [
+export def "use-short-url" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5874,7 +5874,7 @@ export def "sms-campaigns-send create-use-short-url" [
 #
 # GET /sms-campaigns/{campaign_id}/link-export?filename={filename}
 # operationId: Link Tracking Export
-export def "sms-campaigns-link-export-filenamefilename export-tracking" [
+export def "link-tracking-export" [
   campaign_id: float
   filename: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5912,7 +5912,7 @@ export def "sms-campaigns-link-export-filenamefilename export-tracking" [
 #
 # GET /sms-campaigns/{campaign_id}/link-statistics
 # operationId: Link Statistics
-export def "sms-campaigns-link-statistics get" [
+export def "link-statistics" [
   campaign_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5948,7 +5948,7 @@ export def "sms-campaigns-link-statistics get" [
 #
 # GET /sms-campaigns/{campaign_id}/link-tracking
 # operationId: Link Tracking
-export def "sms-campaigns-link-tracking get" [
+export def "link-tracking" [
   campaign_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5984,7 +5984,7 @@ export def "sms-campaigns-link-tracking get" [
 #
 # GET /sms-campaigns/{sms_campaign_id}
 # operationId: Get SMS Campaign
-export def "sms-campaigns get" [
+export def "get-sms-campaign" [
   sms_campaign_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6020,7 +6020,7 @@ export def "sms-campaigns get" [
 #
 # PUT /sms-campaigns/{sms_campaign_id}
 # operationId: Update an SMS Campaign
-export def "sms-campaigns update" [
+export def "update-an-sms-campaign" [
   sms_campaign_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6064,7 +6064,7 @@ export def "sms-campaigns update" [
 #
 # PUT /sms-campaigns/{sms_campaign_id}/cancel
 # operationId: Cancel an SMS Campaign
-export def "sms-campaigns-cancel cancel" [
+export def "cancel-an-sms-campaign" [
   sms_campaign_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6100,7 +6100,7 @@ export def "sms-campaigns-cancel cancel" [
 #
 # PUT /sms/cancel-all
 # operationId: Cancel all Scheduled Messages
-export def "sms-cancel-all cancel-scheduled-messages" [
+export def "cancel-all-scheduled-messages" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6134,7 +6134,7 @@ export def "sms-cancel-all cancel-scheduled-messages" [
 #
 # GET /sms/email-sms
 # operationId: List of Email-to-SMS Allowed Address
-export def "sms-email-sms list-of-to-allowed-address" [
+export def "list-of-email-to-sms-allowed-address" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6168,7 +6168,7 @@ export def "sms-email-sms list-of-to-allowed-address" [
 #
 # POST /sms/email-sms
 # operationId: Create Email to SMS Allowed Address
-export def "sms-email-sms create-to-allowed-address" [
+export def "create-email-to-sms-allowed-address" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6207,7 +6207,7 @@ export def "sms-email-sms create-to-allowed-address" [
 #
 # GET /sms/email-sms-stripped-strings
 # operationId: List Stripped Strings
-export def "sms-email-sms-stripped-strings list" [
+export def "list-stripped-strings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6241,7 +6241,7 @@ export def "sms-email-sms-stripped-strings list" [
 #
 # POST /sms/email-sms-stripped-strings
 # operationId: Create Stripped String
-export def "sms-email-sms-stripped-strings create" [
+export def "create-stripped-string" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6279,7 +6279,7 @@ export def "sms-email-sms-stripped-strings create" [
 #
 # DELETE /sms/email-sms-stripped-strings/{rule_id}
 # operationId: Delete Stripped String
-export def "sms-email-sms-stripped-strings delete" [
+export def "delete-stripped-string" [
   rule_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6315,7 +6315,7 @@ export def "sms-email-sms-stripped-strings delete" [
 #
 # GET /sms/email-sms-stripped-strings/{rule_id}
 # operationId: Find Specific Stripped String
-export def "sms-email-sms-stripped-strings find-specific" [
+export def "find-specific-stripped-string" [
   rule_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6351,7 +6351,7 @@ export def "sms-email-sms-stripped-strings find-specific" [
 #
 # PUT /sms/email-sms-stripped-strings/{rule_id}
 # operationId: Update Stripped String
-export def "sms-email-sms-stripped-strings update" [
+export def "update-stripped-string" [
   rule_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6391,7 +6391,7 @@ export def "sms-email-sms-stripped-strings update" [
 #
 # DELETE /sms/email-sms/{email_address_id}
 # operationId: Delete Email-to-SMS Allowed Address
-export def "sms-email-sms delete-to-allowed" [
+export def "delete-email-to-sms-allowed-address" [
   email_address_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6427,7 +6427,7 @@ export def "sms-email-sms delete-to-allowed" [
 #
 # GET /sms/email-sms/{email_address_id}
 # operationId: Get specific Email-to-SMS Allowed Address
-export def "sms-email-sms get-specific-to-allowed" [
+export def "get-specific-email-to-sms-allowed-address" [
   email_address_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6463,7 +6463,7 @@ export def "sms-email-sms get-specific-to-allowed" [
 #
 # PUT /sms/email-sms/{email_address_id}
 # operationId: Update Email-to-SMS Allowed Address
-export def "sms-email-sms update-to-allowed" [
+export def "update-email-to-sms-allowed-address" [
   email_address_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6504,7 +6504,7 @@ export def "sms-email-sms update-to-allowed" [
 #
 # GET /sms/history/export?filename={filename}
 # operationId: Export SMS History
-export def "sms-history-export-filenamefilename export" [
+export def "export-sms-history" [
   filename: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6540,7 +6540,7 @@ export def "sms-history-export-filenamefilename export" [
 #
 # GET /sms/history?date_from={date_from}&date_to={date_to}
 # operationId: Get all History
-export def "sms-history-date-fromdate-fromdate-todate-to get-list-history" [
+export def "get-all-history" [
   date_from: string
   date_to: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6578,7 +6578,7 @@ export def "sms-history-date-fromdate-fromdate-todate-to get-list-history" [
 #
 # GET /sms/inbound
 # operationId: Get all Inbound SMS - Pull
-export def "sms-inbound get-list-pull" [
+export def "get-all-inbound-sms-pull" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6612,7 +6612,7 @@ export def "sms-inbound get-list-pull" [
 #
 # POST /sms/inbound
 # operationId: Add a Test Inbound SMS
-export def "sms-inbound create-test" [
+export def "add-a-test-inbound-sms" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6650,7 +6650,7 @@ export def "sms-inbound create-test" [
 #
 # PUT /sms/inbound-read
 # operationId: Mark all Inbound SMS as read
-export def "sms-inbound-read list-mark" [
+export def "mark-all-inbound-sms-as-read" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6688,7 +6688,7 @@ export def "sms-inbound-read list-mark" [
 #
 # PUT /sms/inbound-read/{message_id}
 # operationId: Mark a specific Inbound SMS as read
-export def "sms-inbound-read get-mark-specific" [
+export def "mark-a-specific-inbound-sms-as-read" [
   message_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6724,7 +6724,7 @@ export def "sms-inbound-read get-mark-specific" [
 #
 # GET /sms/inbound/{outbound_message_id}
 # operationId: Get Specific Inbound - Pull
-export def "sms-inbound get-specific-pull" [
+export def "get-specific-inbound-pull" [
   outbound_message_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6759,7 +6759,7 @@ export def "sms-inbound get-specific-pull" [
 # Calculate Price
 #
 # POST /sms/price
-export def "sms-price create" [
+export def "post-sms-price" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6803,7 +6803,7 @@ export def "sms-price create" [
 # Get all Delivery Receipts
 #
 # GET /sms/receipts
-export def "sms-receipts get" [
+export def "get-sms-receipts" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6836,7 +6836,7 @@ export def "sms-receipts get" [
 # Add a Test Delivery Receipt
 #
 # POST /sms/receipts
-export def "sms-receipts create" [
+export def "post-sms-receipts" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6874,7 +6874,7 @@ export def "sms-receipts create" [
 #
 # PUT /sms/receipts-read
 # operationId: Mark Delivery Receipts as read
-export def "sms-receipts-read get-mark-delivery" [
+export def "mark-delivery-receipts-as-read" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6912,7 +6912,7 @@ export def "sms-receipts-read get-mark-delivery" [
 #
 # GET /sms/receipts/{message_id}
 # operationId: Get a Specific Delivery Receipt
-export def "sms-receipts get-specific-delivery" [
+export def "get-a-specific-delivery-receipt" [
   message_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6948,7 +6948,7 @@ export def "sms-receipts get-specific-delivery" [
 #
 # POST /sms/send
 # operationId: Send an SMS
-export def "sms-send send" [
+export def "send-an-sms" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6994,7 +6994,7 @@ export def "sms-send send" [
 #
 # GET /sms/templates
 # operationId: List of Templates
-export def "sms-templates list" [
+export def "list-of-templates" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7028,7 +7028,7 @@ export def "sms-templates list" [
 #
 # POST /sms/templates
 # operationId: Create a Template
-export def "sms-templates create" [
+export def "create-a-template" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7067,7 +7067,7 @@ export def "sms-templates create" [
 #
 # DELETE /sms/templates/{template_id}
 # operationId: Delete a Template
-export def "sms-templates delete" [
+export def "delete-a-template" [
   template_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7103,7 +7103,7 @@ export def "sms-templates delete" [
 #
 # PUT /sms/templates/{template_id}
 # operationId: Update a Template
-export def "sms-templates update" [
+export def "update-a-template" [
   template_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7144,7 +7144,7 @@ export def "sms-templates update" [
 #
 # PUT /sms/{message_id}/cancel
 # operationId: Cancel a Scheduled Message
-export def "sms-cancel cancel-scheduled" [
+export def "cancel-a-scheduled-message" [
   message_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7180,7 +7180,7 @@ export def "sms-cancel cancel-scheduled" [
 #
 # GET /statistics/sms
 # operationId: Get SMS Statistics
-export def "statistics-sms get" [
+export def "get-sms-statistics" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7214,7 +7214,7 @@ export def "statistics-sms get" [
 #
 # GET /statistics/voice
 # operationId: Get Voice Statistics
-export def "statistics-voice get" [
+export def "get-voice-statistics" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7248,7 +7248,7 @@ export def "statistics-voice get" [
 #
 # GET /subaccounts
 # operationId: Get all Subaccounts
-export def "subaccounts get-list" [
+export def "get-all-subaccounts" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7282,7 +7282,7 @@ export def "subaccounts get-list" [
 #
 # POST /subaccounts
 # operationId: Create a new subaccount
-export def "subaccounts create-new" [
+export def "create-a-new-subaccount" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7331,7 +7331,7 @@ export def "subaccounts create-new" [
 #
 # DELETE /subaccounts/{subaccount_id}
 # operationId: Delete a specific subaccount
-export def "subaccounts delete-specific" [
+export def "delete-a-specific-subaccount" [
   subaccount_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7367,7 +7367,7 @@ export def "subaccounts delete-specific" [
 #
 # GET /subaccounts/{subaccount_id}
 # operationId: Get a specific subaccount
-export def "subaccounts get-specific" [
+export def "get-a-specific-subaccount" [
   subaccount_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7403,7 +7403,7 @@ export def "subaccounts get-specific" [
 #
 # PUT /subaccounts/{subaccount_id}
 # operationId: Update a specific subaccount
-export def "subaccounts update-specific" [
+export def "update-a-specific-subaccount" [
   subaccount_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7453,7 +7453,7 @@ export def "subaccounts update-specific" [
 #
 # PUT /subaccounts/{subaccount_id}/regen-api-key
 # operationId: Regenerate API Key
-export def "subaccounts-regen-api-key update-regenerate" [
+export def "regenerate-api-key" [
   subaccount_id: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7489,7 +7489,7 @@ export def "subaccounts-regen-api-key update-regenerate" [
 #
 # GET /timezones
 # operationId: Get Timezones
-export def "timezones get" [
+export def "get-timezones" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7523,7 +7523,7 @@ export def "timezones get" [
 #
 # POST /uploads?convert={convert}
 # operationId: Upload a file
-export def "uploads-convertconvert upload-file" [
+export def "upload-a-file" [
   convert: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7565,7 +7565,7 @@ export def "uploads-convertconvert upload-file" [
 #
 # PUT /voice/cancel-all
 # operationId: Cancel all Voice Calls
-export def "voice-cancel-all cancel-calls" [
+export def "cancel-all-voice-calls" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7599,7 +7599,7 @@ export def "voice-cancel-all cancel-calls" [
 #
 # GET /voice/history/export?filename={filename}
 # operationId: Export Voice History
-export def "voice-history-export-filenamefilename export" [
+export def "export-voice-history" [
   filename: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7635,7 +7635,7 @@ export def "voice-history-export-filenamefilename export" [
 #
 # GET /voice/history?date_from={date_from}&date_to={date_to}
 # operationId: Get Voice History
-export def "voice-history-date-fromdate-fromdate-todate-to get-history" [
+export def "get-voice-history" [
   date_from: string
   date_to: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7673,7 +7673,7 @@ export def "voice-history-date-fromdate-fromdate-todate-to get-history" [
 #
 # GET /voice/lang
 # operationId: Voice Languages
-export def "voice-lang get-languages" [
+export def "voice-languages" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7706,7 +7706,7 @@ export def "voice-lang get-languages" [
 # Calculate Price
 #
 # POST /voice/price
-export def "voice-price create" [
+export def "post-voice-price" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7753,7 +7753,7 @@ export def "voice-price create" [
 #
 # GET /voice/receipts
 # operationId: Get Voice receipts
-export def "voice-receipts get" [
+export def "get-voice-receipts" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7786,7 +7786,7 @@ export def "voice-receipts get" [
 # Add a Test Delivery Receipt
 #
 # POST /voice/receipts
-export def "voice-receipts create" [
+export def "post-voice-receipts" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7824,7 +7824,7 @@ export def "voice-receipts create" [
 #
 # PUT /voice/receipts-read?date_before={date_before}
 # operationId: Marked Voice Receipts as Read
-export def "voice-receipts-read-date-beforedate-before get-marked-as" [
+export def "marked-voice-receipts-as-read" [
   date_before: float
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7860,7 +7860,7 @@ export def "voice-receipts-read-date-beforedate-before get-marked-as" [
 #
 # GET /voice/receipts/{message_id}
 # operationId: Get Specific Voice Receipt
-export def "voice-receipts get-specific" [
+export def "get-specific-voice-receipt" [
   message_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7896,7 +7896,7 @@ export def "voice-receipts get-specific" [
 #
 # POST /voice/send
 # operationId: Send a Voice Call
-export def "voice-send send-call" [
+export def "send-a-voice-call" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7944,7 +7944,7 @@ export def "voice-send send-call" [
 #
 # PUT /voice/{message_id}/cancel
 # operationId: Cancel a Specific Voice Call
-export def "voice-cancel cancel-specific-call" [
+export def "cancel-a-specific-voice-call" [
   message_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

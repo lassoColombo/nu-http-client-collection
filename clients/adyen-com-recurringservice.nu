@@ -101,7 +101,7 @@ def auth-scheme-completer [] { ["x-api-key" "basic" "basic-credentials"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "create-permit create" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "post-create-permit" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -126,7 +126,7 @@ export def commands []: nothing -> table {
 # POST /createPermit
 # operationId: post-createPermit
 # --permits item shape: {partnerId?: string, profileReference?: string, restriction?: record, resultKey?: string, validTillDate?: string}
-export def "create-permit create" [
+export def "post-create-permit" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -167,7 +167,7 @@ export def "create-permit create" [
 #
 # POST /disable
 # operationId: post-disable
-export def "disable create" [
+export def "post-disable" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -208,7 +208,7 @@ export def "disable create" [
 #
 # POST /disablePermit
 # operationId: post-disablePermit
-export def "disable-permit create" [
+export def "post-disable-permit" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -248,7 +248,7 @@ export def "disable-permit create" [
 # POST /listRecurringDetails
 # operationId: post-listRecurringDetails
 # --recurring shape: {contract?: "ONECLICK"|"RECURRING"|"PAYOUT", recurringDetailName?: string, recurringExpiry?: string, recurringFrequency?: string, tokenService?: "VISATOKENSERVICE"|"MCTOKENSERVICE"}
-export def "list-recurring-details create" [
+export def "post-list-recurring-details" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -289,7 +289,7 @@ export def "list-recurring-details create" [
 # POST /notifyShopper
 # operationId: post-notifyShopper
 # --amount shape: {currency: string, value: int}
-export def "notify-shopper create" [
+export def "post-notify-shopper" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -336,7 +336,7 @@ export def "notify-shopper create" [
 # POST /scheduleAccountUpdater
 # operationId: post-scheduleAccountUpdater
 # --card shape: {cvc?: string, expiryMonth?: string, expiryYear?: string, holderName?: string, issueNumber?: string, number?: string, startMonth?: string, startYear?: string}
-export def "schedule-account-updater create" [
+export def "post-schedule-account-updater" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

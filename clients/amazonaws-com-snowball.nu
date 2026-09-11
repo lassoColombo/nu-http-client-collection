@@ -126,7 +126,7 @@ def x-amz-target-completer-25 [] { ["AWSIESnowballJobManagementService.UpdateLon
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "api cancel" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "cancel-cluster" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -150,7 +150,7 @@ export def commands []: nothing -> table {
 #
 # POST /
 # operationId: CancelCluster
-export def "api cancel" [
+export def "cancel-cluster" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -198,7 +198,7 @@ export def "api cancel" [
 #
 # POST /
 # operationId: CancelJob
-export def "api cancel-job" [
+export def "cancel-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -246,7 +246,7 @@ export def "api cancel-job" [
 #
 # POST /
 # operationId: CreateAddress
-export def "api create-address" [
+export def "create-address" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -294,7 +294,7 @@ export def "api create-address" [
 #
 # POST /
 # operationId: CreateCluster
-export def "api create" [
+export def "create-cluster" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -358,7 +358,7 @@ export def "api create" [
 #
 # POST /
 # operationId: CreateJob
-export def "api create-job" [
+export def "create-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -422,7 +422,7 @@ export def "api create-job" [
 #
 # POST /
 # operationId: CreateLongTermPricing
-export def "api create-long-term-pricing" [
+export def "create-long-term-pricing" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -472,7 +472,7 @@ export def "api create-long-term-pricing" [
 #
 # POST /
 # operationId: CreateReturnShippingLabel
-export def "api create-return-shipping-label" [
+export def "create-return-shipping-label" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -521,7 +521,7 @@ export def "api create-return-shipping-label" [
 #
 # POST /
 # operationId: DescribeAddress
-export def "api get-address" [
+export def "describe-address" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -569,7 +569,7 @@ export def "api get-address" [
 #
 # POST /
 # operationId: DescribeAddresses
-export def "api get-addresses" [
+export def "describe-addresses" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -621,7 +621,7 @@ export def "api get-addresses" [
 #
 # POST /
 # operationId: DescribeCluster
-export def "api get" [
+export def "describe-cluster" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -669,7 +669,7 @@ export def "api get" [
 #
 # POST /
 # operationId: DescribeJob
-export def "api get-job" [
+export def "describe-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -717,7 +717,7 @@ export def "api get-job" [
 #
 # POST /
 # operationId: DescribeReturnShippingLabel
-export def "api get-return-shipping-label" [
+export def "describe-return-shipping-label" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -765,7 +765,7 @@ export def "api get-return-shipping-label" [
 #
 # POST /
 # operationId: GetJobManifest
-export def "api get-job-manifest" [
+export def "get-job-manifest" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -813,7 +813,7 @@ export def "api get-job-manifest" [
 #
 # POST /
 # operationId: GetJobUnlockCode
-export def "api get-job-unlock-code" [
+export def "get-job-unlock-code" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -861,7 +861,7 @@ export def "api get-job-unlock-code" [
 #
 # POST /
 # operationId: GetSnowballUsage
-export def "api get-snowball-usage" [
+export def "get-snowball-usage" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -909,7 +909,7 @@ export def "api get-snowball-usage" [
 #
 # POST /
 # operationId: GetSoftwareUpdates
-export def "api get-software-updates" [
+export def "get-software-updates" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -957,7 +957,7 @@ export def "api get-software-updates" [
 #
 # POST /
 # operationId: ListClusterJobs
-export def "api list-jobs" [
+export def "list-cluster-jobs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1010,7 +1010,7 @@ export def "api list-jobs" [
 #
 # POST /
 # operationId: ListClusters
-export def "api list-clusters" [
+export def "list-clusters" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1062,7 +1062,7 @@ export def "api list-clusters" [
 #
 # POST /
 # operationId: ListCompatibleImages
-export def "api list-compatible-images" [
+export def "list-compatible-images" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1114,7 +1114,7 @@ export def "api list-compatible-images" [
 #
 # POST /
 # operationId: ListJobs
-export def "api list-jobs-1" [
+export def "list-jobs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1166,7 +1166,7 @@ export def "api list-jobs-1" [
 #
 # POST /
 # operationId: ListLongTermPricing
-export def "api list-long-term-pricing" [
+export def "list-long-term-pricing" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1218,7 +1218,7 @@ export def "api list-long-term-pricing" [
 #
 # POST /
 # operationId: ListServiceVersions
-export def "api list-service-versions" [
+export def "list-service-versions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1269,7 +1269,7 @@ export def "api list-service-versions" [
 #
 # POST /
 # operationId: UpdateCluster
-export def "api update" [
+export def "update-cluster" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1325,7 +1325,7 @@ export def "api update" [
 #
 # POST /
 # operationId: UpdateJob
-export def "api update-job" [
+export def "update-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1382,7 +1382,7 @@ export def "api update-job" [
 #
 # POST /
 # operationId: UpdateJobShipmentState
-export def "api update-job-shipment-state" [
+export def "update-job-shipment-state" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1431,7 +1431,7 @@ export def "api update-job-shipment-state" [
 #
 # POST /
 # operationId: UpdateLongTermPricing
-export def "api update-long-term-pricing" [
+export def "update-long-term-pricing" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

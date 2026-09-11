@@ -129,7 +129,7 @@ def corpus-completer [] { ["domain" "user"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "about get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "drive-about-get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -153,7 +153,7 @@ export def commands []: nothing -> table {
 #
 # GET /about
 # operationId: drive.about.get
-export def "about get" [
+export def "drive-about-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -195,7 +195,7 @@ export def "about get" [
 #
 # GET /changes
 # operationId: drive.changes.list
-export def "changes list" [
+export def "drive-changes-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -251,7 +251,7 @@ export def "changes list" [
 #
 # GET /changes/startPageToken
 # operationId: drive.changes.getStartPageToken
-export def "changes-start-page-token get" [
+export def "drive-changes-get-start-page-token" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -297,7 +297,7 @@ export def "changes-start-page-token get" [
 #
 # POST /changes/watch
 # operationId: drive.changes.watch
-export def "changes-watch watch" [
+export def "drive-changes-watch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -366,7 +366,7 @@ export def "changes-watch watch" [
 #
 # POST /channels/stop
 # operationId: drive.channels.stop
-export def "channels-stop stop" [
+export def "drive-channels-stop" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -421,7 +421,7 @@ export def "channels-stop stop" [
 #
 # GET /drives
 # operationId: drive.drives.list
-export def "drives list" [
+export def "drive-drives-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -470,7 +470,7 @@ export def "drives list" [
 # --backgroundImageFile shape: {id?: string, width?: float, xCoordinate?: float, yCoordinate?: float}
 # --capabilities shape: {canAddChildren?: bool, canChangeCopyRequiresWriterPermissionRestriction?: bool, canChangeDomainUsersOnlyRestriction?: bool, canChangeDriveBackground?: bool, canChangeDriveMembersOnlyRestriction?: bool, canChangeSharingFoldersRequiresOrganizerPermissionRestriction?: bool, canComment?: bool, canCopy?: bool, canDeleteChildren?: bool, canDeleteDrive?: bool, canDownload?: bool, canEdit?: bool, canListChildren?: bool, canManageMembers?: bool, canReadRevisions?: bool, canRename?: bool, ... (4 more fields)}
 # --restrictions shape: {adminManagedRestrictions?: bool, copyRequiresWriterPermission?: bool, domainUsersOnly?: bool, driveMembersOnly?: bool, sharingFoldersRequiresOrganizerPermission?: bool}
-export def "drives create" [
+export def "drive-drives-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -528,7 +528,7 @@ export def "drives create" [
 #
 # DELETE /drives/{driveId}
 # operationId: drive.drives.delete
-export def "drives delete" [
+export def "drive-drives-delete" [
   drive_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -574,7 +574,7 @@ export def "drives delete" [
 #
 # GET /drives/{driveId}
 # operationId: drive.drives.get
-export def "drives get" [
+export def "drive-drives-get" [
   drive_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -622,7 +622,7 @@ export def "drives get" [
 # --backgroundImageFile shape: {id?: string, width?: float, xCoordinate?: float, yCoordinate?: float}
 # --capabilities shape: {canAddChildren?: bool, canChangeCopyRequiresWriterPermissionRestriction?: bool, canChangeDomainUsersOnlyRestriction?: bool, canChangeDriveBackground?: bool, canChangeDriveMembersOnlyRestriction?: bool, canChangeSharingFoldersRequiresOrganizerPermissionRestriction?: bool, canComment?: bool, canCopy?: bool, canDeleteChildren?: bool, canDeleteDrive?: bool, canDownload?: bool, canEdit?: bool, canListChildren?: bool, canManageMembers?: bool, canReadRevisions?: bool, canRename?: bool, ... (4 more fields)}
 # --restrictions shape: {adminManagedRestrictions?: bool, copyRequiresWriterPermission?: bool, domainUsersOnly?: bool, driveMembersOnly?: bool, sharingFoldersRequiresOrganizerPermission?: bool}
-export def "drives update" [
+export def "drive-drives-update" [
   drive_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -682,7 +682,7 @@ export def "drives update" [
 #
 # POST /drives/{driveId}/hide
 # operationId: drive.drives.hide
-export def "drives-hide create" [
+export def "drive-drives-hide" [
   drive_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -726,7 +726,7 @@ export def "drives-hide create" [
 #
 # POST /drives/{driveId}/unhide
 # operationId: drive.drives.unhide
-export def "drives-unhide create" [
+export def "drive-drives-unhide" [
   drive_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -770,7 +770,7 @@ export def "drives-unhide create" [
 #
 # GET /files
 # operationId: drive.files.list
-export def "files list" [
+export def "drive-files-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -827,7 +827,7 @@ export def "files list" [
 #
 # POST /files
 # operationId: drive.files.create
-export def "files create" [
+export def "drive-files-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -882,7 +882,7 @@ export def "files create" [
 #
 # GET /files/generateIds
 # operationId: drive.files.generateIds
-export def "files-generate-ids generate" [
+export def "drive-files-generate-ids" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -927,7 +927,7 @@ export def "files-generate-ids generate" [
 #
 # DELETE /files/trash
 # operationId: drive.files.emptyTrash
-export def "files-trash delete-empty" [
+export def "drive-files-empty-trash" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -971,7 +971,7 @@ export def "files-trash delete-empty" [
 #
 # DELETE /files/{fileId}
 # operationId: drive.files.delete
-export def "files delete" [
+export def "drive-files-delete" [
   file_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1018,7 +1018,7 @@ export def "files delete" [
 #
 # GET /files/{fileId}
 # operationId: drive.files.get
-export def "files get" [
+export def "drive-files-get" [
   file_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1067,7 +1067,7 @@ export def "files get" [
 #
 # PATCH /files/{fileId}
 # operationId: drive.files.update
-export def "files update" [
+export def "drive-files-update" [
   file_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1125,7 +1125,7 @@ export def "files update" [
 #
 # GET /files/{fileId}/comments
 # operationId: drive.comments.list
-export def "files-comments list" [
+export def "drive-comments-list" [
   file_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1176,7 +1176,7 @@ export def "files-comments list" [
 # --author shape: {displayName?: string, emailAddress?: string, kind?: string, me?: bool, permissionId?: string, photoLink?: string}
 # --quotedFileContent shape: {mimeType?: string, value?: string}
 # --replies item shape: {action?: string, author?: record, content?: string, createdTime?: string, deleted?: bool, htmlContent?: string, id?: string, kind?: string, modifiedTime?: string}
-export def "files-comments create" [
+export def "drive-comments-create" [
   file_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1235,7 +1235,7 @@ export def "files-comments create" [
 #
 # DELETE /files/{fileId}/comments/{commentId}
 # operationId: drive.comments.delete
-export def "files-comments delete" [
+export def "drive-comments-delete" [
   file_id: string
   comment_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1281,7 +1281,7 @@ export def "files-comments delete" [
 #
 # GET /files/{fileId}/comments/{commentId}
 # operationId: drive.comments.get
-export def "files-comments get" [
+export def "drive-comments-get" [
   file_id: string
   comment_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1331,7 +1331,7 @@ export def "files-comments get" [
 # --author shape: {displayName?: string, emailAddress?: string, kind?: string, me?: bool, permissionId?: string, photoLink?: string}
 # --quotedFileContent shape: {mimeType?: string, value?: string}
 # --replies item shape: {action?: string, author?: record, content?: string, createdTime?: string, deleted?: bool, htmlContent?: string, id?: string, kind?: string, modifiedTime?: string}
-export def "files-comments update" [
+export def "drive-comments-update" [
   file_id: string
   comment_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1392,7 +1392,7 @@ export def "files-comments update" [
 #
 # GET /files/{fileId}/comments/{commentId}/replies
 # operationId: drive.replies.list
-export def "files-comments-replies list" [
+export def "drive-replies-list" [
   file_id: string
   comment_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1442,7 +1442,7 @@ export def "files-comments-replies list" [
 # POST /files/{fileId}/comments/{commentId}/replies
 # operationId: drive.replies.create
 # --author shape: {displayName?: string, emailAddress?: string, kind?: string, me?: bool, permissionId?: string, photoLink?: string}
-export def "files-comments-replies create" [
+export def "drive-replies-create" [
   file_id: string
   comment_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1500,7 +1500,7 @@ export def "files-comments-replies create" [
 #
 # DELETE /files/{fileId}/comments/{commentId}/replies/{replyId}
 # operationId: drive.replies.delete
-export def "files-comments-replies delete" [
+export def "drive-replies-delete" [
   file_id: string
   comment_id: string
   reply_id: string
@@ -1548,7 +1548,7 @@ export def "files-comments-replies delete" [
 #
 # GET /files/{fileId}/comments/{commentId}/replies/{replyId}
 # operationId: drive.replies.get
-export def "files-comments-replies get" [
+export def "drive-replies-get" [
   file_id: string
   comment_id: string
   reply_id: string
@@ -1598,7 +1598,7 @@ export def "files-comments-replies get" [
 # PATCH /files/{fileId}/comments/{commentId}/replies/{replyId}
 # operationId: drive.replies.update
 # --author shape: {displayName?: string, emailAddress?: string, kind?: string, me?: bool, permissionId?: string, photoLink?: string}
-export def "files-comments-replies update" [
+export def "drive-replies-update" [
   file_id: string
   comment_id: string
   reply_id: string
@@ -1671,7 +1671,7 @@ export def "files-comments-replies update" [
 # --shortcutDetails shape: {targetId?: string, targetMimeType?: string, targetResourceKey?: string}
 # --trashingUser shape: {displayName?: string, emailAddress?: string, kind?: string, me?: bool, permissionId?: string, photoLink?: string}
 # --videoMediaMetadata shape: {durationMillis?: string, height?: int, width?: int}
-export def "files-copy copy" [
+export def "drive-files-copy" [
   file_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1787,7 +1787,7 @@ export def "files-copy copy" [
 #
 # GET /files/{fileId}/export
 # operationId: drive.files.export
-export def "files-export export" [
+export def "drive-files-export" [
   file_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1832,7 +1832,7 @@ export def "files-export export" [
 #
 # GET /files/{fileId}/listLabels
 # operationId: drive.files.listLabels
-export def "files-list-labels list" [
+export def "drive-files-list-labels" [
   file_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1879,7 +1879,7 @@ export def "files-list-labels list" [
 # POST /files/{fileId}/modifyLabels
 # operationId: drive.files.modifyLabels
 # --labelModifications item shape: {fieldModifications?: list, kind?: string, labelId?: string, removeLabel?: bool}
-export def "files-modify-labels create" [
+export def "drive-files-modify-labels" [
   file_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1928,7 +1928,7 @@ export def "files-modify-labels create" [
 #
 # GET /files/{fileId}/permissions
 # operationId: drive.permissions.list
-export def "files-permissions list" [
+export def "drive-permissions-list" [
   file_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1980,7 +1980,7 @@ export def "files-permissions list" [
 # operationId: drive.permissions.create
 # --permissionDetails item shape: {inherited?: bool, inheritedFrom?: string, permissionType?: string, role?: string}
 # --teamDrivePermissionDetails item shape: {inherited?: bool, inheritedFrom?: string, role?: string, teamDrivePermissionType?: string}
-export def "files-permissions create" [
+export def "drive-permissions-create" [
   file_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2048,7 +2048,7 @@ export def "files-permissions create" [
 #
 # DELETE /files/{fileId}/permissions/{permissionId}
 # operationId: drive.permissions.delete
-export def "files-permissions delete" [
+export def "drive-permissions-delete" [
   file_id: string
   permission_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2097,7 +2097,7 @@ export def "files-permissions delete" [
 #
 # GET /files/{fileId}/permissions/{permissionId}
 # operationId: drive.permissions.get
-export def "files-permissions get" [
+export def "drive-permissions-get" [
   file_id: string
   permission_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2148,7 +2148,7 @@ export def "files-permissions get" [
 # operationId: drive.permissions.update
 # --permissionDetails item shape: {inherited?: bool, inheritedFrom?: string, permissionType?: string, role?: string}
 # --teamDrivePermissionDetails item shape: {inherited?: bool, inheritedFrom?: string, role?: string, teamDrivePermissionType?: string}
-export def "files-permissions update" [
+export def "drive-permissions-update" [
   file_id: string
   permission_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2215,7 +2215,7 @@ export def "files-permissions update" [
 #
 # GET /files/{fileId}/revisions
 # operationId: drive.revisions.list
-export def "files-revisions list" [
+export def "drive-revisions-list" [
   file_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2261,7 +2261,7 @@ export def "files-revisions list" [
 #
 # DELETE /files/{fileId}/revisions/{revisionId}
 # operationId: drive.revisions.delete
-export def "files-revisions delete" [
+export def "drive-revisions-delete" [
   file_id: string
   revision_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2307,7 +2307,7 @@ export def "files-revisions delete" [
 #
 # GET /files/{fileId}/revisions/{revisionId}
 # operationId: drive.revisions.get
-export def "files-revisions get" [
+export def "drive-revisions-get" [
   file_id: string
   revision_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2355,7 +2355,7 @@ export def "files-revisions get" [
 # PATCH /files/{fileId}/revisions/{revisionId}
 # operationId: drive.revisions.update
 # --lastModifyingUser shape: {displayName?: string, emailAddress?: string, kind?: string, me?: bool, permissionId?: string, photoLink?: string}
-export def "files-revisions update" [
+export def "drive-revisions-update" [
   file_id: string
   revision_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2418,7 +2418,7 @@ export def "files-revisions update" [
 #
 # POST /files/{fileId}/watch
 # operationId: drive.files.watch
-export def "files-watch watch" [
+export def "drive-files-watch" [
   file_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2480,7 +2480,7 @@ export def "files-watch watch" [
 #
 # GET /teamdrives
 # operationId: drive.teamdrives.list
-export def "teamdrives list" [
+export def "drive-teamdrives-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -2529,7 +2529,7 @@ export def "teamdrives list" [
 # --backgroundImageFile shape: {id?: string, width?: float, xCoordinate?: float, yCoordinate?: float}
 # --capabilities shape: {canAddChildren?: bool, canChangeCopyRequiresWriterPermissionRestriction?: bool, canChangeDomainUsersOnlyRestriction?: bool, canChangeSharingFoldersRequiresOrganizerPermissionRestriction?: bool, canChangeTeamDriveBackground?: bool, canChangeTeamMembersOnlyRestriction?: bool, canComment?: bool, canCopy?: bool, canDeleteChildren?: bool, canDeleteTeamDrive?: bool, canDownload?: bool, canEdit?: bool, canListChildren?: bool, canManageMembers?: bool, canReadRevisions?: bool, canRemoveChildren?: bool, ... (5 more fields)}
 # --restrictions shape: {adminManagedRestrictions?: bool, copyRequiresWriterPermission?: bool, domainUsersOnly?: bool, sharingFoldersRequiresOrganizerPermission?: bool, teamMembersOnly?: bool}
-export def "teamdrives create" [
+export def "drive-teamdrives-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -2586,7 +2586,7 @@ export def "teamdrives create" [
 #
 # DELETE /teamdrives/{teamDriveId}
 # operationId: drive.teamdrives.delete
-export def "teamdrives delete" [
+export def "drive-teamdrives-delete" [
   team_drive_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2630,7 +2630,7 @@ export def "teamdrives delete" [
 #
 # GET /teamdrives/{teamDriveId}
 # operationId: drive.teamdrives.get
-export def "teamdrives get" [
+export def "drive-teamdrives-get" [
   team_drive_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2678,7 +2678,7 @@ export def "teamdrives get" [
 # --backgroundImageFile shape: {id?: string, width?: float, xCoordinate?: float, yCoordinate?: float}
 # --capabilities shape: {canAddChildren?: bool, canChangeCopyRequiresWriterPermissionRestriction?: bool, canChangeDomainUsersOnlyRestriction?: bool, canChangeSharingFoldersRequiresOrganizerPermissionRestriction?: bool, canChangeTeamDriveBackground?: bool, canChangeTeamMembersOnlyRestriction?: bool, canComment?: bool, canCopy?: bool, canDeleteChildren?: bool, canDeleteTeamDrive?: bool, canDownload?: bool, canEdit?: bool, canListChildren?: bool, canManageMembers?: bool, canReadRevisions?: bool, canRemoveChildren?: bool, ... (5 more fields)}
 # --restrictions shape: {adminManagedRestrictions?: bool, copyRequiresWriterPermission?: bool, domainUsersOnly?: bool, sharingFoldersRequiresOrganizerPermission?: bool, teamMembersOnly?: bool}
-export def "teamdrives update" [
+export def "drive-teamdrives-update" [
   team_drive_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)

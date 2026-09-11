@@ -99,7 +99,7 @@ def auth-scheme-completer [] { ["ocp-apim-subscription-key" "query-key"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "dfs-slates-by-date get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "dfs-slates-by-date" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -123,7 +123,7 @@ export def commands []: nothing -> table {
 #
 # GET /{format}/DfsSlatesByDate/{date}
 # operationId: DfsSlatesByDate
-export def "dfs-slates-by-date get" [
+export def "dfs-slates-by-date" [
   format: string
   date: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -161,7 +161,7 @@ export def "dfs-slates-by-date get" [
 #
 # GET /{format}/PlayerGameProjectionStatsByDate/{date}
 # operationId: ProjectedPlayerGameStatsByDate
-export def "player-game-projection-stats-by-date stats-projected" [
+export def "projected-player-game-stats-by-date" [
   format: string
   date: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -199,7 +199,7 @@ export def "player-game-projection-stats-by-date stats-projected" [
 #
 # GET /{format}/PlayerGameProjectionStatsByPlayer/{date}/{playerid}
 # operationId: ProjectedPlayerGameStatsByPlayer
-export def "player-game-projection-stats-by-player stats-projected" [
+export def "projected-player-game-stats-by-player" [
   format: string
   date: string
   playerid: string

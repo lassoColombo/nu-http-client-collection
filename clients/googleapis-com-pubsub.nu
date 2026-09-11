@@ -129,7 +129,7 @@ def alt-completer [] { ["json" "media" "proto"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "v1beta2 create" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "pubsub-projects-topics-create" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -153,7 +153,7 @@ export def commands []: nothing -> table {
 #
 # PUT /v1beta2/{name}
 # operationId: pubsub.projects.topics.create
-export def "v1beta2 create" [
+export def "pubsub-projects-topics-create" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -205,7 +205,7 @@ export def "v1beta2 create" [
 #
 # GET /v1beta2/{project}/subscriptions
 # operationId: pubsub.projects.subscriptions.list
-export def "v1beta2-subscriptions list-by-project" [
+export def "pubsub-projects-subscriptions-list" [
   project: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -255,7 +255,7 @@ export def "v1beta2-subscriptions list-by-project" [
 #
 # GET /v1beta2/{project}/topics
 # operationId: pubsub.projects.topics.list
-export def "v1beta2-topics list" [
+export def "pubsub-projects-topics-list" [
   project: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -305,7 +305,7 @@ export def "v1beta2-topics list" [
 #
 # GET /v1beta2/{resource}:getIamPolicy
 # operationId: pubsub.projects.topics.getIamPolicy
-export def "v1beta2 get-iam-policy" [
+export def "pubsub-projects-topics-get-iam-policy" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -355,7 +355,7 @@ export def "v1beta2 get-iam-policy" [
 # POST /v1beta2/{resource}:setIamPolicy
 # operationId: pubsub.projects.topics.setIamPolicy
 # --policy shape: {bindings?: list, etag?: string, version?: int}
-export def "v1beta2 update-iam-policy" [
+export def "pubsub-projects-topics-set-iam-policy" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -407,7 +407,7 @@ export def "v1beta2 update-iam-policy" [
 #
 # POST /v1beta2/{resource}:testIamPermissions
 # operationId: pubsub.projects.topics.testIamPermissions
-export def "v1beta2 test-iam-permissions" [
+export def "pubsub-projects-topics-test-iam-permissions" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -459,7 +459,7 @@ export def "v1beta2 test-iam-permissions" [
 #
 # DELETE /v1beta2/{subscription}
 # operationId: pubsub.projects.subscriptions.delete
-export def "v1beta2 delete-by-subscription" [
+export def "pubsub-projects-subscriptions-delete" [
   subscription: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -507,7 +507,7 @@ export def "v1beta2 delete-by-subscription" [
 #
 # GET /v1beta2/{subscription}
 # operationId: pubsub.projects.subscriptions.get
-export def "v1beta2 get-by-subscription" [
+export def "pubsub-projects-subscriptions-get" [
   subscription: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -555,7 +555,7 @@ export def "v1beta2 get-by-subscription" [
 #
 # POST /v1beta2/{subscription}:acknowledge
 # operationId: pubsub.projects.subscriptions.acknowledge
-export def "v1beta2 create-acknowledge" [
+export def "pubsub-projects-subscriptions-acknowledge" [
   subscription: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -607,7 +607,7 @@ export def "v1beta2 create-acknowledge" [
 #
 # POST /v1beta2/{subscription}:modifyAckDeadline
 # operationId: pubsub.projects.subscriptions.modifyAckDeadline
-export def "v1beta2 create-modify-ack-deadline" [
+export def "pubsub-projects-subscriptions-modify-ack-deadline" [
   subscription: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -662,7 +662,7 @@ export def "v1beta2 create-modify-ack-deadline" [
 # POST /v1beta2/{subscription}:modifyPushConfig
 # operationId: pubsub.projects.subscriptions.modifyPushConfig
 # --pushConfig shape: {attributes?: record, oidcToken?: record, pushEndpoint?: string}
-export def "v1beta2 push-modify-config" [
+export def "pubsub-projects-subscriptions-modify-push-config" [
   subscription: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -714,7 +714,7 @@ export def "v1beta2 push-modify-config" [
 #
 # POST /v1beta2/{subscription}:pull
 # operationId: pubsub.projects.subscriptions.pull
-export def "v1beta2 pull" [
+export def "pubsub-projects-subscriptions-pull" [
   subscription: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -767,7 +767,7 @@ export def "v1beta2 pull" [
 #
 # DELETE /v1beta2/{topic}
 # operationId: pubsub.projects.topics.delete
-export def "v1beta2 delete-by-topic" [
+export def "pubsub-projects-topics-delete" [
   topic: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -815,7 +815,7 @@ export def "v1beta2 delete-by-topic" [
 #
 # GET /v1beta2/{topic}
 # operationId: pubsub.projects.topics.get
-export def "v1beta2 get-by-topic" [
+export def "pubsub-projects-topics-get" [
   topic: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -863,7 +863,7 @@ export def "v1beta2 get-by-topic" [
 #
 # GET /v1beta2/{topic}/subscriptions
 # operationId: pubsub.projects.topics.subscriptions.list
-export def "v1beta2-subscriptions list-by-topic" [
+export def "pubsub-projects-topics-subscriptions-list" [
   topic: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -914,7 +914,7 @@ export def "v1beta2-subscriptions list-by-topic" [
 # POST /v1beta2/{topic}:publish
 # operationId: pubsub.projects.topics.publish
 # --messages item shape: {attributes?: record, data?: string, messageId?: string, publishTime?: string}
-export def "v1beta2 publish" [
+export def "pubsub-projects-topics-publish" [
   topic: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)

@@ -116,7 +116,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-providers-microsoft-operational-insights-clusters list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "clusters-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -140,7 +140,7 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.OperationalInsights/clusters
 # operationId: Clusters_List
-export def "subscriptions-providers-microsoft-operational-insights-clusters list" [
+export def "clusters-list" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -178,7 +178,7 @@ export def "subscriptions-providers-microsoft-operational-insights-clusters list
 #
 # GET /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.OperationalInsights/clusters
 # operationId: Clusters_ListByResourceGroup
-export def "subscriptions-resourcegroups-providers-microsoft-operational-insights-clusters list-by-resource-group" [
+export def "clusters-list-by-resource-group" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -218,7 +218,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-operational-insight
 #
 # DELETE /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.OperationalInsights/clusters/{clusterName}
 # operationId: Clusters_Delete
-export def "subscriptions-resourcegroups-providers-microsoft-operational-insights-clusters delete" [
+export def "clusters-delete" [
   subscription_id: string
   resource_group_name: string
   cluster_name: string
@@ -260,7 +260,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-operational-insight
 #
 # GET /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.OperationalInsights/clusters/{clusterName}
 # operationId: Clusters_Get
-export def "subscriptions-resourcegroups-providers-microsoft-operational-insights-clusters get" [
+export def "clusters-get" [
   subscription_id: string
   resource_group_name: string
   cluster_name: string
@@ -303,7 +303,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-operational-insight
 # PATCH /subscriptions/{subscriptionId}/resourcegroups/{resourceGroupName}/providers/Microsoft.OperationalInsights/clusters/{clusterName}
 # operationId: Clusters_Update
 # --properties shape: {encryptionKeyUri?: string}
-export def "subscriptions-resourcegroups-providers-microsoft-operational-insights-clusters update" [
+export def "clusters-update" [
   subscription_id: string
   resource_group_name: string
   cluster_name: string
@@ -352,7 +352,7 @@ export def "subscriptions-resourcegroups-providers-microsoft-operational-insight
 # operationId: Clusters_CreateOrUpdate
 # --identity shape: {type: "SystemAssigned"|"None"}
 # --properties shape: {encryptionKeyUri?: string, nextLink?: string}
-export def "subscriptions-resourcegroups-providers-microsoft-operational-insights-clusters create-or-update" [
+export def "clusters-create-or-update" [
   subscription_id: string
   resource_group_name: string
   cluster_name: string

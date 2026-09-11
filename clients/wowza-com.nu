@@ -127,7 +127,7 @@ def billing-mode-completer [] { ["pay_as_you_go" "twentyfour_seven"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "specs get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "specs" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -151,7 +151,7 @@ export def commands []: nothing -> table {
 #
 # GET /api/v1/specs
 # operationId: specs
-export def "specs get" [
+export def "specs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -185,7 +185,7 @@ export def "specs get" [
 #
 # GET /live_streams
 # operationId: listLiveStreams
-export def "live-streams list" [
+export def "list-live-streams" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -223,7 +223,7 @@ export def "live-streams list" [
 # POST /live_streams
 # operationId: createLiveStream
 # --live_stream shape: {aspect_ratio_height: int, aspect_ratio_width: int, billing_mode: "pay_as_you_go"|"twentyfour_seven", broadcast_location: "asia_pacific_australia"|"asia_pacific_japan"|"asia_pacific_singapore"|"asia_pacific_taiwan"|"eu_belgium"|"eu_germany"|"eu_ireland"|"south_america_brazil"|"us_central_iowa"|"us_east_s_carolina"|"us_east_virginia"|"us_west_california"|"us_west_oregon", closed_caption_type?: "none"|"cea"|"on_text"|"both", delivery_method?: "pull"|"cdn"|"push", delivery_protocols?: list<string>, ... (29 more fields)}
-export def "live-streams create" [
+export def "create-live-stream" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -261,7 +261,7 @@ export def "live-streams create" [
 #
 # DELETE /live_streams/{id}
 # operationId: deleteLiveStream
-export def "live-streams delete" [
+export def "delete-live-stream" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -297,7 +297,7 @@ export def "live-streams delete" [
 #
 # GET /live_streams/{id}
 # operationId: showLiveStream
-export def "live-streams get-show" [
+export def "show-live-stream" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -334,7 +334,7 @@ export def "live-streams get-show" [
 # PATCH /live_streams/{id}
 # operationId: updateLiveStream
 # --live_stream shape: {aspect_ratio_height: int, aspect_ratio_width: int, closed_caption_type?: "none"|"cea"|"on_text"|"both", delivery_method?: "pull"|"cdn"|"push", delivery_protocols?: list<string>, disable_authentication?: bool, encoder: "wowza_streaming_engine"|"wowza_gocoder"|"media_ds"|"axis"|"epiphan"|"hauppauge"|"jvc"|"live_u"|"matrox"|"newtek_tricaster"|"osprey"|"sony"|"telestream_wirecast"|"teradek_cube"|"vmix"|"x_split"|"ipcamera"|"other_rtmp"|"other_rtsp", hosted_page_description?: string, ... (22 more fields)}
-export def "live-streams update" [
+export def "update-live-stream" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -374,7 +374,7 @@ export def "live-streams update" [
 #
 # PUT /live_streams/{id}/regenerate_connection_code
 # operationId: regenerateConnectionCodeLiveStream
-export def "live-streams-regenerate-connection-code update" [
+export def "regenerate-connection-code-live-stream" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -410,7 +410,7 @@ export def "live-streams-regenerate-connection-code update" [
 #
 # PUT /live_streams/{id}/reset
 # operationId: resetLiveStream
-export def "live-streams-reset reset" [
+export def "reset-live-stream" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -446,7 +446,7 @@ export def "live-streams-reset reset" [
 #
 # PUT /live_streams/{id}/start
 # operationId: startLiveStream
-export def "live-streams-start start" [
+export def "start-live-stream" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -482,7 +482,7 @@ export def "live-streams-start start" [
 #
 # GET /live_streams/{id}/state
 # operationId: showLiveStreamState
-export def "live-streams-state get-show" [
+export def "show-live-stream-state" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -518,7 +518,7 @@ export def "live-streams-state get-show" [
 #
 # GET /live_streams/{id}/stats
 # operationId: showLiveStreamStats
-export def "live-streams-stats stats-show" [
+export def "show-live-stream-stats" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -554,7 +554,7 @@ export def "live-streams-stats stats-show" [
 #
 # PUT /live_streams/{id}/stop
 # operationId: stopLiveStream
-export def "live-streams-stop stop" [
+export def "stop-live-stream" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -590,7 +590,7 @@ export def "live-streams-stop stop" [
 #
 # GET /live_streams/{id}/thumbnail_url
 # operationId: showLiveStreamThumbnailUrl
-export def "live-streams-thumbnail-url get-show" [
+export def "show-live-stream-thumbnail-url" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -626,7 +626,7 @@ export def "live-streams-thumbnail-url get-show" [
 #
 # GET /players
 # operationId: listPlayers
-export def "players list" [
+export def "list-players" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -663,7 +663,7 @@ export def "players list" [
 #
 # GET /players/{id}
 # operationId: showPlayer
-export def "players get-show" [
+export def "show-player" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -700,7 +700,7 @@ export def "players get-show" [
 # PATCH /players/{id}
 # operationId: updatePlayer
 # --player shape: {countdown?: bool, countdown_at?: string, hosted_page?: bool, hosted_page_description?: string, hosted_page_logo_image?: string, hosted_page_sharing_icons?: bool, hosted_page_title?: string, logo_image?: string, logo_position?: string, remove_hosted_page_logo_image?: bool, remove_logo_image?: bool, remove_video_poster_image?: bool, responsive?: bool, type?: string, video_poster_image?: string, width?: int}
-export def "players update" [
+export def "update-player" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -740,7 +740,7 @@ export def "players update" [
 #
 # POST /players/{id}/rebuild
 # operationId: requestPlayerRebuild
-export def "players-rebuild request" [
+export def "request-player-rebuild" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -776,7 +776,7 @@ export def "players-rebuild request" [
 #
 # GET /players/{id}/state
 # operationId: showPlayerState
-export def "players-state get-show" [
+export def "show-player-state" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -812,7 +812,7 @@ export def "players-state get-show" [
 #
 # GET /players/{player_id}/urls
 # operationId: listPlayerUrls
-export def "players-urls list" [
+export def "list-player-urls" [
   player_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -849,7 +849,7 @@ export def "players-urls list" [
 # POST /players/{player_id}/urls
 # operationId: createPlayerUrl
 # --url shape: {bitrate?: int, height?: int, label?: string, url?: string, width?: int}
-export def "players-urls create" [
+export def "create-player-url" [
   player_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -889,7 +889,7 @@ export def "players-urls create" [
 #
 # DELETE /players/{player_id}/urls/{id}
 # operationId: deletePlayerUrl
-export def "players-urls delete" [
+export def "delete-player-url" [
   player_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -927,7 +927,7 @@ export def "players-urls delete" [
 #
 # GET /players/{player_id}/urls/{id}
 # operationId: showPlayerUrl
-export def "players-urls get-show" [
+export def "show-player-url" [
   player_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -966,7 +966,7 @@ export def "players-urls get-show" [
 # PATCH /players/{player_id}/urls/{id}
 # operationId: updatePlayerUrl
 # --url shape: {bitrate?: int, height?: int, label?: string, url?: string, width?: int}
-export def "players-urls update" [
+export def "update-player-url" [
   player_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1008,7 +1008,7 @@ export def "players-urls update" [
 #
 # GET /recordings
 # operationId: listRecordings
-export def "recordings list" [
+export def "list-recordings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1045,7 +1045,7 @@ export def "recordings list" [
 #
 # DELETE /recordings/{id}
 # operationId: deleteRecording
-export def "recordings delete" [
+export def "delete-recording" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1081,7 +1081,7 @@ export def "recordings delete" [
 #
 # GET /recordings/{id}
 # operationId: showRecording
-export def "recordings get-show" [
+export def "show-recording" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1117,7 +1117,7 @@ export def "recordings get-show" [
 #
 # GET /recordings/{id}/state
 # operationId: showRecordingState
-export def "recordings-state get-show" [
+export def "show-recording-state" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1153,7 +1153,7 @@ export def "recordings-state get-show" [
 #
 # GET /schedules
 # operationId: listSchedules
-export def "schedules list" [
+export def "list-schedules" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1191,7 +1191,7 @@ export def "schedules list" [
 # POST /schedules
 # operationId: createSchedule
 # --schedule shape: {action_type: "start"|"stop"|"start_stop", end_repeat?: string, name: string, recurrence_data?: "sunday"|"monday"|"tuesday"|"wednesday"|"thursday"|"friday"|"saturday", recurrence_type: "once"|"recur", start_repeat?: string, start_transcoder?: string, stop_transcoder?: string, transcoder_id: string}
-export def "schedules create" [
+export def "create-schedule" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1229,7 +1229,7 @@ export def "schedules create" [
 #
 # DELETE /schedules/{id}
 # operationId: deleteSchedule
-export def "schedules delete" [
+export def "delete-schedule" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1265,7 +1265,7 @@ export def "schedules delete" [
 #
 # GET /schedules/{id}
 # operationId: showSchedule
-export def "schedules get-show" [
+export def "show-schedule" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1302,7 +1302,7 @@ export def "schedules get-show" [
 # PATCH /schedules/{id}
 # operationId: updateSchedule
 # --schedule shape: {action_type: "start"|"stop"|"start_stop", end_repeat?: string, name: string, recurrence_data?: "sunday"|"monday"|"tuesday"|"wednesday"|"thursday"|"friday"|"saturday", start_repeat?: string, start_transcoder?: string, stop_transcoder?: string}
-export def "schedules update" [
+export def "update-schedule" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1342,7 +1342,7 @@ export def "schedules update" [
 #
 # PUT /schedules/{id}/disable
 # operationId: disableSchedule
-export def "schedules-disable disable" [
+export def "disable-schedule" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1378,7 +1378,7 @@ export def "schedules-disable disable" [
 #
 # PUT /schedules/{id}/enable
 # operationId: enableSchedule
-export def "schedules-enable enable" [
+export def "enable-schedule" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1414,7 +1414,7 @@ export def "schedules-enable enable" [
 #
 # GET /schedules/{id}/state
 # operationId: showScheduleState
-export def "schedules-state get-show" [
+export def "show-schedule-state" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1450,7 +1450,7 @@ export def "schedules-state get-show" [
 #
 # GET /stream_sources
 # operationId: listStreamSources
-export def "stream-sources list" [
+export def "list-stream-sources" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1488,7 +1488,7 @@ export def "stream-sources list" [
 # POST /stream_sources
 # operationId: createStreamSource
 # --stream_source shape: {backup_ip_address?: string, ip_address?: string, location?: "asia_pacific_australia"|"asia_pacific_japan"|"asia_pacific_singapore"|"asia_pacific_taiwan"|"eu_belgium"|"eu_germany"|"eu_ireland"|"south_america_brazil"|"us_central_iowa"|"us_east_s_carolina"|"us_east_virginia"|"us_west_california"|"us_west_oregon", location_method: "region"|"ip_address", name: string}
-export def "stream-sources create" [
+export def "create-stream-source" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1529,7 +1529,7 @@ export def "stream-sources create" [
 # operationId: addStreamSource
 # --stream_source shape: {backup_ip_address?: string, ip_address?: string, location?: "asia_pacific_australia"|"asia_pacific_japan"|"asia_pacific_singapore"|"asia_pacific_taiwan"|"eu_belgium"|"eu_germany"|"eu_ireland"|"south_america_brazil"|"us_central_iowa"|"us_east_s_carolina"|"us_east_virginia"|"us_west_california"|"us_west_oregon", location_method: "region"|"ip_address", name: string}
 @deprecated
-export def "stream-sources-add create" [
+export def "add-stream-source" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1567,7 +1567,7 @@ export def "stream-sources-add create" [
 #
 # DELETE /stream_sources/{id}
 # operationId: deleteStreamSource
-export def "stream-sources delete" [
+export def "delete-stream-source" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1603,7 +1603,7 @@ export def "stream-sources delete" [
 #
 # GET /stream_sources/{id}
 # operationId: showStreamSource
-export def "stream-sources get-show" [
+export def "show-stream-source" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1640,7 +1640,7 @@ export def "stream-sources get-show" [
 # PATCH /stream_sources/{id}
 # operationId: updateStreamSource
 # --stream_source shape: {name: string}
-export def "stream-sources update" [
+export def "update-stream-source" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1680,7 +1680,7 @@ export def "stream-sources update" [
 #
 # GET /stream_targets
 # operationId: listStreamTargets
-export def "stream-targets list" [
+export def "list-stream-targets" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1718,7 +1718,7 @@ export def "stream-targets list" [
 # POST /stream_targets
 # operationId: createStreamTarget
 # --stream_target shape: {backup_url?: string, chunk_size?: "2"|"4"|"6"|"8"|"10", enable_hls?: bool, enabled?: bool, hds_playback_url?: string, hls_playback_url?: string, ingest_ip_whitelist?: list<string>, location: "asia_pacific_australia"|"asia_pacific_japan"|"asia_pacific_singapore"|"asia_pacific_taiwan"|"eu_belgium"|"eu_germany"|"eu_ireland"|"south_america_brazil"|"us_central_iowa"|"us_east_s_carolina"|"us_east_virginia"|"us_west_california"|"us_west_oregon", name: string, password?: string, primary_url: string, ... (11 more fields)}
-export def "stream-targets create" [
+export def "create-stream-target" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1759,7 +1759,7 @@ export def "stream-targets create" [
 # operationId: addStreamTarget
 # --stream_target shape: {chunk_size?: "2"|"4"|"6"|"8"|"10", location: "asia_pacific_australia"|"asia_pacific_japan"|"asia_pacific_singapore"|"asia_pacific_taiwan"|"eu_belgium"|"eu_germany"|"eu_ireland"|"south_america_brazil"|"us_central_iowa"|"us_east_s_carolina"|"us_east_virginia"|"us_west_california"|"us_west_oregon", name: string, provider?: string, type?: string, use_cors?: bool, use_https?: bool, use_secure_ingest?: bool}
 @deprecated
-export def "stream-targets-add create" [
+export def "add-stream-target" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1797,7 +1797,7 @@ export def "stream-targets-add create" [
 #
 # DELETE /stream_targets/{id}
 # operationId: deleteStreamTarget
-export def "stream-targets delete" [
+export def "delete-stream-target" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1833,7 +1833,7 @@ export def "stream-targets delete" [
 #
 # GET /stream_targets/{id}
 # operationId: showStreamTarget
-export def "stream-targets get-show" [
+export def "show-stream-target" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1870,7 +1870,7 @@ export def "stream-targets get-show" [
 # PATCH /stream_targets/{id}
 # operationId: updateStreamTarget
 # --stream_target shape: {backup_url?: string, chunk_size?: "2"|"4"|"6"|"8"|"10", enabled?: bool, hds_playback_url?: string, hls_playback_url?: string, ingest_ip_whitelist?: list<string>, name?: string, password?: string, primary_url?: string, provider?: string, rtmp_playback_url?: string, source_url?: string, stream_name?: string, username?: string}
-export def "stream-targets update" [
+export def "update-stream-target" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1910,7 +1910,7 @@ export def "stream-targets update" [
 #
 # GET /stream_targets/{id}/metrics/current
 # operationId: showStreamTargetMetricsCurrent
-export def "stream-targets-metrics-current get-show" [
+export def "show-stream-target-metrics-current" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1946,7 +1946,7 @@ export def "stream-targets-metrics-current get-show" [
 #
 # GET /stream_targets/{id}/metrics/historic
 # operationId: showStreamTargetMetricsHistoric
-export def "stream-targets-metrics-historic get-show" [
+export def "show-stream-target-metrics-historic" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1986,7 +1986,7 @@ export def "stream-targets-metrics-historic get-show" [
 #
 # PUT /stream_targets/{id}/regenerate_connection_code
 # operationId: regenerateConnectionCodeStreamTarget
-export def "stream-targets-regenerate-connection-code update" [
+export def "regenerate-connection-code-stream-target" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2022,7 +2022,7 @@ export def "stream-targets-regenerate-connection-code update" [
 #
 # GET /stream_targets/{stream_target_id}/geoblock
 # operationId: showStreamTargetGeoblock
-export def "stream-targets-geoblock get-show" [
+export def "show-stream-target-geoblock" [
   stream_target_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2059,7 +2059,7 @@ export def "stream-targets-geoblock get-show" [
 # PATCH /stream_targets/{stream_target_id}/geoblock
 # operationId: updateStreamTargetGeoblock
 # --geoblock shape: {countries?: list<string>, type: "disabled"|"allow"|"deny", whitelist?: list<string>}
-export def "stream-targets-geoblock update" [
+export def "update-stream-target-geoblock" [
   stream_target_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2100,7 +2100,7 @@ export def "stream-targets-geoblock update" [
 # POST /stream_targets/{stream_target_id}/geoblock
 # operationId: createStreamTargetGeoblock
 # --geoblock shape: {countries?: list<string>, type: "disabled"|"allow"|"deny", whitelist?: list<string>}
-export def "stream-targets-geoblock create" [
+export def "create-stream-target-geoblock" [
   stream_target_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2140,7 +2140,7 @@ export def "stream-targets-geoblock create" [
 #
 # GET /stream_targets/{stream_target_id}/properties
 # operationId: listStreamTargetProperties
-export def "stream-targets-properties list" [
+export def "list-stream-target-properties" [
   stream_target_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2177,7 +2177,7 @@ export def "stream-targets-properties list" [
 # POST /stream_targets/{stream_target_id}/properties
 # operationId: createStreamTargetProperty
 # --property shape: {key: "chunkSize"|"playSSL"|"relativePlaylists"|"sendSSL", section: "hls"|"playlist", value: "2"|"4"|"6"|"8"|"10"|"true"|"false"}
-export def "stream-targets-properties create-property" [
+export def "create-stream-target-property" [
   stream_target_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2217,7 +2217,7 @@ export def "stream-targets-properties create-property" [
 #
 # DELETE /stream_targets/{stream_target_id}/properties/{id}
 # operationId: deleteStreamTargetProperty
-export def "stream-targets-properties delete-property" [
+export def "delete-stream-target-property" [
   stream_target_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2255,7 +2255,7 @@ export def "stream-targets-properties delete-property" [
 #
 # GET /stream_targets/{stream_target_id}/properties/{id}
 # operationId: showStreamTargetProperty
-export def "stream-targets-properties get-show-property" [
+export def "show-stream-target-property" [
   stream_target_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2293,7 +2293,7 @@ export def "stream-targets-properties get-show-property" [
 #
 # GET /stream_targets/{stream_target_id}/token_auth
 # operationId: showStreamTargetTokenAuth
-export def "stream-targets-token-auth get-show" [
+export def "show-stream-target-token-auth" [
   stream_target_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2330,7 +2330,7 @@ export def "stream-targets-token-auth get-show" [
 # PATCH /stream_targets/{stream_target_id}/token_auth
 # operationId: updateStreamTargetTokenAuth
 # --token_auth shape: {enabled?: bool, trusted_shared_secret?: string}
-export def "stream-targets-token-auth update" [
+export def "update-stream-target-token-auth" [
   stream_target_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2371,7 +2371,7 @@ export def "stream-targets-token-auth update" [
 # POST /stream_targets/{stream_target_id}/token_auth
 # operationId: createStreamTargetTokenAuth
 # --token_auth shape: {enabled: bool, trusted_shared_secret: string}
-export def "stream-targets-token-auth create" [
+export def "create-stream-target-token-auth" [
   stream_target_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2411,7 +2411,7 @@ export def "stream-targets-token-auth create" [
 #
 # GET /transcoders
 # operationId: listTranscoders
-export def "transcoders list" [
+export def "list-transcoders" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2449,7 +2449,7 @@ export def "transcoders list" [
 # POST /transcoders
 # operationId: createTranscoder
 # --transcoder shape: {billing_mode: "pay_as_you_go"|"twentyfour_seven", broadcast_location: "asia_pacific_australia"|"asia_pacific_japan"|"asia_pacific_singapore"|"asia_pacific_taiwan"|"eu_belgium"|"eu_germany"|"eu_ireland"|"south_america_brazil"|"us_central_iowa"|"us_east_s_carolina"|"us_east_virginia"|"us_west_california"|"us_west_oregon", buffer_size?: "0"|"1000"|"2000"|"3000"|"4000"|"5000"|"6000"|"7000"|"8000", closed_caption_type?: "none"|"cea"|"on_text"|"both", delivery_method: "pull"|"cdn"|"push", ... (24 more fields)}
-export def "transcoders create" [
+export def "create-transcoder" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2487,7 +2487,7 @@ export def "transcoders create" [
 #
 # DELETE /transcoders/{id}
 # operationId: deleteTranscoder
-export def "transcoders delete" [
+export def "delete-transcoder" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2523,7 +2523,7 @@ export def "transcoders delete" [
 #
 # GET /transcoders/{id}
 # operationId: showTranscoder
-export def "transcoders get-show" [
+export def "show-transcoder" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2560,7 +2560,7 @@ export def "transcoders get-show" [
 # PATCH /transcoders/{id}
 # operationId: updateTranscoder
 # --transcoder shape: {broadcast_location?: "asia_pacific_australia"|"asia_pacific_japan"|"asia_pacific_singapore"|"asia_pacific_taiwan"|"eu_belgium"|"eu_germany"|"eu_ireland"|"south_america_brazil"|"us_central_iowa"|"us_east_s_carolina"|"us_east_virginia"|"us_west_california"|"us_west_oregon", buffer_size?: "0"|"1000"|"2000"|"3000"|"4000"|"5000"|"6000"|"7000"|"8000", closed_caption_type?: "none"|"cea"|"on_text"|"both", delivery_method: "pull"|"cdn"|"push", delivery_protocols?: list<string>, description?: string, ... (22 more fields)}
-export def "transcoders update" [
+export def "update-transcoder" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2600,7 +2600,7 @@ export def "transcoders update" [
 #
 # PUT /transcoders/{id}/disable_all_stream_targets
 # operationId: disableAllStreamTargetsTranscoder
-export def "transcoders-disable-all-stream-targets disable" [
+export def "disable-all-stream-targets-transcoder" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2636,7 +2636,7 @@ export def "transcoders-disable-all-stream-targets disable" [
 #
 # PUT /transcoders/{id}/enable_all_stream_targets
 # operationId: enableAllStreamTargetsTranscoder
-export def "transcoders-enable-all-stream-targets enable" [
+export def "enable-all-stream-targets-transcoder" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2672,7 +2672,7 @@ export def "transcoders-enable-all-stream-targets enable" [
 #
 # GET /transcoders/{id}/recordings
 # operationId: listTranscoderRecordings
-export def "transcoders-recordings list" [
+export def "list-transcoder-recordings" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2708,7 +2708,7 @@ export def "transcoders-recordings list" [
 #
 # PUT /transcoders/{id}/reset
 # operationId: resetTranscoder
-export def "transcoders-reset reset" [
+export def "reset-transcoder" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2744,7 +2744,7 @@ export def "transcoders-reset reset" [
 #
 # GET /transcoders/{id}/schedules
 # operationId: listTranscoderSchedules
-export def "transcoders-schedules list" [
+export def "list-transcoder-schedules" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2780,7 +2780,7 @@ export def "transcoders-schedules list" [
 #
 # PUT /transcoders/{id}/start
 # operationId: startTranscoder
-export def "transcoders-start start" [
+export def "start-transcoder" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2816,7 +2816,7 @@ export def "transcoders-start start" [
 #
 # GET /transcoders/{id}/state
 # operationId: showTranscoderState
-export def "transcoders-state get-show" [
+export def "show-transcoder-state" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2852,7 +2852,7 @@ export def "transcoders-state get-show" [
 #
 # GET /transcoders/{id}/stats
 # operationId: showTranscoderStats
-export def "transcoders-stats stats-show" [
+export def "show-transcoder-stats" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2888,7 +2888,7 @@ export def "transcoders-stats stats-show" [
 #
 # PUT /transcoders/{id}/stop
 # operationId: stopTranscoder
-export def "transcoders-stop stop" [
+export def "stop-transcoder" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2924,7 +2924,7 @@ export def "transcoders-stop stop" [
 #
 # GET /transcoders/{id}/thumbnail_url
 # operationId: showTranscoderThumbnailUrl
-export def "transcoders-thumbnail-url get-show" [
+export def "show-transcoder-thumbnail-url" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2960,7 +2960,7 @@ export def "transcoders-thumbnail-url get-show" [
 #
 # GET /transcoders/{transcoder_id}/outputs
 # operationId: listTranscoderOutputs
-export def "transcoders-outputs list" [
+export def "list-transcoder-outputs" [
   transcoder_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2997,7 +2997,7 @@ export def "transcoders-outputs list" [
 # POST /transcoders/{transcoder_id}/outputs
 # operationId: createTranscoderOutput
 # --output shape: {aspect_ratio_height?: int, aspect_ratio_width?: int, bitrate_audio?: int, bitrate_video?: int, framerate_reduction?: "0"|"1/2"|"1/4"|"1/25"|"1/30"|"1/50"|"1/60", h264_profile?: "main"|"baseline"|"high", keyframes?: "follow_source"|"25"|"30"|"50"|"60"|"100"|"120", passthrough_audio?: bool, passthrough_video?: bool, stream_format: "audiovideo"|"videoonly"|"audioonly"}
-export def "transcoders-outputs create" [
+export def "create-transcoder-output" [
   transcoder_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3037,7 +3037,7 @@ export def "transcoders-outputs create" [
 #
 # DELETE /transcoders/{transcoder_id}/outputs/{id}
 # operationId: deleteTranscoderOutput
-export def "transcoders-outputs delete" [
+export def "delete-transcoder-output" [
   transcoder_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3075,7 +3075,7 @@ export def "transcoders-outputs delete" [
 #
 # GET /transcoders/{transcoder_id}/outputs/{id}
 # operationId: showTranscoderOutput
-export def "transcoders-outputs get-show" [
+export def "show-transcoder-output" [
   transcoder_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3114,7 +3114,7 @@ export def "transcoders-outputs get-show" [
 # PATCH /transcoders/{transcoder_id}/outputs/{id}
 # operationId: updateTranscoderOutput
 # --output shape: {aspect_ratio_height?: int, aspect_ratio_width?: int, bitrate_audio?: int, bitrate_video?: int, framerate_reduction?: "0"|"1/2"|"1/4"|"1/25"|"1/30"|"1/50"|"1/60", h264_profile?: "main"|"baseline"|"high", keyframes?: "follow_source"|"25"|"30"|"50"|"60"|"100"|"120", passthrough_audio?: bool, passthrough_video?: bool, stream_format: "audiovideo"|"videoonly"|"audioonly"}
-export def "transcoders-outputs update" [
+export def "update-transcoder-output" [
   transcoder_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3159,7 +3159,7 @@ export def "transcoders-outputs update" [
 # operationId: addStreamTargetToTranscoderOutput
 # --output_stream_target shape: {stream_target_id: string, use_stream_target_backup_url?: bool}
 @deprecated
-export def "transcoders-outputs-add-stream-target create" [
+export def "add-stream-target-to-transcoder-output" [
   transcoder_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3204,7 +3204,7 @@ export def "transcoders-outputs-add-stream-target create" [
 # operationId: removeStreamTargetToTranscoderOutput
 # --output_stream_target shape: {stream_target_id: string}
 @deprecated
-export def "transcoders-outputs-remove-stream-target delete" [
+export def "remove-stream-target-to-transcoder-output" [
   transcoder_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3246,7 +3246,7 @@ export def "transcoders-outputs-remove-stream-target delete" [
 #
 # GET /transcoders/{transcoder_id}/outputs/{output_id}/output_stream_targets
 # operationId: listTranscoderOutputOutputStreamTargets
-export def "transcoders-outputs-output-stream-targets list" [
+export def "list-transcoder-output-output-stream-targets" [
   transcoder_id: string
   output_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3285,7 +3285,7 @@ export def "transcoders-outputs-output-stream-targets list" [
 # POST /transcoders/{transcoder_id}/outputs/{output_id}/output_stream_targets
 # operationId: createTranscoderOutputOutputStreamTarget
 # --output_stream_target shape: {stream_target_id: string, use_stream_target_backup_url?: bool}
-export def "transcoders-outputs-output-stream-targets create" [
+export def "create-transcoder-output-output-stream-target" [
   transcoder_id: string
   output_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3327,7 +3327,7 @@ export def "transcoders-outputs-output-stream-targets create" [
 #
 # DELETE /transcoders/{transcoder_id}/outputs/{output_id}/output_stream_targets/{stream_target_id}
 # operationId: deleteTranscoderOutputOutputStreamTarget
-export def "transcoders-outputs-output-stream-targets delete" [
+export def "delete-transcoder-output-output-stream-target" [
   transcoder_id: string
   output_id: string
   stream_target_id: string
@@ -3367,7 +3367,7 @@ export def "transcoders-outputs-output-stream-targets delete" [
 #
 # GET /transcoders/{transcoder_id}/outputs/{output_id}/output_stream_targets/{stream_target_id}
 # operationId: showTranscoderOutputOutputStreamTarget
-export def "transcoders-outputs-output-stream-targets get-show" [
+export def "show-transcoder-output-output-stream-target" [
   transcoder_id: string
   output_id: string
   stream_target_id: string
@@ -3408,7 +3408,7 @@ export def "transcoders-outputs-output-stream-targets get-show" [
 # PATCH /transcoders/{transcoder_id}/outputs/{output_id}/output_stream_targets/{stream_target_id}
 # operationId: updateTranscoderOutputOutputStreamTarget
 # --output_stream_target shape: {stream_target_id: string, use_stream_target_backup_url?: bool}
-export def "transcoders-outputs-output-stream-targets update" [
+export def "update-transcoder-output-output-stream-target" [
   transcoder_id: string
   output_id: string
   stream_target_id: string
@@ -3452,7 +3452,7 @@ export def "transcoders-outputs-output-stream-targets update" [
 #
 # PUT /transcoders/{transcoder_id}/outputs/{output_id}/output_stream_targets/{stream_target_id}/disable
 # operationId: disableTranscoderOutputOutputStreamTarget
-export def "transcoders-outputs-output-stream-targets-disable disable" [
+export def "disable-transcoder-output-output-stream-target" [
   transcoder_id: string
   output_id: string
   stream_target_id: string
@@ -3492,7 +3492,7 @@ export def "transcoders-outputs-output-stream-targets-disable disable" [
 #
 # PUT /transcoders/{transcoder_id}/outputs/{output_id}/output_stream_targets/{stream_target_id}/enable
 # operationId: enableTranscoderOutputOutputStreamTarget
-export def "transcoders-outputs-output-stream-targets-enable enable" [
+export def "enable-transcoder-output-output-stream-target" [
   transcoder_id: string
   output_id: string
   stream_target_id: string
@@ -3532,7 +3532,7 @@ export def "transcoders-outputs-output-stream-targets-enable enable" [
 #
 # PUT /transcoders/{transcoder_id}/outputs/{output_id}/output_stream_targets/{stream_target_id}/restart
 # operationId: restartTranscoderOutputOutputStreamTarget
-export def "transcoders-outputs-output-stream-targets-restart restart" [
+export def "restart-transcoder-output-output-stream-target" [
   transcoder_id: string
   output_id: string
   stream_target_id: string
@@ -3572,7 +3572,7 @@ export def "transcoders-outputs-output-stream-targets-restart restart" [
 #
 # GET /transcoders/{transcoder_id}/properties
 # operationId: listTranscoderProperties
-export def "transcoders-properties list" [
+export def "list-transcoder-properties" [
   transcoder_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3609,7 +3609,7 @@ export def "transcoders-properties list" [
 # POST /transcoders/{transcoder_id}/properties
 # operationId: createTranscoderProperty
 # --property shape: {key: string, section: string, value: string}
-export def "transcoders-properties create-property" [
+export def "create-transcoder-property" [
   transcoder_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3649,7 +3649,7 @@ export def "transcoders-properties create-property" [
 #
 # DELETE /transcoders/{transcoder_id}/properties/{id}
 # operationId: deleteTranscoderProperty
-export def "transcoders-properties delete-property" [
+export def "delete-transcoder-property" [
   transcoder_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3687,7 +3687,7 @@ export def "transcoders-properties delete-property" [
 #
 # GET /transcoders/{transcoder_id}/properties/{id}
 # operationId: showTranscoderProperty
-export def "transcoders-properties get-show-property" [
+export def "show-transcoder-property" [
   transcoder_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3725,7 +3725,7 @@ export def "transcoders-properties get-show-property" [
 #
 # GET /transcoders/{transcoder_id}/uptimes
 # operationId: indexUptimes
-export def "transcoders-uptimes get-index" [
+export def "index-uptimes" [
   transcoder_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3764,7 +3764,7 @@ export def "transcoders-uptimes get-index" [
 #
 # GET /transcoders/{transcoder_id}/uptimes/{id}
 # operationId: showUptime
-export def "transcoders-uptimes get-show" [
+export def "show-uptime" [
   transcoder_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3802,7 +3802,7 @@ export def "transcoders-uptimes get-show" [
 #
 # GET /transcoders/{transcoder_id}/uptimes/{id}/metrics/current
 # operationId: showUptimeMetricsCurrent
-export def "transcoders-uptimes-metrics-current get-show" [
+export def "show-uptime-metrics-current" [
   transcoder_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3842,7 +3842,7 @@ export def "transcoders-uptimes-metrics-current get-show" [
 #
 # GET /transcoders/{transcoder_id}/uptimes/{id}/metrics/historic
 # operationId: showUptimeMetricsHistoric
-export def "transcoders-uptimes-metrics-historic get-show" [
+export def "show-uptime-metrics-historic" [
   transcoder_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3884,7 +3884,7 @@ export def "transcoders-uptimes-metrics-historic get-show" [
 #
 # GET /usage/network/stream_sources
 # operationId: usageNetworkStreamSourcesIndex
-export def "usage-network-stream-sources get-index" [
+export def "usage-network-stream-sources-index" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3921,7 +3921,7 @@ export def "usage-network-stream-sources get-index" [
 #
 # GET /usage/network/stream_targets
 # operationId: usageNetworkStreamTargetsIndex
-export def "usage-network-stream-targets get-index" [
+export def "usage-network-stream-targets-index" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3958,7 +3958,7 @@ export def "usage-network-stream-targets get-index" [
 #
 # GET /usage/network/transcoders
 # operationId: usageNetworkTranscodersIndex
-export def "usage-network-transcoders get-index" [
+export def "usage-network-transcoders-index" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3997,7 +3997,7 @@ export def "usage-network-transcoders get-index" [
 #
 # GET /usage/storage/peak_recording
 # operationId: usageStoragePeakRecordingIndex
-export def "usage-storage-peak-recording get-index" [
+export def "usage-storage-peak-recording-index" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4034,7 +4034,7 @@ export def "usage-storage-peak-recording get-index" [
 #
 # GET /usage/time/transcoders
 # operationId: usageTimeTranscodersIndex
-export def "usage-time-transcoders get-index" [
+export def "usage-time-transcoders-index" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4073,7 +4073,7 @@ export def "usage-time-transcoders get-index" [
 #
 # GET /usage/viewer_data/stream_targets/{id}
 # operationId: showViewerDataStreamTarget
-export def "usage-viewer-data-stream-targets get-show" [
+export def "show-viewer-data-stream-target" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

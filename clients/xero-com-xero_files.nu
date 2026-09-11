@@ -148,7 +148,7 @@ def object-type-completer [] { ["AccPayCredit" "AccPayPayment" "AccRec" "AccRecC
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "associations get-by-object" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-associations-by-object" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -172,7 +172,7 @@ export def commands []: nothing -> table {
 #
 # GET /Associations/{ObjectId}
 # operationId: getAssociationsByObject
-export def "associations get-by-object" [
+export def "get-associations-by-object" [
   object_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -211,7 +211,7 @@ export def "associations get-by-object" [
 #
 # GET /Files
 # operationId: getFiles
-export def "files list" [
+export def "get-files" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -252,7 +252,7 @@ export def "files list" [
 #
 # POST /Files
 # operationId: uploadFile
-export def "files upload" [
+export def "upload-file" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -300,7 +300,7 @@ export def "files upload" [
 #
 # DELETE /Files/{FileId}
 # operationId: deleteFile
-export def "files delete" [
+export def "delete-file" [
   file_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -339,7 +339,7 @@ export def "files delete" [
 #
 # GET /Files/{FileId}
 # operationId: getFile
-export def "files get" [
+export def "get-file" [
   file_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -379,7 +379,7 @@ export def "files get" [
 # PUT /Files/{FileId}
 # operationId: updateFile
 # --User shape: {FirstName?: string, FullName?: string, Id: string, LastName?: string, Name?: string}
-export def "files update" [
+export def "update-file" [
   file_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -429,7 +429,7 @@ export def "files update" [
 #
 # GET /Files/{FileId}/Associations
 # operationId: getFileAssociations
-export def "files-associations get" [
+export def "get-file-associations" [
   file_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -468,7 +468,7 @@ export def "files-associations get" [
 #
 # POST /Files/{FileId}/Associations
 # operationId: createFileAssociation
-export def "files-associations create" [
+export def "create-file-association" [
   file_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -514,7 +514,7 @@ export def "files-associations create" [
 #
 # DELETE /Files/{FileId}/Associations/{ObjectId}
 # operationId: deleteFileAssociation
-export def "files-associations delete" [
+export def "delete-file-association" [
   file_id: string
   object_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -555,7 +555,7 @@ export def "files-associations delete" [
 #
 # GET /Files/{FileId}/Content
 # operationId: getFileContent
-export def "files-content get" [
+export def "get-file-content" [
   file_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -594,7 +594,7 @@ export def "files-content get" [
 #
 # GET /Folders
 # operationId: getFolders
-export def "folders list" [
+export def "get-folders" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -633,7 +633,7 @@ export def "folders list" [
 #
 # POST /Folders
 # operationId: createFolder
-export def "folders create" [
+export def "create-folder" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -678,7 +678,7 @@ export def "folders create" [
 #
 # DELETE /Folders/{FolderId}
 # operationId: deleteFolder
-export def "folders delete" [
+export def "delete-folder" [
   folder_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -717,7 +717,7 @@ export def "folders delete" [
 #
 # GET /Folders/{FolderId}
 # operationId: getFolder
-export def "folders get" [
+export def "get-folder" [
   folder_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -756,7 +756,7 @@ export def "folders get" [
 #
 # PUT /Folders/{FolderId}
 # operationId: updateFolder
-export def "folders update" [
+export def "update-folder" [
   folder_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -803,7 +803,7 @@ export def "folders update" [
 #
 # GET /Inbox
 # operationId: getInbox
-export def "inbox get" [
+export def "get-inbox" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

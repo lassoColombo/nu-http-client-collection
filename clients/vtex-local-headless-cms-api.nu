@@ -97,7 +97,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "v-cms get-list-content-types" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-all-content-types" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -121,7 +121,7 @@ export def commands []: nothing -> table {
 #
 # GET /_v/cms/api/{builderId}/
 # operationId: GetAllContentTypes
-export def "v-cms get-list-content-types" [
+export def "get-all-content-types" [
   builder_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -157,7 +157,7 @@ export def "v-cms get-list-content-types" [
 #
 # GET /_v/cms/api/{builderId}/{content-type}
 # operationId: GetPagesbyContentType
-export def "v-cms get-pagesby" [
+export def "get-pagesby-content-type" [
   builder_id: string
   content_type: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -199,7 +199,7 @@ export def "v-cms get-pagesby" [
 #
 # GET /_v/cms/api/{builderId}/{content-type}/{document-id}/
 # operationId: GetCMSpage
-export def "v-cms get-spage" [
+export def "get-cm-spage" [
   builder_id: string
   content_type: string
   document_id: string

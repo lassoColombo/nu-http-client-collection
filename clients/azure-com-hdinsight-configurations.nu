@@ -104,7 +104,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resource-groups-providers-microsoft-hd-insight-clusters-configurations list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "configurations-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -128,7 +128,7 @@ export def commands []: nothing -> table {
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.HDInsight/clusters/{clusterName}/configurations
 # operationId: Configurations_List
-export def "subscriptions-resource-groups-providers-microsoft-hd-insight-clusters-configurations list" [
+export def "configurations-list" [
   subscription_id: string
   resource_group_name: string
   cluster_name: string
@@ -170,7 +170,7 @@ export def "subscriptions-resource-groups-providers-microsoft-hd-insight-cluster
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.HDInsight/clusters/{clusterName}/configurations/{configurationName}
 # operationId: Configurations_Get
-export def "subscriptions-resource-groups-providers-microsoft-hd-insight-clusters-configurations get" [
+export def "configurations-get" [
   subscription_id: string
   resource_group_name: string
   cluster_name: string
@@ -216,7 +216,7 @@ export def "subscriptions-resource-groups-providers-microsoft-hd-insight-cluster
 # DEPRECATED
 # operationId: Configurations_Update
 @deprecated
-export def "subscriptions-resource-groups-providers-microsoft-hd-insight-clusters-configurations update" [
+export def "configurations-update" [
   subscription_id: string
   resource_group_name: string
   cluster_name: string

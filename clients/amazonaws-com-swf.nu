@@ -137,7 +137,7 @@ def x-amz-target-completer-36 [] { ["SimpleWorkflowService.UntagResource"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "api create-count-closed-workflow-executions" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "count-closed-workflow-executions" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -161,7 +161,7 @@ export def commands []: nothing -> table {
 #
 # POST /
 # operationId: CountClosedWorkflowExecutions
-export def "api create-count-closed-workflow-executions" [
+export def "count-closed-workflow-executions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -215,7 +215,7 @@ export def "api create-count-closed-workflow-executions" [
 #
 # POST /
 # operationId: CountOpenWorkflowExecutions
-export def "api open-count-workflow-executions" [
+export def "count-open-workflow-executions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -267,7 +267,7 @@ export def "api open-count-workflow-executions" [
 #
 # POST /
 # operationId: CountPendingActivityTasks
-export def "api create-count-pending-activity-tasks" [
+export def "count-pending-activity-tasks" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -316,7 +316,7 @@ export def "api create-count-pending-activity-tasks" [
 #
 # POST /
 # operationId: CountPendingDecisionTasks
-export def "api create-count-pending-decision-tasks" [
+export def "count-pending-decision-tasks" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -365,7 +365,7 @@ export def "api create-count-pending-decision-tasks" [
 #
 # POST /
 # operationId: DeprecateActivityType
-export def "api create-deprecate-activity-type" [
+export def "deprecate-activity-type" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -414,7 +414,7 @@ export def "api create-deprecate-activity-type" [
 #
 # POST /
 # operationId: DeprecateDomain
-export def "api create-deprecate-domain" [
+export def "deprecate-domain" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -462,7 +462,7 @@ export def "api create-deprecate-domain" [
 #
 # POST /
 # operationId: DeprecateWorkflowType
-export def "api create-deprecate-workflow-type" [
+export def "deprecate-workflow-type" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -511,7 +511,7 @@ export def "api create-deprecate-workflow-type" [
 #
 # POST /
 # operationId: DescribeActivityType
-export def "api get-activity-type" [
+export def "describe-activity-type" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -560,7 +560,7 @@ export def "api get-activity-type" [
 #
 # POST /
 # operationId: DescribeDomain
-export def "api get-domain" [
+export def "describe-domain" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -608,7 +608,7 @@ export def "api get-domain" [
 #
 # POST /
 # operationId: DescribeWorkflowExecution
-export def "api get-workflow-execution" [
+export def "describe-workflow-execution" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -657,7 +657,7 @@ export def "api get-workflow-execution" [
 #
 # POST /
 # operationId: DescribeWorkflowType
-export def "api get-workflow-type" [
+export def "describe-workflow-type" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -706,7 +706,7 @@ export def "api get-workflow-type" [
 #
 # POST /
 # operationId: GetWorkflowExecutionHistory
-export def "api get-workflow-execution-history" [
+export def "get-workflow-execution-history" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -761,7 +761,7 @@ export def "api get-workflow-execution-history" [
 #
 # POST /
 # operationId: ListActivityTypes
-export def "api list-activity-types" [
+export def "list-activity-types" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -817,7 +817,7 @@ export def "api list-activity-types" [
 #
 # POST /
 # operationId: ListClosedWorkflowExecutions
-export def "api list-closed-workflow-executions" [
+export def "list-closed-workflow-executions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -877,7 +877,7 @@ export def "api list-closed-workflow-executions" [
 #
 # POST /
 # operationId: ListDomains
-export def "api list-domains" [
+export def "list-domains" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -931,7 +931,7 @@ export def "api list-domains" [
 #
 # POST /
 # operationId: ListOpenWorkflowExecutions
-export def "api list-open-workflow-executions" [
+export def "list-open-workflow-executions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -989,7 +989,7 @@ export def "api list-open-workflow-executions" [
 #
 # POST /
 # operationId: ListTagsForResource
-export def "api list-tags-for-resource" [
+export def "list-tags-for-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1037,7 +1037,7 @@ export def "api list-tags-for-resource" [
 #
 # POST /
 # operationId: ListWorkflowTypes
-export def "api list-workflow-types" [
+export def "list-workflow-types" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1093,7 +1093,7 @@ export def "api list-workflow-types" [
 #
 # POST /
 # operationId: PollForActivityTask
-export def "api create-poll-for-activity-task" [
+export def "poll-for-activity-task" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1143,7 +1143,7 @@ export def "api create-poll-for-activity-task" [
 #
 # POST /
 # operationId: PollForDecisionTask
-export def "api create-poll-for-decision-task" [
+export def "poll-for-decision-task" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1199,7 +1199,7 @@ export def "api create-poll-for-decision-task" [
 #
 # POST /
 # operationId: RecordActivityTaskHeartbeat
-export def "api create-record-activity-task-heartbeat" [
+export def "record-activity-task-heartbeat" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1248,7 +1248,7 @@ export def "api create-record-activity-task-heartbeat" [
 #
 # POST /
 # operationId: RegisterActivityType
-export def "api create-activity-type" [
+export def "register-activity-type" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1305,7 +1305,7 @@ export def "api create-activity-type" [
 #
 # POST /
 # operationId: RegisterDomain
-export def "api create-domain" [
+export def "register-domain" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1356,7 +1356,7 @@ export def "api create-domain" [
 #
 # POST /
 # operationId: RegisterWorkflowType
-export def "api create-workflow-type" [
+export def "register-workflow-type" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1413,7 +1413,7 @@ export def "api create-workflow-type" [
 #
 # POST /
 # operationId: RequestCancelWorkflowExecution
-export def "api request-cancel-workflow-execution" [
+export def "request-cancel-workflow-execution" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1463,7 +1463,7 @@ export def "api request-cancel-workflow-execution" [
 #
 # POST /
 # operationId: RespondActivityTaskCanceled
-export def "api create-respond-activity-task-canceled" [
+export def "respond-activity-task-canceled" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1512,7 +1512,7 @@ export def "api create-respond-activity-task-canceled" [
 #
 # POST /
 # operationId: RespondActivityTaskCompleted
-export def "api create-respond-activity-task-completed" [
+export def "respond-activity-task-completed" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1561,7 +1561,7 @@ export def "api create-respond-activity-task-completed" [
 #
 # POST /
 # operationId: RespondActivityTaskFailed
-export def "api create-respond-activity-task-failed" [
+export def "respond-activity-task-failed" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1611,7 +1611,7 @@ export def "api create-respond-activity-task-failed" [
 #
 # POST /
 # operationId: RespondDecisionTaskCompleted
-export def "api create-respond-decision-task-completed" [
+export def "respond-decision-task-completed" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1661,7 +1661,7 @@ export def "api create-respond-decision-task-completed" [
 #
 # POST /
 # operationId: SignalWorkflowExecution
-export def "api create-signal-workflow-execution" [
+export def "signal-workflow-execution" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1713,7 +1713,7 @@ export def "api create-signal-workflow-execution" [
 #
 # POST /
 # operationId: StartWorkflowExecution
-export def "api start-workflow-execution" [
+export def "start-workflow-execution" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1771,7 +1771,7 @@ export def "api start-workflow-execution" [
 #
 # POST /
 # operationId: TagResource
-export def "api tag-resource" [
+export def "tag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1820,7 +1820,7 @@ export def "api tag-resource" [
 #
 # POST /
 # operationId: TerminateWorkflowExecution
-export def "api create-terminate-workflow-execution" [
+export def "terminate-workflow-execution" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1873,7 +1873,7 @@ export def "api create-terminate-workflow-execution" [
 #
 # POST /
 # operationId: UndeprecateActivityType
-export def "api create-undeprecate-activity-type" [
+export def "undeprecate-activity-type" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1922,7 +1922,7 @@ export def "api create-undeprecate-activity-type" [
 #
 # POST /
 # operationId: UndeprecateDomain
-export def "api create-undeprecate-domain" [
+export def "undeprecate-domain" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1970,7 +1970,7 @@ export def "api create-undeprecate-domain" [
 #
 # POST /
 # operationId: UndeprecateWorkflowType
-export def "api create-undeprecate-workflow-type" [
+export def "undeprecate-workflow-type" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2019,7 +2019,7 @@ export def "api create-undeprecate-workflow-type" [
 #
 # POST /
 # operationId: UntagResource
-export def "api untag-resource" [
+export def "untag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

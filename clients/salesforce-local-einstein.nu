@@ -150,7 +150,7 @@ def type-completer-2 [] { ["image" "image-detection" "image-multi-label"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "apiusage get-usage-plans" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-api-usage-plans-v2" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -174,7 +174,7 @@ export def commands []: nothing -> table {
 #
 # GET /v2/apiusage
 # operationId: getApiUsagePlansV2
-export def "apiusage get-usage-plans" [
+export def "get-api-usage-plans-v2" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -208,7 +208,7 @@ export def "apiusage get-usage-plans" [
 #
 # GET /v2/language/datasets
 # operationId: listDatasets
-export def "language-datasets list" [
+export def "list-datasets" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -246,7 +246,7 @@ export def "language-datasets list" [
 #
 # POST /v2/language/datasets/upload
 # operationId: uploadDatasetAsync
-export def "language-datasets-upload upload-async" [
+export def "upload-dataset-async" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -289,7 +289,7 @@ export def "language-datasets-upload upload-async" [
 #
 # POST /v2/language/datasets/upload/sync
 # operationId: uploadDatasetSync
-export def "language-datasets-upload-sync upload" [
+export def "upload-dataset-sync" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -332,7 +332,7 @@ export def "language-datasets-upload-sync upload" [
 #
 # DELETE /v2/language/datasets/{datasetId}
 # operationId: deleteDataset
-export def "language-datasets delete" [
+export def "delete-dataset" [
   dataset_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -368,7 +368,7 @@ export def "language-datasets delete" [
 #
 # GET /v2/language/datasets/{datasetId}
 # operationId: getDataset
-export def "language-datasets get" [
+export def "get-dataset" [
   dataset_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -404,7 +404,7 @@ export def "language-datasets get" [
 #
 # GET /v2/language/datasets/{datasetId}/examples
 # operationId: getExamples
-export def "language-datasets-examples get" [
+export def "get-examples" [
   dataset_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -444,7 +444,7 @@ export def "language-datasets-examples get" [
 #
 # GET /v2/language/datasets/{datasetId}/models
 # operationId: getTrainedModels
-export def "language-datasets-models get-trained" [
+export def "get-trained-models" [
   dataset_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -483,7 +483,7 @@ export def "language-datasets-models get-trained" [
 #
 # PUT /v2/language/datasets/{datasetId}/upload
 # operationId: updateDatasetAsync
-export def "language-datasets-upload update-async" [
+export def "update-dataset-async" [
   dataset_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -526,7 +526,7 @@ export def "language-datasets-upload update-async" [
 #
 # GET /v2/language/deletion/{id}
 # operationId: get
-export def "language-deletion get" [
+export def "get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -562,7 +562,7 @@ export def "language-deletion get" [
 #
 # GET /v2/language/examples
 # operationId: getExamplesByLabel
-export def "language-examples get-by-label" [
+export def "get-examples-by-label" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -600,7 +600,7 @@ export def "language-examples get-by-label" [
 #
 # POST /v2/language/feedback
 # operationId: provideFeedback
-export def "language-feedback create-provide" [
+export def "provide-feedback" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -643,7 +643,7 @@ export def "language-feedback create-provide" [
 #
 # POST /v2/language/intent
 # operationId: intentMultipart
-export def "language-intent create-multipart" [
+export def "intent-multipart" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -684,7 +684,7 @@ export def "language-intent create-multipart" [
 #
 # DELETE /v2/language/models/{modelId}
 # operationId: deleteModel
-export def "language-models delete" [
+export def "delete-model" [
   model_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -720,7 +720,7 @@ export def "language-models delete" [
 #
 # GET /v2/language/models/{modelId}
 # operationId: getTrainedModelMetrics
-export def "language-models get-trained-metrics" [
+export def "get-trained-model-metrics" [
   model_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -756,7 +756,7 @@ export def "language-models get-trained-metrics" [
 #
 # GET /v2/language/models/{modelId}/lc
 # operationId: getTrainedModelLearningCurve
-export def "language-models-lc get-trained-learning-curve" [
+export def "get-trained-model-learning-curve" [
   model_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -796,7 +796,7 @@ export def "language-models-lc get-trained-learning-curve" [
 # POST /v2/language/retrain
 # operationId: retrain
 # --trainParams shape: {trainSplitRatio?: float, withFeedback?: bool, withGlobalDatasetId?: int}
-export def "language-retrain create" [
+export def "retrain" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -840,7 +840,7 @@ export def "language-retrain create" [
 #
 # POST /v2/language/sentiment
 # operationId: sentimentMultipart
-export def "language-sentiment create-multipart" [
+export def "sentiment-multipart" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -882,7 +882,7 @@ export def "language-sentiment create-multipart" [
 # POST /v2/language/train
 # operationId: train
 # --trainParams shape: {trainSplitRatio?: float, withFeedback?: bool, withGlobalDatasetId?: int}
-export def "language-train create" [
+export def "train" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -927,7 +927,7 @@ export def "language-train create" [
 #
 # GET /v2/language/train/{modelId}
 # operationId: getTrainStatusAndProgress
-export def "language-train get-status-and-progress" [
+export def "get-train-status-and-progress" [
   model_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -964,7 +964,7 @@ export def "language-train get-status-and-progress" [
 # POST /v2/oauth2/token
 # Docs: https://metamind.readme.io/docs/generate-an-oauth-access-token — authentication guid
 # operationId: generateTokenV2
-export def "oauth2-token generate" [
+export def "generate-token-v2" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1007,7 +1007,7 @@ export def "oauth2-token generate" [
 #
 # DELETE /v2/oauth2/tokens/{token}
 # operationId: revokeRefreshTokenV2
-export def "oauth2-tokens delete-refresh" [
+export def "revoke-refresh-token-v2" [
   token_arg: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1043,7 +1043,7 @@ export def "oauth2-tokens delete-refresh" [
 #
 # PUT /v2/vision/bulkfeedback
 # operationId: updateDatasetAsync_1
-export def "vision-bulkfeedback update-dataset-async" [
+export def "update-dataset-async-1" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1084,7 +1084,7 @@ export def "vision-bulkfeedback update-dataset-async" [
 #
 # GET /v2/vision/datasets
 # operationId: listDatasets_1
-export def "vision-datasets list" [
+export def "list-datasets-1" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1122,7 +1122,7 @@ export def "vision-datasets list" [
 #
 # POST /v2/vision/datasets
 # operationId: createDataset
-export def "vision-datasets create" [
+export def "create-dataset" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1164,7 +1164,7 @@ export def "vision-datasets create" [
 #
 # POST /v2/vision/datasets/upload
 # operationId: uploadDatasetAsync_1
-export def "vision-datasets-upload upload-async" [
+export def "upload-dataset-async-1" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1207,7 +1207,7 @@ export def "vision-datasets-upload upload-async" [
 #
 # POST /v2/vision/datasets/upload/sync
 # operationId: uploadDatasetSync_1
-export def "vision-datasets-upload-sync upload" [
+export def "upload-dataset-sync-1" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1250,7 +1250,7 @@ export def "vision-datasets-upload-sync upload" [
 #
 # DELETE /v2/vision/datasets/{datasetId}
 # operationId: deleteDataset_1
-export def "vision-datasets delete-by-dataset-id" [
+export def "delete-dataset-1" [
   dataset_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1286,7 +1286,7 @@ export def "vision-datasets delete-by-dataset-id" [
 #
 # GET /v2/vision/datasets/{datasetId}
 # operationId: getDataset_1
-export def "vision-datasets get-by-dataset-id" [
+export def "get-dataset-1" [
   dataset_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1322,7 +1322,7 @@ export def "vision-datasets get-by-dataset-id" [
 #
 # GET /v2/vision/datasets/{datasetId}/examples
 # operationId: getExamples_1
-export def "vision-datasets-examples get-by-dataset-id" [
+export def "get-examples-1" [
   dataset_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1362,7 +1362,7 @@ export def "vision-datasets-examples get-by-dataset-id" [
 #
 # POST /v2/vision/datasets/{datasetId}/examples
 # operationId: addExample
-export def "vision-datasets-examples create" [
+export def "add-example" [
   dataset_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1406,7 +1406,7 @@ export def "vision-datasets-examples create" [
 #
 # GET /v2/vision/datasets/{datasetId}/models
 # operationId: getTrainedModels_1
-export def "vision-datasets-models get-trained-by-dataset-id" [
+export def "get-trained-models-1" [
   dataset_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1445,7 +1445,7 @@ export def "vision-datasets-models get-trained-by-dataset-id" [
 #
 # PUT /v2/vision/datasets/{datasetId}/upload
 # operationId: updateDatasetAsync_2
-export def "vision-datasets-upload update-async-by-dataset-id" [
+export def "update-dataset-async-2" [
   dataset_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1488,7 +1488,7 @@ export def "vision-datasets-upload update-async-by-dataset-id" [
 #
 # GET /v2/vision/deletion/{id}
 # operationId: get_1
-export def "vision-deletion get-by-id" [
+export def "get-1" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1524,7 +1524,7 @@ export def "vision-deletion get-by-id" [
 #
 # POST /v2/vision/detect
 # operationId: detectMultipart
-export def "vision-detect create-multipart" [
+export def "detect-multipart" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1565,7 +1565,7 @@ export def "vision-detect create-multipart" [
 #
 # GET /v2/vision/examples
 # operationId: getExamplesByLabel_1
-export def "vision-examples get-by-label" [
+export def "get-examples-by-label-1" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1603,7 +1603,7 @@ export def "vision-examples get-by-label" [
 #
 # POST /v2/vision/feedback
 # operationId: provideFeedback_1
-export def "vision-feedback create-provide" [
+export def "provide-feedback-1" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1646,7 +1646,7 @@ export def "vision-feedback create-provide" [
 #
 # DELETE /v2/vision/models/{modelId}
 # operationId: deleteModel_1
-export def "vision-models delete-by-model-id" [
+export def "delete-model-1" [
   model_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1682,7 +1682,7 @@ export def "vision-models delete-by-model-id" [
 #
 # GET /v2/vision/models/{modelId}
 # operationId: getTrainedModelMetrics_1
-export def "vision-models get-trained-metrics-by-model-id" [
+export def "get-trained-model-metrics-1" [
   model_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1718,7 +1718,7 @@ export def "vision-models get-trained-metrics-by-model-id" [
 #
 # GET /v2/vision/models/{modelId}/lc
 # operationId: getTrainedModelLearningCurve_1
-export def "vision-models-lc get-trained-learning-curve-by-model-id" [
+export def "get-trained-model-learning-curve-1" [
   model_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1757,7 +1757,7 @@ export def "vision-models-lc get-trained-learning-curve-by-model-id" [
 #
 # POST /v2/vision/ocr
 # operationId: ocrMultipart
-export def "vision-ocr create-multipart" [
+export def "ocr-multipart" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1801,7 +1801,7 @@ export def "vision-ocr create-multipart" [
 #
 # POST /v2/vision/predict
 # operationId: predictMultipart
-export def "vision-predict create-multipart" [
+export def "predict-multipart" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1844,7 +1844,7 @@ export def "vision-predict create-multipart" [
 # POST /v2/vision/retrain
 # operationId: retrain_1
 # --trainParams shape: {trainSplitRatio?: float, withFeedback?: bool, withGlobalDatasetId?: int}
-export def "vision-retrain create" [
+export def "retrain-1" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1889,7 +1889,7 @@ export def "vision-retrain create" [
 # POST /v2/vision/train
 # operationId: train_1
 # --trainParams shape: {trainSplitRatio?: float, withFeedback?: bool, withGlobalDatasetId?: int}
-export def "vision-train create" [
+export def "train-1" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1934,7 +1934,7 @@ export def "vision-train create" [
 #
 # GET /v2/vision/train/{modelId}
 # operationId: getTrainStatusAndProgress_1
-export def "vision-train get-status-and-progress-by-model-id" [
+export def "get-train-status-and-progress-1" [
   model_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

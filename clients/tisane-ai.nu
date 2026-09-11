@@ -97,7 +97,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "hypernyms list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "list-hypernyms" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -121,7 +121,7 @@ export def commands []: nothing -> table {
 #
 # GET /hypernyms
 # operationId: listHypernyms
-export def "hypernyms list" [
+export def "list-hypernyms" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -161,7 +161,7 @@ export def "hypernyms list" [
 #
 # GET /hyponyms
 # operationId: listHyponyms
-export def "hyponyms list" [
+export def "list-hyponyms" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -201,7 +201,7 @@ export def "hyponyms list" [
 #
 # GET /inflections
 # operationId: listInflectedForms
-export def "inflections list-inflected-forms" [
+export def "list-inflected-forms" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -242,7 +242,7 @@ export def "inflections list-inflected-forms" [
 #
 # GET /lm/family
 # operationId: getFamilyDetails
-export def "lm-family get-details" [
+export def "get-family-details" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -281,7 +281,7 @@ export def "lm-family get-details" [
 #
 # GET /senses
 # operationId: listWordSenses
-export def "senses list-word" [
+export def "list-word-senses" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -321,7 +321,7 @@ export def "senses list-word" [
 #
 # GET /values
 # operationId: listFeatureValues
-export def "values list-feature" [
+export def "list-feature-values" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

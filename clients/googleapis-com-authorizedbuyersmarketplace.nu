@@ -130,7 +130,7 @@ def role-completer [] { ["CLIENT_DEAL_APPROVER" "CLIENT_DEAL_NEGOTIATOR" "CLIENT
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "buyers subscribe-clients" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "authorizedbuyersmarketplace-buyers-auction-packages-subscribe-clients" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -154,7 +154,7 @@ export def commands []: nothing -> table {
 #
 # POST /v1/{auctionPackage}:subscribeClients
 # operationId: authorizedbuyersmarketplace.buyers.auctionPackages.subscribeClients
-export def "buyers subscribe-clients" [
+export def "authorizedbuyersmarketplace-buyers-auction-packages-subscribe-clients" [
   auction_package: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -206,7 +206,7 @@ export def "buyers subscribe-clients" [
 #
 # POST /v1/{auctionPackage}:unsubscribeClients
 # operationId: authorizedbuyersmarketplace.buyers.auctionPackages.unsubscribeClients
-export def "buyers unsubscribe-clients" [
+export def "authorizedbuyersmarketplace-buyers-auction-packages-unsubscribe-clients" [
   auction_package: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -264,7 +264,7 @@ export def "buyers unsubscribe-clients" [
 # --inventorySizeTargeting shape: {excludedInventorySizes?: list, targetedInventorySizes?: list}
 # --preferredDealTerms shape: {fixedPrice?: record}
 # --programmaticGuaranteedTerms shape: {fixedPrice?: record, guaranteedLooks?: string, impressionCap?: string, minimumDailyLooks?: string, percentShareOfVoice?: string, reservationType?: "RESERVATION_TYPE_UNSPECIFIED"|"STANDARD"|"SPONSORSHIP"}
-export def "proposals-send-rfp send" [
+export def "authorizedbuyersmarketplace-buyers-proposals-send-rfp" [
   buyer: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -327,7 +327,7 @@ export def "proposals-send-rfp send" [
 #
 # POST /v1/{deal}:addCreative
 # operationId: authorizedbuyersmarketplace.buyers.finalizedDeals.addCreative
-export def "buyers create-creative" [
+export def "authorizedbuyersmarketplace-buyers-finalized-deals-add-creative" [
   deal: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -379,7 +379,7 @@ export def "buyers create-creative" [
 #
 # POST /v1/{deal}:setReadyToServe
 # operationId: authorizedbuyersmarketplace.buyers.finalizedDeals.setReadyToServe
-export def "buyers update-ready-to-serve" [
+export def "authorizedbuyersmarketplace-buyers-finalized-deals-set-ready-to-serve" [
   deal: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -431,7 +431,7 @@ export def "buyers update-ready-to-serve" [
 #
 # DELETE /v1/{name}
 # operationId: authorizedbuyersmarketplace.buyers.clients.users.delete
-export def "buyers delete" [
+export def "authorizedbuyersmarketplace-buyers-clients-users-delete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -479,7 +479,7 @@ export def "buyers delete" [
 #
 # GET /v1/{name}
 # operationId: authorizedbuyersmarketplace.buyers.publisherProfiles.get
-export def "buyers get" [
+export def "authorizedbuyersmarketplace-buyers-publisher-profiles-get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -533,7 +533,7 @@ export def "buyers get" [
 # --programmaticGuaranteedTerms shape: {fixedPrice?: record, guaranteedLooks?: string, impressionCap?: string, minimumDailyLooks?: string, percentShareOfVoice?: string, reservationType?: "RESERVATION_TYPE_UNSPECIFIED"|"STANDARD"|"SPONSORSHIP"}
 # --sellerTimeZone shape: {id?: string, version?: string}
 # --targeting shape: {daypartTargeting?: record, geoTargeting?: record, inventorySizeTargeting?: record, inventoryTypeTargeting?: record, placementTargeting?: record, technologyTargeting?: record, userListTargeting?: record, videoTargeting?: record}
-export def "buyers update" [
+export def "authorizedbuyersmarketplace-buyers-proposals-deals-patch" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -597,7 +597,7 @@ export def "buyers update" [
 #
 # POST /v1/{name}:accept
 # operationId: authorizedbuyersmarketplace.buyers.proposals.accept
-export def "buyers create-accept" [
+export def "authorizedbuyersmarketplace-buyers-proposals-accept" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -649,7 +649,7 @@ export def "buyers create-accept" [
 #
 # POST /v1/{name}:activate
 # operationId: authorizedbuyersmarketplace.buyers.clients.users.activate
-export def "buyers create-activate" [
+export def "authorizedbuyersmarketplace-buyers-clients-users-activate" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -701,7 +701,7 @@ export def "buyers create-activate" [
 #
 # POST /v1/{name}:deactivate
 # operationId: authorizedbuyersmarketplace.buyers.clients.users.deactivate
-export def "buyers create-deactivate" [
+export def "authorizedbuyersmarketplace-buyers-clients-users-deactivate" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -753,7 +753,7 @@ export def "buyers create-deactivate" [
 #
 # POST /v1/{name}:pause
 # operationId: authorizedbuyersmarketplace.buyers.finalizedDeals.pause
-export def "buyers pause" [
+export def "authorizedbuyersmarketplace-buyers-finalized-deals-pause" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -805,7 +805,7 @@ export def "buyers pause" [
 #
 # POST /v1/{name}:resume
 # operationId: authorizedbuyersmarketplace.buyers.finalizedDeals.resume
-export def "buyers create-resume" [
+export def "authorizedbuyersmarketplace-buyers-finalized-deals-resume" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -857,7 +857,7 @@ export def "buyers create-resume" [
 #
 # POST /v1/{name}:subscribe
 # operationId: authorizedbuyersmarketplace.buyers.auctionPackages.subscribe
-export def "buyers subscribe" [
+export def "authorizedbuyersmarketplace-buyers-auction-packages-subscribe" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -909,7 +909,7 @@ export def "buyers subscribe" [
 #
 # POST /v1/{name}:unsubscribe
 # operationId: authorizedbuyersmarketplace.buyers.auctionPackages.unsubscribe
-export def "buyers unsubscribe" [
+export def "authorizedbuyersmarketplace-buyers-auction-packages-unsubscribe" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -961,7 +961,7 @@ export def "buyers unsubscribe" [
 #
 # GET /v1/{parent}/auctionPackages
 # operationId: authorizedbuyersmarketplace.buyers.auctionPackages.list
-export def "auction-packages list" [
+export def "authorizedbuyersmarketplace-buyers-auction-packages-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1011,7 +1011,7 @@ export def "auction-packages list" [
 #
 # GET /v1/{parent}/clients
 # operationId: authorizedbuyersmarketplace.buyers.clients.list
-export def "clients list" [
+export def "authorizedbuyersmarketplace-buyers-clients-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1062,7 +1062,7 @@ export def "clients list" [
 #
 # POST /v1/{parent}/clients
 # operationId: authorizedbuyersmarketplace.buyers.clients.create
-export def "clients create" [
+export def "authorizedbuyersmarketplace-buyers-clients-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1117,7 +1117,7 @@ export def "clients create" [
 #
 # GET /v1/{parent}/deals
 # operationId: authorizedbuyersmarketplace.buyers.proposals.deals.list
-export def "deals list" [
+export def "authorizedbuyersmarketplace-buyers-proposals-deals-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1168,7 +1168,7 @@ export def "deals list" [
 # POST /v1/{parent}/deals:batchUpdate
 # operationId: authorizedbuyersmarketplace.buyers.proposals.deals.batchUpdate
 # --requests item shape: {deal?: record, updateMask?: string}
-export def "deals-batch-update update" [
+export def "authorizedbuyersmarketplace-buyers-proposals-deals-batch-update" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1220,7 +1220,7 @@ export def "deals-batch-update update" [
 #
 # GET /v1/{parent}/finalizedDeals
 # operationId: authorizedbuyersmarketplace.buyers.finalizedDeals.list
-export def "finalized-deals list" [
+export def "authorizedbuyersmarketplace-buyers-finalized-deals-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1272,7 +1272,7 @@ export def "finalized-deals list" [
 #
 # GET /v1/{parent}/proposals
 # operationId: authorizedbuyersmarketplace.buyers.proposals.list
-export def "proposals list" [
+export def "authorizedbuyersmarketplace-buyers-proposals-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1323,7 +1323,7 @@ export def "proposals list" [
 #
 # GET /v1/{parent}/publisherProfiles
 # operationId: authorizedbuyersmarketplace.buyers.publisherProfiles.list
-export def "publisher-profiles list" [
+export def "authorizedbuyersmarketplace-buyers-publisher-profiles-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1374,7 +1374,7 @@ export def "publisher-profiles list" [
 #
 # GET /v1/{parent}/users
 # operationId: authorizedbuyersmarketplace.buyers.clients.users.list
-export def "users list" [
+export def "authorizedbuyersmarketplace-buyers-clients-users-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1424,7 +1424,7 @@ export def "users list" [
 #
 # POST /v1/{parent}/users
 # operationId: authorizedbuyersmarketplace.buyers.clients.users.create
-export def "users create" [
+export def "authorizedbuyersmarketplace-buyers-clients-users-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1477,7 +1477,7 @@ export def "users create" [
 # POST /v1/{proposal}:addNote
 # operationId: authorizedbuyersmarketplace.buyers.proposals.addNote
 # --note shape: {note?: string}
-export def "buyers create-note" [
+export def "authorizedbuyersmarketplace-buyers-proposals-add-note" [
   proposal: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1529,7 +1529,7 @@ export def "buyers create-note" [
 #
 # POST /v1/{proposal}:cancelNegotiation
 # operationId: authorizedbuyersmarketplace.buyers.proposals.cancelNegotiation
-export def "buyers cancel-negotiation" [
+export def "authorizedbuyersmarketplace-buyers-proposals-cancel-negotiation" [
   proposal: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)

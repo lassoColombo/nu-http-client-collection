@@ -112,7 +112,7 @@ def availability-completer [] { ["disabled" "enabled"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-marketplace-operations list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "operations-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -136,7 +136,7 @@ export def commands []: nothing -> table {
 #
 # GET /providers/Microsoft.Marketplace/operations
 # operationId: Operations_List
-export def "providers-microsoft-marketplace-operations list" [
+export def "operations-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -172,7 +172,7 @@ export def "providers-microsoft-marketplace-operations list" [
 #
 # GET /providers/Microsoft.Marketplace/privateStores
 # operationId: PrivateStore_List
-export def "providers-microsoft-marketplace-private-stores list" [
+export def "private-store-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -208,7 +208,7 @@ export def "providers-microsoft-marketplace-private-stores list" [
 #
 # DELETE /providers/Microsoft.Marketplace/privateStores/{PrivateStoreId}
 # operationId: PrivateStore_Delete
-export def "providers-microsoft-marketplace-private-stores delete" [
+export def "private-store-delete" [
   private_store_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -246,7 +246,7 @@ export def "providers-microsoft-marketplace-private-stores delete" [
 #
 # GET /providers/Microsoft.Marketplace/privateStores/{PrivateStoreId}
 # operationId: PrivateStore_Get
-export def "providers-microsoft-marketplace-private-stores get" [
+export def "private-store-get" [
   private_store_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -284,7 +284,7 @@ export def "providers-microsoft-marketplace-private-stores get" [
 #
 # PUT /providers/Microsoft.Marketplace/privateStores/{PrivateStoreId}
 # operationId: PrivateStore_CreateOrUpdate
-export def "providers-microsoft-marketplace-private-stores create-or-update" [
+export def "private-store-create-or-update" [
   private_store_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -327,7 +327,7 @@ export def "providers-microsoft-marketplace-private-stores create-or-update" [
 #
 # GET /providers/Microsoft.Marketplace/privateStores/{PrivateStoreId}/offers
 # operationId: PrivateStoreOffers_List
-export def "providers-microsoft-marketplace-private-stores-offers list" [
+export def "private-store-offers-list" [
   private_store_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -365,7 +365,7 @@ export def "providers-microsoft-marketplace-private-stores-offers list" [
 #
 # DELETE /providers/Microsoft.Marketplace/privateStores/{PrivateStoreId}/offers/{OfferId}
 # operationId: PrivateStoreOffer_Delete
-export def "providers-microsoft-marketplace-private-stores-offers delete" [
+export def "private-store-offer-delete" [
   private_store_id: string
   offer_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -405,7 +405,7 @@ export def "providers-microsoft-marketplace-private-stores-offers delete" [
 #
 # GET /providers/Microsoft.Marketplace/privateStores/{PrivateStoreId}/offers/{OfferId}
 # operationId: PrivateStoreOffer_Get
-export def "providers-microsoft-marketplace-private-stores-offers get" [
+export def "private-store-offer-get" [
   private_store_id: string
   offer_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -445,7 +445,7 @@ export def "providers-microsoft-marketplace-private-stores-offers get" [
 #
 # PUT /providers/Microsoft.Marketplace/privateStores/{PrivateStoreId}/offers/{OfferId}
 # operationId: PrivateStoreOffer_CreateOrUpdate
-export def "providers-microsoft-marketplace-private-stores-offers create-or-update" [
+export def "private-store-offer-create-or-update" [
   private_store_id: string
   offer_id: string
   --base-url(-b): string@base-url-completer # API base URL

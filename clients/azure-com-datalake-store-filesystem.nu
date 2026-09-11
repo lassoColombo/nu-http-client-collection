@@ -117,7 +117,7 @@ def op-completer-2 [] { ["CHECKACCESS"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "web-hdfs-ext create-file-system-concurrent" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "file-system-concurrent-append" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -141,7 +141,7 @@ export def commands []: nothing -> table {
 #
 # POST /WebHdfsExt/{path}
 # operationId: FileSystem_ConcurrentAppend
-export def "web-hdfs-ext create-file-system-concurrent" [
+export def "file-system-concurrent-append" [
   path: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -189,7 +189,7 @@ export def "web-hdfs-ext create-file-system-concurrent" [
 #
 # PUT /WebHdfsExt/{path}
 # operationId: FileSystem_SetFileExpiry
-export def "web-hdfs-ext update-file-system-file-expiry" [
+export def "file-system-set-file-expiry" [
   path: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -230,7 +230,7 @@ export def "web-hdfs-ext update-file-system-file-expiry" [
 #
 # GET /webhdfs/v1/{path}
 # operationId: FileSystem_CheckAccess
-export def "webhdfs check-file-system-access" [
+export def "file-system-check-access" [
   path: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

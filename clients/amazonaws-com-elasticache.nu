@@ -178,7 +178,7 @@ def action-completer-64 [] { ["TestFailover"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "api get-create-tags-to-resource" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-add-tags-to-resource" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -202,7 +202,7 @@ export def commands []: nothing -> table {
 #
 # GET /
 # operationId: GET_AddTagsToResource
-export def "api get-create-tags-to-resource" [
+export def "get-add-tags-to-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -250,7 +250,7 @@ export def "api get-create-tags-to-resource" [
 #
 # POST /
 # operationId: POST_AddTagsToResource
-export def "api create-tags-to-resource" [
+export def "post-add-tags-to-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -300,7 +300,7 @@ export def "api create-tags-to-resource" [
 #
 # GET /
 # operationId: GET_AuthorizeCacheSecurityGroupIngress
-export def "api get-authorize-cache-security-group-ingress" [
+export def "get-authorize-cache-security-group-ingress" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -349,7 +349,7 @@ export def "api get-authorize-cache-security-group-ingress" [
 #
 # POST /
 # operationId: POST_AuthorizeCacheSecurityGroupIngress
-export def "api create-authorize-cache-security-group-ingress" [
+export def "post-authorize-cache-security-group-ingress" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -399,7 +399,7 @@ export def "api create-authorize-cache-security-group-ingress" [
 #
 # GET /
 # operationId: GET_BatchApplyUpdateAction
-export def "api get-batch-apply-update-action" [
+export def "get-batch-apply-update-action" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -448,7 +448,7 @@ export def "api get-batch-apply-update-action" [
 #
 # POST /
 # operationId: POST_BatchApplyUpdateAction
-export def "api create-batch-apply-update-action" [
+export def "post-batch-apply-update-action" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -498,7 +498,7 @@ export def "api create-batch-apply-update-action" [
 #
 # GET /
 # operationId: GET_BatchStopUpdateAction
-export def "api get-batch-stop-update-action" [
+export def "get-batch-stop-update-action" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -547,7 +547,7 @@ export def "api get-batch-stop-update-action" [
 #
 # POST /
 # operationId: POST_BatchStopUpdateAction
-export def "api create-batch-stop-update-action" [
+export def "post-batch-stop-update-action" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -597,7 +597,7 @@ export def "api create-batch-stop-update-action" [
 #
 # GET /
 # operationId: GET_CompleteMigration
-export def "api get-complete-migration" [
+export def "get-complete-migration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -645,7 +645,7 @@ export def "api get-complete-migration" [
 #
 # POST /
 # operationId: POST_CompleteMigration
-export def "api create-complete-migration" [
+export def "post-complete-migration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -695,7 +695,7 @@ export def "api create-complete-migration" [
 #
 # GET /
 # operationId: GET_CopySnapshot
-export def "api get-copy-snapshot" [
+export def "get-copy-snapshot" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -746,7 +746,7 @@ export def "api get-copy-snapshot" [
 #
 # POST /
 # operationId: POST_CopySnapshot
-export def "api create-copy-snapshot" [
+export def "post-copy-snapshot" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -796,7 +796,7 @@ export def "api create-copy-snapshot" [
 #
 # GET /
 # operationId: GET_CreateCacheCluster
-export def "api get-create-cache" [
+export def "get-create-cache-cluster" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -872,7 +872,7 @@ export def "api get-create-cache" [
 #
 # POST /
 # operationId: POST_CreateCacheCluster
-export def "api create-cache" [
+export def "post-create-cache-cluster" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -922,7 +922,7 @@ export def "api create-cache" [
 #
 # GET /
 # operationId: GET_CreateCacheParameterGroup
-export def "api get-create-cache-parameter-group" [
+export def "get-create-cache-parameter-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -972,7 +972,7 @@ export def "api get-create-cache-parameter-group" [
 #
 # POST /
 # operationId: POST_CreateCacheParameterGroup
-export def "api create-cache-parameter-group" [
+export def "post-create-cache-parameter-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1022,7 +1022,7 @@ export def "api create-cache-parameter-group" [
 #
 # GET /
 # operationId: GET_CreateCacheSecurityGroup
-export def "api get-create-cache-security-group" [
+export def "get-create-cache-security-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1071,7 +1071,7 @@ export def "api get-create-cache-security-group" [
 #
 # POST /
 # operationId: POST_CreateCacheSecurityGroup
-export def "api create-cache-security-group" [
+export def "post-create-cache-security-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1121,7 +1121,7 @@ export def "api create-cache-security-group" [
 #
 # GET /
 # operationId: GET_CreateCacheSubnetGroup
-export def "api get-create-cache-subnet-group" [
+export def "get-create-cache-subnet-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1171,7 +1171,7 @@ export def "api get-create-cache-subnet-group" [
 #
 # POST /
 # operationId: POST_CreateCacheSubnetGroup
-export def "api create-cache-subnet-group" [
+export def "post-create-cache-subnet-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1221,7 +1221,7 @@ export def "api create-cache-subnet-group" [
 #
 # GET /
 # operationId: GET_CreateGlobalReplicationGroup
-export def "api get-create-global-replication-group" [
+export def "get-create-global-replication-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1270,7 +1270,7 @@ export def "api get-create-global-replication-group" [
 #
 # POST /
 # operationId: POST_CreateGlobalReplicationGroup
-export def "api create-global-replication-group" [
+export def "post-create-global-replication-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1320,7 +1320,7 @@ export def "api create-global-replication-group" [
 #
 # GET /
 # operationId: GET_CreateReplicationGroup
-export def "api get-create-replication-group" [
+export def "get-create-replication-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1403,7 +1403,7 @@ export def "api get-create-replication-group" [
 #
 # POST /
 # operationId: POST_CreateReplicationGroup
-export def "api create-replication-group" [
+export def "post-create-replication-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1453,7 +1453,7 @@ export def "api create-replication-group" [
 #
 # GET /
 # operationId: GET_CreateSnapshot
-export def "api get-create-snapshot" [
+export def "get-create-snapshot" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1504,7 +1504,7 @@ export def "api get-create-snapshot" [
 #
 # POST /
 # operationId: POST_CreateSnapshot
-export def "api create-snapshot" [
+export def "post-create-snapshot" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1554,7 +1554,7 @@ export def "api create-snapshot" [
 #
 # GET /
 # operationId: GET_CreateUser
-export def "api get-create-user" [
+export def "get-create-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1608,7 +1608,7 @@ export def "api get-create-user" [
 #
 # POST /
 # operationId: POST_CreateUser
-export def "api create-user" [
+export def "post-create-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1658,7 +1658,7 @@ export def "api create-user" [
 #
 # GET /
 # operationId: GET_CreateUserGroup
-export def "api get-create-user-group" [
+export def "get-create-user-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1708,7 +1708,7 @@ export def "api get-create-user-group" [
 #
 # POST /
 # operationId: POST_CreateUserGroup
-export def "api create-user-group" [
+export def "post-create-user-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1758,7 +1758,7 @@ export def "api create-user-group" [
 #
 # GET /
 # operationId: GET_DecreaseNodeGroupsInGlobalReplicationGroup
-export def "api get-decrease-node-groups-in-global-replication-group" [
+export def "get-decrease-node-groups-in-global-replication-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1809,7 +1809,7 @@ export def "api get-decrease-node-groups-in-global-replication-group" [
 #
 # POST /
 # operationId: POST_DecreaseNodeGroupsInGlobalReplicationGroup
-export def "api create-decrease-node-groups-in-global-replication-group" [
+export def "post-decrease-node-groups-in-global-replication-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1859,7 +1859,7 @@ export def "api create-decrease-node-groups-in-global-replication-group" [
 #
 # GET /
 # operationId: GET_DecreaseReplicaCount
-export def "api get-decrease-replica-count" [
+export def "get-decrease-replica-count" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1910,7 +1910,7 @@ export def "api get-decrease-replica-count" [
 #
 # POST /
 # operationId: POST_DecreaseReplicaCount
-export def "api create-decrease-replica-count" [
+export def "post-decrease-replica-count" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1960,7 +1960,7 @@ export def "api create-decrease-replica-count" [
 #
 # GET /
 # operationId: GET_DeleteCacheCluster
-export def "api get-delete-cache" [
+export def "get-delete-cache-cluster" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2008,7 +2008,7 @@ export def "api get-delete-cache" [
 #
 # POST /
 # operationId: POST_DeleteCacheCluster
-export def "api create-delete-cache" [
+export def "post-delete-cache-cluster" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2058,7 +2058,7 @@ export def "api create-delete-cache" [
 #
 # GET /
 # operationId: GET_DeleteCacheParameterGroup
-export def "api get-delete-cache-parameter-group" [
+export def "get-delete-cache-parameter-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2105,7 +2105,7 @@ export def "api get-delete-cache-parameter-group" [
 #
 # POST /
 # operationId: POST_DeleteCacheParameterGroup
-export def "api create-delete-cache-parameter-group" [
+export def "post-delete-cache-parameter-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2155,7 +2155,7 @@ export def "api create-delete-cache-parameter-group" [
 #
 # GET /
 # operationId: GET_DeleteCacheSecurityGroup
-export def "api get-delete-cache-security-group" [
+export def "get-delete-cache-security-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2202,7 +2202,7 @@ export def "api get-delete-cache-security-group" [
 #
 # POST /
 # operationId: POST_DeleteCacheSecurityGroup
-export def "api create-delete-cache-security-group" [
+export def "post-delete-cache-security-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2252,7 +2252,7 @@ export def "api create-delete-cache-security-group" [
 #
 # GET /
 # operationId: GET_DeleteCacheSubnetGroup
-export def "api get-delete-cache-subnet-group" [
+export def "get-delete-cache-subnet-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2299,7 +2299,7 @@ export def "api get-delete-cache-subnet-group" [
 #
 # POST /
 # operationId: POST_DeleteCacheSubnetGroup
-export def "api create-delete-cache-subnet-group" [
+export def "post-delete-cache-subnet-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2349,7 +2349,7 @@ export def "api create-delete-cache-subnet-group" [
 #
 # GET /
 # operationId: GET_DeleteGlobalReplicationGroup
-export def "api get-delete-global-replication-group" [
+export def "get-delete-global-replication-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2397,7 +2397,7 @@ export def "api get-delete-global-replication-group" [
 #
 # POST /
 # operationId: POST_DeleteGlobalReplicationGroup
-export def "api create-delete-global-replication-group" [
+export def "post-delete-global-replication-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2447,7 +2447,7 @@ export def "api create-delete-global-replication-group" [
 #
 # GET /
 # operationId: GET_DeleteReplicationGroup
-export def "api get-delete-replication-group" [
+export def "get-delete-replication-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2496,7 +2496,7 @@ export def "api get-delete-replication-group" [
 #
 # POST /
 # operationId: POST_DeleteReplicationGroup
-export def "api create-delete-replication-group" [
+export def "post-delete-replication-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2546,7 +2546,7 @@ export def "api create-delete-replication-group" [
 #
 # GET /
 # operationId: GET_DeleteSnapshot
-export def "api get-delete-snapshot" [
+export def "get-delete-snapshot" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2593,7 +2593,7 @@ export def "api get-delete-snapshot" [
 #
 # POST /
 # operationId: POST_DeleteSnapshot
-export def "api create-delete-snapshot" [
+export def "post-delete-snapshot" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2643,7 +2643,7 @@ export def "api create-delete-snapshot" [
 #
 # GET /
 # operationId: GET_DeleteUser
-export def "api get-delete-user" [
+export def "get-delete-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2690,7 +2690,7 @@ export def "api get-delete-user" [
 #
 # POST /
 # operationId: POST_DeleteUser
-export def "api create-delete-user" [
+export def "post-delete-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2740,7 +2740,7 @@ export def "api create-delete-user" [
 #
 # GET /
 # operationId: GET_DeleteUserGroup
-export def "api get-delete-user-group" [
+export def "get-delete-user-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2787,7 +2787,7 @@ export def "api get-delete-user-group" [
 #
 # POST /
 # operationId: POST_DeleteUserGroup
-export def "api create-delete-user-group" [
+export def "post-delete-user-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2837,7 +2837,7 @@ export def "api create-delete-user-group" [
 #
 # GET /
 # operationId: GET_DescribeCacheClusters
-export def "api get-cache-clusters" [
+export def "get-describe-cache-clusters" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2888,7 +2888,7 @@ export def "api get-cache-clusters" [
 #
 # POST /
 # operationId: POST_DescribeCacheClusters
-export def "api create-get-cache-clusters" [
+export def "post-describe-cache-clusters" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2940,7 +2940,7 @@ export def "api create-get-cache-clusters" [
 #
 # GET /
 # operationId: GET_DescribeCacheEngineVersions
-export def "api get-cache-engine-versions" [
+export def "get-describe-cache-engine-versions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2992,7 +2992,7 @@ export def "api get-cache-engine-versions" [
 #
 # POST /
 # operationId: POST_DescribeCacheEngineVersions
-export def "api create-get-cache-engine-versions" [
+export def "post-describe-cache-engine-versions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3044,7 +3044,7 @@ export def "api create-get-cache-engine-versions" [
 #
 # GET /
 # operationId: GET_DescribeCacheParameterGroups
-export def "api get-cache-parameter-groups" [
+export def "get-describe-cache-parameter-groups" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3093,7 +3093,7 @@ export def "api get-cache-parameter-groups" [
 #
 # POST /
 # operationId: POST_DescribeCacheParameterGroups
-export def "api create-get-cache-parameter-groups" [
+export def "post-describe-cache-parameter-groups" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3145,7 +3145,7 @@ export def "api create-get-cache-parameter-groups" [
 #
 # GET /
 # operationId: GET_DescribeCacheParameters
-export def "api get-cache-parameters" [
+export def "get-describe-cache-parameters" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3195,7 +3195,7 @@ export def "api get-cache-parameters" [
 #
 # POST /
 # operationId: POST_DescribeCacheParameters
-export def "api create-get-cache-parameters" [
+export def "post-describe-cache-parameters" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3247,7 +3247,7 @@ export def "api create-get-cache-parameters" [
 #
 # GET /
 # operationId: GET_DescribeCacheSecurityGroups
-export def "api get-cache-security-groups" [
+export def "get-describe-cache-security-groups" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3296,7 +3296,7 @@ export def "api get-cache-security-groups" [
 #
 # POST /
 # operationId: POST_DescribeCacheSecurityGroups
-export def "api create-get-cache-security-groups" [
+export def "post-describe-cache-security-groups" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3348,7 +3348,7 @@ export def "api create-get-cache-security-groups" [
 #
 # GET /
 # operationId: GET_DescribeCacheSubnetGroups
-export def "api get-cache-subnet-groups" [
+export def "get-describe-cache-subnet-groups" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3397,7 +3397,7 @@ export def "api get-cache-subnet-groups" [
 #
 # POST /
 # operationId: POST_DescribeCacheSubnetGroups
-export def "api create-get-cache-subnet-groups" [
+export def "post-describe-cache-subnet-groups" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3449,7 +3449,7 @@ export def "api create-get-cache-subnet-groups" [
 #
 # GET /
 # operationId: GET_DescribeEngineDefaultParameters
-export def "api get-engine-default-parameters" [
+export def "get-describe-engine-default-parameters" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3498,7 +3498,7 @@ export def "api get-engine-default-parameters" [
 #
 # POST /
 # operationId: POST_DescribeEngineDefaultParameters
-export def "api create-get-engine-default-parameters" [
+export def "post-describe-engine-default-parameters" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3550,7 +3550,7 @@ export def "api create-get-engine-default-parameters" [
 #
 # GET /
 # operationId: GET_DescribeEvents
-export def "api get-events" [
+export def "get-describe-events" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3603,7 +3603,7 @@ export def "api get-events" [
 #
 # POST /
 # operationId: POST_DescribeEvents
-export def "api create-get-events" [
+export def "post-describe-events" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3655,7 +3655,7 @@ export def "api create-get-events" [
 #
 # GET /
 # operationId: GET_DescribeGlobalReplicationGroups
-export def "api get-global-replication-groups" [
+export def "get-describe-global-replication-groups" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3705,7 +3705,7 @@ export def "api get-global-replication-groups" [
 #
 # POST /
 # operationId: POST_DescribeGlobalReplicationGroups
-export def "api create-get-global-replication-groups" [
+export def "post-describe-global-replication-groups" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3757,7 +3757,7 @@ export def "api create-get-global-replication-groups" [
 #
 # GET /
 # operationId: GET_DescribeReplicationGroups
-export def "api get-replication-groups" [
+export def "get-describe-replication-groups" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3806,7 +3806,7 @@ export def "api get-replication-groups" [
 #
 # POST /
 # operationId: POST_DescribeReplicationGroups
-export def "api create-get-replication-groups" [
+export def "post-describe-replication-groups" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3858,7 +3858,7 @@ export def "api create-get-replication-groups" [
 #
 # GET /
 # operationId: GET_DescribeReservedCacheNodes
-export def "api get-reserved-cache-nodes" [
+export def "get-describe-reserved-cache-nodes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3912,7 +3912,7 @@ export def "api get-reserved-cache-nodes" [
 #
 # POST /
 # operationId: POST_DescribeReservedCacheNodes
-export def "api create-get-reserved-cache-nodes" [
+export def "post-describe-reserved-cache-nodes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3964,7 +3964,7 @@ export def "api create-get-reserved-cache-nodes" [
 #
 # GET /
 # operationId: GET_DescribeReservedCacheNodesOfferings
-export def "api get-reserved-cache-nodes-offerings" [
+export def "get-describe-reserved-cache-nodes-offerings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4017,7 +4017,7 @@ export def "api get-reserved-cache-nodes-offerings" [
 #
 # POST /
 # operationId: POST_DescribeReservedCacheNodesOfferings
-export def "api create-get-reserved-cache-nodes-offerings" [
+export def "post-describe-reserved-cache-nodes-offerings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4069,7 +4069,7 @@ export def "api create-get-reserved-cache-nodes-offerings" [
 #
 # GET /
 # operationId: GET_DescribeServiceUpdates
-export def "api get-service-updates" [
+export def "get-describe-service-updates" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4119,7 +4119,7 @@ export def "api get-service-updates" [
 #
 # POST /
 # operationId: POST_DescribeServiceUpdates
-export def "api create-get-service-updates" [
+export def "post-describe-service-updates" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4171,7 +4171,7 @@ export def "api create-get-service-updates" [
 #
 # GET /
 # operationId: GET_DescribeSnapshots
-export def "api get-snapshots" [
+export def "get-describe-snapshots" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4224,7 +4224,7 @@ export def "api get-snapshots" [
 #
 # POST /
 # operationId: POST_DescribeSnapshots
-export def "api create-get-snapshots" [
+export def "post-describe-snapshots" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4276,7 +4276,7 @@ export def "api create-get-snapshots" [
 #
 # GET /
 # operationId: GET_DescribeUpdateActions
-export def "api get-update-actions" [
+export def "get-describe-update-actions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4332,7 +4332,7 @@ export def "api get-update-actions" [
 #
 # POST /
 # operationId: POST_DescribeUpdateActions
-export def "api create-get-update-actions" [
+export def "post-describe-update-actions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4384,7 +4384,7 @@ export def "api create-get-update-actions" [
 #
 # GET /
 # operationId: GET_DescribeUserGroups
-export def "api get-user-groups" [
+export def "get-describe-user-groups" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4433,7 +4433,7 @@ export def "api get-user-groups" [
 #
 # POST /
 # operationId: POST_DescribeUserGroups
-export def "api create-get-user-groups" [
+export def "post-describe-user-groups" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4485,7 +4485,7 @@ export def "api create-get-user-groups" [
 #
 # GET /
 # operationId: GET_DescribeUsers
-export def "api get-users" [
+export def "get-describe-users" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4536,7 +4536,7 @@ export def "api get-users" [
 #
 # POST /
 # operationId: POST_DescribeUsers
-export def "api create-get-users" [
+export def "post-describe-users" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4588,7 +4588,7 @@ export def "api create-get-users" [
 #
 # GET /
 # operationId: GET_DisassociateGlobalReplicationGroup
-export def "api get-disassociate-global-replication-group" [
+export def "get-disassociate-global-replication-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4637,7 +4637,7 @@ export def "api get-disassociate-global-replication-group" [
 #
 # POST /
 # operationId: POST_DisassociateGlobalReplicationGroup
-export def "api create-disassociate-global-replication-group" [
+export def "post-disassociate-global-replication-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4687,7 +4687,7 @@ export def "api create-disassociate-global-replication-group" [
 #
 # GET /
 # operationId: GET_FailoverGlobalReplicationGroup
-export def "api get-failover-global-replication-group" [
+export def "get-failover-global-replication-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4736,7 +4736,7 @@ export def "api get-failover-global-replication-group" [
 #
 # POST /
 # operationId: POST_FailoverGlobalReplicationGroup
-export def "api create-failover-global-replication-group" [
+export def "post-failover-global-replication-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4786,7 +4786,7 @@ export def "api create-failover-global-replication-group" [
 #
 # GET /
 # operationId: GET_IncreaseNodeGroupsInGlobalReplicationGroup
-export def "api get-increase-node-groups-in-global-replication-group" [
+export def "get-increase-node-groups-in-global-replication-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4836,7 +4836,7 @@ export def "api get-increase-node-groups-in-global-replication-group" [
 #
 # POST /
 # operationId: POST_IncreaseNodeGroupsInGlobalReplicationGroup
-export def "api create-increase-node-groups-in-global-replication-group" [
+export def "post-increase-node-groups-in-global-replication-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4886,7 +4886,7 @@ export def "api create-increase-node-groups-in-global-replication-group" [
 #
 # GET /
 # operationId: GET_IncreaseReplicaCount
-export def "api get-increase-replica-count" [
+export def "get-increase-replica-count" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4936,7 +4936,7 @@ export def "api get-increase-replica-count" [
 #
 # POST /
 # operationId: POST_IncreaseReplicaCount
-export def "api create-increase-replica-count" [
+export def "post-increase-replica-count" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4986,7 +4986,7 @@ export def "api create-increase-replica-count" [
 #
 # GET /
 # operationId: GET_ListAllowedNodeTypeModifications
-export def "api get-list-allowed-node-type-modifications" [
+export def "get-list-allowed-node-type-modifications" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5034,7 +5034,7 @@ export def "api get-list-allowed-node-type-modifications" [
 #
 # POST /
 # operationId: POST_ListAllowedNodeTypeModifications
-export def "api create-list-allowed-node-type-modifications" [
+export def "post-list-allowed-node-type-modifications" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5084,7 +5084,7 @@ export def "api create-list-allowed-node-type-modifications" [
 #
 # GET /
 # operationId: GET_ListTagsForResource
-export def "api get-list-tags-for-resource" [
+export def "get-list-tags-for-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5131,7 +5131,7 @@ export def "api get-list-tags-for-resource" [
 #
 # POST /
 # operationId: POST_ListTagsForResource
-export def "api create-list-tags-for-resource" [
+export def "post-list-tags-for-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5181,7 +5181,7 @@ export def "api create-list-tags-for-resource" [
 #
 # GET /
 # operationId: GET_ModifyCacheCluster
-export def "api get-modify-cache" [
+export def "get-modify-cache-cluster" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5248,7 +5248,7 @@ export def "api get-modify-cache" [
 #
 # POST /
 # operationId: POST_ModifyCacheCluster
-export def "api create-modify-cache" [
+export def "post-modify-cache-cluster" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5298,7 +5298,7 @@ export def "api create-modify-cache" [
 #
 # GET /
 # operationId: GET_ModifyCacheParameterGroup
-export def "api get-modify-cache-parameter-group" [
+export def "get-modify-cache-parameter-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5346,7 +5346,7 @@ export def "api get-modify-cache-parameter-group" [
 #
 # POST /
 # operationId: POST_ModifyCacheParameterGroup
-export def "api create-modify-cache-parameter-group" [
+export def "post-modify-cache-parameter-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5396,7 +5396,7 @@ export def "api create-modify-cache-parameter-group" [
 #
 # GET /
 # operationId: GET_ModifyCacheSubnetGroup
-export def "api get-modify-cache-subnet-group" [
+export def "get-modify-cache-subnet-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5445,7 +5445,7 @@ export def "api get-modify-cache-subnet-group" [
 #
 # POST /
 # operationId: POST_ModifyCacheSubnetGroup
-export def "api create-modify-cache-subnet-group" [
+export def "post-modify-cache-subnet-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5495,7 +5495,7 @@ export def "api create-modify-cache-subnet-group" [
 #
 # GET /
 # operationId: GET_ModifyGlobalReplicationGroup
-export def "api get-modify-global-replication-group" [
+export def "get-modify-global-replication-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5548,7 +5548,7 @@ export def "api get-modify-global-replication-group" [
 #
 # POST /
 # operationId: POST_ModifyGlobalReplicationGroup
-export def "api create-modify-global-replication-group" [
+export def "post-modify-global-replication-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5598,7 +5598,7 @@ export def "api create-modify-global-replication-group" [
 #
 # GET /
 # operationId: GET_ModifyReplicationGroup
-export def "api get-modify-replication-group" [
+export def "get-modify-replication-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5672,7 +5672,7 @@ export def "api get-modify-replication-group" [
 #
 # POST /
 # operationId: POST_ModifyReplicationGroup
-export def "api create-modify-replication-group" [
+export def "post-modify-replication-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5722,7 +5722,7 @@ export def "api create-modify-replication-group" [
 #
 # GET /
 # operationId: GET_ModifyReplicationGroupShardConfiguration
-export def "api get-modify-replication-group-shard-configuration" [
+export def "get-modify-replication-group-shard-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5774,7 +5774,7 @@ export def "api get-modify-replication-group-shard-configuration" [
 #
 # POST /
 # operationId: POST_ModifyReplicationGroupShardConfiguration
-export def "api create-modify-replication-group-shard-configuration" [
+export def "post-modify-replication-group-shard-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5824,7 +5824,7 @@ export def "api create-modify-replication-group-shard-configuration" [
 #
 # GET /
 # operationId: GET_ModifyUser
-export def "api get-modify-user" [
+export def "get-modify-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5876,7 +5876,7 @@ export def "api get-modify-user" [
 #
 # POST /
 # operationId: POST_ModifyUser
-export def "api create-modify-user" [
+export def "post-modify-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5926,7 +5926,7 @@ export def "api create-modify-user" [
 #
 # GET /
 # operationId: GET_ModifyUserGroup
-export def "api get-modify-user-group" [
+export def "get-modify-user-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5975,7 +5975,7 @@ export def "api get-modify-user-group" [
 #
 # POST /
 # operationId: POST_ModifyUserGroup
-export def "api create-modify-user-group" [
+export def "post-modify-user-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6025,7 +6025,7 @@ export def "api create-modify-user-group" [
 #
 # GET /
 # operationId: GET_PurchaseReservedCacheNodesOffering
-export def "api get-purchase-reserved-cache-nodes-offering" [
+export def "get-purchase-reserved-cache-nodes-offering" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6075,7 +6075,7 @@ export def "api get-purchase-reserved-cache-nodes-offering" [
 #
 # POST /
 # operationId: POST_PurchaseReservedCacheNodesOffering
-export def "api create-purchase-reserved-cache-nodes-offering" [
+export def "post-purchase-reserved-cache-nodes-offering" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6125,7 +6125,7 @@ export def "api create-purchase-reserved-cache-nodes-offering" [
 #
 # GET /
 # operationId: GET_RebalanceSlotsInGlobalReplicationGroup
-export def "api get-rebalance-slots-in-global-replication-group" [
+export def "get-rebalance-slots-in-global-replication-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6173,7 +6173,7 @@ export def "api get-rebalance-slots-in-global-replication-group" [
 #
 # POST /
 # operationId: POST_RebalanceSlotsInGlobalReplicationGroup
-export def "api create-rebalance-slots-in-global-replication-group" [
+export def "post-rebalance-slots-in-global-replication-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6223,7 +6223,7 @@ export def "api create-rebalance-slots-in-global-replication-group" [
 #
 # GET /
 # operationId: GET_RebootCacheCluster
-export def "api get-reboot-cache" [
+export def "get-reboot-cache-cluster" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6271,7 +6271,7 @@ export def "api get-reboot-cache" [
 #
 # POST /
 # operationId: POST_RebootCacheCluster
-export def "api create-reboot-cache" [
+export def "post-reboot-cache-cluster" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6321,7 +6321,7 @@ export def "api create-reboot-cache" [
 #
 # GET /
 # operationId: GET_RemoveTagsFromResource
-export def "api get-delete-tags-from-resource" [
+export def "get-remove-tags-from-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6369,7 +6369,7 @@ export def "api get-delete-tags-from-resource" [
 #
 # POST /
 # operationId: POST_RemoveTagsFromResource
-export def "api create-delete-tags-from-resource" [
+export def "post-remove-tags-from-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6419,7 +6419,7 @@ export def "api create-delete-tags-from-resource" [
 #
 # GET /
 # operationId: GET_ResetCacheParameterGroup
-export def "api get-reset-cache-parameter-group" [
+export def "get-reset-cache-parameter-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6468,7 +6468,7 @@ export def "api get-reset-cache-parameter-group" [
 #
 # POST /
 # operationId: POST_ResetCacheParameterGroup
-export def "api create-reset-cache-parameter-group" [
+export def "post-reset-cache-parameter-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6518,7 +6518,7 @@ export def "api create-reset-cache-parameter-group" [
 #
 # GET /
 # operationId: GET_RevokeCacheSecurityGroupIngress
-export def "api get-delete-cache-security-group-ingress" [
+export def "get-revoke-cache-security-group-ingress" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6567,7 +6567,7 @@ export def "api get-delete-cache-security-group-ingress" [
 #
 # POST /
 # operationId: POST_RevokeCacheSecurityGroupIngress
-export def "api create-delete-cache-security-group-ingress" [
+export def "post-revoke-cache-security-group-ingress" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6617,7 +6617,7 @@ export def "api create-delete-cache-security-group-ingress" [
 #
 # GET /
 # operationId: GET_StartMigration
-export def "api get-start-migration" [
+export def "get-start-migration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6665,7 +6665,7 @@ export def "api get-start-migration" [
 #
 # POST /
 # operationId: POST_StartMigration
-export def "api create-start-migration" [
+export def "post-start-migration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6715,7 +6715,7 @@ export def "api create-start-migration" [
 #
 # GET /
 # operationId: GET_TestFailover
-export def "api get-test-failover" [
+export def "get-test-failover" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6763,7 +6763,7 @@ export def "api get-test-failover" [
 #
 # POST /
 # operationId: POST_TestFailover
-export def "api create-test-failover" [
+export def "post-test-failover" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

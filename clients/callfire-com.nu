@@ -159,7 +159,7 @@ def big-message-strategy-completer [] { ["DO_NOT_SEND" "MMS" "SEND_MULTIPLE" "TR
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "calls find" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "find-calls" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -183,7 +183,7 @@ export def commands []: nothing -> table {
 #
 # GET /calls
 # operationId: findCalls
-export def "calls find" [
+export def "find-calls" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -232,7 +232,7 @@ export def "calls find" [
 #
 # POST /calls
 # operationId: sendCalls
-export def "calls send" [
+export def "send-calls" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -279,7 +279,7 @@ export def "calls send" [
 #
 # GET /calls/broadcasts
 # operationId: findCallBroadcasts
-export def "calls-broadcasts find" [
+export def "find-call-broadcasts" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -328,7 +328,7 @@ export def "calls-broadcasts find" [
 # --retryConfig shape: {maxAttempts?: int, minutesBetweenAttempts?: int, retryPhoneTypes?: list<string>, retryResults?: list<string>}
 # --schedules item shape: {campaignId?: int, daysOfWeek?: list<string>, id?: int, startDate?: record, startTimeOfDay?: record, stopDate?: record, stopTimeOfDay?: record, timeZone?: string}
 # --sounds shape: {dncDigit?: string, dncSoundId?: int, dncSoundText?: string, dncSoundTextVoice?: "MALE1"|"FEMALE1"|"FEMALE2"|"SPANISH1"|"FRENCHCANADIAN1", liveSoundId?: int, liveSoundText?: string, liveSoundTextVoice?: "MALE1"|"FEMALE1"|"FEMALE2"|"SPANISH1"|"FRENCHCANADIAN1", machineSoundId?: int, machineSoundText?: string, machineSoundTextVoice?: "MALE1"|"FEMALE1"|"FEMALE2"|"SPANISH1"|"FRENCHCANADIAN1", transferDigit?: string, transferNumber?: string, transferSoundId?: int, transferSoundText?: string, ... (1 more fields)}
-export def "calls-broadcasts create" [
+export def "create-call-broadcast" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -382,7 +382,7 @@ export def "calls-broadcasts create" [
 #
 # GET /calls/broadcasts/{id}
 # operationId: getCallBroadcast
-export def "calls-broadcasts get" [
+export def "get-call-broadcast" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -425,7 +425,7 @@ export def "calls-broadcasts get" [
 # --retryConfig shape: {maxAttempts?: int, minutesBetweenAttempts?: int, retryPhoneTypes?: list<string>, retryResults?: list<string>}
 # --schedules item shape: {campaignId?: int, daysOfWeek?: list<string>, id?: int, startDate?: record, startTimeOfDay?: record, stopDate?: record, stopTimeOfDay?: record, timeZone?: string}
 # --sounds shape: {dncDigit?: string, dncSoundId?: int, dncSoundText?: string, dncSoundTextVoice?: "MALE1"|"FEMALE1"|"FEMALE2"|"SPANISH1"|"FRENCHCANADIAN1", liveSoundId?: int, liveSoundText?: string, liveSoundTextVoice?: "MALE1"|"FEMALE1"|"FEMALE2"|"SPANISH1"|"FRENCHCANADIAN1", machineSoundId?: int, machineSoundText?: string, machineSoundTextVoice?: "MALE1"|"FEMALE1"|"FEMALE2"|"SPANISH1"|"FRENCHCANADIAN1", transferDigit?: string, transferNumber?: string, transferSoundId?: int, transferSoundText?: string, ... (1 more fields)}
-export def "calls-broadcasts update" [
+export def "update-call-broadcast" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -480,7 +480,7 @@ export def "calls-broadcasts update" [
 #
 # POST /calls/broadcasts/{id}/archive
 # operationId: archiveVoiceBroadcast
-export def "calls-broadcasts-archive archive-voice" [
+export def "archive-voice-broadcast" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -516,7 +516,7 @@ export def "calls-broadcasts-archive archive-voice" [
 #
 # GET /calls/broadcasts/{id}/batches
 # operationId: getCallBroadcastBatches
-export def "calls-broadcasts-batches get" [
+export def "get-call-broadcast-batches" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -557,7 +557,7 @@ export def "calls-broadcasts-batches get" [
 # POST /calls/broadcasts/{id}/batches
 # operationId: addCallBroadcastBatch
 # --recipients item shape: {attributes?: record, contactId?: int, fromNumber?: string, phoneNumber?: string}
-export def "calls-broadcasts-batches create-batch" [
+export def "add-call-broadcast-batch" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -602,7 +602,7 @@ export def "calls-broadcasts-batches create-batch" [
 #
 # GET /calls/broadcasts/{id}/calls
 # operationId: getCallBroadcastCalls
-export def "calls-broadcasts-calls get" [
+export def "get-call-broadcast-calls" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -643,7 +643,7 @@ export def "calls-broadcasts-calls get" [
 #
 # POST /calls/broadcasts/{id}/recipients
 # operationId: addCallBroadcastRecipients
-export def "calls-broadcasts-recipients create" [
+export def "add-call-broadcast-recipients" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -686,7 +686,7 @@ export def "calls-broadcasts-recipients create" [
 #
 # POST /calls/broadcasts/{id}/start
 # operationId: startVoiceBroadcast
-export def "calls-broadcasts-start start-voice" [
+export def "start-voice-broadcast" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -722,7 +722,7 @@ export def "calls-broadcasts-start start-voice" [
 #
 # GET /calls/broadcasts/{id}/stats
 # operationId: getCallBroadcastStats
-export def "calls-broadcasts-stats get" [
+export def "get-call-broadcast-stats" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -762,7 +762,7 @@ export def "calls-broadcasts-stats get" [
 #
 # POST /calls/broadcasts/{id}/stop
 # operationId: stopVoiceBroadcast
-export def "calls-broadcasts-stop stop-voice" [
+export def "stop-voice-broadcast" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -798,7 +798,7 @@ export def "calls-broadcasts-stop stop-voice" [
 #
 # POST /calls/broadcasts/{id}/toggleRecipientsStatus
 # operationId: toggleCallBroadcastRecipientsStatus
-export def "calls-broadcasts-toggle-recipients-status create" [
+export def "toggle-call-broadcast-recipients-status" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -840,7 +840,7 @@ export def "calls-broadcasts-toggle-recipients-status create" [
 #
 # GET /calls/recordings/{id}
 # operationId: getCallRecording
-export def "calls-recordings get-by-id" [
+export def "get-call-recording" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -878,7 +878,7 @@ export def "calls-recordings get-by-id" [
 #
 # GET /calls/recordings/{id}.mp3
 # operationId: getCallRecordingMp3
-export def "calls-recordings list" [
+export def "get-call-recording-mp3" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -914,7 +914,7 @@ export def "calls-recordings list" [
 #
 # GET /calls/{id}
 # operationId: getCall
-export def "calls get" [
+export def "get-call" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -952,7 +952,7 @@ export def "calls get" [
 #
 # GET /calls/{id}/recordings
 # operationId: getCallRecordings
-export def "calls-recordings get-by-id-1" [
+export def "get-call-recordings" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -990,7 +990,7 @@ export def "calls-recordings get-by-id-1" [
 #
 # GET /calls/{id}/recordings/{name}
 # operationId: getCallRecordingByName
-export def "calls-recordings get-by-id-name" [
+export def "get-call-recording-by-name" [
   id: int
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1030,7 +1030,7 @@ export def "calls-recordings get-by-id-name" [
 #
 # GET /calls/{id}/recordings/{name}.mp3
 # operationId: getCallRecordingMp3ByName
-export def "calls-recordings get-mp3" [
+export def "get-call-recording-mp3-by-name" [
   id: int
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1068,7 +1068,7 @@ export def "calls-recordings get-mp3" [
 #
 # GET /campaigns/batches/{id}
 # operationId: getCampaignBatch
-export def "campaigns-batches get-batch" [
+export def "get-campaign-batch" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1106,7 +1106,7 @@ export def "campaigns-batches get-batch" [
 #
 # PUT /campaigns/batches/{id}
 # operationId: updateCampaignBatch
-export def "campaigns-batches update-batch" [
+export def "update-campaign-batch" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1150,7 +1150,7 @@ export def "campaigns-batches update-batch" [
 #
 # GET /campaigns/sounds
 # operationId: findCampaignSounds
-export def "campaigns-sounds find" [
+export def "find-campaign-sounds" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1192,7 +1192,7 @@ export def "campaigns-sounds find" [
 #
 # POST /campaigns/sounds/calls
 # operationId: postCallCampaignSound
-export def "campaigns-sounds-calls create" [
+export def "post-call-campaign-sound" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1233,7 +1233,7 @@ export def "campaigns-sounds-calls create" [
 #
 # POST /campaigns/sounds/files
 # operationId: postFileCampaignSound
-export def "campaigns-sounds-files create" [
+export def "post-file-campaign-sound" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1276,7 +1276,7 @@ export def "campaigns-sounds-files create" [
 #
 # POST /campaigns/sounds/tts
 # operationId: postTTSCampaignSound
-export def "campaigns-sounds-tts create" [
+export def "post-tts-campaign-sound" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1317,7 +1317,7 @@ export def "campaigns-sounds-tts create" [
 #
 # DELETE /campaigns/sounds/{id}
 # operationId: deleteCampaignSound
-export def "campaigns-sounds delete" [
+export def "delete-campaign-sound" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1353,7 +1353,7 @@ export def "campaigns-sounds delete" [
 #
 # GET /campaigns/sounds/{id}
 # operationId: getCampaignSound
-export def "campaigns-sounds get" [
+export def "get-campaign-sound" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1391,7 +1391,7 @@ export def "campaigns-sounds get" [
 #
 # GET /campaigns/sounds/{id}.mp3
 # operationId: getCampaignSoundDataMp3
-export def "campaigns-sounds get-data-mp3" [
+export def "get-campaign-sound-data-mp3" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1427,7 +1427,7 @@ export def "campaigns-sounds get-data-mp3" [
 #
 # GET /campaigns/sounds/{id}.wav
 # operationId: getCampaignSoundDataWav
-export def "campaigns-sounds get-data-wav" [
+export def "get-campaign-sound-data-wav" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1463,7 +1463,7 @@ export def "campaigns-sounds get-data-wav" [
 #
 # GET /contacts
 # operationId: findContacts
-export def "contacts find" [
+export def "find-contacts" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1506,7 +1506,7 @@ export def "contacts find" [
 #
 # POST /contacts
 # operationId: createContacts
-export def "contacts create" [
+export def "create-contacts" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1544,7 +1544,7 @@ export def "contacts create" [
 #
 # GET /contacts/dncs
 # operationId: findDoNotContacts
-export def "contacts-dncs find-do-not" [
+export def "find-do-not-contacts" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1590,7 +1590,7 @@ export def "contacts-dncs find-do-not" [
 #
 # POST /contacts/dncs
 # operationId: addDoNotContacts
-export def "contacts-dncs create-do-not" [
+export def "add-do-not-contacts" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1633,7 +1633,7 @@ export def "contacts-dncs create-do-not" [
 #
 # DELETE /contacts/dncs/sources/{source}
 # operationId: deleteDoNotContactsBySource
-export def "contacts-dncs-sources delete-do-not" [
+export def "delete-do-not-contacts-by-source" [
   source: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1669,7 +1669,7 @@ export def "contacts-dncs-sources delete-do-not" [
 #
 # GET /contacts/dncs/universals/{toNumber}
 # operationId: getUniversalDoNotContacts
-export def "contacts-dncs-universals get-do-not" [
+export def "get-universal-do-not-contacts" [
   to_number: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1708,7 +1708,7 @@ export def "contacts-dncs-universals get-do-not" [
 #
 # DELETE /contacts/dncs/{number}
 # operationId: deleteDoNotContact
-export def "contacts-dncs delete-do-not" [
+export def "delete-do-not-contact" [
   number: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1744,7 +1744,7 @@ export def "contacts-dncs delete-do-not" [
 #
 # GET /contacts/dncs/{number}
 # operationId: getDoNotContact
-export def "contacts-dncs get-do-not" [
+export def "get-do-not-contact" [
   number: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1780,7 +1780,7 @@ export def "contacts-dncs get-do-not" [
 #
 # PUT /contacts/dncs/{number}
 # operationId: updateDoNotContact
-export def "contacts-dncs update-do-not" [
+export def "update-do-not-contact" [
   number: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1825,7 +1825,7 @@ export def "contacts-dncs update-do-not" [
 #
 # GET /contacts/lists
 # operationId: findContactLists
-export def "contacts-lists find" [
+export def "find-contact-lists" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1868,7 +1868,7 @@ export def "contacts-lists find" [
 # POST /contacts/lists
 # operationId: createContactList
 # --contacts item shape: {deleted?: bool, externalId?: string, externalSystem?: string, extraPhone1?: string, extraPhone2?: string, extraPhone3?: string, firstName?: string, homePhone?: string, id?: int, lastName?: string, mobilePhone?: string, properties?: record, workPhone?: string, zipcode?: string}
-export def "contacts-lists create" [
+export def "create-contact-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1913,7 +1913,7 @@ export def "contacts-lists create" [
 #
 # POST /contacts/lists/upload
 # operationId: createContactListFromFile
-export def "contacts-lists-upload create-from-file" [
+export def "create-contact-list-from-file" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1955,7 +1955,7 @@ export def "contacts-lists-upload create-from-file" [
 #
 # DELETE /contacts/lists/{id}
 # operationId: deleteContactList
-export def "contacts-lists delete" [
+export def "delete-contact-list" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1991,7 +1991,7 @@ export def "contacts-lists delete" [
 #
 # GET /contacts/lists/{id}
 # operationId: getContactList
-export def "contacts-lists get" [
+export def "get-contact-list" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2029,7 +2029,7 @@ export def "contacts-lists get" [
 #
 # PUT /contacts/lists/{id}
 # operationId: updateContactList
-export def "contacts-lists update" [
+export def "update-contact-list" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2069,7 +2069,7 @@ export def "contacts-lists update" [
 #
 # DELETE /contacts/lists/{id}/items
 # operationId: removeContactListItems
-export def "contacts-lists-items delete-by-id" [
+export def "remove-contact-list-items" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2107,7 +2107,7 @@ export def "contacts-lists-items delete-by-id" [
 #
 # GET /contacts/lists/{id}/items
 # operationId: getContactListItems
-export def "contacts-lists-items get" [
+export def "get-contact-list-items" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2148,7 +2148,7 @@ export def "contacts-lists-items get" [
 # POST /contacts/lists/{id}/items
 # operationId: addContactListItems
 # --contacts item shape: {deleted?: bool, externalId?: string, externalSystem?: string, extraPhone1?: string, extraPhone2?: string, extraPhone3?: string, firstName?: string, homePhone?: string, id?: int, lastName?: string, mobilePhone?: string, properties?: record, workPhone?: string, zipcode?: string}
-export def "contacts-lists-items create" [
+export def "add-contact-list-items" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2192,7 +2192,7 @@ export def "contacts-lists-items create" [
 #
 # DELETE /contacts/lists/{id}/items/{contactId}
 # operationId: removeContactListItem
-export def "contacts-lists-items delete-by-id-contact-id" [
+export def "remove-contact-list-item" [
   id: int
   contact_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -2230,7 +2230,7 @@ export def "contacts-lists-items delete-by-id-contact-id" [
 #
 # DELETE /contacts/{id}
 # operationId: deleteContact
-export def "contacts delete" [
+export def "delete-contact" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2266,7 +2266,7 @@ export def "contacts delete" [
 #
 # GET /contacts/{id}
 # operationId: getContact
-export def "contacts get" [
+export def "get-contact" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2304,7 +2304,7 @@ export def "contacts get" [
 #
 # PUT /contacts/{id}
 # operationId: updateContact
-export def "contacts update" [
+export def "update-contact" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2357,7 +2357,7 @@ export def "contacts update" [
 #
 # GET /contacts/{id}/history
 # operationId: getContactHistory
-export def "contacts-history get" [
+export def "get-contact-history" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2397,7 +2397,7 @@ export def "contacts-history get" [
 #
 # GET /keywords
 # operationId: findKeywords
-export def "keywords find" [
+export def "find-keywords" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2433,7 +2433,7 @@ export def "keywords find" [
 #
 # GET /keywords/leases
 # operationId: findKeywordLeases
-export def "keywords-leases find" [
+export def "find-keyword-leases" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2473,7 +2473,7 @@ export def "keywords-leases find" [
 #
 # GET /keywords/leases/configs
 # operationId: findKeywordLeaseConfigs
-export def "keywords-leases-configs find" [
+export def "find-keyword-lease-configs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2513,7 +2513,7 @@ export def "keywords-leases-configs find" [
 #
 # GET /keywords/leases/configs/{keyword}
 # operationId: getKeywordLeaseConfig
-export def "keywords-leases-configs get" [
+export def "get-keyword-lease-config" [
   keyword: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2552,7 +2552,7 @@ export def "keywords-leases-configs get" [
 # PUT /keywords/leases/configs/{keyword}
 # operationId: updateKeywordLeaseConfig
 # --textInboundConfig shape: {forwardEnabled?: bool, forwardNumber?: string}
-export def "keywords-leases-configs update" [
+export def "update-keyword-lease-config" [
   keyword: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2593,7 +2593,7 @@ export def "keywords-leases-configs update" [
 #
 # GET /keywords/leases/id/{id}
 # operationId: getKeywordLeaseById
-export def "keywords-leases-id get" [
+export def "get-keyword-lease-by-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2631,7 +2631,7 @@ export def "keywords-leases-id get" [
 #
 # GET /keywords/leases/{keyword}
 # operationId: getKeywordLease
-export def "keywords-leases get" [
+export def "get-keyword-lease" [
   keyword: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2669,7 +2669,7 @@ export def "keywords-leases get" [
 #
 # PUT /keywords/leases/{keyword}
 # operationId: updateKeywordLease
-export def "keywords-leases update" [
+export def "update-keyword-lease" [
   keyword: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2720,7 +2720,7 @@ export def "keywords-leases update" [
 #
 # GET /keywords/{keyword}/available
 # operationId: isKeywordAvailable
-export def "keywords-available get-is" [
+export def "is-keyword-available" [
   keyword: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2756,7 +2756,7 @@ export def "keywords-available get-is" [
 #
 # GET /me/account
 # operationId: getAccount
-export def "me-account get" [
+export def "get-account" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2792,7 +2792,7 @@ export def "me-account get" [
 #
 # GET /me/api/credentials
 # operationId: findApiCredentials
-export def "me-credentials find" [
+export def "find-api-credentials" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2831,7 +2831,7 @@ export def "me-credentials find" [
 #
 # POST /me/api/credentials
 # operationId: createApiCredential
-export def "me-credentials create" [
+export def "create-api-credential" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2871,7 +2871,7 @@ export def "me-credentials create" [
 #
 # DELETE /me/api/credentials/{id}
 # operationId: deleteApiCredential
-export def "me-credentials delete" [
+export def "delete-api-credential" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2907,7 +2907,7 @@ export def "me-credentials delete" [
 #
 # GET /me/api/credentials/{id}
 # operationId: getApiCredential
-export def "me-credentials get" [
+export def "get-api-credential" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2945,7 +2945,7 @@ export def "me-credentials get" [
 #
 # POST /me/api/credentials/{id}/disable
 # operationId: disableApiCredentials
-export def "me-credentials-disable disable" [
+export def "disable-api-credentials" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2981,7 +2981,7 @@ export def "me-credentials-disable disable" [
 #
 # POST /me/api/credentials/{id}/enable
 # operationId: enableApiCredentials
-export def "me-credentials-enable enable" [
+export def "enable-api-credentials" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3017,7 +3017,7 @@ export def "me-credentials-enable enable" [
 #
 # GET /me/billing/credit-usage
 # operationId: getCreditUsage
-export def "me-billing-credit-usage get" [
+export def "get-credit-usage" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3054,7 +3054,7 @@ export def "me-billing-credit-usage get" [
 #
 # GET /me/billing/plan-usage
 # operationId: getBillingPlanUsage
-export def "me-billing-plan-usage get" [
+export def "get-billing-plan-usage" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3088,7 +3088,7 @@ export def "me-billing-plan-usage get" [
 #
 # GET /me/callerids
 # operationId: getCallerIds
-export def "me-callerids get-caller" [
+export def "get-caller-ids" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3122,7 +3122,7 @@ export def "me-callerids get-caller" [
 #
 # POST /me/callerids/{callerid}
 # operationId: sendVerificationCodeToCallerId
-export def "me-callerids send-verification-code-to-caller" [
+export def "send-verification-code-to-caller-id" [
   callerid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3158,7 +3158,7 @@ export def "me-callerids send-verification-code-to-caller" [
 #
 # POST /me/callerids/{callerid}/verification-code
 # operationId: verifyCallerId
-export def "me-callerids-verification-code verify-caller" [
+export def "verify-caller-id" [
   callerid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3198,7 +3198,7 @@ export def "me-callerids-verification-code verify-caller" [
 #
 # GET /media
 # operationId: findMedia
-export def "media find" [
+export def "find-media" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3237,7 +3237,7 @@ export def "media find" [
 #
 # POST /media
 # operationId: createMedia
-export def "media create" [
+export def "create-media" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3278,7 +3278,7 @@ export def "media create" [
 #
 # GET /media/public/{key}.{extension}
 # operationId: getMediaDataByKey
-export def "media-public get-data" [
+export def "get-media-data-by-key" [
   key: string
   extension: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3317,7 +3317,7 @@ export def "media-public get-data" [
 #
 # GET /media/{id}
 # operationId: getMedia
-export def "media get" [
+export def "get-media" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3355,7 +3355,7 @@ export def "media get" [
 #
 # GET /media/{id}.{extension}
 # operationId: getMediaData
-export def "media get-data" [
+export def "get-media-data" [
   id: int
   extension: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3394,7 +3394,7 @@ export def "media get-data" [
 #
 # GET /media/{id}/file
 # operationId: getMediaDataBinary
-export def "media-file get-data-binary" [
+export def "get-media-data-binary" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3430,7 +3430,7 @@ export def "media-file get-data-binary" [
 #
 # GET /numbers/leases
 # operationId: findNumberLeases
-export def "numbers-leases find" [
+export def "find-number-leases" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3474,7 +3474,7 @@ export def "numbers-leases find" [
 #
 # GET /numbers/leases/configs
 # operationId: findNumberLeaseConfigs
-export def "numbers-leases-configs find" [
+export def "find-number-lease-configs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3517,7 +3517,7 @@ export def "numbers-leases-configs find" [
 #
 # GET /numbers/leases/configs/{number}
 # operationId: getNumberLeaseConfig
-export def "numbers-leases-configs get" [
+export def "get-number-lease-config" [
   number: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3558,7 +3558,7 @@ export def "numbers-leases-configs get" [
 # --callTrackingConfig shape: {failedTransferSoundId?: int, googleAnalytics?: record, introSoundId?: int, recorded?: bool, screen?: bool, transferNumbers?: list<string>, voicemail?: bool, voicemailSoundId?: int, weeklySchedule?: record, whisperSoundId?: int}
 # --ivrInboundConfig shape: {dialplanXml?: string}
 # --textInboundConfig shape: {forwardEnabled?: bool, forwardNumber?: string}
-export def "numbers-leases-configs update" [
+export def "update-number-lease-config" [
   number: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3602,7 +3602,7 @@ export def "numbers-leases-configs update" [
 #
 # GET /numbers/leases/{number}
 # operationId: getNumberLease
-export def "numbers-leases get" [
+export def "get-number-lease" [
   number: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3641,7 +3641,7 @@ export def "numbers-leases get" [
 # PUT /numbers/leases/{number}
 # operationId: updateNumberLease
 # --region shape: {city?: string, country?: string, latitude?: float, longitude?: float, prefix?: string, state?: string, timeZone?: string, zipcode?: string}
-export def "numbers-leases update" [
+export def "update-number-lease" [
   number: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3692,7 +3692,7 @@ export def "numbers-leases update" [
 #
 # GET /numbers/local
 # operationId: findNumbersLocal
-export def "numbers-local find" [
+export def "find-numbers-local" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3733,7 +3733,7 @@ export def "numbers-local find" [
 #
 # GET /numbers/regions
 # operationId: findNumberRegions
-export def "numbers-regions find" [
+export def "find-number-regions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3777,7 +3777,7 @@ export def "numbers-regions find" [
 #
 # GET /numbers/tollfree
 # operationId: findNumbersTollfree
-export def "numbers-tollfree find" [
+export def "find-numbers-tollfree" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3815,7 +3815,7 @@ export def "numbers-tollfree find" [
 #
 # GET /orders
 # operationId: findOrders
-export def "orders find" [
+export def "find-orders" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3856,7 +3856,7 @@ export def "orders find" [
 #
 # POST /orders/keywords
 # operationId: orderKeywords
-export def "orders-keywords create" [
+export def "order-keywords" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3896,7 +3896,7 @@ export def "orders-keywords create" [
 #
 # POST /orders/numbers
 # operationId: orderNumbers
-export def "orders-numbers create" [
+export def "order-numbers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3943,7 +3943,7 @@ export def "orders-numbers create" [
 #
 # GET /orders/{id}
 # operationId: getOrder
-export def "orders get" [
+export def "get-order" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3981,7 +3981,7 @@ export def "orders get" [
 #
 # GET /reports/delivery
 # operationId: getDeliveryReports
-export def "reports-delivery get" [
+export def "get-delivery-reports" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4027,7 +4027,7 @@ export def "reports-delivery get" [
 #
 # GET /texts
 # operationId: findTexts
-export def "texts find" [
+export def "find-texts" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4076,7 +4076,7 @@ export def "texts find" [
 #
 # POST /texts
 # operationId: sendTexts
-export def "texts send" [
+export def "send-texts" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4119,7 +4119,7 @@ export def "texts send" [
 #
 # GET /texts/auto-replys
 # operationId: findTextAutoReplys
-export def "texts-auto-replys find" [
+export def "find-text-auto-replys" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4158,7 +4158,7 @@ export def "texts-auto-replys find" [
 #
 # POST /texts/auto-replys
 # operationId: createTextAutoReply
-export def "texts-auto-replys create" [
+export def "create-text-auto-reply" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4200,7 +4200,7 @@ export def "texts-auto-replys create" [
 #
 # DELETE /texts/auto-replys/{id}
 # operationId: deleteTextAutoReply
-export def "texts-auto-replys delete" [
+export def "delete-text-auto-reply" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4236,7 +4236,7 @@ export def "texts-auto-replys delete" [
 #
 # GET /texts/auto-replys/{id}
 # operationId: getTextAutoReply
-export def "texts-auto-replys get" [
+export def "get-text-auto-reply" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4274,7 +4274,7 @@ export def "texts-auto-replys get" [
 #
 # GET /texts/broadcasts
 # operationId: findTextBroadcasts
-export def "texts-broadcasts find" [
+export def "find-text-broadcasts" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4322,7 +4322,7 @@ export def "texts-broadcasts find" [
 # --media item shape: {accountId?: int, created?: int, id?: int, lengthInBytes?: int, mediaType?: string, name?: string, publicUrl?: string}
 # --recipients item shape: {attributes?: record, contactId?: int, fromNumber?: string, media?: list, message?: string, phoneNumber?: string}
 # --schedules item shape: {campaignId?: int, daysOfWeek?: list<string>, id?: int, startDate?: record, startTimeOfDay?: record, stopDate?: record, stopTimeOfDay?: record, timeZone?: string}
-export def "texts-broadcasts create" [
+export def "create-text-broadcast" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4374,7 +4374,7 @@ export def "texts-broadcasts create" [
 #
 # GET /texts/broadcasts/{id}
 # operationId: getTextBroadcast
-export def "texts-broadcasts get" [
+export def "get-text-broadcast" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4416,7 +4416,7 @@ export def "texts-broadcasts get" [
 # --media item shape: {accountId?: int, created?: int, id?: int, lengthInBytes?: int, mediaType?: string, name?: string, publicUrl?: string}
 # --recipients item shape: {attributes?: record, contactId?: int, fromNumber?: string, media?: list, message?: string, phoneNumber?: string}
 # --schedules item shape: {campaignId?: int, daysOfWeek?: list<string>, id?: int, startDate?: record, startTimeOfDay?: record, stopDate?: record, stopTimeOfDay?: record, timeZone?: string}
-export def "texts-broadcasts update" [
+export def "update-text-broadcast" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4469,7 +4469,7 @@ export def "texts-broadcasts update" [
 #
 # POST /texts/broadcasts/{id}/archive
 # operationId: archiveTextBroadcast
-export def "texts-broadcasts-archive archive" [
+export def "archive-text-broadcast" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4505,7 +4505,7 @@ export def "texts-broadcasts-archive archive" [
 #
 # GET /texts/broadcasts/{id}/batches
 # operationId: getTextBroadcastBatches
-export def "texts-broadcasts-batches get" [
+export def "get-text-broadcast-batches" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4546,7 +4546,7 @@ export def "texts-broadcasts-batches get" [
 # POST /texts/broadcasts/{id}/batches
 # operationId: addTextBroadcastBatch
 # --recipients item shape: {attributes?: record, contactId?: int, fromNumber?: string, phoneNumber?: string}
-export def "texts-broadcasts-batches create-batch" [
+export def "add-text-broadcast-batch" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4591,7 +4591,7 @@ export def "texts-broadcasts-batches create-batch" [
 #
 # POST /texts/broadcasts/{id}/recipients
 # operationId: addTextBroadcastRecipients
-export def "texts-broadcasts-recipients create" [
+export def "add-text-broadcast-recipients" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4634,7 +4634,7 @@ export def "texts-broadcasts-recipients create" [
 #
 # POST /texts/broadcasts/{id}/start
 # operationId: startTextBroadcast
-export def "texts-broadcasts-start start" [
+export def "start-text-broadcast" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4670,7 +4670,7 @@ export def "texts-broadcasts-start start" [
 #
 # GET /texts/broadcasts/{id}/stats
 # operationId: getTextBroadcastStats
-export def "texts-broadcasts-stats get" [
+export def "get-text-broadcast-stats" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4710,7 +4710,7 @@ export def "texts-broadcasts-stats get" [
 #
 # POST /texts/broadcasts/{id}/stop
 # operationId: stopTextBroadcast
-export def "texts-broadcasts-stop stop" [
+export def "stop-text-broadcast" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4746,7 +4746,7 @@ export def "texts-broadcasts-stop stop" [
 #
 # GET /texts/broadcasts/{id}/texts
 # operationId: getTextBroadcastTexts
-export def "texts-broadcasts-texts get" [
+export def "get-text-broadcast-texts" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4787,7 +4787,7 @@ export def "texts-broadcasts-texts get" [
 #
 # POST /texts/broadcasts/{id}/toggleRecipientsStatus
 # operationId: toggleTextBroadcastRecipientsStatus
-export def "texts-broadcasts-toggle-recipients-status create" [
+export def "toggle-text-broadcast-recipients-status" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4829,7 +4829,7 @@ export def "texts-broadcasts-toggle-recipients-status create" [
 #
 # GET /texts/{id}
 # operationId: getText
-export def "texts get" [
+export def "get-text" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4867,7 +4867,7 @@ export def "texts get" [
 #
 # GET /webhooks
 # operationId: findWebhooks
-export def "webhooks find" [
+export def "find-webhooks" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4910,7 +4910,7 @@ export def "webhooks find" [
 #
 # POST /webhooks
 # operationId: createWebhook
-export def "webhooks create" [
+export def "create-webhook" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4958,7 +4958,7 @@ export def "webhooks create" [
 #
 # GET /webhooks/resources
 # operationId: findWebhookResources
-export def "webhooks-resources find" [
+export def "find-webhook-resources" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4994,7 +4994,7 @@ export def "webhooks-resources find" [
 #
 # GET /webhooks/resources/{resource}
 # operationId: getWebhookResource
-export def "webhooks-resources get" [
+export def "get-webhook-resource" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5032,7 +5032,7 @@ export def "webhooks-resources get" [
 #
 # DELETE /webhooks/{id}
 # operationId: deleteWebhook
-export def "webhooks delete" [
+export def "delete-webhook" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5068,7 +5068,7 @@ export def "webhooks delete" [
 #
 # GET /webhooks/{id}
 # operationId: getWebhook
-export def "webhooks get" [
+export def "get-webhook" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5106,7 +5106,7 @@ export def "webhooks get" [
 #
 # PUT /webhooks/{id}
 # operationId: updateWebhook
-export def "webhooks update" [
+export def "update-webhook" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

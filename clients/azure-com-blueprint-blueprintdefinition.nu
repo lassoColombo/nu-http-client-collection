@@ -112,7 +112,7 @@ def kind-completer [] { ["policyAssignment" "roleAssignment" "template"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-blueprint-blueprints list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "blueprints-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -136,7 +136,7 @@ export def commands []: nothing -> table {
 #
 # GET /{scope}/providers/Microsoft.Blueprint/blueprints
 # operationId: Blueprints_List
-export def "providers-microsoft-blueprint-blueprints list" [
+export def "blueprints-list" [
   scope: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -174,7 +174,7 @@ export def "providers-microsoft-blueprint-blueprints list" [
 #
 # DELETE /{scope}/providers/Microsoft.Blueprint/blueprints/{blueprintName}
 # operationId: Blueprints_Delete
-export def "providers-microsoft-blueprint-blueprints delete" [
+export def "blueprints-delete" [
   scope: string
   blueprint_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -214,7 +214,7 @@ export def "providers-microsoft-blueprint-blueprints delete" [
 #
 # GET /{scope}/providers/Microsoft.Blueprint/blueprints/{blueprintName}
 # operationId: Blueprints_Get
-export def "providers-microsoft-blueprint-blueprints get" [
+export def "blueprints-get" [
   scope: string
   blueprint_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -255,7 +255,7 @@ export def "providers-microsoft-blueprint-blueprints get" [
 # PUT /{scope}/providers/Microsoft.Blueprint/blueprints/{blueprintName}
 # operationId: Blueprints_CreateOrUpdate
 # --properties shape: {layout?: record, versions?: record, parameters?: record, resourceGroups?: record, status?: record, targetScope: "subscription"|"managementGroup"}
-export def "providers-microsoft-blueprint-blueprints create-or-update" [
+export def "blueprints-create-or-update" [
   scope: string
   blueprint_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -299,7 +299,7 @@ export def "providers-microsoft-blueprint-blueprints create-or-update" [
 #
 # GET /{scope}/providers/Microsoft.Blueprint/blueprints/{blueprintName}/artifacts
 # operationId: Artifacts_List
-export def "providers-microsoft-blueprint-blueprints-artifacts list" [
+export def "artifacts-list" [
   scope: string
   blueprint_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -339,7 +339,7 @@ export def "providers-microsoft-blueprint-blueprints-artifacts list" [
 #
 # DELETE /{scope}/providers/Microsoft.Blueprint/blueprints/{blueprintName}/artifacts/{artifactName}
 # operationId: Artifacts_Delete
-export def "providers-microsoft-blueprint-blueprints-artifacts delete" [
+export def "artifacts-delete" [
   scope: string
   blueprint_name: string
   artifact_name: string
@@ -381,7 +381,7 @@ export def "providers-microsoft-blueprint-blueprints-artifacts delete" [
 #
 # GET /{scope}/providers/Microsoft.Blueprint/blueprints/{blueprintName}/artifacts/{artifactName}
 # operationId: Artifacts_Get
-export def "providers-microsoft-blueprint-blueprints-artifacts get" [
+export def "artifacts-get" [
   scope: string
   blueprint_name: string
   artifact_name: string
@@ -424,7 +424,7 @@ export def "providers-microsoft-blueprint-blueprints-artifacts get" [
 # PUT /{scope}/providers/Microsoft.Blueprint/blueprints/{blueprintName}/artifacts/{artifactName}
 # Discriminator (request): kind
 # operationId: Artifacts_CreateOrUpdate
-export def "providers-microsoft-blueprint-blueprints-artifacts create-or-update" [
+export def "artifacts-create-or-update" [
   scope: string
   blueprint_name: string
   artifact_name: string
@@ -470,7 +470,7 @@ export def "providers-microsoft-blueprint-blueprints-artifacts create-or-update"
 #
 # GET /{scope}/providers/Microsoft.Blueprint/blueprints/{blueprintName}/versions
 # operationId: PublishedBlueprints_List
-export def "providers-microsoft-blueprint-blueprints-versions list-published" [
+export def "published-blueprints-list" [
   scope: string
   blueprint_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -510,7 +510,7 @@ export def "providers-microsoft-blueprint-blueprints-versions list-published" [
 #
 # DELETE /{scope}/providers/Microsoft.Blueprint/blueprints/{blueprintName}/versions/{versionId}
 # operationId: PublishedBlueprints_Delete
-export def "providers-microsoft-blueprint-blueprints-versions delete-published" [
+export def "published-blueprints-delete" [
   scope: string
   blueprint_name: string
   version_id: string
@@ -552,7 +552,7 @@ export def "providers-microsoft-blueprint-blueprints-versions delete-published" 
 #
 # GET /{scope}/providers/Microsoft.Blueprint/blueprints/{blueprintName}/versions/{versionId}
 # operationId: PublishedBlueprints_Get
-export def "providers-microsoft-blueprint-blueprints-versions get-published" [
+export def "published-blueprints-get" [
   scope: string
   blueprint_name: string
   version_id: string
@@ -595,7 +595,7 @@ export def "providers-microsoft-blueprint-blueprints-versions get-published" [
 # PUT /{scope}/providers/Microsoft.Blueprint/blueprints/{blueprintName}/versions/{versionId}
 # operationId: PublishedBlueprints_Create
 # --properties shape: {blueprintName?: string, changeNotes?: string, parameters?: record, resourceGroups?: record, status?: record, targetScope?: "subscription"|"managementGroup"}
-export def "providers-microsoft-blueprint-blueprints-versions create-published" [
+export def "published-blueprints-create" [
   scope: string
   blueprint_name: string
   version_id: string
@@ -641,7 +641,7 @@ export def "providers-microsoft-blueprint-blueprints-versions create-published" 
 #
 # GET /{scope}/providers/Microsoft.Blueprint/blueprints/{blueprintName}/versions/{versionId}/artifacts
 # operationId: PublishedArtifacts_List
-export def "providers-microsoft-blueprint-blueprints-versions-artifacts list-published" [
+export def "published-artifacts-list" [
   scope: string
   blueprint_name: string
   version_id: string
@@ -683,7 +683,7 @@ export def "providers-microsoft-blueprint-blueprints-versions-artifacts list-pub
 #
 # GET /{scope}/providers/Microsoft.Blueprint/blueprints/{blueprintName}/versions/{versionId}/artifacts/{artifactName}
 # operationId: PublishedArtifacts_Get
-export def "providers-microsoft-blueprint-blueprints-versions-artifacts get-published" [
+export def "published-artifacts-get" [
   scope: string
   blueprint_name: string
   version_id: string

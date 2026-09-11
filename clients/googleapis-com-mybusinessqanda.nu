@@ -118,7 +118,7 @@ def alt-completer [] { ["json" "media" "proto"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "locations delete" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "mybusinessqanda-locations-questions-delete" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -142,7 +142,7 @@ export def commands []: nothing -> table {
 #
 # DELETE /v1/{name}
 # operationId: mybusinessqanda.locations.questions.delete
-export def "locations delete" [
+export def "mybusinessqanda-locations-questions-delete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -192,7 +192,7 @@ export def "locations delete" [
 # operationId: mybusinessqanda.locations.questions.patch
 # --author shape: {displayName?: string, profilePhotoUri?: string, type?: "AUTHOR_TYPE_UNSPECIFIED"|"REGULAR_USER"|"LOCAL_GUIDE"|"MERCHANT"}
 # --topAnswers item shape: {author?: record, text?: string}
-export def "locations update" [
+export def "mybusinessqanda-locations-questions-patch" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -247,7 +247,7 @@ export def "locations update" [
 #
 # DELETE /v1/{name}/answers:delete
 # operationId: mybusinessqanda.locations.questions.answers.delete
-export def "answers-delete delete" [
+export def "mybusinessqanda-locations-questions-answers-delete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -295,7 +295,7 @@ export def "answers-delete delete" [
 #
 # GET /v1/{parent}
 # operationId: mybusinessqanda.locations.questions.list
-export def "locations list" [
+export def "mybusinessqanda-locations-questions-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -350,7 +350,7 @@ export def "locations list" [
 # operationId: mybusinessqanda.locations.questions.create
 # --author shape: {displayName?: string, profilePhotoUri?: string, type?: "AUTHOR_TYPE_UNSPECIFIED"|"REGULAR_USER"|"LOCAL_GUIDE"|"MERCHANT"}
 # --topAnswers item shape: {author?: record, text?: string}
-export def "locations create" [
+export def "mybusinessqanda-locations-questions-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -404,7 +404,7 @@ export def "locations create" [
 #
 # GET /v1/{parent}/answers
 # operationId: mybusinessqanda.locations.questions.answers.list
-export def "answers list" [
+export def "mybusinessqanda-locations-questions-answers-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -456,7 +456,7 @@ export def "answers list" [
 # POST /v1/{parent}/answers:upsert
 # operationId: mybusinessqanda.locations.questions.answers.upsert
 # --answer shape: {author?: record, text?: string}
-export def "answers-upsert update" [
+export def "mybusinessqanda-locations-questions-answers-upsert" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

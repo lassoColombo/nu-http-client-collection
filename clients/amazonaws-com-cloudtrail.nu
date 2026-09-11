@@ -144,7 +144,7 @@ def x-amz-target-completer-43 [] { ["com.amazonaws.cloudtrail.v20131101.CloudTra
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "api create-tags" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "add-tags" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -168,7 +168,7 @@ export def commands []: nothing -> table {
 #
 # POST /
 # operationId: AddTags
-export def "api create-tags" [
+export def "add-tags" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -217,7 +217,7 @@ export def "api create-tags" [
 #
 # POST /
 # operationId: CancelQuery
-export def "api cancel-list" [
+export def "cancel-query" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -267,7 +267,7 @@ export def "api cancel-list" [
 # POST /
 # operationId: CreateChannel
 # --Tags item shape: {Key: any, Value?: any}
-export def "api create-channel" [
+export def "create-channel" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -319,7 +319,7 @@ export def "api create-channel" [
 # POST /
 # operationId: CreateEventDataStore
 # --TagsList item shape: {Key: any, Value?: any}
-export def "api create-event-data-store" [
+export def "create-event-data-store" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -375,7 +375,7 @@ export def "api create-event-data-store" [
 # POST /
 # operationId: CreateTrail
 # --TagsList item shape: {Key: any, Value?: any}
-export def "api create-trail" [
+export def "create-trail" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -434,7 +434,7 @@ export def "api create-trail" [
 #
 # POST /
 # operationId: DeleteChannel
-export def "api delete-channel" [
+export def "delete-channel" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -482,7 +482,7 @@ export def "api delete-channel" [
 #
 # POST /
 # operationId: DeleteEventDataStore
-export def "api delete-event-data-store" [
+export def "delete-event-data-store" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -530,7 +530,7 @@ export def "api delete-event-data-store" [
 #
 # POST /
 # operationId: DeleteResourcePolicy
-export def "api delete-resource-policy" [
+export def "delete-resource-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -578,7 +578,7 @@ export def "api delete-resource-policy" [
 #
 # POST /
 # operationId: DeleteTrail
-export def "api delete-trail" [
+export def "delete-trail" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -626,7 +626,7 @@ export def "api delete-trail" [
 #
 # POST /
 # operationId: DeregisterOrganizationDelegatedAdmin
-export def "api create-deregister-organization-delegated-admin" [
+export def "deregister-organization-delegated-admin" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -674,7 +674,7 @@ export def "api create-deregister-organization-delegated-admin" [
 #
 # POST /
 # operationId: DescribeQuery
-export def "api get-list" [
+export def "describe-query" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -723,7 +723,7 @@ export def "api get-list" [
 #
 # POST /
 # operationId: DescribeTrails
-export def "api get-trails" [
+export def "describe-trails" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -772,7 +772,7 @@ export def "api get-trails" [
 #
 # POST /
 # operationId: GetChannel
-export def "api get-channel" [
+export def "get-channel" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -820,7 +820,7 @@ export def "api get-channel" [
 #
 # POST /
 # operationId: GetEventDataStore
-export def "api get-event-data-store" [
+export def "get-event-data-store" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -868,7 +868,7 @@ export def "api get-event-data-store" [
 #
 # POST /
 # operationId: GetEventSelectors
-export def "api get-event-selectors" [
+export def "get-event-selectors" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -916,7 +916,7 @@ export def "api get-event-selectors" [
 #
 # POST /
 # operationId: GetImport
-export def "api get-import" [
+export def "get-import" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -964,7 +964,7 @@ export def "api get-import" [
 #
 # POST /
 # operationId: GetInsightSelectors
-export def "api get-insight-selectors" [
+export def "get-insight-selectors" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1012,7 +1012,7 @@ export def "api get-insight-selectors" [
 #
 # POST /
 # operationId: GetQueryResults
-export def "api get-list-results" [
+export def "get-query-results" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1065,7 +1065,7 @@ export def "api get-list-results" [
 #
 # POST /
 # operationId: GetResourcePolicy
-export def "api get-resource-policy" [
+export def "get-resource-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1113,7 +1113,7 @@ export def "api get-resource-policy" [
 #
 # POST /
 # operationId: GetTrail
-export def "api get-trail" [
+export def "get-trail" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1161,7 +1161,7 @@ export def "api get-trail" [
 #
 # POST /
 # operationId: GetTrailStatus
-export def "api get-trail-status" [
+export def "get-trail-status" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1209,7 +1209,7 @@ export def "api get-trail-status" [
 #
 # POST /
 # operationId: ListChannels
-export def "api list-channels" [
+export def "list-channels" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1261,7 +1261,7 @@ export def "api list-channels" [
 #
 # POST /
 # operationId: ListEventDataStores
-export def "api list-event-data-stores" [
+export def "list-event-data-stores" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1313,7 +1313,7 @@ export def "api list-event-data-stores" [
 #
 # POST /
 # operationId: ListImportFailures
-export def "api list-import-failures" [
+export def "list-import-failures" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1366,7 +1366,7 @@ export def "api list-import-failures" [
 #
 # POST /
 # operationId: ListImports
-export def "api list-imports" [
+export def "list-imports" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1420,7 +1420,7 @@ export def "api list-imports" [
 #
 # POST /
 # operationId: ListPublicKeys
-export def "api list-public-keys" [
+export def "list-public-keys" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1472,7 +1472,7 @@ export def "api list-public-keys" [
 #
 # POST /
 # operationId: ListQueries
-export def "api list-queries" [
+export def "list-queries" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1528,7 +1528,7 @@ export def "api list-queries" [
 #
 # POST /
 # operationId: ListTags
-export def "api list-tags" [
+export def "list-tags" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1579,7 +1579,7 @@ export def "api list-tags" [
 #
 # POST /
 # operationId: ListTrails
-export def "api list-trails" [
+export def "list-trails" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1629,7 +1629,7 @@ export def "api list-trails" [
 #
 # POST /
 # operationId: LookupEvents
-export def "api create-lookup-events" [
+export def "lookup-events" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1685,7 +1685,7 @@ export def "api create-lookup-events" [
 #
 # POST /
 # operationId: PutEventSelectors
-export def "api update-event-selectors" [
+export def "put-event-selectors" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1735,7 +1735,7 @@ export def "api update-event-selectors" [
 #
 # POST /
 # operationId: PutInsightSelectors
-export def "api update-insight-selectors" [
+export def "put-insight-selectors" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1784,7 +1784,7 @@ export def "api update-insight-selectors" [
 #
 # POST /
 # operationId: PutResourcePolicy
-export def "api update-resource-policy" [
+export def "put-resource-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1833,7 +1833,7 @@ export def "api update-resource-policy" [
 #
 # POST /
 # operationId: RegisterOrganizationDelegatedAdmin
-export def "api create-organization-delegated-admin" [
+export def "register-organization-delegated-admin" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1881,7 +1881,7 @@ export def "api create-organization-delegated-admin" [
 #
 # POST /
 # operationId: RemoveTags
-export def "api delete-tags" [
+export def "remove-tags" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1930,7 +1930,7 @@ export def "api delete-tags" [
 #
 # POST /
 # operationId: RestoreEventDataStore
-export def "api create-restore-event-data-store" [
+export def "restore-event-data-store" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1978,7 +1978,7 @@ export def "api create-restore-event-data-store" [
 #
 # POST /
 # operationId: StartImport
-export def "api start-import" [
+export def "start-import" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2030,7 +2030,7 @@ export def "api start-import" [
 #
 # POST /
 # operationId: StartLogging
-export def "api start-logging" [
+export def "start-logging" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2078,7 +2078,7 @@ export def "api start-logging" [
 #
 # POST /
 # operationId: StartQuery
-export def "api start-list" [
+export def "start-query" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2127,7 +2127,7 @@ export def "api start-list" [
 #
 # POST /
 # operationId: StopImport
-export def "api stop-import" [
+export def "stop-import" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2175,7 +2175,7 @@ export def "api stop-import" [
 #
 # POST /
 # operationId: StopLogging
-export def "api stop-logging" [
+export def "stop-logging" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2223,7 +2223,7 @@ export def "api stop-logging" [
 #
 # POST /
 # operationId: UpdateChannel
-export def "api update-channel" [
+export def "update-channel" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2273,7 +2273,7 @@ export def "api update-channel" [
 #
 # POST /
 # operationId: UpdateEventDataStore
-export def "api update-event-data-store" [
+export def "update-event-data-store" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2328,7 +2328,7 @@ export def "api update-event-data-store" [
 #
 # POST /
 # operationId: UpdateTrail
-export def "api update-trail" [
+export def "update-trail" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

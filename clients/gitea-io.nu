@@ -173,7 +173,7 @@ def style-completer [] { ["merge" "rebase"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "activitypub-user get-person" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "activitypub-person" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -197,7 +197,7 @@ export def commands []: nothing -> table {
 #
 # GET /activitypub/user/{username}
 # operationId: activitypubPerson
-export def "activitypub-user get-person" [
+export def "activitypub-person" [
   username: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -233,7 +233,7 @@ export def "activitypub-user get-person" [
 #
 # POST /activitypub/user/{username}/inbox
 # operationId: activitypubPersonInbox
-export def "activitypub-user-inbox create-person" [
+export def "activitypub-person-inbox" [
   username: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -269,7 +269,7 @@ export def "activitypub-user-inbox create-person" [
 #
 # GET /admin/cron
 # operationId: adminCronList
-export def "admin-cron list" [
+export def "admin-cron-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -306,7 +306,7 @@ export def "admin-cron list" [
 #
 # POST /admin/cron/{task}
 # operationId: adminCronRun
-export def "admin-cron create-run" [
+export def "admin-cron-run" [
   task: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -342,7 +342,7 @@ export def "admin-cron create-run" [
 #
 # GET /admin/hooks
 # operationId: adminListHooks
-export def "admin-hooks list" [
+export def "admin-list-hooks" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -379,7 +379,7 @@ export def "admin-hooks list" [
 #
 # POST /admin/hooks
 # operationId: adminCreateHook
-export def "admin-hooks create" [
+export def "admin-create-hook" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -422,7 +422,7 @@ export def "admin-hooks create" [
 #
 # GET /admin/hooks/{id}
 # operationId: adminGetHook
-export def "admin-hooks get" [
+export def "admin-get-hook" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -458,7 +458,7 @@ export def "admin-hooks get" [
 #
 # PATCH /admin/hooks/{id}
 # operationId: adminEditHook
-export def "admin-hooks update-edit" [
+export def "admin-edit-hook" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -502,7 +502,7 @@ export def "admin-hooks update-edit" [
 #
 # GET /admin/orgs
 # operationId: adminGetAllOrgs
-export def "admin-orgs get-list" [
+export def "admin-get-all-orgs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -539,7 +539,7 @@ export def "admin-orgs get-list" [
 #
 # GET /admin/unadopted
 # operationId: adminUnadoptedList
-export def "admin-unadopted list" [
+export def "admin-unadopted-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -577,7 +577,7 @@ export def "admin-unadopted list" [
 #
 # DELETE /admin/unadopted/{owner}/{repo}
 # operationId: adminDeleteUnadoptedRepository
-export def "admin-unadopted delete-repository" [
+export def "admin-delete-unadopted-repository" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -615,7 +615,7 @@ export def "admin-unadopted delete-repository" [
 #
 # POST /admin/unadopted/{owner}/{repo}
 # operationId: adminAdoptRepository
-export def "admin-unadopted create-adopt-repository" [
+export def "admin-adopt-repository" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -653,7 +653,7 @@ export def "admin-unadopted create-adopt-repository" [
 #
 # GET /admin/users
 # operationId: adminGetAllUsers
-export def "admin-users get-list" [
+export def "admin-get-all-users" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -690,7 +690,7 @@ export def "admin-users get-list" [
 #
 # POST /admin/users
 # operationId: adminCreateUser
-export def "admin-users create" [
+export def "admin-create-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -738,7 +738,7 @@ export def "admin-users create" [
 #
 # DELETE /admin/users/{username}
 # operationId: adminDeleteUser
-export def "admin-users delete" [
+export def "admin-delete-user" [
   username: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -774,7 +774,7 @@ export def "admin-users delete" [
 #
 # PATCH /admin/users/{username}
 # operationId: adminEditUser
-export def "admin-users update-edit" [
+export def "admin-edit-user" [
   username: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -831,7 +831,7 @@ export def "admin-users update-edit" [
 #
 # POST /admin/users/{username}/keys
 # operationId: adminCreatePublicKey
-export def "admin-users-keys create-public" [
+export def "admin-create-public-key" [
   username: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -873,7 +873,7 @@ export def "admin-users-keys create-public" [
 #
 # DELETE /admin/users/{username}/keys/{id}
 # operationId: adminDeleteUserPublicKey
-export def "admin-users-keys delete-public" [
+export def "admin-delete-user-public-key" [
   username: string
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -911,7 +911,7 @@ export def "admin-users-keys delete-public" [
 #
 # POST /admin/users/{username}/orgs
 # operationId: adminCreateOrg
-export def "admin-users-orgs create" [
+export def "admin-create-org" [
   username: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -957,7 +957,7 @@ export def "admin-users-orgs create" [
 #
 # POST /admin/users/{username}/repos
 # operationId: adminCreateRepo
-export def "admin-users-repos create" [
+export def "admin-create-repo" [
   username: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1007,7 +1007,7 @@ export def "admin-users-repos create" [
 #
 # DELETE /amdin/hooks/{id}
 # operationId: adminDeleteHook
-export def "amdin-hooks delete-admin" [
+export def "admin-delete-hook" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1043,7 +1043,7 @@ export def "amdin-hooks delete-admin" [
 #
 # POST /markdown
 # operationId: renderMarkdown
-export def "markdown create-render" [
+export def "render-markdown" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1084,7 +1084,7 @@ export def "markdown create-render" [
 #
 # POST /markdown/raw
 # operationId: renderMarkdownRaw
-export def "markdown-raw create-render" [
+export def "render-markdown-raw" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1122,7 +1122,7 @@ export def "markdown-raw create-render" [
 #
 # GET /nodeinfo
 # operationId: getNodeInfo
-export def "nodeinfo get-node" [
+export def "get-node-info" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1156,7 +1156,7 @@ export def "nodeinfo get-node" [
 #
 # GET /notifications
 # operationId: notifyGetList
-export def "notifications notify-get-list" [
+export def "notify-get-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1198,7 +1198,7 @@ export def "notifications notify-get-list" [
 #
 # PUT /notifications
 # operationId: notifyReadList
-export def "notifications notify-get-list-1" [
+export def "notify-read-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1237,7 +1237,7 @@ export def "notifications notify-get-list-1" [
 #
 # GET /notifications/new
 # operationId: notifyNewAvailable
-export def "notifications-new notify-available" [
+export def "notify-new-available" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1271,7 +1271,7 @@ export def "notifications-new notify-available" [
 #
 # GET /notifications/threads/{id}
 # operationId: notifyGetThread
-export def "notifications-threads notify-get-by-id" [
+export def "notify-get-thread" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1307,7 +1307,7 @@ export def "notifications-threads notify-get-by-id" [
 #
 # PATCH /notifications/threads/{id}
 # operationId: notifyReadThread
-export def "notifications-threads notify-get-by-id-1" [
+export def "notify-read-thread" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1347,7 +1347,7 @@ export def "notifications-threads notify-get-by-id-1" [
 # DEPRECATED
 # operationId: createOrgRepoDeprecated
 @deprecated
-export def "org-repos create-deprecated" [
+export def "create-org-repo-deprecated" [
   org: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1397,7 +1397,7 @@ export def "org-repos create-deprecated" [
 #
 # GET /orgs
 # operationId: orgGetAll
-export def "orgs get-list" [
+export def "org-get-all" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1434,7 +1434,7 @@ export def "orgs get-list" [
 #
 # POST /orgs
 # operationId: orgCreate
-export def "orgs create" [
+export def "org-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1478,7 +1478,7 @@ export def "orgs create" [
 #
 # DELETE /orgs/{org}
 # operationId: orgDelete
-export def "orgs delete" [
+export def "org-delete" [
   org: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1514,7 +1514,7 @@ export def "orgs delete" [
 #
 # GET /orgs/{org}
 # operationId: orgGet
-export def "orgs get" [
+export def "org-get" [
   org: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1550,7 +1550,7 @@ export def "orgs get" [
 #
 # PATCH /orgs/{org}
 # operationId: orgEdit
-export def "orgs update-edit" [
+export def "org-edit" [
   org: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1595,7 +1595,7 @@ export def "orgs update-edit" [
 #
 # GET /orgs/{org}/hooks
 # operationId: orgListHooks
-export def "orgs-hooks list" [
+export def "org-list-hooks" [
   org: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1634,7 +1634,7 @@ export def "orgs-hooks list" [
 #
 # POST /orgs/{org}/hooks
 # operationId: orgCreateHook
-export def "orgs-hooks create" [
+export def "org-create-hook" [
   org: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1679,7 +1679,7 @@ export def "orgs-hooks create" [
 #
 # DELETE /orgs/{org}/hooks/{id}
 # operationId: orgDeleteHook
-export def "orgs-hooks delete" [
+export def "org-delete-hook" [
   org: string
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -1717,7 +1717,7 @@ export def "orgs-hooks delete" [
 #
 # GET /orgs/{org}/hooks/{id}
 # operationId: orgGetHook
-export def "orgs-hooks get" [
+export def "org-get-hook" [
   org: string
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -1755,7 +1755,7 @@ export def "orgs-hooks get" [
 #
 # PATCH /orgs/{org}/hooks/{id}
 # operationId: orgEditHook
-export def "orgs-hooks update-edit" [
+export def "org-edit-hook" [
   org: string
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -1801,7 +1801,7 @@ export def "orgs-hooks update-edit" [
 #
 # GET /orgs/{org}/labels
 # operationId: orgListLabels
-export def "orgs-labels list" [
+export def "org-list-labels" [
   org: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1840,7 +1840,7 @@ export def "orgs-labels list" [
 #
 # POST /orgs/{org}/labels
 # operationId: orgCreateLabel
-export def "orgs-labels create" [
+export def "org-create-label" [
   org: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1883,7 +1883,7 @@ export def "orgs-labels create" [
 #
 # DELETE /orgs/{org}/labels/{id}
 # operationId: orgDeleteLabel
-export def "orgs-labels delete" [
+export def "org-delete-label" [
   org: string
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -1921,7 +1921,7 @@ export def "orgs-labels delete" [
 #
 # GET /orgs/{org}/labels/{id}
 # operationId: orgGetLabel
-export def "orgs-labels get" [
+export def "org-get-label" [
   org: string
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -1959,7 +1959,7 @@ export def "orgs-labels get" [
 #
 # PATCH /orgs/{org}/labels/{id}
 # operationId: orgEditLabel
-export def "orgs-labels update-edit" [
+export def "org-edit-label" [
   org: string
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -2004,7 +2004,7 @@ export def "orgs-labels update-edit" [
 #
 # GET /orgs/{org}/members
 # operationId: orgListMembers
-export def "orgs-members list" [
+export def "org-list-members" [
   org: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2043,7 +2043,7 @@ export def "orgs-members list" [
 #
 # DELETE /orgs/{org}/members/{username}
 # operationId: orgDeleteMember
-export def "orgs-members delete" [
+export def "org-delete-member" [
   org: string
   username: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2081,7 +2081,7 @@ export def "orgs-members delete" [
 #
 # GET /orgs/{org}/members/{username}
 # operationId: orgIsMember
-export def "orgs-members get-is" [
+export def "org-is-member" [
   org: string
   username: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2119,7 +2119,7 @@ export def "orgs-members get-is" [
 #
 # GET /orgs/{org}/public_members
 # operationId: orgListPublicMembers
-export def "orgs-public-members list" [
+export def "org-list-public-members" [
   org: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2158,7 +2158,7 @@ export def "orgs-public-members list" [
 #
 # DELETE /orgs/{org}/public_members/{username}
 # operationId: orgConcealMember
-export def "orgs-public-members delete-conceal" [
+export def "org-conceal-member" [
   org: string
   username: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2196,7 +2196,7 @@ export def "orgs-public-members delete-conceal" [
 #
 # GET /orgs/{org}/public_members/{username}
 # operationId: orgIsPublicMember
-export def "orgs-public-members get-is" [
+export def "org-is-public-member" [
   org: string
   username: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2234,7 +2234,7 @@ export def "orgs-public-members get-is" [
 #
 # PUT /orgs/{org}/public_members/{username}
 # operationId: orgPublicizeMember
-export def "orgs-public-members update-publicize" [
+export def "org-publicize-member" [
   org: string
   username: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2272,7 +2272,7 @@ export def "orgs-public-members update-publicize" [
 #
 # GET /orgs/{org}/repos
 # operationId: orgListRepos
-export def "orgs-repos list" [
+export def "org-list-repos" [
   org: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2311,7 +2311,7 @@ export def "orgs-repos list" [
 #
 # POST /orgs/{org}/repos
 # operationId: createOrgRepo
-export def "orgs-repos create" [
+export def "create-org-repo" [
   org: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2361,7 +2361,7 @@ export def "orgs-repos create" [
 #
 # GET /orgs/{org}/teams
 # operationId: orgListTeams
-export def "orgs-teams list" [
+export def "org-list-teams" [
   org: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2400,7 +2400,7 @@ export def "orgs-teams list" [
 #
 # POST /orgs/{org}/teams
 # operationId: orgCreateTeam
-export def "orgs-teams create" [
+export def "org-create-team" [
   org: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2446,7 +2446,7 @@ export def "orgs-teams create" [
 #
 # GET /orgs/{org}/teams/search
 # operationId: teamSearch
-export def "orgs-teams-search list" [
+export def "team-search" [
   org: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2487,7 +2487,7 @@ export def "orgs-teams-search list" [
 #
 # GET /packages/{owner}
 # operationId: listPackages
-export def "packages list" [
+export def "list-packages" [
   owner: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2528,7 +2528,7 @@ export def "packages list" [
 #
 # DELETE /packages/{owner}/{type}/{name}/{version}
 # operationId: deletePackage
-export def "packages delete" [
+export def "delete-package" [
   owner: string
   type: string
   name: string
@@ -2570,7 +2570,7 @@ export def "packages delete" [
 #
 # GET /packages/{owner}/{type}/{name}/{version}
 # operationId: getPackage
-export def "packages get" [
+export def "get-package" [
   owner: string
   type: string
   name: string
@@ -2612,7 +2612,7 @@ export def "packages get" [
 #
 # GET /packages/{owner}/{type}/{name}/{version}/files
 # operationId: listPackageFiles
-export def "packages-files list" [
+export def "list-package-files" [
   owner: string
   type: string
   name: string
@@ -2654,7 +2654,7 @@ export def "packages-files list" [
 #
 # GET /repos/issues/search
 # operationId: issueSearchIssues
-export def "repos-issues-search list" [
+export def "issue-search-issues" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2706,7 +2706,7 @@ export def "repos-issues-search list" [
 #
 # POST /repos/migrate
 # operationId: repoMigrate
-export def "repos-migrate create" [
+export def "repo-migrate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2763,7 +2763,7 @@ export def "repos-migrate create" [
 #
 # GET /repos/search
 # operationId: repoSearch
-export def "repos-search list" [
+export def "repo-search" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2815,7 +2815,7 @@ export def "repos-search list" [
 #
 # DELETE /repos/{owner}/{repo}
 # operationId: repoDelete
-export def "repos delete" [
+export def "repo-delete" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2853,7 +2853,7 @@ export def "repos delete" [
 #
 # GET /repos/{owner}/{repo}
 # operationId: repoGet
-export def "repos get" [
+export def "repo-get" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2894,7 +2894,7 @@ export def "repos get" [
 # --external_tracker shape: {external_tracker_format?: string, external_tracker_regexp_pattern?: string, external_tracker_style?: string, external_tracker_url?: string}
 # --external_wiki shape: {external_wiki_url?: string}
 # --internal_tracker shape: {allow_only_contributors_to_track_time?: bool, enable_issue_dependencies?: bool, enable_time_tracker?: bool}
-export def "repos update-edit" [
+export def "repo-edit" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2962,7 +2962,7 @@ export def "repos update-edit" [
 #
 # GET /repos/{owner}/{repo}/archive/{archive}
 # operationId: repoGetArchive
-export def "repos-archive get" [
+export def "repo-get-archive" [
   owner: string
   repo: string
   archive: string
@@ -3002,7 +3002,7 @@ export def "repos-archive get" [
 #
 # GET /repos/{owner}/{repo}/assignees
 # operationId: repoGetAssignees
-export def "repos-assignees get" [
+export def "repo-get-assignees" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3040,7 +3040,7 @@ export def "repos-assignees get" [
 #
 # GET /repos/{owner}/{repo}/branch_protections
 # operationId: repoListBranchProtection
-export def "repos-branch-protections list" [
+export def "repo-list-branch-protection" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3078,7 +3078,7 @@ export def "repos-branch-protections list" [
 #
 # POST /repos/{owner}/{repo}/branch_protections
 # operationId: repoCreateBranchProtection
-export def "repos-branch-protections create" [
+export def "repo-create-branch-protection" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3142,7 +3142,7 @@ export def "repos-branch-protections create" [
 #
 # DELETE /repos/{owner}/{repo}/branch_protections/{name}
 # operationId: repoDeleteBranchProtection
-export def "repos-branch-protections delete" [
+export def "repo-delete-branch-protection" [
   owner: string
   repo: string
   name: string
@@ -3182,7 +3182,7 @@ export def "repos-branch-protections delete" [
 #
 # GET /repos/{owner}/{repo}/branch_protections/{name}
 # operationId: repoGetBranchProtection
-export def "repos-branch-protections get" [
+export def "repo-get-branch-protection" [
   owner: string
   repo: string
   name: string
@@ -3222,7 +3222,7 @@ export def "repos-branch-protections get" [
 #
 # PATCH /repos/{owner}/{repo}/branch_protections/{name}
 # operationId: repoEditBranchProtection
-export def "repos-branch-protections update-edit" [
+export def "repo-edit-branch-protection" [
   owner: string
   repo: string
   name: string
@@ -3286,7 +3286,7 @@ export def "repos-branch-protections update-edit" [
 #
 # GET /repos/{owner}/{repo}/branches
 # operationId: repoListBranches
-export def "repos-branches list" [
+export def "repo-list-branches" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3327,7 +3327,7 @@ export def "repos-branches list" [
 #
 # POST /repos/{owner}/{repo}/branches
 # operationId: repoCreateBranch
-export def "repos-branches create-branch" [
+export def "repo-create-branch" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3370,7 +3370,7 @@ export def "repos-branches create-branch" [
 #
 # DELETE /repos/{owner}/{repo}/branches/{branch}
 # operationId: repoDeleteBranch
-export def "repos-branches delete" [
+export def "repo-delete-branch" [
   owner: string
   repo: string
   branch: string
@@ -3410,7 +3410,7 @@ export def "repos-branches delete" [
 #
 # GET /repos/{owner}/{repo}/branches/{branch}
 # operationId: repoGetBranch
-export def "repos-branches get" [
+export def "repo-get-branch" [
   owner: string
   repo: string
   branch: string
@@ -3450,7 +3450,7 @@ export def "repos-branches get" [
 #
 # GET /repos/{owner}/{repo}/collaborators
 # operationId: repoListCollaborators
-export def "repos-collaborators list" [
+export def "repo-list-collaborators" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3491,7 +3491,7 @@ export def "repos-collaborators list" [
 #
 # DELETE /repos/{owner}/{repo}/collaborators/{collaborator}
 # operationId: repoDeleteCollaborator
-export def "repos-collaborators delete" [
+export def "repo-delete-collaborator" [
   owner: string
   repo: string
   collaborator: string
@@ -3531,7 +3531,7 @@ export def "repos-collaborators delete" [
 #
 # GET /repos/{owner}/{repo}/collaborators/{collaborator}
 # operationId: repoCheckCollaborator
-export def "repos-collaborators check" [
+export def "repo-check-collaborator" [
   owner: string
   repo: string
   collaborator: string
@@ -3571,7 +3571,7 @@ export def "repos-collaborators check" [
 #
 # PUT /repos/{owner}/{repo}/collaborators/{collaborator}
 # operationId: repoAddCollaborator
-export def "repos-collaborators create" [
+export def "repo-add-collaborator" [
   owner: string
   repo: string
   collaborator: string
@@ -3615,7 +3615,7 @@ export def "repos-collaborators create" [
 #
 # GET /repos/{owner}/{repo}/collaborators/{collaborator}/permission
 # operationId: repoGetRepoPermissions
-export def "repos-collaborators-permission get" [
+export def "repo-get-repo-permissions" [
   owner: string
   repo: string
   collaborator: string
@@ -3655,7 +3655,7 @@ export def "repos-collaborators-permission get" [
 #
 # GET /repos/{owner}/{repo}/commits
 # operationId: repoGetAllCommits
-export def "repos-commits get-list" [
+export def "repo-get-all-commits" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3699,7 +3699,7 @@ export def "repos-commits get-list" [
 #
 # GET /repos/{owner}/{repo}/commits/{ref}/status
 # operationId: repoGetCombinedStatusByRef
-export def "repos-commits-status get-combined" [
+export def "repo-get-combined-status-by-ref" [
   owner: string
   repo: string
   ref: string
@@ -3742,7 +3742,7 @@ export def "repos-commits-status get-combined" [
 #
 # GET /repos/{owner}/{repo}/commits/{ref}/statuses
 # operationId: repoListStatusesByRef
-export def "repos-commits-statuses list" [
+export def "repo-list-statuses-by-ref" [
   owner: string
   repo: string
   ref: string
@@ -3787,7 +3787,7 @@ export def "repos-commits-statuses list" [
 #
 # GET /repos/{owner}/{repo}/contents
 # operationId: repoGetContentsList
-export def "repos-contents get-list" [
+export def "repo-get-contents-list" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3830,7 +3830,7 @@ export def "repos-contents get-list" [
 # --author shape: {email?: string, name?: string}
 # --committer shape: {email?: string, name?: string}
 # --dates shape: {author?: string, committer?: string}
-export def "repos-contents delete-file" [
+export def "repo-delete-file" [
   owner: string
   repo: string
   filepath: string
@@ -3881,7 +3881,7 @@ export def "repos-contents delete-file" [
 #
 # GET /repos/{owner}/{repo}/contents/{filepath}
 # operationId: repoGetContents
-export def "repos-contents get" [
+export def "repo-get-contents" [
   owner: string
   repo: string
   filepath: string
@@ -3926,7 +3926,7 @@ export def "repos-contents get" [
 # --author shape: {email?: string, name?: string}
 # --committer shape: {email?: string, name?: string}
 # --dates shape: {author?: string, committer?: string}
-export def "repos-contents create-file" [
+export def "repo-create-file" [
   owner: string
   repo: string
   filepath: string
@@ -3980,7 +3980,7 @@ export def "repos-contents create-file" [
 # --author shape: {email?: string, name?: string}
 # --committer shape: {email?: string, name?: string}
 # --dates shape: {author?: string, committer?: string}
-export def "repos-contents update-file" [
+export def "repo-update-file" [
   owner: string
   repo: string
   filepath: string
@@ -4036,7 +4036,7 @@ export def "repos-contents update-file" [
 # --author shape: {email?: string, name?: string}
 # --committer shape: {email?: string, name?: string}
 # --dates shape: {author?: string, committer?: string}
-export def "repos-diffpatch update-apply-diff" [
+export def "repo-apply-diff-patch" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4087,7 +4087,7 @@ export def "repos-diffpatch update-apply-diff" [
 #
 # GET /repos/{owner}/{repo}/editorconfig/{filepath}
 # operationId: repoGetEditorConfig
-export def "repos-editorconfig get-editor-config" [
+export def "repo-get-editor-config" [
   owner: string
   repo: string
   filepath: string
@@ -4129,7 +4129,7 @@ export def "repos-editorconfig get-editor-config" [
 #
 # GET /repos/{owner}/{repo}/forks
 # operationId: listForks
-export def "repos-forks list" [
+export def "list-forks" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4170,7 +4170,7 @@ export def "repos-forks list" [
 #
 # POST /repos/{owner}/{repo}/forks
 # operationId: createFork
-export def "repos-forks create" [
+export def "create-fork" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4213,7 +4213,7 @@ export def "repos-forks create" [
 #
 # GET /repos/{owner}/{repo}/git/blobs/{sha}
 # operationId: GetBlob
-export def "repos-git-blobs get" [
+export def "get-blob" [
   owner: string
   repo: string
   sha: string
@@ -4253,7 +4253,7 @@ export def "repos-git-blobs get" [
 #
 # GET /repos/{owner}/{repo}/git/commits/{sha}
 # operationId: repoGetSingleCommit
-export def "repos-git-commits get-single" [
+export def "repo-get-single-commit" [
   owner: string
   repo: string
   sha: string
@@ -4293,7 +4293,7 @@ export def "repos-git-commits get-single" [
 #
 # GET /repos/{owner}/{repo}/git/commits/{sha}.{diffType}
 # operationId: repoDownloadCommitDiffOrPatch
-export def "repos-git-commits download-diff-or-update" [
+export def "repo-download-commit-diff-or-patch" [
   owner: string
   repo: string
   sha: string
@@ -4335,7 +4335,7 @@ export def "repos-git-commits download-diff-or-update" [
 #
 # GET /repos/{owner}/{repo}/git/notes/{sha}
 # operationId: repoGetNote
-export def "repos-git-notes get" [
+export def "repo-get-note" [
   owner: string
   repo: string
   sha: string
@@ -4375,7 +4375,7 @@ export def "repos-git-notes get" [
 #
 # GET /repos/{owner}/{repo}/git/refs
 # operationId: repoListAllGitRefs
-export def "repos-git-refs list" [
+export def "repo-list-all-git-refs" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4413,7 +4413,7 @@ export def "repos-git-refs list" [
 #
 # GET /repos/{owner}/{repo}/git/refs/{ref}
 # operationId: repoListGitRefs
-export def "repos-git-refs list-1" [
+export def "repo-list-git-refs" [
   owner: string
   repo: string
   ref: string
@@ -4453,7 +4453,7 @@ export def "repos-git-refs list-1" [
 #
 # GET /repos/{owner}/{repo}/git/tags/{sha}
 # operationId: GetAnnotatedTag
-export def "repos-git-tags get-annotated" [
+export def "get-annotated-tag" [
   owner: string
   repo: string
   sha: string
@@ -4493,7 +4493,7 @@ export def "repos-git-tags get-annotated" [
 #
 # GET /repos/{owner}/{repo}/git/trees/{sha}
 # operationId: GetTree
-export def "repos-git-trees get" [
+export def "get-tree" [
   owner: string
   repo: string
   sha: string
@@ -4537,7 +4537,7 @@ export def "repos-git-trees get" [
 #
 # GET /repos/{owner}/{repo}/hooks
 # operationId: repoListHooks
-export def "repos-hooks list" [
+export def "repo-list-hooks" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4578,7 +4578,7 @@ export def "repos-hooks list" [
 #
 # POST /repos/{owner}/{repo}/hooks
 # operationId: repoCreateHook
-export def "repos-hooks create" [
+export def "repo-create-hook" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4625,7 +4625,7 @@ export def "repos-hooks create" [
 #
 # GET /repos/{owner}/{repo}/hooks/git
 # operationId: repoListGitHooks
-export def "repos-hooks-git list" [
+export def "repo-list-git-hooks" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4663,7 +4663,7 @@ export def "repos-hooks-git list" [
 #
 # DELETE /repos/{owner}/{repo}/hooks/git/{id}
 # operationId: repoDeleteGitHook
-export def "repos-hooks-git delete" [
+export def "repo-delete-git-hook" [
   owner: string
   repo: string
   id: string
@@ -4703,7 +4703,7 @@ export def "repos-hooks-git delete" [
 #
 # GET /repos/{owner}/{repo}/hooks/git/{id}
 # operationId: repoGetGitHook
-export def "repos-hooks-git get" [
+export def "repo-get-git-hook" [
   owner: string
   repo: string
   id: string
@@ -4743,7 +4743,7 @@ export def "repos-hooks-git get" [
 #
 # PATCH /repos/{owner}/{repo}/hooks/git/{id}
 # operationId: repoEditGitHook
-export def "repos-hooks-git update-edit" [
+export def "repo-edit-git-hook" [
   owner: string
   repo: string
   id: string
@@ -4787,7 +4787,7 @@ export def "repos-hooks-git update-edit" [
 #
 # DELETE /repos/{owner}/{repo}/hooks/{id}
 # operationId: repoDeleteHook
-export def "repos-hooks delete" [
+export def "repo-delete-hook" [
   owner: string
   repo: string
   id: int
@@ -4827,7 +4827,7 @@ export def "repos-hooks delete" [
 #
 # GET /repos/{owner}/{repo}/hooks/{id}
 # operationId: repoGetHook
-export def "repos-hooks get" [
+export def "repo-get-hook" [
   owner: string
   repo: string
   id: int
@@ -4867,7 +4867,7 @@ export def "repos-hooks get" [
 #
 # PATCH /repos/{owner}/{repo}/hooks/{id}
 # operationId: repoEditHook
-export def "repos-hooks update-edit" [
+export def "repo-edit-hook" [
   owner: string
   repo: string
   id: int
@@ -4915,7 +4915,7 @@ export def "repos-hooks update-edit" [
 #
 # POST /repos/{owner}/{repo}/hooks/{id}/tests
 # operationId: repoTestHook
-export def "repos-hooks-tests test" [
+export def "repo-test-hook" [
   owner: string
   repo: string
   id: int
@@ -4957,7 +4957,7 @@ export def "repos-hooks-tests test" [
 #
 # GET /repos/{owner}/{repo}/issue_templates
 # operationId: repoGetIssueTemplates
-export def "repos-issue-templates get" [
+export def "repo-get-issue-templates" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4995,7 +4995,7 @@ export def "repos-issue-templates get" [
 #
 # GET /repos/{owner}/{repo}/issues
 # operationId: issueListIssues
-export def "repos-issues list" [
+export def "issue-list-issues" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5046,7 +5046,7 @@ export def "repos-issues list" [
 #
 # POST /repos/{owner}/{repo}/issues
 # operationId: issueCreateIssue
-export def "repos-issues create" [
+export def "issue-create-issue" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5096,7 +5096,7 @@ export def "repos-issues create" [
 #
 # GET /repos/{owner}/{repo}/issues/comments
 # operationId: issueGetRepoComments
-export def "repos-issues-comments get-by-owner-repo" [
+export def "issue-get-repo-comments" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5139,7 +5139,7 @@ export def "repos-issues-comments get-by-owner-repo" [
 #
 # DELETE /repos/{owner}/{repo}/issues/comments/{id}
 # operationId: issueDeleteComment
-export def "repos-issues-comments delete" [
+export def "issue-delete-comment" [
   owner: string
   repo: string
   id: int
@@ -5179,7 +5179,7 @@ export def "repos-issues-comments delete" [
 #
 # GET /repos/{owner}/{repo}/issues/comments/{id}
 # operationId: issueGetComment
-export def "repos-issues-comments get-by-owner-repo-id" [
+export def "issue-get-comment" [
   owner: string
   repo: string
   id: int
@@ -5219,7 +5219,7 @@ export def "repos-issues-comments get-by-owner-repo-id" [
 #
 # PATCH /repos/{owner}/{repo}/issues/comments/{id}
 # operationId: issueEditComment
-export def "repos-issues-comments update-edit" [
+export def "issue-edit-comment" [
   owner: string
   repo: string
   id: int
@@ -5263,7 +5263,7 @@ export def "repos-issues-comments update-edit" [
 #
 # GET /repos/{owner}/{repo}/issues/comments/{id}/assets
 # operationId: issueListIssueCommentAttachments
-export def "repos-issues-comments-assets list-attachments" [
+export def "issue-list-issue-comment-attachments" [
   owner: string
   repo: string
   id: int
@@ -5303,7 +5303,7 @@ export def "repos-issues-comments-assets list-attachments" [
 #
 # POST /repos/{owner}/{repo}/issues/comments/{id}/assets
 # operationId: issueCreateIssueCommentAttachment
-export def "repos-issues-comments-assets create-attachment" [
+export def "issue-create-issue-comment-attachment" [
   owner: string
   repo: string
   id: int
@@ -5351,7 +5351,7 @@ export def "repos-issues-comments-assets create-attachment" [
 #
 # DELETE /repos/{owner}/{repo}/issues/comments/{id}/assets/{attachment_id}
 # operationId: issueDeleteIssueCommentAttachment
-export def "repos-issues-comments-assets delete" [
+export def "issue-delete-issue-comment-attachment" [
   owner: string
   repo: string
   id: int
@@ -5393,7 +5393,7 @@ export def "repos-issues-comments-assets delete" [
 #
 # GET /repos/{owner}/{repo}/issues/comments/{id}/assets/{attachment_id}
 # operationId: issueGetIssueCommentAttachment
-export def "repos-issues-comments-assets get" [
+export def "issue-get-issue-comment-attachment" [
   owner: string
   repo: string
   id: int
@@ -5435,7 +5435,7 @@ export def "repos-issues-comments-assets get" [
 #
 # PATCH /repos/{owner}/{repo}/issues/comments/{id}/assets/{attachment_id}
 # operationId: issueEditIssueCommentAttachment
-export def "repos-issues-comments-assets update-edit" [
+export def "issue-edit-issue-comment-attachment" [
   owner: string
   repo: string
   id: int
@@ -5481,7 +5481,7 @@ export def "repos-issues-comments-assets update-edit" [
 #
 # DELETE /repos/{owner}/{repo}/issues/comments/{id}/reactions
 # operationId: issueDeleteCommentReaction
-export def "repos-issues-comments-reactions delete" [
+export def "issue-delete-comment-reaction" [
   owner: string
   repo: string
   id: int
@@ -5525,7 +5525,7 @@ export def "repos-issues-comments-reactions delete" [
 #
 # GET /repos/{owner}/{repo}/issues/comments/{id}/reactions
 # operationId: issueGetCommentReactions
-export def "repos-issues-comments-reactions get" [
+export def "issue-get-comment-reactions" [
   owner: string
   repo: string
   id: int
@@ -5565,7 +5565,7 @@ export def "repos-issues-comments-reactions get" [
 #
 # POST /repos/{owner}/{repo}/issues/comments/{id}/reactions
 # operationId: issuePostCommentReaction
-export def "repos-issues-comments-reactions create" [
+export def "issue-post-comment-reaction" [
   owner: string
   repo: string
   id: int
@@ -5609,7 +5609,7 @@ export def "repos-issues-comments-reactions create" [
 #
 # DELETE /repos/{owner}/{repo}/issues/{index}
 # operationId: issueDelete
-export def "repos-issues delete" [
+export def "issue-delete" [
   owner: string
   repo: string
   index: int
@@ -5649,7 +5649,7 @@ export def "repos-issues delete" [
 #
 # GET /repos/{owner}/{repo}/issues/{index}
 # operationId: issueGetIssue
-export def "repos-issues get" [
+export def "issue-get-issue" [
   owner: string
   repo: string
   index: int
@@ -5689,7 +5689,7 @@ export def "repos-issues get" [
 #
 # PATCH /repos/{owner}/{repo}/issues/{index}
 # operationId: issueEditIssue
-export def "repos-issues update-edit" [
+export def "issue-edit-issue" [
   owner: string
   repo: string
   index: int
@@ -5741,7 +5741,7 @@ export def "repos-issues update-edit" [
 #
 # GET /repos/{owner}/{repo}/issues/{index}/assets
 # operationId: issueListIssueAttachments
-export def "repos-issues-assets list-attachments" [
+export def "issue-list-issue-attachments" [
   owner: string
   repo: string
   index: int
@@ -5781,7 +5781,7 @@ export def "repos-issues-assets list-attachments" [
 #
 # POST /repos/{owner}/{repo}/issues/{index}/assets
 # operationId: issueCreateIssueAttachment
-export def "repos-issues-assets create-attachment" [
+export def "issue-create-issue-attachment" [
   owner: string
   repo: string
   index: int
@@ -5829,7 +5829,7 @@ export def "repos-issues-assets create-attachment" [
 #
 # DELETE /repos/{owner}/{repo}/issues/{index}/assets/{attachment_id}
 # operationId: issueDeleteIssueAttachment
-export def "repos-issues-assets delete" [
+export def "issue-delete-issue-attachment" [
   owner: string
   repo: string
   index: int
@@ -5871,7 +5871,7 @@ export def "repos-issues-assets delete" [
 #
 # GET /repos/{owner}/{repo}/issues/{index}/assets/{attachment_id}
 # operationId: issueGetIssueAttachment
-export def "repos-issues-assets get" [
+export def "issue-get-issue-attachment" [
   owner: string
   repo: string
   index: int
@@ -5913,7 +5913,7 @@ export def "repos-issues-assets get" [
 #
 # PATCH /repos/{owner}/{repo}/issues/{index}/assets/{attachment_id}
 # operationId: issueEditIssueAttachment
-export def "repos-issues-assets update-edit" [
+export def "issue-edit-issue-attachment" [
   owner: string
   repo: string
   index: int
@@ -5959,7 +5959,7 @@ export def "repos-issues-assets update-edit" [
 #
 # GET /repos/{owner}/{repo}/issues/{index}/comments
 # operationId: issueGetComments
-export def "repos-issues-comments get-by-owner-repo-index" [
+export def "issue-get-comments" [
   owner: string
   repo: string
   index: int
@@ -6002,7 +6002,7 @@ export def "repos-issues-comments get-by-owner-repo-index" [
 #
 # POST /repos/{owner}/{repo}/issues/{index}/comments
 # operationId: issueCreateComment
-export def "repos-issues-comments create" [
+export def "issue-create-comment" [
   owner: string
   repo: string
   index: int
@@ -6048,7 +6048,7 @@ export def "repos-issues-comments create" [
 # DEPRECATED
 # operationId: issueDeleteCommentDeprecated
 @deprecated
-export def "repos-issues-comments delete-deprecated" [
+export def "issue-delete-comment-deprecated" [
   owner: string
   repo: string
   index: int
@@ -6092,7 +6092,7 @@ export def "repos-issues-comments delete-deprecated" [
 # DEPRECATED
 # operationId: issueEditCommentDeprecated
 @deprecated
-export def "repos-issues-comments update-edit-deprecated" [
+export def "issue-edit-comment-deprecated" [
   owner: string
   repo: string
   index: int
@@ -6138,7 +6138,7 @@ export def "repos-issues-comments update-edit-deprecated" [
 #
 # POST /repos/{owner}/{repo}/issues/{index}/deadline
 # operationId: issueEditIssueDeadline
-export def "repos-issues-deadline create-edit" [
+export def "issue-edit-issue-deadline" [
   owner: string
   repo: string
   index: int
@@ -6182,7 +6182,7 @@ export def "repos-issues-deadline create-edit" [
 #
 # DELETE /repos/{owner}/{repo}/issues/{index}/labels
 # operationId: issueClearLabels
-export def "repos-issues-labels delete-clear" [
+export def "issue-clear-labels" [
   owner: string
   repo: string
   index: int
@@ -6222,7 +6222,7 @@ export def "repos-issues-labels delete-clear" [
 #
 # GET /repos/{owner}/{repo}/issues/{index}/labels
 # operationId: issueGetLabels
-export def "repos-issues-labels get" [
+export def "issue-get-labels" [
   owner: string
   repo: string
   index: int
@@ -6262,7 +6262,7 @@ export def "repos-issues-labels get" [
 #
 # POST /repos/{owner}/{repo}/issues/{index}/labels
 # operationId: issueAddLabel
-export def "repos-issues-labels create" [
+export def "issue-add-label" [
   owner: string
   repo: string
   index: int
@@ -6306,7 +6306,7 @@ export def "repos-issues-labels create" [
 #
 # PUT /repos/{owner}/{repo}/issues/{index}/labels
 # operationId: issueReplaceLabels
-export def "repos-issues-labels update" [
+export def "issue-replace-labels" [
   owner: string
   repo: string
   index: int
@@ -6350,7 +6350,7 @@ export def "repos-issues-labels update" [
 #
 # DELETE /repos/{owner}/{repo}/issues/{index}/labels/{id}
 # operationId: issueRemoveLabel
-export def "repos-issues-labels delete" [
+export def "issue-remove-label" [
   owner: string
   repo: string
   index: int
@@ -6392,7 +6392,7 @@ export def "repos-issues-labels delete" [
 #
 # DELETE /repos/{owner}/{repo}/issues/{index}/reactions
 # operationId: issueDeleteIssueReaction
-export def "repos-issues-reactions delete" [
+export def "issue-delete-issue-reaction" [
   owner: string
   repo: string
   index: int
@@ -6436,7 +6436,7 @@ export def "repos-issues-reactions delete" [
 #
 # GET /repos/{owner}/{repo}/issues/{index}/reactions
 # operationId: issueGetIssueReactions
-export def "repos-issues-reactions get" [
+export def "issue-get-issue-reactions" [
   owner: string
   repo: string
   index: int
@@ -6479,7 +6479,7 @@ export def "repos-issues-reactions get" [
 #
 # POST /repos/{owner}/{repo}/issues/{index}/reactions
 # operationId: issuePostIssueReaction
-export def "repos-issues-reactions create" [
+export def "issue-post-issue-reaction" [
   owner: string
   repo: string
   index: int
@@ -6523,7 +6523,7 @@ export def "repos-issues-reactions create" [
 #
 # DELETE /repos/{owner}/{repo}/issues/{index}/stopwatch/delete
 # operationId: issueDeleteStopWatch
-export def "repos-issues-stopwatch-delete stop-watch" [
+export def "issue-delete-stop-watch" [
   owner: string
   repo: string
   index: int
@@ -6563,7 +6563,7 @@ export def "repos-issues-stopwatch-delete stop-watch" [
 #
 # POST /repos/{owner}/{repo}/issues/{index}/stopwatch/start
 # operationId: issueStartStopWatch
-export def "repos-issues-stopwatch-start stop-watch" [
+export def "issue-start-stop-watch" [
   owner: string
   repo: string
   index: int
@@ -6603,7 +6603,7 @@ export def "repos-issues-stopwatch-start stop-watch" [
 #
 # POST /repos/{owner}/{repo}/issues/{index}/stopwatch/stop
 # operationId: issueStopStopWatch
-export def "repos-issues-stopwatch-stop watch" [
+export def "issue-stop-stop-watch" [
   owner: string
   repo: string
   index: int
@@ -6643,7 +6643,7 @@ export def "repos-issues-stopwatch-stop watch" [
 #
 # GET /repos/{owner}/{repo}/issues/{index}/subscriptions
 # operationId: issueSubscriptions
-export def "repos-issues-subscriptions get" [
+export def "issue-subscriptions" [
   owner: string
   repo: string
   index: int
@@ -6686,7 +6686,7 @@ export def "repos-issues-subscriptions get" [
 #
 # GET /repos/{owner}/{repo}/issues/{index}/subscriptions/check
 # operationId: issueCheckSubscription
-export def "repos-issues-subscriptions-check check" [
+export def "issue-check-subscription" [
   owner: string
   repo: string
   index: int
@@ -6726,7 +6726,7 @@ export def "repos-issues-subscriptions-check check" [
 #
 # DELETE /repos/{owner}/{repo}/issues/{index}/subscriptions/{user}
 # operationId: issueDeleteSubscription
-export def "repos-issues-subscriptions delete" [
+export def "issue-delete-subscription" [
   owner: string
   repo: string
   index: int
@@ -6768,7 +6768,7 @@ export def "repos-issues-subscriptions delete" [
 #
 # PUT /repos/{owner}/{repo}/issues/{index}/subscriptions/{user}
 # operationId: issueAddSubscription
-export def "repos-issues-subscriptions create" [
+export def "issue-add-subscription" [
   owner: string
   repo: string
   index: int
@@ -6810,7 +6810,7 @@ export def "repos-issues-subscriptions create" [
 #
 # GET /repos/{owner}/{repo}/issues/{index}/timeline
 # operationId: issueGetCommentsAndTimeline
-export def "repos-issues-timeline get-comments-and" [
+export def "issue-get-comments-and-timeline" [
   owner: string
   repo: string
   index: int
@@ -6855,7 +6855,7 @@ export def "repos-issues-timeline get-comments-and" [
 #
 # DELETE /repos/{owner}/{repo}/issues/{index}/times
 # operationId: issueResetTime
-export def "repos-issues-times reset" [
+export def "issue-reset-time" [
   owner: string
   repo: string
   index: int
@@ -6895,7 +6895,7 @@ export def "repos-issues-times reset" [
 #
 # GET /repos/{owner}/{repo}/issues/{index}/times
 # operationId: issueTrackedTimes
-export def "repos-issues-times get-tracked" [
+export def "issue-tracked-times" [
   owner: string
   repo: string
   index: int
@@ -6941,7 +6941,7 @@ export def "repos-issues-times get-tracked" [
 #
 # POST /repos/{owner}/{repo}/issues/{index}/times
 # operationId: issueAddTime
-export def "repos-issues-times create" [
+export def "issue-add-time" [
   owner: string
   repo: string
   index: int
@@ -6987,7 +6987,7 @@ export def "repos-issues-times create" [
 #
 # DELETE /repos/{owner}/{repo}/issues/{index}/times/{id}
 # operationId: issueDeleteTime
-export def "repos-issues-times delete" [
+export def "issue-delete-time" [
   owner: string
   repo: string
   index: int
@@ -7029,7 +7029,7 @@ export def "repos-issues-times delete" [
 #
 # GET /repos/{owner}/{repo}/keys
 # operationId: repoListKeys
-export def "repos-keys list" [
+export def "repo-list-keys" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7072,7 +7072,7 @@ export def "repos-keys list" [
 #
 # POST /repos/{owner}/{repo}/keys
 # operationId: repoCreateKey
-export def "repos-keys create" [
+export def "repo-create-key" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7116,7 +7116,7 @@ export def "repos-keys create" [
 #
 # DELETE /repos/{owner}/{repo}/keys/{id}
 # operationId: repoDeleteKey
-export def "repos-keys delete" [
+export def "repo-delete-key" [
   owner: string
   repo: string
   id: int
@@ -7156,7 +7156,7 @@ export def "repos-keys delete" [
 #
 # GET /repos/{owner}/{repo}/keys/{id}
 # operationId: repoGetKey
-export def "repos-keys get" [
+export def "repo-get-key" [
   owner: string
   repo: string
   id: int
@@ -7196,7 +7196,7 @@ export def "repos-keys get" [
 #
 # GET /repos/{owner}/{repo}/labels
 # operationId: issueListLabels
-export def "repos-labels list-issue" [
+export def "issue-list-labels" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7237,7 +7237,7 @@ export def "repos-labels list-issue" [
 #
 # POST /repos/{owner}/{repo}/labels
 # operationId: issueCreateLabel
-export def "repos-labels create-issue" [
+export def "issue-create-label" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7282,7 +7282,7 @@ export def "repos-labels create-issue" [
 #
 # DELETE /repos/{owner}/{repo}/labels/{id}
 # operationId: issueDeleteLabel
-export def "repos-labels delete-issue" [
+export def "issue-delete-label" [
   owner: string
   repo: string
   id: int
@@ -7322,7 +7322,7 @@ export def "repos-labels delete-issue" [
 #
 # GET /repos/{owner}/{repo}/labels/{id}
 # operationId: issueGetLabel
-export def "repos-labels get-issue" [
+export def "issue-get-label" [
   owner: string
   repo: string
   id: int
@@ -7362,7 +7362,7 @@ export def "repos-labels get-issue" [
 #
 # PATCH /repos/{owner}/{repo}/labels/{id}
 # operationId: issueEditLabel
-export def "repos-labels update-issue-edit" [
+export def "issue-edit-label" [
   owner: string
   repo: string
   id: int
@@ -7409,7 +7409,7 @@ export def "repos-labels update-issue-edit" [
 #
 # GET /repos/{owner}/{repo}/languages
 # operationId: repoGetLanguages
-export def "repos-languages get" [
+export def "repo-get-languages" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7447,7 +7447,7 @@ export def "repos-languages get" [
 #
 # GET /repos/{owner}/{repo}/media/{filepath}
 # operationId: repoGetRawFileOrLFS
-export def "repos-media get-raw-file-or-lfs" [
+export def "repo-get-raw-file-or-lfs" [
   owner: string
   repo: string
   filepath: string
@@ -7489,7 +7489,7 @@ export def "repos-media get-raw-file-or-lfs" [
 #
 # GET /repos/{owner}/{repo}/milestones
 # operationId: issueGetMilestonesList
-export def "repos-milestones get-issue-list" [
+export def "issue-get-milestones-list" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7532,7 +7532,7 @@ export def "repos-milestones get-issue-list" [
 #
 # POST /repos/{owner}/{repo}/milestones
 # operationId: issueCreateMilestone
-export def "repos-milestones create-issue" [
+export def "issue-create-milestone" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7577,7 +7577,7 @@ export def "repos-milestones create-issue" [
 #
 # DELETE /repos/{owner}/{repo}/milestones/{id}
 # operationId: issueDeleteMilestone
-export def "repos-milestones delete-issue" [
+export def "issue-delete-milestone" [
   owner: string
   repo: string
   id: string
@@ -7617,7 +7617,7 @@ export def "repos-milestones delete-issue" [
 #
 # GET /repos/{owner}/{repo}/milestones/{id}
 # operationId: issueGetMilestone
-export def "repos-milestones get-issue" [
+export def "issue-get-milestone" [
   owner: string
   repo: string
   id: string
@@ -7657,7 +7657,7 @@ export def "repos-milestones get-issue" [
 #
 # PATCH /repos/{owner}/{repo}/milestones/{id}
 # operationId: issueEditMilestone
-export def "repos-milestones update-issue-edit" [
+export def "issue-edit-milestone" [
   owner: string
   repo: string
   id: string
@@ -7704,7 +7704,7 @@ export def "repos-milestones update-issue-edit" [
 #
 # POST /repos/{owner}/{repo}/mirror-sync
 # operationId: repoMirrorSync
-export def "repos-mirror-sync sync" [
+export def "repo-mirror-sync" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7742,7 +7742,7 @@ export def "repos-mirror-sync sync" [
 #
 # GET /repos/{owner}/{repo}/notifications
 # operationId: notifyGetRepoList
-export def "repos-notifications notify-get-list-by-owner-repo" [
+export def "notify-get-repo-list" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7788,7 +7788,7 @@ export def "repos-notifications notify-get-list-by-owner-repo" [
 #
 # PUT /repos/{owner}/{repo}/notifications
 # operationId: notifyReadRepoList
-export def "repos-notifications notify-get-list-by-owner-repo-1" [
+export def "notify-read-repo-list" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7831,7 +7831,7 @@ export def "repos-notifications notify-get-list-by-owner-repo-1" [
 #
 # GET /repos/{owner}/{repo}/pulls
 # operationId: repoListPullRequests
-export def "repos-pulls list-requests" [
+export def "repo-list-pull-requests" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7876,7 +7876,7 @@ export def "repos-pulls list-requests" [
 #
 # POST /repos/{owner}/{repo}/pulls
 # operationId: repoCreatePullRequest
-export def "repos-pulls create-request" [
+export def "repo-create-pull-request" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7926,7 +7926,7 @@ export def "repos-pulls create-request" [
 #
 # GET /repos/{owner}/{repo}/pulls/{index}
 # operationId: repoGetPullRequest
-export def "repos-pulls get-request" [
+export def "repo-get-pull-request" [
   owner: string
   repo: string
   index: int
@@ -7966,7 +7966,7 @@ export def "repos-pulls get-request" [
 #
 # PATCH /repos/{owner}/{repo}/pulls/{index}
 # operationId: repoEditPullRequest
-export def "repos-pulls request-edit" [
+export def "repo-edit-pull-request" [
   owner: string
   repo: string
   index: int
@@ -8020,7 +8020,7 @@ export def "repos-pulls request-edit" [
 #
 # GET /repos/{owner}/{repo}/pulls/{index}.{diffType}
 # operationId: repoDownloadPullDiffOrPatch
-export def "repos-pulls download-diff-or-update" [
+export def "repo-download-pull-diff-or-patch" [
   owner: string
   repo: string
   index: int
@@ -8064,7 +8064,7 @@ export def "repos-pulls download-diff-or-update" [
 #
 # GET /repos/{owner}/{repo}/pulls/{index}/commits
 # operationId: repoGetPullRequestCommits
-export def "repos-pulls-commits get-request" [
+export def "repo-get-pull-request-commits" [
   owner: string
   repo: string
   index: int
@@ -8107,7 +8107,7 @@ export def "repos-pulls-commits get-request" [
 #
 # GET /repos/{owner}/{repo}/pulls/{index}/files
 # operationId: repoGetPullRequestFiles
-export def "repos-pulls-files get-request" [
+export def "repo-get-pull-request-files" [
   owner: string
   repo: string
   index: int
@@ -8152,7 +8152,7 @@ export def "repos-pulls-files get-request" [
 #
 # DELETE /repos/{owner}/{repo}/pulls/{index}/merge
 # operationId: repoCancelScheduledAutoMerge
-export def "repos-pulls-merge cancel-scheduled-auto" [
+export def "repo-cancel-scheduled-auto-merge" [
   owner: string
   repo: string
   index: int
@@ -8192,7 +8192,7 @@ export def "repos-pulls-merge cancel-scheduled-auto" [
 #
 # GET /repos/{owner}/{repo}/pulls/{index}/merge
 # operationId: repoPullRequestIsMerged
-export def "repos-pulls-merge request-is-merged" [
+export def "repo-pull-request-is-merged" [
   owner: string
   repo: string
   index: int
@@ -8232,7 +8232,7 @@ export def "repos-pulls-merge request-is-merged" [
 #
 # POST /repos/{owner}/{repo}/pulls/{index}/merge
 # operationId: repoMergePullRequest
-export def "repos-pulls-merge request" [
+export def "repo-merge-pull-request" [
   owner: string
   repo: string
   index: int
@@ -8283,7 +8283,7 @@ export def "repos-pulls-merge request" [
 #
 # DELETE /repos/{owner}/{repo}/pulls/{index}/requested_reviewers
 # operationId: repoDeletePullReviewRequests
-export def "repos-pulls-requested-reviewers delete-review-requests" [
+export def "repo-delete-pull-review-requests" [
   owner: string
   repo: string
   index: int
@@ -8328,7 +8328,7 @@ export def "repos-pulls-requested-reviewers delete-review-requests" [
 #
 # POST /repos/{owner}/{repo}/pulls/{index}/requested_reviewers
 # operationId: repoCreatePullReviewRequests
-export def "repos-pulls-requested-reviewers create-review-requests" [
+export def "repo-create-pull-review-requests" [
   owner: string
   repo: string
   index: int
@@ -8373,7 +8373,7 @@ export def "repos-pulls-requested-reviewers create-review-requests" [
 #
 # GET /repos/{owner}/{repo}/pulls/{index}/reviews
 # operationId: repoListPullReviews
-export def "repos-pulls-reviews list" [
+export def "repo-list-pull-reviews" [
   owner: string
   repo: string
   index: int
@@ -8417,7 +8417,7 @@ export def "repos-pulls-reviews list" [
 # POST /repos/{owner}/{repo}/pulls/{index}/reviews
 # operationId: repoCreatePullReview
 # --comments item shape: {body?: string, new_position?: int, old_position?: int, path?: string}
-export def "repos-pulls-reviews create" [
+export def "repo-create-pull-review" [
   owner: string
   repo: string
   index: int
@@ -8464,7 +8464,7 @@ export def "repos-pulls-reviews create" [
 #
 # DELETE /repos/{owner}/{repo}/pulls/{index}/reviews/{id}
 # operationId: repoDeletePullReview
-export def "repos-pulls-reviews delete" [
+export def "repo-delete-pull-review" [
   owner: string
   repo: string
   index: int
@@ -8506,7 +8506,7 @@ export def "repos-pulls-reviews delete" [
 #
 # GET /repos/{owner}/{repo}/pulls/{index}/reviews/{id}
 # operationId: repoGetPullReview
-export def "repos-pulls-reviews get" [
+export def "repo-get-pull-review" [
   owner: string
   repo: string
   index: int
@@ -8548,7 +8548,7 @@ export def "repos-pulls-reviews get" [
 #
 # POST /repos/{owner}/{repo}/pulls/{index}/reviews/{id}
 # operationId: repoSubmitPullReview
-export def "repos-pulls-reviews submit" [
+export def "repo-submit-pull-review" [
   owner: string
   repo: string
   index: int
@@ -8595,7 +8595,7 @@ export def "repos-pulls-reviews submit" [
 #
 # GET /repos/{owner}/{repo}/pulls/{index}/reviews/{id}/comments
 # operationId: repoGetPullReviewComments
-export def "repos-pulls-reviews-comments get" [
+export def "repo-get-pull-review-comments" [
   owner: string
   repo: string
   index: int
@@ -8637,7 +8637,7 @@ export def "repos-pulls-reviews-comments get" [
 #
 # POST /repos/{owner}/{repo}/pulls/{index}/reviews/{id}/dismissals
 # operationId: repoDismissPullReview
-export def "repos-pulls-reviews-dismissals pull-dismiss" [
+export def "repo-dismiss-pull-review" [
   owner: string
   repo: string
   index: int
@@ -8684,7 +8684,7 @@ export def "repos-pulls-reviews-dismissals pull-dismiss" [
 #
 # POST /repos/{owner}/{repo}/pulls/{index}/reviews/{id}/undismissals
 # operationId: repoUnDismissPullReview
-export def "repos-pulls-reviews-undismissals pull-un-dismiss" [
+export def "repo-un-dismiss-pull-review" [
   owner: string
   repo: string
   index: int
@@ -8726,7 +8726,7 @@ export def "repos-pulls-reviews-undismissals pull-un-dismiss" [
 #
 # POST /repos/{owner}/{repo}/pulls/{index}/update
 # operationId: repoUpdatePullRequest
-export def "repos-pulls-update request" [
+export def "repo-update-pull-request" [
   owner: string
   repo: string
   index: int
@@ -8768,7 +8768,7 @@ export def "repos-pulls-update request" [
 #
 # GET /repos/{owner}/{repo}/push_mirrors
 # operationId: repoListPushMirrors
-export def "repos-push-mirrors list" [
+export def "repo-list-push-mirrors" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8809,7 +8809,7 @@ export def "repos-push-mirrors list" [
 #
 # POST /repos/{owner}/{repo}/push_mirrors
 # operationId: repoAddPushMirror
-export def "repos-push-mirrors create" [
+export def "repo-add-push-mirror" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8855,7 +8855,7 @@ export def "repos-push-mirrors create" [
 #
 # POST /repos/{owner}/{repo}/push_mirrors-sync
 # operationId: repoPushMirrorSync
-export def "repos-push-mirrors-sync push" [
+export def "repo-push-mirror-sync" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8893,7 +8893,7 @@ export def "repos-push-mirrors-sync push" [
 #
 # DELETE /repos/{owner}/{repo}/push_mirrors/{name}
 # operationId: repoDeletePushMirror
-export def "repos-push-mirrors delete" [
+export def "repo-delete-push-mirror" [
   owner: string
   repo: string
   name: string
@@ -8933,7 +8933,7 @@ export def "repos-push-mirrors delete" [
 #
 # GET /repos/{owner}/{repo}/push_mirrors/{name}
 # operationId: repoGetPushMirrorByRemoteName
-export def "repos-push-mirrors get-by-remote" [
+export def "repo-get-push-mirror-by-remote-name" [
   owner: string
   repo: string
   name: string
@@ -8973,7 +8973,7 @@ export def "repos-push-mirrors get-by-remote" [
 #
 # GET /repos/{owner}/{repo}/raw/{filepath}
 # operationId: repoGetRawFile
-export def "repos-raw get-file" [
+export def "repo-get-raw-file" [
   owner: string
   repo: string
   filepath: string
@@ -9015,7 +9015,7 @@ export def "repos-raw get-file" [
 #
 # GET /repos/{owner}/{repo}/releases
 # operationId: repoListReleases
-export def "repos-releases list" [
+export def "repo-list-releases" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9059,7 +9059,7 @@ export def "repos-releases list" [
 #
 # POST /repos/{owner}/{repo}/releases
 # operationId: repoCreateRelease
-export def "repos-releases create" [
+export def "repo-create-release" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9106,7 +9106,7 @@ export def "repos-releases create" [
 #
 # GET /repos/{owner}/{repo}/releases/latest
 # operationId: repoGetLatestRelease
-export def "repos-releases-latest get" [
+export def "repo-get-latest-release" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9144,7 +9144,7 @@ export def "repos-releases-latest get" [
 #
 # DELETE /repos/{owner}/{repo}/releases/tags/{tag}
 # operationId: repoDeleteReleaseByTag
-export def "repos-releases-tags delete" [
+export def "repo-delete-release-by-tag" [
   owner: string
   repo: string
   tag: string
@@ -9184,7 +9184,7 @@ export def "repos-releases-tags delete" [
 #
 # GET /repos/{owner}/{repo}/releases/tags/{tag}
 # operationId: repoGetReleaseByTag
-export def "repos-releases-tags get" [
+export def "repo-get-release-by-tag" [
   owner: string
   repo: string
   tag: string
@@ -9224,7 +9224,7 @@ export def "repos-releases-tags get" [
 #
 # DELETE /repos/{owner}/{repo}/releases/{id}
 # operationId: repoDeleteRelease
-export def "repos-releases delete" [
+export def "repo-delete-release" [
   owner: string
   repo: string
   id: int
@@ -9264,7 +9264,7 @@ export def "repos-releases delete" [
 #
 # GET /repos/{owner}/{repo}/releases/{id}
 # operationId: repoGetRelease
-export def "repos-releases get" [
+export def "repo-get-release" [
   owner: string
   repo: string
   id: int
@@ -9304,7 +9304,7 @@ export def "repos-releases get" [
 #
 # PATCH /repos/{owner}/{repo}/releases/{id}
 # operationId: repoEditRelease
-export def "repos-releases update-edit" [
+export def "repo-edit-release" [
   owner: string
   repo: string
   id: int
@@ -9353,7 +9353,7 @@ export def "repos-releases update-edit" [
 #
 # GET /repos/{owner}/{repo}/releases/{id}/assets
 # operationId: repoListReleaseAttachments
-export def "repos-releases-assets list-attachments" [
+export def "repo-list-release-attachments" [
   owner: string
   repo: string
   id: int
@@ -9393,7 +9393,7 @@ export def "repos-releases-assets list-attachments" [
 #
 # POST /repos/{owner}/{repo}/releases/{id}/assets
 # operationId: repoCreateReleaseAttachment
-export def "repos-releases-assets create-attachment" [
+export def "repo-create-release-attachment" [
   owner: string
   repo: string
   id: int
@@ -9441,7 +9441,7 @@ export def "repos-releases-assets create-attachment" [
 #
 # DELETE /repos/{owner}/{repo}/releases/{id}/assets/{attachment_id}
 # operationId: repoDeleteReleaseAttachment
-export def "repos-releases-assets delete" [
+export def "repo-delete-release-attachment" [
   owner: string
   repo: string
   id: int
@@ -9483,7 +9483,7 @@ export def "repos-releases-assets delete" [
 #
 # GET /repos/{owner}/{repo}/releases/{id}/assets/{attachment_id}
 # operationId: repoGetReleaseAttachment
-export def "repos-releases-assets get" [
+export def "repo-get-release-attachment" [
   owner: string
   repo: string
   id: int
@@ -9525,7 +9525,7 @@ export def "repos-releases-assets get" [
 #
 # PATCH /repos/{owner}/{repo}/releases/{id}/assets/{attachment_id}
 # operationId: repoEditReleaseAttachment
-export def "repos-releases-assets update-edit" [
+export def "repo-edit-release-attachment" [
   owner: string
   repo: string
   id: int
@@ -9571,7 +9571,7 @@ export def "repos-releases-assets update-edit" [
 #
 # GET /repos/{owner}/{repo}/reviewers
 # operationId: repoGetReviewers
-export def "repos-reviewers get" [
+export def "repo-get-reviewers" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9609,7 +9609,7 @@ export def "repos-reviewers get" [
 #
 # GET /repos/{owner}/{repo}/signing-key.gpg
 # operationId: repoSigningKey
-export def "repos-signing-key-gpg get" [
+export def "repo-signing-key" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9647,7 +9647,7 @@ export def "repos-signing-key-gpg get" [
 #
 # GET /repos/{owner}/{repo}/stargazers
 # operationId: repoListStargazers
-export def "repos-stargazers list" [
+export def "repo-list-stargazers" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9688,7 +9688,7 @@ export def "repos-stargazers list" [
 #
 # GET /repos/{owner}/{repo}/statuses/{sha}
 # operationId: repoListStatuses
-export def "repos-statuses list" [
+export def "repo-list-statuses" [
   owner: string
   repo: string
   sha: string
@@ -9733,7 +9733,7 @@ export def "repos-statuses list" [
 #
 # POST /repos/{owner}/{repo}/statuses/{sha}
 # operationId: repoCreateStatus
-export def "repos-statuses create-status" [
+export def "repo-create-status" [
   owner: string
   repo: string
   sha: string
@@ -9780,7 +9780,7 @@ export def "repos-statuses create-status" [
 #
 # GET /repos/{owner}/{repo}/subscribers
 # operationId: repoListSubscribers
-export def "repos-subscribers list" [
+export def "repo-list-subscribers" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9821,7 +9821,7 @@ export def "repos-subscribers list" [
 #
 # DELETE /repos/{owner}/{repo}/subscription
 # operationId: userCurrentDeleteSubscription
-export def "repos-subscription get-user-delete" [
+export def "user-current-delete-subscription" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9859,7 +9859,7 @@ export def "repos-subscription get-user-delete" [
 #
 # GET /repos/{owner}/{repo}/subscription
 # operationId: userCurrentCheckSubscription
-export def "repos-subscription get-user-check" [
+export def "user-current-check-subscription" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9897,7 +9897,7 @@ export def "repos-subscription get-user-check" [
 #
 # PUT /repos/{owner}/{repo}/subscription
 # operationId: userCurrentPutSubscription
-export def "repos-subscription get-user-update" [
+export def "user-current-put-subscription" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9935,7 +9935,7 @@ export def "repos-subscription get-user-update" [
 #
 # GET /repos/{owner}/{repo}/tags
 # operationId: repoListTags
-export def "repos-tags list" [
+export def "repo-list-tags" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9976,7 +9976,7 @@ export def "repos-tags list" [
 #
 # POST /repos/{owner}/{repo}/tags
 # operationId: repoCreateTag
-export def "repos-tags create" [
+export def "repo-create-tag" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -10020,7 +10020,7 @@ export def "repos-tags create" [
 #
 # DELETE /repos/{owner}/{repo}/tags/{tag}
 # operationId: repoDeleteTag
-export def "repos-tags delete" [
+export def "repo-delete-tag" [
   owner: string
   repo: string
   tag: string
@@ -10060,7 +10060,7 @@ export def "repos-tags delete" [
 #
 # GET /repos/{owner}/{repo}/tags/{tag}
 # operationId: repoGetTag
-export def "repos-tags get" [
+export def "repo-get-tag" [
   owner: string
   repo: string
   tag: string
@@ -10100,7 +10100,7 @@ export def "repos-tags get" [
 #
 # GET /repos/{owner}/{repo}/teams
 # operationId: repoListTeams
-export def "repos-teams list" [
+export def "repo-list-teams" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -10138,7 +10138,7 @@ export def "repos-teams list" [
 #
 # DELETE /repos/{owner}/{repo}/teams/{team}
 # operationId: repoDeleteTeam
-export def "repos-teams delete" [
+export def "repo-delete-team" [
   owner: string
   repo: string
   team: string
@@ -10178,7 +10178,7 @@ export def "repos-teams delete" [
 #
 # GET /repos/{owner}/{repo}/teams/{team}
 # operationId: repoCheckTeam
-export def "repos-teams check" [
+export def "repo-check-team" [
   owner: string
   repo: string
   team: string
@@ -10218,7 +10218,7 @@ export def "repos-teams check" [
 #
 # PUT /repos/{owner}/{repo}/teams/{team}
 # operationId: repoAddTeam
-export def "repos-teams create" [
+export def "repo-add-team" [
   owner: string
   repo: string
   team: string
@@ -10258,7 +10258,7 @@ export def "repos-teams create" [
 #
 # GET /repos/{owner}/{repo}/times
 # operationId: repoTrackedTimes
-export def "repos-times list" [
+export def "repo-tracked-times" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -10304,7 +10304,7 @@ export def "repos-times list" [
 # DEPRECATED
 # operationId: userTrackedTimes
 @deprecated
-export def "repos-times get-tracked" [
+export def "user-tracked-times" [
   owner: string
   repo: string
   user: string
@@ -10344,7 +10344,7 @@ export def "repos-times get-tracked" [
 #
 # GET /repos/{owner}/{repo}/topics
 # operationId: repoListTopics
-export def "repos-topics list" [
+export def "repo-list-topics" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -10385,7 +10385,7 @@ export def "repos-topics list" [
 #
 # PUT /repos/{owner}/{repo}/topics
 # operationId: repoUpdateTopics
-export def "repos-topics update" [
+export def "repo-update-topics" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -10427,7 +10427,7 @@ export def "repos-topics update" [
 #
 # DELETE /repos/{owner}/{repo}/topics/{topic}
 # operationId: repoDeleteTopic
-export def "repos-topics delete" [
+export def "repo-delete-topic" [
   owner: string
   repo: string
   topic: string
@@ -10467,7 +10467,7 @@ export def "repos-topics delete" [
 #
 # PUT /repos/{owner}/{repo}/topics/{topic}
 # operationId: repoAddTopic
-export def "repos-topics create" [
+export def "repo-add-topic" [
   owner: string
   repo: string
   topic: string
@@ -10507,7 +10507,7 @@ export def "repos-topics create" [
 #
 # POST /repos/{owner}/{repo}/transfer
 # operationId: repoTransfer
-export def "repos-transfer create" [
+export def "repo-transfer" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -10550,7 +10550,7 @@ export def "repos-transfer create" [
 #
 # POST /repos/{owner}/{repo}/transfer/accept
 # operationId: acceptRepoTransfer
-export def "repos-transfer-accept create" [
+export def "accept-repo-transfer" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -10588,7 +10588,7 @@ export def "repos-transfer-accept create" [
 #
 # POST /repos/{owner}/{repo}/transfer/reject
 # operationId: rejectRepoTransfer
-export def "repos-transfer-reject reject" [
+export def "reject-repo-transfer" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -10626,7 +10626,7 @@ export def "repos-transfer-reject reject" [
 #
 # POST /repos/{owner}/{repo}/wiki/new
 # operationId: repoCreateWikiPage
-export def "repos-wiki-new create-page" [
+export def "repo-create-wiki-page" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -10670,7 +10670,7 @@ export def "repos-wiki-new create-page" [
 #
 # DELETE /repos/{owner}/{repo}/wiki/page/{pageName}
 # operationId: repoDeleteWikiPage
-export def "repos-wiki-page delete" [
+export def "repo-delete-wiki-page" [
   owner: string
   repo: string
   page_name: string
@@ -10710,7 +10710,7 @@ export def "repos-wiki-page delete" [
 #
 # GET /repos/{owner}/{repo}/wiki/page/{pageName}
 # operationId: repoGetWikiPage
-export def "repos-wiki-page get" [
+export def "repo-get-wiki-page" [
   owner: string
   repo: string
   page_name: string
@@ -10750,7 +10750,7 @@ export def "repos-wiki-page get" [
 #
 # PATCH /repos/{owner}/{repo}/wiki/page/{pageName}
 # operationId: repoEditWikiPage
-export def "repos-wiki-page update-edit" [
+export def "repo-edit-wiki-page" [
   owner: string
   repo: string
   page_name: string
@@ -10796,7 +10796,7 @@ export def "repos-wiki-page update-edit" [
 #
 # GET /repos/{owner}/{repo}/wiki/pages
 # operationId: repoGetWikiPages
-export def "repos-wiki-pages get" [
+export def "repo-get-wiki-pages" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -10837,7 +10837,7 @@ export def "repos-wiki-pages get" [
 #
 # GET /repos/{owner}/{repo}/wiki/revisions/{pageName}
 # operationId: repoGetWikiPageRevisions
-export def "repos-wiki-revisions get-page" [
+export def "repo-get-wiki-page-revisions" [
   owner: string
   repo: string
   page_name: string
@@ -10879,7 +10879,7 @@ export def "repos-wiki-revisions get-page" [
 #
 # POST /repos/{template_owner}/{template_repo}/generate
 # operationId: generateRepo
-export def "repos-generate generate" [
+export def "generate-repo" [
   template_owner: string
   template_repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -10931,7 +10931,7 @@ export def "repos-generate generate" [
 #
 # GET /repositories/{id}
 # operationId: repoGetByID
-export def "repositories get-repo" [
+export def "repo-get-by-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10967,7 +10967,7 @@ export def "repositories get-repo" [
 #
 # GET /settings/api
 # operationId: getGeneralAPISettings
-export def "settings get-general" [
+export def "get-general-api-settings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11001,7 +11001,7 @@ export def "settings get-general" [
 #
 # GET /settings/attachment
 # operationId: getGeneralAttachmentSettings
-export def "settings-attachment get-general" [
+export def "get-general-attachment-settings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11035,7 +11035,7 @@ export def "settings-attachment get-general" [
 #
 # GET /settings/repository
 # operationId: getGeneralRepositorySettings
-export def "settings-repository get-general" [
+export def "get-general-repository-settings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11069,7 +11069,7 @@ export def "settings-repository get-general" [
 #
 # GET /settings/ui
 # operationId: getGeneralUISettings
-export def "settings-ui get-general" [
+export def "get-general-ui-settings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11103,7 +11103,7 @@ export def "settings-ui get-general" [
 #
 # GET /signing-key.gpg
 # operationId: getSigningKey
-export def "signing-key-gpg get" [
+export def "get-signing-key" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11137,7 +11137,7 @@ export def "signing-key-gpg get" [
 #
 # DELETE /teams/{id}
 # operationId: orgDeleteTeam
-export def "teams delete-org" [
+export def "org-delete-team" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11173,7 +11173,7 @@ export def "teams delete-org" [
 #
 # GET /teams/{id}
 # operationId: orgGetTeam
-export def "teams get-org" [
+export def "org-get-team" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11209,7 +11209,7 @@ export def "teams get-org" [
 #
 # PATCH /teams/{id}
 # operationId: orgEditTeam
-export def "teams update-org-edit" [
+export def "org-edit-team" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11255,7 +11255,7 @@ export def "teams update-org-edit" [
 #
 # GET /teams/{id}/members
 # operationId: orgListTeamMembers
-export def "teams-members list" [
+export def "org-list-team-members" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11294,7 +11294,7 @@ export def "teams-members list" [
 #
 # DELETE /teams/{id}/members/{username}
 # operationId: orgRemoveTeamMember
-export def "teams-members delete-org" [
+export def "org-remove-team-member" [
   id: int
   username: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -11332,7 +11332,7 @@ export def "teams-members delete-org" [
 #
 # GET /teams/{id}/members/{username}
 # operationId: orgListTeamMember
-export def "teams-members list-org" [
+export def "org-list-team-member" [
   id: int
   username: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -11370,7 +11370,7 @@ export def "teams-members list-org" [
 #
 # PUT /teams/{id}/members/{username}
 # operationId: orgAddTeamMember
-export def "teams-members create-org" [
+export def "org-add-team-member" [
   id: int
   username: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -11408,7 +11408,7 @@ export def "teams-members create-org" [
 #
 # GET /teams/{id}/repos
 # operationId: orgListTeamRepos
-export def "teams-repos list-org" [
+export def "org-list-team-repos" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11447,7 +11447,7 @@ export def "teams-repos list-org" [
 #
 # DELETE /teams/{id}/repos/{org}/{repo}
 # operationId: orgRemoveTeamRepository
-export def "teams-repos delete-repository" [
+export def "org-remove-team-repository" [
   id: int
   org: string
   repo: string
@@ -11487,7 +11487,7 @@ export def "teams-repos delete-repository" [
 #
 # GET /teams/{id}/repos/{org}/{repo}
 # operationId: orgListTeamRepo
-export def "teams-repos list" [
+export def "org-list-team-repo" [
   id: int
   org: string
   repo: string
@@ -11527,7 +11527,7 @@ export def "teams-repos list" [
 #
 # PUT /teams/{id}/repos/{org}/{repo}
 # operationId: orgAddTeamRepository
-export def "teams-repos create-repository" [
+export def "org-add-team-repository" [
   id: int
   org: string
   repo: string
@@ -11567,7 +11567,7 @@ export def "teams-repos create-repository" [
 #
 # GET /topics/search
 # operationId: topicSearch
-export def "topics-search list" [
+export def "topic-search" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11605,7 +11605,7 @@ export def "topics-search list" [
 #
 # GET /user
 # operationId: userGetCurrent
-export def "user get" [
+export def "user-get-current" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11639,7 +11639,7 @@ export def "user get" [
 #
 # GET /user/applications/oauth2
 # operationId: userGetOauth2Application
-export def "user-applications-oauth2 get" [
+export def "user-get-oauth2-application" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11676,7 +11676,7 @@ export def "user-applications-oauth2 get" [
 #
 # POST /user/applications/oauth2
 # operationId: userCreateOAuth2Application
-export def "user-applications-oauth2 create-o-auth2" [
+export def "user-create-o-auth2-application" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11716,7 +11716,7 @@ export def "user-applications-oauth2 create-o-auth2" [
 #
 # DELETE /user/applications/oauth2/{id}
 # operationId: userDeleteOAuth2Application
-export def "user-applications-oauth2 delete-o-auth2" [
+export def "user-delete-o-auth2-application" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11752,7 +11752,7 @@ export def "user-applications-oauth2 delete-o-auth2" [
 #
 # GET /user/applications/oauth2/{id}
 # operationId: userGetOAuth2Application
-export def "user-applications-oauth2 get-o-auth2" [
+export def "user-get-o-auth2-application" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11788,7 +11788,7 @@ export def "user-applications-oauth2 get-o-auth2" [
 #
 # PATCH /user/applications/oauth2/{id}
 # operationId: userUpdateOAuth2Application
-export def "user-applications-oauth2 update-o-auth2" [
+export def "user-update-o-auth2-application" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11830,7 +11830,7 @@ export def "user-applications-oauth2 update-o-auth2" [
 #
 # DELETE /user/emails
 # operationId: userDeleteEmail
-export def "user-emails delete" [
+export def "user-delete-email" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11868,7 +11868,7 @@ export def "user-emails delete" [
 #
 # GET /user/emails
 # operationId: userListEmails
-export def "user-emails list" [
+export def "user-list-emails" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11902,7 +11902,7 @@ export def "user-emails list" [
 #
 # POST /user/emails
 # operationId: userAddEmail
-export def "user-emails create" [
+export def "user-add-email" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11940,7 +11940,7 @@ export def "user-emails create" [
 #
 # GET /user/followers
 # operationId: userCurrentListFollowers
-export def "user-followers get-list" [
+export def "user-current-list-followers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11977,7 +11977,7 @@ export def "user-followers get-list" [
 #
 # GET /user/following
 # operationId: userCurrentListFollowing
-export def "user-following get-list" [
+export def "user-current-list-following" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12014,7 +12014,7 @@ export def "user-following get-list" [
 #
 # DELETE /user/following/{username}
 # operationId: userCurrentDeleteFollow
-export def "user-following get-delete-follow" [
+export def "user-current-delete-follow" [
   username: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12050,7 +12050,7 @@ export def "user-following get-delete-follow" [
 #
 # GET /user/following/{username}
 # operationId: userCurrentCheckFollowing
-export def "user-following get-check" [
+export def "user-current-check-following" [
   username: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12086,7 +12086,7 @@ export def "user-following get-check" [
 #
 # PUT /user/following/{username}
 # operationId: userCurrentPutFollow
-export def "user-following get-update-follow" [
+export def "user-current-put-follow" [
   username: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12122,7 +12122,7 @@ export def "user-following get-update-follow" [
 #
 # GET /user/gpg_key_token
 # operationId: getVerificationToken
-export def "user-gpg-key-token get-verification" [
+export def "get-verification-token" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12156,7 +12156,7 @@ export def "user-gpg-key-token get-verification" [
 #
 # POST /user/gpg_key_verify
 # operationId: userVerifyGPGKey
-export def "user-gpg-key-verify verify" [
+export def "user-verify-gpg-key" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12190,7 +12190,7 @@ export def "user-gpg-key-verify verify" [
 #
 # GET /user/gpg_keys
 # operationId: userCurrentListGPGKeys
-export def "user-gpg-keys get-list" [
+export def "user-current-list-gpg-keys" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12227,7 +12227,7 @@ export def "user-gpg-keys get-list" [
 #
 # POST /user/gpg_keys
 # operationId: userCurrentPostGPGKey
-export def "user-gpg-keys get-create" [
+export def "user-current-post-gpg-key" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12266,7 +12266,7 @@ export def "user-gpg-keys get-create" [
 #
 # DELETE /user/gpg_keys/{id}
 # operationId: userCurrentDeleteGPGKey
-export def "user-gpg-keys get-delete" [
+export def "user-current-delete-gpg-key" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12302,7 +12302,7 @@ export def "user-gpg-keys get-delete" [
 #
 # GET /user/gpg_keys/{id}
 # operationId: userCurrentGetGPGKey
-export def "user-gpg-keys get" [
+export def "user-current-get-gpg-key" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12338,7 +12338,7 @@ export def "user-gpg-keys get" [
 #
 # GET /user/keys
 # operationId: userCurrentListKeys
-export def "user-keys get-list" [
+export def "user-current-list-keys" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12376,7 +12376,7 @@ export def "user-keys get-list" [
 #
 # POST /user/keys
 # operationId: userCurrentPostKey
-export def "user-keys get-create" [
+export def "user-current-post-key" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12416,7 +12416,7 @@ export def "user-keys get-create" [
 #
 # DELETE /user/keys/{id}
 # operationId: userCurrentDeleteKey
-export def "user-keys get-delete" [
+export def "user-current-delete-key" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12452,7 +12452,7 @@ export def "user-keys get-delete" [
 #
 # GET /user/keys/{id}
 # operationId: userCurrentGetKey
-export def "user-keys get" [
+export def "user-current-get-key" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12488,7 +12488,7 @@ export def "user-keys get" [
 #
 # GET /user/orgs
 # operationId: orgListCurrentUserOrgs
-export def "user-orgs list-get" [
+export def "org-list-current-user-orgs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12525,7 +12525,7 @@ export def "user-orgs list-get" [
 #
 # GET /user/repos
 # operationId: userCurrentListRepos
-export def "user-repos get-list" [
+export def "user-current-list-repos" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12562,7 +12562,7 @@ export def "user-repos get-list" [
 #
 # POST /user/repos
 # operationId: createCurrentUserRepo
-export def "user-repos create-get" [
+export def "create-current-user-repo" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12610,7 +12610,7 @@ export def "user-repos create-get" [
 #
 # GET /user/settings
 # operationId: getUserSettings
-export def "user-settings get" [
+export def "get-user-settings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12644,7 +12644,7 @@ export def "user-settings get" [
 #
 # PATCH /user/settings
 # operationId: updateUserSettings
-export def "user-settings update" [
+export def "update-user-settings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12690,7 +12690,7 @@ export def "user-settings update" [
 #
 # GET /user/starred
 # operationId: userCurrentListStarred
-export def "user-starred get-list" [
+export def "user-current-list-starred" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12727,7 +12727,7 @@ export def "user-starred get-list" [
 #
 # DELETE /user/starred/{owner}/{repo}
 # operationId: userCurrentDeleteStar
-export def "user-starred get-delete-star" [
+export def "user-current-delete-star" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -12765,7 +12765,7 @@ export def "user-starred get-delete-star" [
 #
 # GET /user/starred/{owner}/{repo}
 # operationId: userCurrentCheckStarring
-export def "user-starred get-check-starring" [
+export def "user-current-check-starring" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -12803,7 +12803,7 @@ export def "user-starred get-check-starring" [
 #
 # PUT /user/starred/{owner}/{repo}
 # operationId: userCurrentPutStar
-export def "user-starred get-update-star" [
+export def "user-current-put-star" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -12841,7 +12841,7 @@ export def "user-starred get-update-star" [
 #
 # GET /user/stopwatches
 # operationId: userGetStopWatches
-export def "user-stopwatches get-stop-watches" [
+export def "user-get-stop-watches" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12878,7 +12878,7 @@ export def "user-stopwatches get-stop-watches" [
 #
 # GET /user/subscriptions
 # operationId: userCurrentListSubscriptions
-export def "user-subscriptions get-list" [
+export def "user-current-list-subscriptions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12915,7 +12915,7 @@ export def "user-subscriptions get-list" [
 #
 # GET /user/teams
 # operationId: userListTeams
-export def "user-teams list" [
+export def "user-list-teams" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12952,7 +12952,7 @@ export def "user-teams list" [
 #
 # GET /user/times
 # operationId: userCurrentTrackedTimes
-export def "user-times get-tracked" [
+export def "user-current-tracked-times" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12991,7 +12991,7 @@ export def "user-times get-tracked" [
 #
 # GET /users/search
 # operationId: userSearch
-export def "users-search list" [
+export def "user-search" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -13030,7 +13030,7 @@ export def "users-search list" [
 #
 # GET /users/{username}
 # operationId: userGet
-export def "users get" [
+export def "user-get" [
   username: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -13066,7 +13066,7 @@ export def "users get" [
 #
 # GET /users/{username}/followers
 # operationId: userListFollowers
-export def "users-followers list" [
+export def "user-list-followers" [
   username: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -13105,7 +13105,7 @@ export def "users-followers list" [
 #
 # GET /users/{username}/following
 # operationId: userListFollowing
-export def "users-following list" [
+export def "user-list-following" [
   username: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -13144,7 +13144,7 @@ export def "users-following list" [
 #
 # GET /users/{username}/following/{target}
 # operationId: userCheckFollowing
-export def "users-following check" [
+export def "user-check-following" [
   username: string
   target: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -13182,7 +13182,7 @@ export def "users-following check" [
 #
 # GET /users/{username}/gpg_keys
 # operationId: userListGPGKeys
-export def "users-gpg-keys list" [
+export def "user-list-gpg-keys" [
   username: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -13221,7 +13221,7 @@ export def "users-gpg-keys list" [
 #
 # GET /users/{username}/heatmap
 # operationId: userGetHeatmapData
-export def "users-heatmap get-data" [
+export def "user-get-heatmap-data" [
   username: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -13257,7 +13257,7 @@ export def "users-heatmap get-data" [
 #
 # GET /users/{username}/keys
 # operationId: userListKeys
-export def "users-keys list" [
+export def "user-list-keys" [
   username: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -13297,7 +13297,7 @@ export def "users-keys list" [
 #
 # GET /users/{username}/orgs
 # operationId: orgListUserOrgs
-export def "users-orgs list" [
+export def "org-list-user-orgs" [
   username: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -13336,7 +13336,7 @@ export def "users-orgs list" [
 #
 # GET /users/{username}/orgs/{org}/permissions
 # operationId: orgGetUserPermissions
-export def "users-orgs-permissions get" [
+export def "org-get-user-permissions" [
   username: string
   org: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -13374,7 +13374,7 @@ export def "users-orgs-permissions get" [
 #
 # GET /users/{username}/repos
 # operationId: userListRepos
-export def "users-repos list" [
+export def "user-list-repos" [
   username: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -13413,7 +13413,7 @@ export def "users-repos list" [
 #
 # GET /users/{username}/starred
 # operationId: userListStarred
-export def "users-starred list" [
+export def "user-list-starred" [
   username: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -13452,7 +13452,7 @@ export def "users-starred list" [
 #
 # GET /users/{username}/subscriptions
 # operationId: userListSubscriptions
-export def "users-subscriptions list" [
+export def "user-list-subscriptions" [
   username: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -13491,7 +13491,7 @@ export def "users-subscriptions list" [
 #
 # GET /users/{username}/tokens
 # operationId: userGetTokens
-export def "users-tokens get" [
+export def "user-get-tokens" [
   username: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -13530,7 +13530,7 @@ export def "users-tokens get" [
 #
 # POST /users/{username}/tokens
 # operationId: userCreateToken
-export def "users-tokens create" [
+export def "user-create-token" [
   username: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -13571,7 +13571,7 @@ export def "users-tokens create" [
 #
 # DELETE /users/{username}/tokens/{token}
 # operationId: userDeleteAccessToken
-export def "users-tokens delete-access" [
+export def "user-delete-access-token" [
   username: string
   token_arg: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -13609,7 +13609,7 @@ export def "users-tokens delete-access" [
 #
 # GET /version
 # operationId: getVersion
-export def "version get" [
+export def "get-version" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

@@ -112,7 +112,7 @@ def exclude-source-dictionaries-completer [] { ["ahd-5" "century" "cmu" "macmill
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "word-json-audio get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-audio" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -136,7 +136,7 @@ export def commands []: nothing -> table {
 #
 # GET /word.json/{word}/audio
 # operationId: getAudio
-export def "word-json-audio get" [
+export def "get-audio" [
   word: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -175,7 +175,7 @@ export def "word-json-audio get" [
 #
 # GET /word.json/{word}/definitions
 # operationId: getDefinitions
-export def "word-json-definitions get" [
+export def "get-definitions" [
   word: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -218,7 +218,7 @@ export def "word-json-definitions get" [
 #
 # GET /word.json/{word}/etymologies
 # operationId: getEtymologies
-export def "word-json-etymologies get" [
+export def "get-etymologies" [
   word: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -256,7 +256,7 @@ export def "word-json-etymologies get" [
 #
 # GET /word.json/{word}/examples
 # operationId: getExamples
-export def "word-json-examples get" [
+export def "get-examples" [
   word: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -297,7 +297,7 @@ export def "word-json-examples get" [
 #
 # GET /word.json/{word}/frequency
 # operationId: getWordFrequency
-export def "word-json-frequency get" [
+export def "get-word-frequency" [
   word: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -337,7 +337,7 @@ export def "word-json-frequency get" [
 #
 # GET /word.json/{word}/hyphenation
 # operationId: getHyphenation
-export def "word-json-hyphenation get" [
+export def "get-hyphenation" [
   word: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -377,7 +377,7 @@ export def "word-json-hyphenation get" [
 #
 # GET /word.json/{word}/phrases
 # operationId: getPhrases
-export def "word-json-phrases get" [
+export def "get-phrases" [
   word: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -417,7 +417,7 @@ export def "word-json-phrases get" [
 #
 # GET /word.json/{word}/pronunciations
 # operationId: getTextPronunciations
-export def "word-json-pronunciations get-text" [
+export def "get-text-pronunciations" [
   word: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -458,7 +458,7 @@ export def "word-json-pronunciations get-text" [
 #
 # GET /word.json/{word}/relatedWords
 # operationId: getRelatedWords
-export def "word-json-related-words get" [
+export def "get-related-words" [
   word: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -498,7 +498,7 @@ export def "word-json-related-words get" [
 #
 # GET /word.json/{word}/scrabbleScore
 # operationId: getScrabbleScore
-export def "word-json-scrabble-score get" [
+export def "get-scrabble-score" [
   word: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -534,7 +534,7 @@ export def "word-json-scrabble-score get" [
 #
 # GET /word.json/{word}/topExample
 # operationId: getTopExample
-export def "word-json-top-example get" [
+export def "get-top-example" [
   word: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -572,7 +572,7 @@ export def "word-json-top-example get" [
 #
 # GET /words.json/randomWord
 # operationId: getRandomWord
-export def "words-json-random-word get" [
+export def "get-random-word" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -616,7 +616,7 @@ export def "words-json-random-word get" [
 #
 # GET /words.json/randomWords
 # operationId: getRandomWords
-export def "words-json-random-words get" [
+export def "get-random-words" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -663,7 +663,7 @@ export def "words-json-random-words get" [
 #
 # GET /words.json/reverseDictionary
 # operationId: reverseDictionary
-export def "words-json-reverse-dictionary get" [
+export def "reverse-dictionary" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -714,7 +714,7 @@ export def "words-json-reverse-dictionary get" [
 #
 # GET /words.json/search/{query}
 # operationId: searchWords
-export def "words-json-search list" [
+export def "search-words" [
   query: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -763,7 +763,7 @@ export def "words-json-search list" [
 #
 # GET /words.json/wordOfTheDay
 # operationId: getWordOfTheDay
-export def "words-json-word-of-the-day get" [
+export def "get-word-of-the-day" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

@@ -127,7 +127,7 @@ def auth-scheme-completer [] { ["x-vtex-api-appkey" "x-vtex-api-apptoken"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "pricing-config get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-pricing-config" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -151,7 +151,7 @@ export def commands []: nothing -> table {
 #
 # GET /pricing/config
 # operationId: GetPricingConfig
-export def "pricing-config get" [
+export def "get-pricing-config" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
   --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
@@ -189,7 +189,7 @@ export def "pricing-config get" [
 #
 # GET /pricing/migration
 # operationId: GetPricingv2Status
-export def "pricing-migration get-pricingv2-status" [
+export def "get-pricingv2-status" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
   --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
@@ -227,7 +227,7 @@ export def "pricing-migration get-pricingv2-status" [
 #
 # GET /pricing/pipeline/catalog
 # operationId: getallpricetablesandrules
-export def "pricing-pipeline-catalog get-allpricetablesandrules" [
+export def "getallpricetablesandrules" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
   --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
@@ -265,7 +265,7 @@ export def "pricing-pipeline-catalog get-allpricetablesandrules" [
 #
 # GET /pricing/pipeline/catalog/{priceTableId}
 # operationId: Getrulesforapricetable
-export def "pricing-pipeline-catalog get-rulesforapricetable" [
+export def "getrulesforapricetable" [
   price_table_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -305,7 +305,7 @@ export def "pricing-pipeline-catalog get-rulesforapricetable" [
 #
 # PUT /pricing/pipeline/catalog/{priceTableId}
 # --rules item shape: {context: record, id: int, percentualModifier: float}
-export def "pricing-pipeline-catalog update" [
+export def "put-pricing-pipeline-catalog-price-table-id" [
   price_table_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -351,7 +351,7 @@ export def "pricing-pipeline-catalog update" [
 #
 # DELETE /pricing/prices/{itemId}
 # operationId: DeletePrice
-export def "pricing-prices delete" [
+export def "delete-price" [
   item_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -391,7 +391,7 @@ export def "pricing-prices delete" [
 #
 # GET /pricing/prices/{itemId}
 # operationId: GetPrice
-export def "pricing-prices get" [
+export def "get-price" [
   item_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -432,7 +432,7 @@ export def "pricing-prices get" [
 # PUT /pricing/prices/{itemId}
 # operationId: CreateUpdatePriceOrFixedPrice
 # --fixedPrices item shape: {dateRange?: record, listPrice?: float, minQuantity: int, tradePolicyId: string, value: float}
-export def "pricing-prices create-update-or-fixed" [
+export def "create-update-price-or-fixed-price" [
   item_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -482,7 +482,7 @@ export def "pricing-prices create-update-or-fixed" [
 #
 # GET /pricing/prices/{itemId}/computed/{priceTableId}
 # operationId: GetComputedPricebypricetable
-export def "pricing-prices-computed get-pricebypricetable" [
+export def "get-computed-pricebypricetable" [
   item_id: int
   price_table_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -528,7 +528,7 @@ export def "pricing-prices-computed get-pricebypricetable" [
 #
 # GET /pricing/prices/{itemId}/fixed
 # operationId: GetFixedPrices
-export def "pricing-prices-fixed get" [
+export def "get-fixed-prices" [
   item_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -568,7 +568,7 @@ export def "pricing-prices-fixed get" [
 #
 # DELETE /pricing/prices/{itemId}/fixed/{priceTableId}
 # operationId: Deletefixedpricesonapricetableortradepolicy
-export def "pricing-prices-fixed delete-fixedpricesonapricetableortradepolicy" [
+export def "deletefixedpricesonapricetableortradepolicy" [
   item_id: int
   price_table_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -610,7 +610,7 @@ export def "pricing-prices-fixed delete-fixedpricesonapricetableortradepolicy" [
 #
 # GET /pricing/prices/{itemId}/fixed/{priceTableId}
 # operationId: GetFixedPricesonapricetable
-export def "pricing-prices-fixed get-pricesonapricetable" [
+export def "get-fixed-pricesonapricetable" [
   item_id: int
   price_table_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -652,7 +652,7 @@ export def "pricing-prices-fixed get-pricesonapricetable" [
 #
 # POST /pricing/prices/{itemId}/fixed/{priceTableId}
 # operationId: createorupdatefixedpricesonpricetableortradepolicy
-export def "pricing-prices-fixed create-orupdatefixedpricesonpricetableortradepolicy" [
+export def "createorupdatefixedpricesonpricetableortradepolicy" [
   item_id: int
   price_table_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -700,7 +700,7 @@ export def "pricing-prices-fixed create-orupdatefixedpricesonpricetableortradepo
 #
 # GET /pricing/tables
 # operationId: Listpricetables
-export def "pricing-tables list-pricetables" [
+export def "listpricetables" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
   --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)

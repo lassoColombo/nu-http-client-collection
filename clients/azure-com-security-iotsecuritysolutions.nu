@@ -116,7 +116,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-providers-microsoft-security-iot-security-solutions list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "iot-security-solution-list-by-subscription" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -140,7 +140,7 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Security/iotSecuritySolutions
 # operationId: IotSecuritySolution_ListBySubscription
-export def "subscriptions-providers-microsoft-security-iot-security-solutions list" [
+export def "iot-security-solution-list-by-subscription" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -179,7 +179,7 @@ export def "subscriptions-providers-microsoft-security-iot-security-solutions li
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Security/iotSecuritySolutions
 # operationId: IotSecuritySolution_ListByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-security-iot-security-solutions list" [
+export def "iot-security-solution-list-by-resource-group" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -220,7 +220,7 @@ export def "subscriptions-resource-groups-providers-microsoft-security-iot-secur
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Security/iotSecuritySolutions/{solutionName}
 # operationId: IotSecuritySolution_Delete
-export def "subscriptions-resource-groups-providers-microsoft-security-iot-security-solutions delete" [
+export def "iot-security-solution-delete" [
   subscription_id: string
   resource_group_name: string
   solution_name: string
@@ -262,7 +262,7 @@ export def "subscriptions-resource-groups-providers-microsoft-security-iot-secur
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Security/iotSecuritySolutions/{solutionName}
 # operationId: IotSecuritySolution_Get
-export def "subscriptions-resource-groups-providers-microsoft-security-iot-security-solutions get" [
+export def "iot-security-solution-get" [
   subscription_id: string
   resource_group_name: string
   solution_name: string
@@ -305,7 +305,7 @@ export def "subscriptions-resource-groups-providers-microsoft-security-iot-secur
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Security/iotSecuritySolutions/{solutionName}
 # operationId: IotSecuritySolution_Update
 # --properties shape: {recommendationsConfiguration?: list, userDefinedResources?: record}
-export def "subscriptions-resource-groups-providers-microsoft-security-iot-security-solutions update" [
+export def "iot-security-solution-update" [
   subscription_id: string
   resource_group_name: string
   solution_name: string
@@ -353,7 +353,7 @@ export def "subscriptions-resource-groups-providers-microsoft-security-iot-secur
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Security/iotSecuritySolutions/{solutionName}
 # operationId: IotSecuritySolution_CreateOrUpdate
 # --properties shape: {disabledDataSources?: list<string>, displayName: string, export?: list<string>, iotHubs: list<string>, recommendationsConfiguration?: list, status?: "Enabled"|"Disabled", unmaskedIpLoggingStatus?: "Disabled"|"Enabled", userDefinedResources?: record, workspace: string}
-export def "subscriptions-resource-groups-providers-microsoft-security-iot-security-solutions create-or-update" [
+export def "iot-security-solution-create-or-update" [
   subscription_id: string
   resource_group_name: string
   solution_name: string

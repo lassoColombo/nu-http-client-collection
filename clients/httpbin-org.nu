@@ -121,7 +121,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "absolute-redirect get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-absolute-redirect-n" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -144,7 +144,7 @@ export def commands []: nothing -> table {
 # Absolutely 302 Redirects n times.
 #
 # GET /absolute-redirect/{n}
-export def "absolute-redirect get" [
+export def "get-absolute-redirect-n" [
   n: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -179,7 +179,7 @@ export def "absolute-redirect get" [
 # Returns anything passed in request data.
 #
 # DELETE /anything
-export def "anything delete" [
+export def "delete-anything" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -212,7 +212,7 @@ export def "anything delete" [
 # Returns anything passed in request data.
 #
 # GET /anything
-export def "anything list" [
+export def "get-anything" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -245,7 +245,7 @@ export def "anything list" [
 # Returns anything passed in request data.
 #
 # PATCH /anything
-export def "anything update" [
+export def "patch-anything" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -278,7 +278,7 @@ export def "anything update" [
 # Returns anything passed in request data.
 #
 # POST /anything
-export def "anything create" [
+export def "post-anything" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -311,7 +311,7 @@ export def "anything create" [
 # Returns anything passed in request data.
 #
 # PUT /anything
-export def "anything update-1" [
+export def "put-anything" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -344,7 +344,7 @@ export def "anything update-1" [
 # Returns anything passed in request data.
 #
 # DELETE /anything/{anything}
-export def "anything delete-by-anything" [
+export def "delete-anything-anything" [
   anything: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -379,7 +379,7 @@ export def "anything delete-by-anything" [
 # Returns anything passed in request data.
 #
 # GET /anything/{anything}
-export def "anything get" [
+export def "get-anything-anything" [
   anything: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -414,7 +414,7 @@ export def "anything get" [
 # Returns anything passed in request data.
 #
 # PATCH /anything/{anything}
-export def "anything update-by-anything" [
+export def "patch-anything-anything" [
   anything: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -449,7 +449,7 @@ export def "anything update-by-anything" [
 # Returns anything passed in request data.
 #
 # POST /anything/{anything}
-export def "anything create-by-anything" [
+export def "post-anything-anything" [
   anything: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -484,7 +484,7 @@ export def "anything create-by-anything" [
 # Returns anything passed in request data.
 #
 # PUT /anything/{anything}
-export def "anything update-by-anything-1" [
+export def "put-anything-anything" [
   anything: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -519,7 +519,7 @@ export def "anything update-by-anything-1" [
 # Decodes base64url-encoded string.
 #
 # GET /base64/{value}
-export def "base64 get" [
+export def "get-base64-value" [
   value: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -554,7 +554,7 @@ export def "base64 get" [
 # Prompts the user for authorization using HTTP Basic Auth.
 #
 # GET /basic-auth/{user}/{passwd}
-export def "basic-auth get" [
+export def "get-basic-auth-user-passwd" [
   user: string
   passwd: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -591,7 +591,7 @@ export def "basic-auth get" [
 # Prompts the user for authorization using bearer authentication.
 #
 # GET /bearer
-export def "bearer get" [
+export def "get-bearer" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -627,7 +627,7 @@ export def "bearer get" [
 # Returns Brotli-encoded data.
 #
 # GET /brotli
-export def "brotli get" [
+export def "get-brotli" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -660,7 +660,7 @@ export def "brotli get" [
 # Returns n random bytes generated with given seed
 #
 # GET /bytes/{n}
-export def "bytes get" [
+export def "get-bytes-n" [
   n: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -695,7 +695,7 @@ export def "bytes get" [
 # Returns a 304 if an If-Modified-Since header or If-None-Match is present. Returns the same as a GET otherwise.
 #
 # GET /cache
-export def "cache list" [
+export def "get-cache" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -732,7 +732,7 @@ export def "cache list" [
 # Sets a Cache-Control header for n seconds.
 #
 # GET /cache/{value}
-export def "cache get" [
+export def "get-cache-value" [
   value: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -767,7 +767,7 @@ export def "cache get" [
 # Returns cookie data.
 #
 # GET /cookies
-export def "cookies get" [
+export def "get-cookies" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -800,7 +800,7 @@ export def "cookies get" [
 # Deletes cookie(s) as provided by the query string and redirects to cookie list.
 #
 # GET /cookies/delete
-export def "cookies-delete get" [
+export def "get-cookies-delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -835,7 +835,7 @@ export def "cookies-delete get" [
 # Sets cookie(s) as provided by the query string and redirects to cookie list.
 #
 # GET /cookies/set
-export def "cookies-set get" [
+export def "get-cookies-set" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -870,7 +870,7 @@ export def "cookies-set get" [
 # Sets a cookie and redirects to cookie list.
 #
 # GET /cookies/set/{name}/{value}
-export def "cookies-set get-by-name-value" [
+export def "get-cookies-set-name-value" [
   name: string
   value: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -907,7 +907,7 @@ export def "cookies-set get-by-name-value" [
 # Returns Deflate-encoded data.
 #
 # GET /deflate
-export def "deflate get" [
+export def "get-deflate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -940,7 +940,7 @@ export def "deflate get" [
 # Returns a delayed response (max of 10 seconds).
 #
 # DELETE /delay/{delay}
-export def "delay delete" [
+export def "delete-delay-delay" [
   delay: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -975,7 +975,7 @@ export def "delay delete" [
 # Returns a delayed response (max of 10 seconds).
 #
 # GET /delay/{delay}
-export def "delay get" [
+export def "get-delay-delay" [
   delay: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1010,7 +1010,7 @@ export def "delay get" [
 # Returns a delayed response (max of 10 seconds).
 #
 # PATCH /delay/{delay}
-export def "delay update-by-delay" [
+export def "patch-delay-delay" [
   delay: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1045,7 +1045,7 @@ export def "delay update-by-delay" [
 # Returns a delayed response (max of 10 seconds).
 #
 # POST /delay/{delay}
-export def "delay create" [
+export def "post-delay-delay" [
   delay: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1080,7 +1080,7 @@ export def "delay create" [
 # Returns a delayed response (max of 10 seconds).
 #
 # PUT /delay/{delay}
-export def "delay update-by-delay-1" [
+export def "put-delay-delay" [
   delay: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1115,7 +1115,7 @@ export def "delay update-by-delay-1" [
 # The request's DELETE parameters.
 #
 # DELETE /delete
-export def "delete delete" [
+export def "delete-delete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1148,7 +1148,7 @@ export def "delete delete" [
 # Returns page denied by robots.txt rules.
 #
 # GET /deny
-export def "deny get" [
+export def "get-deny" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1181,7 +1181,7 @@ export def "deny get" [
 # Prompts the user for authorization using Digest Auth.
 #
 # GET /digest-auth/{qop}/{user}/{passwd}
-export def "digest-auth get-by-qop-user-passwd" [
+export def "get-digest-auth-qop-user-passwd" [
   qop: string
   user: string
   passwd: string
@@ -1220,7 +1220,7 @@ export def "digest-auth get-by-qop-user-passwd" [
 # Prompts the user for authorization using Digest Auth + Algorithm.
 #
 # GET /digest-auth/{qop}/{user}/{passwd}/{algorithm}
-export def "digest-auth get-by-qop-user-passwd-algorithm" [
+export def "get-digest-auth-qop-user-passwd-algorithm" [
   qop: string
   user: string
   passwd: string
@@ -1261,7 +1261,7 @@ export def "digest-auth get-by-qop-user-passwd-algorithm" [
 # Prompts the user for authorization using Digest Auth + Algorithm.
 #
 # GET /digest-auth/{qop}/{user}/{passwd}/{algorithm}/{stale_after}
-export def "digest-auth get-by-qop-user-passwd-algorithm-stale-after" [
+export def "get-digest-auth-qop-user-passwd-algorithm-stale-after" [
   qop: string
   user: string
   passwd: string
@@ -1304,7 +1304,7 @@ export def "digest-auth get-by-qop-user-passwd-algorithm-stale-after" [
 # Drips data over a duration after an optional initial delay.
 #
 # GET /drip
-export def "drip get" [
+export def "get-drip" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1342,7 +1342,7 @@ export def "drip get" [
 # Returns a UTF-8 encoded body.
 #
 # GET /encoding/utf8
-export def "encoding-utf8 get" [
+export def "get-encoding-utf8" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1375,7 +1375,7 @@ export def "encoding-utf8 get" [
 # Assumes the resource has the given etag and responds to If-None-Match and If-Match headers appropriately.
 #
 # GET /etag/{etag}
-export def "etag get" [
+export def "get-etag-etag" [
   etag: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1414,7 +1414,7 @@ export def "etag get" [
 # The request's query parameters.
 #
 # GET /get
-export def "get get" [
+export def "get-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1447,7 +1447,7 @@ export def "get get" [
 # Returns GZip-encoded data.
 #
 # GET /gzip
-export def "gzip get" [
+export def "get-gzip" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1480,7 +1480,7 @@ export def "gzip get" [
 # Return the incoming request's HTTP headers.
 #
 # GET /headers
-export def "headers get" [
+export def "get-headers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1513,7 +1513,7 @@ export def "headers get" [
 # Prompts the user for authorization using HTTP Basic Auth.
 #
 # GET /hidden-basic-auth/{user}/{passwd}
-export def "hidden-basic-auth get" [
+export def "get-hidden-basic-auth-user-passwd" [
   user: string
   passwd: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1550,7 +1550,7 @@ export def "hidden-basic-auth get" [
 # Returns a simple HTML document.
 #
 # GET /html
-export def "html get" [
+export def "get-html" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1583,7 +1583,7 @@ export def "html get" [
 # Returns a simple image of the type suggest by the Accept header.
 #
 # GET /image
-export def "image get" [
+export def "get-image" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1616,7 +1616,7 @@ export def "image get" [
 # Returns a simple JPEG image.
 #
 # GET /image/jpeg
-export def "image-jpeg get" [
+export def "get-image-jpeg" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1649,7 +1649,7 @@ export def "image-jpeg get" [
 # Returns a simple PNG image.
 #
 # GET /image/png
-export def "image-png get" [
+export def "get-image-png" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1682,7 +1682,7 @@ export def "image-png get" [
 # Returns a simple SVG image.
 #
 # GET /image/svg
-export def "image-svg get" [
+export def "get-image-svg" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1715,7 +1715,7 @@ export def "image-svg get" [
 # Returns a simple WEBP image.
 #
 # GET /image/webp
-export def "image-webp get" [
+export def "get-image-webp" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1748,7 +1748,7 @@ export def "image-webp get" [
 # Returns the requester's IP Address.
 #
 # GET /ip
-export def "ip get" [
+export def "get-ip" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1781,7 +1781,7 @@ export def "ip get" [
 # Returns a simple JSON document.
 #
 # GET /json
-export def "json get" [
+export def "get-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1814,7 +1814,7 @@ export def "json get" [
 # Generate a page containing n links to other pages which do the same.
 #
 # GET /links/{n}/{offset}
-export def "links get" [
+export def "get-links-n-offset" [
   n: int
   offset: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -1851,7 +1851,7 @@ export def "links get" [
 # The request's PATCH parameters.
 #
 # PATCH /patch
-export def "patch update" [
+export def "patch-patch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1884,7 +1884,7 @@ export def "patch update" [
 # The request's POST parameters.
 #
 # POST /post
-export def "post create" [
+export def "post-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1917,7 +1917,7 @@ export def "post create" [
 # The request's PUT parameters.
 #
 # PUT /put
-export def "put update" [
+export def "put-put" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1950,7 +1950,7 @@ export def "put update" [
 # Streams n random bytes generated with given seed, at given chunk size per packet.
 #
 # GET /range/{numbytes}
-export def "range get" [
+export def "get-range-numbytes" [
   numbytes: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1985,7 +1985,7 @@ export def "range get" [
 # 302/3XX Redirects to the given URL.
 #
 # DELETE /redirect-to
-export def "redirect-to delete" [
+export def "delete-redirect-to" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2018,7 +2018,7 @@ export def "redirect-to delete" [
 # 302/3XX Redirects to the given URL.
 #
 # GET /redirect-to
-export def "redirect-to get" [
+export def "get-redirect-to" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2054,7 +2054,7 @@ export def "redirect-to get" [
 # 302/3XX Redirects to the given URL.
 #
 # PATCH /redirect-to
-export def "redirect-to update" [
+export def "patch-redirect-to" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2087,7 +2087,7 @@ export def "redirect-to update" [
 # 302/3XX Redirects to the given URL.
 #
 # POST /redirect-to
-export def "redirect-to create" [
+export def "post-redirect-to" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2126,7 +2126,7 @@ export def "redirect-to create" [
 # 302/3XX Redirects to the given URL.
 #
 # PUT /redirect-to
-export def "redirect-to update-1" [
+export def "put-redirect-to" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2165,7 +2165,7 @@ export def "redirect-to update-1" [
 # 302 Redirects n times.
 #
 # GET /redirect/{n}
-export def "redirect get" [
+export def "get-redirect-n" [
   n: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2200,7 +2200,7 @@ export def "redirect get" [
 # Relatively 302 Redirects n times.
 #
 # GET /relative-redirect/{n}
-export def "relative-redirect get" [
+export def "get-relative-redirect-n" [
   n: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2235,7 +2235,7 @@ export def "relative-redirect get" [
 # Returns a set of response headers from the query string.
 #
 # GET /response-headers
-export def "response-headers get" [
+export def "get-response-headers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2270,7 +2270,7 @@ export def "response-headers get" [
 # Returns a set of response headers from the query string.
 #
 # POST /response-headers
-export def "response-headers create" [
+export def "post-response-headers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2305,7 +2305,7 @@ export def "response-headers create" [
 # Returns some robots.txt rules.
 #
 # GET /robots.txt
-export def "robots-txt get" [
+export def "get-robots-txt" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2338,7 +2338,7 @@ export def "robots-txt get" [
 # Return status code or random status code if more than one are given
 #
 # DELETE /status/{codes}
-export def "status delete" [
+export def "delete-status-codes" [
   codes: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2373,7 +2373,7 @@ export def "status delete" [
 # Return status code or random status code if more than one are given
 #
 # GET /status/{codes}
-export def "status get" [
+export def "get-status-codes" [
   codes: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2408,7 +2408,7 @@ export def "status get" [
 # Return status code or random status code if more than one are given
 #
 # PATCH /status/{codes}
-export def "status update-by-codes" [
+export def "patch-status-codes" [
   codes: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2443,7 +2443,7 @@ export def "status update-by-codes" [
 # Return status code or random status code if more than one are given
 #
 # POST /status/{codes}
-export def "status create" [
+export def "post-status-codes" [
   codes: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2478,7 +2478,7 @@ export def "status create" [
 # Return status code or random status code if more than one are given
 #
 # PUT /status/{codes}
-export def "status update-by-codes-1" [
+export def "put-status-codes" [
   codes: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2513,7 +2513,7 @@ export def "status update-by-codes-1" [
 # Streams n random bytes generated with given seed, at given chunk size per packet.
 #
 # GET /stream-bytes/{n}
-export def "stream-bytes get" [
+export def "get-stream-bytes-n" [
   n: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2548,7 +2548,7 @@ export def "stream-bytes get" [
 # Stream n JSON responses
 #
 # GET /stream/{n}
-export def "stream get" [
+export def "get-stream-n" [
   n: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2583,7 +2583,7 @@ export def "stream get" [
 # Return the incoming requests's User-Agent header.
 #
 # GET /user-agent
-export def "user-agent get" [
+export def "get-user-agent" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2616,7 +2616,7 @@ export def "user-agent get" [
 # Return a UUID4.
 #
 # GET /uuid
-export def "uuid get" [
+export def "get-uuid" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2649,7 +2649,7 @@ export def "uuid get" [
 # Returns a simple XML document.
 #
 # GET /xml
-export def "xml get" [
+export def "get-xml" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

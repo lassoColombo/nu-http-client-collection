@@ -102,7 +102,7 @@ def type-completer [] { ["KMS" "NONE"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "traces get-batch" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "batch-get-traces" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -126,7 +126,7 @@ export def commands []: nothing -> table {
 #
 # POST /Traces
 # operationId: BatchGetTraces
-export def "traces get-batch" [
+export def "batch-get-traces" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -178,7 +178,7 @@ export def "traces get-batch" [
 # operationId: CreateGroup
 # --InsightsConfiguration shape: {InsightsEnabled?: any, NotificationsEnabled?: any}
 # --Tags item shape: {Key: any, Value: any}
-export def "create-group create" [
+export def "create-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -230,7 +230,7 @@ export def "create-group create" [
 # operationId: CreateSamplingRule
 # --SamplingRule shape: {RuleName?: any, RuleARN?: any, ResourceARN?: any, Priority?: any, FixedRate?: any, ReservoirSize?: any, ServiceName?: any, ServiceType?: any, Host?: any, HTTPMethod?: any, URLPath?: any, Version?: any, Attributes?: any}
 # --Tags item shape: {Key: any, Value: any}
-export def "create-sampling-rule create" [
+export def "create-sampling-rule" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -278,7 +278,7 @@ export def "create-sampling-rule create" [
 #
 # POST /DeleteGroup
 # operationId: DeleteGroup
-export def "delete-group delete" [
+export def "delete-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -326,7 +326,7 @@ export def "delete-group delete" [
 #
 # POST /DeleteResourcePolicy
 # operationId: DeleteResourcePolicy
-export def "delete-resource-policy delete" [
+export def "delete-resource-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -374,7 +374,7 @@ export def "delete-resource-policy delete" [
 #
 # POST /DeleteSamplingRule
 # operationId: DeleteSamplingRule
-export def "delete-sampling-rule delete" [
+export def "delete-sampling-rule" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -422,7 +422,7 @@ export def "delete-sampling-rule delete" [
 #
 # POST /EncryptionConfig
 # operationId: GetEncryptionConfig
-export def "encryption-config get" [
+export def "get-encryption-config" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -465,7 +465,7 @@ export def "encryption-config get" [
 #
 # POST /GetGroup
 # operationId: GetGroup
-export def "get-group get" [
+export def "get-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -513,7 +513,7 @@ export def "get-group get" [
 #
 # POST /Groups
 # operationId: GetGroups
-export def "groups get" [
+export def "get-groups" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -562,7 +562,7 @@ export def "groups get" [
 #
 # POST /Insight
 # operationId: GetInsight
-export def "insight get" [
+export def "get-insight" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -609,7 +609,7 @@ export def "insight get" [
 #
 # POST /InsightEvents
 # operationId: GetInsightEvents
-export def "insight-events get" [
+export def "get-insight-events" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -661,7 +661,7 @@ export def "insight-events get" [
 #
 # POST /InsightImpactGraph
 # operationId: GetInsightImpactGraph
-export def "insight-impact-graph get" [
+export def "get-insight-impact-graph" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -711,7 +711,7 @@ export def "insight-impact-graph get" [
 #
 # POST /InsightSummaries
 # operationId: GetInsightSummaries
-export def "insight-summaries get" [
+export def "get-insight-summaries" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -767,7 +767,7 @@ export def "insight-summaries get" [
 #
 # POST /GetSamplingRules
 # operationId: GetSamplingRules
-export def "get-sampling-rules get" [
+export def "get-sampling-rules" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -816,7 +816,7 @@ export def "get-sampling-rules get" [
 #
 # POST /SamplingStatisticSummaries
 # operationId: GetSamplingStatisticSummaries
-export def "sampling-statistic-summaries get" [
+export def "get-sampling-statistic-summaries" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -866,7 +866,7 @@ export def "sampling-statistic-summaries get" [
 # POST /SamplingTargets
 # operationId: GetSamplingTargets
 # --SamplingStatisticsDocuments item shape: {RuleName: any, ClientID: any, Timestamp: any, RequestCount: any, SampledCount: any, BorrowCount?: any}
-export def "sampling-targets get" [
+export def "get-sampling-targets" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -913,7 +913,7 @@ export def "sampling-targets get" [
 #
 # POST /ServiceGraph
 # operationId: GetServiceGraph
-export def "service-graph get" [
+export def "get-service-graph" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -966,7 +966,7 @@ export def "service-graph get" [
 #
 # POST /TimeSeriesServiceStatistics
 # operationId: GetTimeSeriesServiceStatistics
-export def "time-series-service-statistics get" [
+export def "get-time-series-service-statistics" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1022,7 +1022,7 @@ export def "time-series-service-statistics get" [
 #
 # POST /TraceGraph
 # operationId: GetTraceGraph
-export def "trace-graph get" [
+export def "get-trace-graph" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1073,7 +1073,7 @@ export def "trace-graph get" [
 # POST /TraceSummaries
 # operationId: GetTraceSummaries
 # --SamplingStrategy shape: {Name?: any, Value?: any}
-export def "trace-summaries get" [
+export def "get-trace-summaries" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1128,7 +1128,7 @@ export def "trace-summaries get" [
 #
 # POST /ListResourcePolicies
 # operationId: ListResourcePolicies
-export def "list-resource-policies list" [
+export def "list-resource-policies" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1177,7 +1177,7 @@ export def "list-resource-policies list" [
 #
 # POST /ListTagsForResource
 # operationId: ListTagsForResource
-export def "list-tags-for-resource list" [
+export def "list-tags-for-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1227,7 +1227,7 @@ export def "list-tags-for-resource list" [
 #
 # POST /PutEncryptionConfig
 # operationId: PutEncryptionConfig
-export def "put-encryption-config update" [
+export def "put-encryption-config" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1275,7 +1275,7 @@ export def "put-encryption-config update" [
 #
 # POST /PutResourcePolicy
 # operationId: PutResourcePolicy
-export def "put-resource-policy update" [
+export def "put-resource-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1326,7 +1326,7 @@ export def "put-resource-policy update" [
 # POST /TelemetryRecords
 # operationId: PutTelemetryRecords
 # --TelemetryRecords item shape: {Timestamp: any, SegmentsReceivedCount?: any, SegmentsSentCount?: any, SegmentsSpilloverCount?: any, SegmentsRejectedCount?: any, BackendConnectionErrors?: any}
-export def "telemetry-records update" [
+export def "put-telemetry-records" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1376,7 +1376,7 @@ export def "telemetry-records update" [
 #
 # POST /TraceSegments
 # operationId: PutTraceSegments
-export def "trace-segments update" [
+export def "put-trace-segments" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1424,7 +1424,7 @@ export def "trace-segments update" [
 # POST /TagResource
 # operationId: TagResource
 # --Tags item shape: {Key: any, Value: any}
-export def "tag-resource tag" [
+export def "tag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1472,7 +1472,7 @@ export def "tag-resource tag" [
 #
 # POST /UntagResource
 # operationId: UntagResource
-export def "untag-resource untag" [
+export def "untag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1521,7 +1521,7 @@ export def "untag-resource untag" [
 # POST /UpdateGroup
 # operationId: UpdateGroup
 # --InsightsConfiguration shape: {InsightsEnabled?: any, NotificationsEnabled?: any}
-export def "update-group update" [
+export def "update-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1572,7 +1572,7 @@ export def "update-group update" [
 # POST /UpdateSamplingRule
 # operationId: UpdateSamplingRule
 # --SamplingRuleUpdate shape: {RuleName?: any, RuleARN?: any, ResourceARN?: any, Priority?: any, FixedRate?: any, ReservoirSize?: any, Host?: any, ServiceName?: any, ServiceType?: any, HTTPMethod?: any, URLPath?: any, Attributes?: any}
-export def "update-sampling-rule update" [
+export def "update-sampling-rule" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

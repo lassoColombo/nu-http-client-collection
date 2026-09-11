@@ -116,7 +116,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resource-groups-providers-microsoft-media-media-services-media-graphs list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "media-graphs-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -140,7 +140,7 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Media/mediaServices/{accountName}/mediaGraphs
 # operationId: MediaGraphs_List
-export def "subscriptions-resource-groups-providers-microsoft-media-media-services-media-graphs list" [
+export def "media-graphs-list" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -183,7 +183,7 @@ export def "subscriptions-resource-groups-providers-microsoft-media-media-servic
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Media/mediaServices/{accountName}/mediaGraphs/{mediaGraphName}
 # operationId: MediaGraphs_Delete
-export def "subscriptions-resource-groups-providers-microsoft-media-media-services-media-graphs delete" [
+export def "media-graphs-delete" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -227,7 +227,7 @@ export def "subscriptions-resource-groups-providers-microsoft-media-media-servic
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Media/mediaServices/{accountName}/mediaGraphs/{mediaGraphName}
 # operationId: MediaGraphs_Get
-export def "subscriptions-resource-groups-providers-microsoft-media-media-services-media-graphs get" [
+export def "media-graphs-get" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -272,7 +272,7 @@ export def "subscriptions-resource-groups-providers-microsoft-media-media-servic
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Media/mediaServices/{accountName}/mediaGraphs/{mediaGraphName}
 # operationId: MediaGraphs_CreateOrUpdate
 # --properties shape: {description?: string, sinks: list, sources: list}
-export def "subscriptions-resource-groups-providers-microsoft-media-media-services-media-graphs create-or-update" [
+export def "media-graphs-create-or-update" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -320,7 +320,7 @@ export def "subscriptions-resource-groups-providers-microsoft-media-media-servic
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Media/mediaServices/{accountName}/mediaGraphs/{mediaGraphName}/operationResults/{operationId}
 # operationId: OperationResults_Get
-export def "subscriptions-resource-groups-providers-microsoft-media-media-services-media-graphs-operation-results get" [
+export def "operation-results-get" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -366,7 +366,7 @@ export def "subscriptions-resource-groups-providers-microsoft-media-media-servic
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Media/mediaServices/{accountName}/mediaGraphs/{mediaGraphName}/operationsStatus/{operationId}
 # operationId: OperationsStatus_Get
-export def "subscriptions-resource-groups-providers-microsoft-media-media-services-media-graphs-operations-status get" [
+export def "operations-status-get" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -412,7 +412,7 @@ export def "subscriptions-resource-groups-providers-microsoft-media-media-servic
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Media/mediaServices/{accountName}/mediaGraphs/{mediaGraphName}/start
 # operationId: MediaGraphs_Start
-export def "subscriptions-resource-groups-providers-microsoft-media-media-services-media-graphs-start start" [
+export def "media-graphs-start" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -456,7 +456,7 @@ export def "subscriptions-resource-groups-providers-microsoft-media-media-servic
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Media/mediaServices/{accountName}/mediaGraphs/{mediaGraphName}/stop
 # operationId: MediaGraphs_Stop
-export def "subscriptions-resource-groups-providers-microsoft-media-media-services-media-graphs-stop stop" [
+export def "media-graphs-stop" [
   subscription_id: string
   resource_group_name: string
   account_name: string

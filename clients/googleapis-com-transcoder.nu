@@ -124,7 +124,7 @@ def mode-completer [] { ["PROCESSING_MODE_BATCH" "PROCESSING_MODE_INTERACTIVE" "
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "projects delete" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "transcoder-projects-locations-job-templates-delete" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -148,7 +148,7 @@ export def commands []: nothing -> table {
 #
 # DELETE /v1/{name}
 # operationId: transcoder.projects.locations.jobTemplates.delete
-export def "projects delete" [
+export def "transcoder-projects-locations-job-templates-delete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -197,7 +197,7 @@ export def "projects delete" [
 #
 # GET /v1/{name}
 # operationId: transcoder.projects.locations.jobTemplates.get
-export def "projects get" [
+export def "transcoder-projects-locations-job-templates-get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -245,7 +245,7 @@ export def "projects get" [
 #
 # GET /v1/{parent}/jobTemplates
 # operationId: transcoder.projects.locations.jobTemplates.list
-export def "job-templates list" [
+export def "transcoder-projects-locations-job-templates-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -298,7 +298,7 @@ export def "job-templates list" [
 # POST /v1/{parent}/jobTemplates
 # operationId: transcoder.projects.locations.jobTemplates.create
 # --config shape: {adBreaks?: list, editList?: list, elementaryStreams?: list, inputs?: list, manifests?: list, muxStreams?: list, output?: record, overlays?: list, pubsubDestination?: record, spriteSheets?: list}
-export def "job-templates create" [
+export def "transcoder-projects-locations-job-templates-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -353,7 +353,7 @@ export def "job-templates create" [
 #
 # GET /v1/{parent}/jobs
 # operationId: transcoder.projects.locations.jobs.list
-export def "jobs list" [
+export def "transcoder-projects-locations-jobs-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -407,7 +407,7 @@ export def "jobs list" [
 # operationId: transcoder.projects.locations.jobs.create
 # --config shape: {adBreaks?: list, editList?: list, elementaryStreams?: list, inputs?: list, manifests?: list, muxStreams?: list, output?: record, overlays?: list, pubsubDestination?: record, spriteSheets?: list}
 # --error shape: {code?: int, details?: list, message?: string}
-export def "jobs create" [
+export def "transcoder-projects-locations-jobs-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)

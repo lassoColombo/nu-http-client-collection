@@ -110,7 +110,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resource-groups-providers-microsoft-automation-automation-accounts-node-configurations list-dsc" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "dsc-node-configuration-list-by-automation-account" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -135,7 +135,7 @@ export def commands []: nothing -> table {
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Automation/automationAccounts/{automationAccountName}/nodeConfigurations
 # Docs: http://aka.ms/azureautomationsdk/dscnodeconfigurations
 # operationId: DscNodeConfiguration_ListByAutomationAccount
-export def "subscriptions-resource-groups-providers-microsoft-automation-automation-accounts-node-configurations list-dsc" [
+export def "dsc-node-configuration-list-by-automation-account" [
   subscription_id: string
   resource_group_name: string
   automation_account_name: string
@@ -182,7 +182,7 @@ export def "subscriptions-resource-groups-providers-microsoft-automation-automat
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Automation/automationAccounts/{automationAccountName}/nodeConfigurations/{nodeConfigurationName}
 # Docs: http://aka.ms/azureautomationsdk/dscnodeconfigurations
 # operationId: DscNodeConfiguration_Delete
-export def "subscriptions-resource-groups-providers-microsoft-automation-automation-accounts-node-configurations delete-dsc" [
+export def "dsc-node-configuration-delete" [
   subscription_id: string
   resource_group_name: string
   automation_account_name: string
@@ -227,7 +227,7 @@ export def "subscriptions-resource-groups-providers-microsoft-automation-automat
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Automation/automationAccounts/{automationAccountName}/nodeConfigurations/{nodeConfigurationName}
 # Docs: http://aka.ms/azureautomationsdk/dscnodeconfigurations
 # operationId: DscNodeConfiguration_Get
-export def "subscriptions-resource-groups-providers-microsoft-automation-automation-accounts-node-configurations get-dsc" [
+export def "dsc-node-configuration-get" [
   subscription_id: string
   resource_group_name: string
   automation_account_name: string
@@ -273,7 +273,7 @@ export def "subscriptions-resource-groups-providers-microsoft-automation-automat
 # Docs: http://aka.ms/azureautomationsdk/dscnodeconfigurations
 # operationId: DscNodeConfiguration_CreateOrUpdate
 # --properties shape: {configuration: any, incrementNodeConfigurationBuild?: bool, source: any}
-export def "subscriptions-resource-groups-providers-microsoft-automation-automation-accounts-node-configurations create-dsc-or-update" [
+export def "dsc-node-configuration-create-or-update" [
   subscription_id: string
   resource_group_name: string
   automation_account_name: string

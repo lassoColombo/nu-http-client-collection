@@ -166,7 +166,7 @@ def x-amz-target-completer-65 [] { ["AmazonPersonalize.UpdateRecommender"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "api create-batch-inference-job" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "create-batch-inference-job" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -190,7 +190,7 @@ export def commands []: nothing -> table {
 #
 # POST /
 # operationId: CreateBatchInferenceJob
-export def "api create-batch-inference-job" [
+export def "create-batch-inference-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -246,7 +246,7 @@ export def "api create-batch-inference-job" [
 #
 # POST /
 # operationId: CreateBatchSegmentJob
-export def "api create-batch-segment-job" [
+export def "create-batch-segment-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -301,7 +301,7 @@ export def "api create-batch-segment-job" [
 #
 # POST /
 # operationId: CreateCampaign
-export def "api create-campaign" [
+export def "create-campaign" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -353,7 +353,7 @@ export def "api create-campaign" [
 #
 # POST /
 # operationId: CreateDataset
-export def "api create-dataset" [
+export def "create-dataset" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -405,7 +405,7 @@ export def "api create-dataset" [
 #
 # POST /
 # operationId: CreateDatasetExportJob
-export def "api create-dataset-export-job" [
+export def "create-dataset-export-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -458,7 +458,7 @@ export def "api create-dataset-export-job" [
 #
 # POST /
 # operationId: CreateDatasetGroup
-export def "api create-dataset-group" [
+export def "create-dataset-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -510,7 +510,7 @@ export def "api create-dataset-group" [
 #
 # POST /
 # operationId: CreateDatasetImportJob
-export def "api create-dataset-import-job" [
+export def "create-dataset-import-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -564,7 +564,7 @@ export def "api create-dataset-import-job" [
 #
 # POST /
 # operationId: CreateEventTracker
-export def "api create-event-tracker" [
+export def "create-event-tracker" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -614,7 +614,7 @@ export def "api create-event-tracker" [
 #
 # POST /
 # operationId: CreateFilter
-export def "api create-filter" [
+export def "create-filter" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -665,7 +665,7 @@ export def "api create-filter" [
 #
 # POST /
 # operationId: CreateMetricAttribution
-export def "api create-metric-attribution" [
+export def "create-metric-attribution" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -716,7 +716,7 @@ export def "api create-metric-attribution" [
 #
 # POST /
 # operationId: CreateRecommender
-export def "api create-recommender" [
+export def "create-recommender" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -768,7 +768,7 @@ export def "api create-recommender" [
 #
 # POST /
 # operationId: CreateSchema
-export def "api create-schema" [
+export def "create-schema" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -818,7 +818,7 @@ export def "api create-schema" [
 #
 # POST /
 # operationId: CreateSolution
-export def "api create-solution" [
+export def "create-solution" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -873,7 +873,7 @@ export def "api create-solution" [
 #
 # POST /
 # operationId: CreateSolutionVersion
-export def "api create-solution-version" [
+export def "create-solution-version" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -924,7 +924,7 @@ export def "api create-solution-version" [
 #
 # POST /
 # operationId: DeleteCampaign
-export def "api delete-campaign" [
+export def "delete-campaign" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -972,7 +972,7 @@ export def "api delete-campaign" [
 #
 # POST /
 # operationId: DeleteDataset
-export def "api delete-dataset" [
+export def "delete-dataset" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1020,7 +1020,7 @@ export def "api delete-dataset" [
 #
 # POST /
 # operationId: DeleteDatasetGroup
-export def "api delete-dataset-group" [
+export def "delete-dataset-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1068,7 +1068,7 @@ export def "api delete-dataset-group" [
 #
 # POST /
 # operationId: DeleteEventTracker
-export def "api delete-event-tracker" [
+export def "delete-event-tracker" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1116,7 +1116,7 @@ export def "api delete-event-tracker" [
 #
 # POST /
 # operationId: DeleteFilter
-export def "api delete-filter" [
+export def "delete-filter" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1164,7 +1164,7 @@ export def "api delete-filter" [
 #
 # POST /
 # operationId: DeleteMetricAttribution
-export def "api delete-metric-attribution" [
+export def "delete-metric-attribution" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1212,7 +1212,7 @@ export def "api delete-metric-attribution" [
 #
 # POST /
 # operationId: DeleteRecommender
-export def "api delete-recommender" [
+export def "delete-recommender" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1260,7 +1260,7 @@ export def "api delete-recommender" [
 #
 # POST /
 # operationId: DeleteSchema
-export def "api delete-schema" [
+export def "delete-schema" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1308,7 +1308,7 @@ export def "api delete-schema" [
 #
 # POST /
 # operationId: DeleteSolution
-export def "api delete-solution" [
+export def "delete-solution" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1356,7 +1356,7 @@ export def "api delete-solution" [
 #
 # POST /
 # operationId: DescribeAlgorithm
-export def "api get-algorithm" [
+export def "describe-algorithm" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1404,7 +1404,7 @@ export def "api get-algorithm" [
 #
 # POST /
 # operationId: DescribeBatchInferenceJob
-export def "api get-batch-inference-job" [
+export def "describe-batch-inference-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1452,7 +1452,7 @@ export def "api get-batch-inference-job" [
 #
 # POST /
 # operationId: DescribeBatchSegmentJob
-export def "api get-batch-segment-job" [
+export def "describe-batch-segment-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1500,7 +1500,7 @@ export def "api get-batch-segment-job" [
 #
 # POST /
 # operationId: DescribeCampaign
-export def "api get-campaign" [
+export def "describe-campaign" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1548,7 +1548,7 @@ export def "api get-campaign" [
 #
 # POST /
 # operationId: DescribeDataset
-export def "api get-dataset" [
+export def "describe-dataset" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1596,7 +1596,7 @@ export def "api get-dataset" [
 #
 # POST /
 # operationId: DescribeDatasetExportJob
-export def "api get-dataset-export-job" [
+export def "describe-dataset-export-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1644,7 +1644,7 @@ export def "api get-dataset-export-job" [
 #
 # POST /
 # operationId: DescribeDatasetGroup
-export def "api get-dataset-group" [
+export def "describe-dataset-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1692,7 +1692,7 @@ export def "api get-dataset-group" [
 #
 # POST /
 # operationId: DescribeDatasetImportJob
-export def "api get-dataset-import-job" [
+export def "describe-dataset-import-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1740,7 +1740,7 @@ export def "api get-dataset-import-job" [
 #
 # POST /
 # operationId: DescribeEventTracker
-export def "api get-event-tracker" [
+export def "describe-event-tracker" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1788,7 +1788,7 @@ export def "api get-event-tracker" [
 #
 # POST /
 # operationId: DescribeFeatureTransformation
-export def "api get-feature-transformation" [
+export def "describe-feature-transformation" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1836,7 +1836,7 @@ export def "api get-feature-transformation" [
 #
 # POST /
 # operationId: DescribeFilter
-export def "api get-filter" [
+export def "describe-filter" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1884,7 +1884,7 @@ export def "api get-filter" [
 #
 # POST /
 # operationId: DescribeMetricAttribution
-export def "api get-metric-attribution" [
+export def "describe-metric-attribution" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1932,7 +1932,7 @@ export def "api get-metric-attribution" [
 #
 # POST /
 # operationId: DescribeRecipe
-export def "api get-recipe" [
+export def "describe-recipe" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1980,7 +1980,7 @@ export def "api get-recipe" [
 #
 # POST /
 # operationId: DescribeRecommender
-export def "api get-recommender" [
+export def "describe-recommender" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2028,7 +2028,7 @@ export def "api get-recommender" [
 #
 # POST /
 # operationId: DescribeSchema
-export def "api get-schema" [
+export def "describe-schema" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2076,7 +2076,7 @@ export def "api get-schema" [
 #
 # POST /
 # operationId: DescribeSolution
-export def "api get-solution" [
+export def "describe-solution" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2124,7 +2124,7 @@ export def "api get-solution" [
 #
 # POST /
 # operationId: DescribeSolutionVersion
-export def "api get-solution-version" [
+export def "describe-solution-version" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2172,7 +2172,7 @@ export def "api get-solution-version" [
 #
 # POST /
 # operationId: GetSolutionMetrics
-export def "api get-solution-metrics" [
+export def "get-solution-metrics" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2220,7 +2220,7 @@ export def "api get-solution-metrics" [
 #
 # POST /
 # operationId: ListBatchInferenceJobs
-export def "api list-batch-inference-jobs" [
+export def "list-batch-inference-jobs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2273,7 +2273,7 @@ export def "api list-batch-inference-jobs" [
 #
 # POST /
 # operationId: ListBatchSegmentJobs
-export def "api list-batch-segment-jobs" [
+export def "list-batch-segment-jobs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2326,7 +2326,7 @@ export def "api list-batch-segment-jobs" [
 #
 # POST /
 # operationId: ListCampaigns
-export def "api list-campaigns" [
+export def "list-campaigns" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2379,7 +2379,7 @@ export def "api list-campaigns" [
 #
 # POST /
 # operationId: ListDatasetExportJobs
-export def "api list-dataset-export-jobs" [
+export def "list-dataset-export-jobs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2432,7 +2432,7 @@ export def "api list-dataset-export-jobs" [
 #
 # POST /
 # operationId: ListDatasetGroups
-export def "api list-dataset-groups" [
+export def "list-dataset-groups" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2484,7 +2484,7 @@ export def "api list-dataset-groups" [
 #
 # POST /
 # operationId: ListDatasetImportJobs
-export def "api list-dataset-import-jobs" [
+export def "list-dataset-import-jobs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2537,7 +2537,7 @@ export def "api list-dataset-import-jobs" [
 #
 # POST /
 # operationId: ListDatasets
-export def "api list-datasets" [
+export def "list-datasets" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2590,7 +2590,7 @@ export def "api list-datasets" [
 #
 # POST /
 # operationId: ListEventTrackers
-export def "api list-event-trackers" [
+export def "list-event-trackers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2643,7 +2643,7 @@ export def "api list-event-trackers" [
 #
 # POST /
 # operationId: ListFilters
-export def "api list-filters" [
+export def "list-filters" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2696,7 +2696,7 @@ export def "api list-filters" [
 #
 # POST /
 # operationId: ListMetricAttributionMetrics
-export def "api list-metric-attribution-metrics" [
+export def "list-metric-attribution-metrics" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2749,7 +2749,7 @@ export def "api list-metric-attribution-metrics" [
 #
 # POST /
 # operationId: ListMetricAttributions
-export def "api list-metric-attributions" [
+export def "list-metric-attributions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2802,7 +2802,7 @@ export def "api list-metric-attributions" [
 #
 # POST /
 # operationId: ListRecipes
-export def "api list-recipes" [
+export def "list-recipes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2856,7 +2856,7 @@ export def "api list-recipes" [
 #
 # POST /
 # operationId: ListRecommenders
-export def "api list-recommenders" [
+export def "list-recommenders" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2909,7 +2909,7 @@ export def "api list-recommenders" [
 #
 # POST /
 # operationId: ListSchemas
-export def "api list-schemas" [
+export def "list-schemas" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2961,7 +2961,7 @@ export def "api list-schemas" [
 #
 # POST /
 # operationId: ListSolutionVersions
-export def "api list-solution-versions" [
+export def "list-solution-versions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3014,7 +3014,7 @@ export def "api list-solution-versions" [
 #
 # POST /
 # operationId: ListSolutions
-export def "api list-solutions" [
+export def "list-solutions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3067,7 +3067,7 @@ export def "api list-solutions" [
 #
 # POST /
 # operationId: ListTagsForResource
-export def "api list-tags-for-resource" [
+export def "list-tags-for-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3115,7 +3115,7 @@ export def "api list-tags-for-resource" [
 #
 # POST /
 # operationId: StartRecommender
-export def "api start-recommender" [
+export def "start-recommender" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3163,7 +3163,7 @@ export def "api start-recommender" [
 #
 # POST /
 # operationId: StopRecommender
-export def "api stop-recommender" [
+export def "stop-recommender" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3211,7 +3211,7 @@ export def "api stop-recommender" [
 #
 # POST /
 # operationId: StopSolutionVersionCreation
-export def "api stop-solution-version-creation" [
+export def "stop-solution-version-creation" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3259,7 +3259,7 @@ export def "api stop-solution-version-creation" [
 #
 # POST /
 # operationId: TagResource
-export def "api tag-resource" [
+export def "tag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3308,7 +3308,7 @@ export def "api tag-resource" [
 #
 # POST /
 # operationId: UntagResource
-export def "api untag-resource" [
+export def "untag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3357,7 +3357,7 @@ export def "api untag-resource" [
 #
 # POST /
 # operationId: UpdateCampaign
-export def "api update-campaign" [
+export def "update-campaign" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3408,7 +3408,7 @@ export def "api update-campaign" [
 #
 # POST /
 # operationId: UpdateMetricAttribution
-export def "api update-metric-attribution" [
+export def "update-metric-attribution" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3459,7 +3459,7 @@ export def "api update-metric-attribution" [
 #
 # POST /
 # operationId: UpdateRecommender
-export def "api update-recommender" [
+export def "update-recommender" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

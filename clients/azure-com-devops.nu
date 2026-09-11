@@ -116,7 +116,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-dev-ops-operations list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "operations-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -140,7 +140,7 @@ export def commands []: nothing -> table {
 #
 # GET /providers/Microsoft.DevOps/operations
 # operationId: Operations_List
-export def "providers-microsoft-dev-ops-operations list" [
+export def "operations-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -176,7 +176,7 @@ export def "providers-microsoft-dev-ops-operations list" [
 #
 # GET /providers/Microsoft.DevOps/pipelineTemplateDefinitions
 # operationId: PipelineTemplateDefinitions_List
-export def "providers-microsoft-dev-ops-pipeline-template-definitions list" [
+export def "pipeline-template-definitions-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -212,7 +212,7 @@ export def "providers-microsoft-dev-ops-pipeline-template-definitions list" [
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.DevOps/pipelines
 # operationId: Pipelines_ListBySubscription
-export def "subscriptions-providers-microsoft-dev-ops-pipelines list" [
+export def "pipelines-list-by-subscription" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -250,7 +250,7 @@ export def "subscriptions-providers-microsoft-dev-ops-pipelines list" [
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevOps/pipelines
 # operationId: Pipelines_ListByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-dev-ops-pipelines list" [
+export def "pipelines-list-by-resource-group" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -290,7 +290,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-ops-pipelines 
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevOps/pipelines/{pipelineName}
 # operationId: Pipelines_Delete
-export def "subscriptions-resource-groups-providers-microsoft-dev-ops-pipelines delete" [
+export def "pipelines-delete" [
   subscription_id: string
   resource_group_name: string
   pipeline_name: string
@@ -332,7 +332,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-ops-pipelines 
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevOps/pipelines/{pipelineName}
 # operationId: Pipelines_Get
-export def "subscriptions-resource-groups-providers-microsoft-dev-ops-pipelines get" [
+export def "pipelines-get" [
   subscription_id: string
   resource_group_name: string
   pipeline_name: string
@@ -374,7 +374,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-ops-pipelines 
 #
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevOps/pipelines/{pipelineName}
 # operationId: Pipelines_Update
-export def "subscriptions-resource-groups-providers-microsoft-dev-ops-pipelines update" [
+export def "pipelines-update" [
   subscription_id: string
   resource_group_name: string
   pipeline_name: string
@@ -421,7 +421,7 @@ export def "subscriptions-resource-groups-providers-microsoft-dev-ops-pipelines 
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DevOps/pipelines/{pipelineName}
 # operationId: Pipelines_CreateOrUpdate
 # --properties shape: {bootstrapConfiguration: record, organization: record, project: record}
-export def "subscriptions-resource-groups-providers-microsoft-dev-ops-pipelines create-or-update" [
+export def "pipelines-create-or-update" [
   subscription_id: string
   resource_group_name: string
   pipeline_name: string

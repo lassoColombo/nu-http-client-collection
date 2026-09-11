@@ -132,7 +132,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "previews get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "previews-read" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -156,7 +156,7 @@ export def commands []: nothing -> table {
 #
 # GET /previews/{file_id}/
 # operationId: previews_read
-export def "previews get" [
+export def "previews-read" [
   file_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -192,7 +192,7 @@ export def "previews get" [
 #
 # GET /processes/
 # operationId: processes_list
-export def "processes list" [
+export def "processes-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -226,7 +226,7 @@ export def "processes list" [
 #
 # GET /projects/
 # operationId: projects_list
-export def "projects list" [
+export def "projects-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -261,7 +261,7 @@ export def "projects list" [
 # POST /projects/
 # operationId: projects_create
 # --process shape: {crop?: string, flip?: bool, mirror?: bool, processing_algorithm: string, resize?: string, rotate?: int}
-export def "projects create" [
+export def "projects-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -301,7 +301,7 @@ export def "projects create" [
 #
 # GET /projects/{project_number}/
 # operationId: projects_read
-export def "projects get" [
+export def "projects-read" [
   project_number: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -337,7 +337,7 @@ export def "projects get" [
 #
 # GET /reports/
 # operationId: reports_list
-export def "reports list" [
+export def "reports-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -371,7 +371,7 @@ export def "reports list" [
 #
 # POST /reports/
 # operationId: reports_create
-export def "reports create" [
+export def "reports-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -410,7 +410,7 @@ export def "reports create" [
 #
 # GET /reports/{report_number}/
 # operationId: reports_read
-export def "reports get" [
+export def "reports-read" [
   report_number: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -446,7 +446,7 @@ export def "reports get" [
 #
 # GET /results/{result_file_id}/
 # operationId: results_read
-export def "results get" [
+export def "results-read" [
   result_file_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -482,7 +482,7 @@ export def "results get" [
 #
 # POST /uploads/
 # operationId: uploads_create
-export def "uploads create" [
+export def "uploads-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

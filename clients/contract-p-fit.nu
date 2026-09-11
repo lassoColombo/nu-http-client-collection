@@ -157,7 +157,7 @@ def type-completer-3 [] { ["oauth" "saml"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "about-release-notes get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-release-notes" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -180,7 +180,7 @@ export def commands []: nothing -> table {
 # GET /about/release_notes
 #
 # operationId: get_release_notes
-export def "about-release-notes get" [
+export def "get-release-notes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -213,7 +213,7 @@ export def "about-release-notes get" [
 # GET /about/version
 #
 # operationId: get_version
-export def "about-version get" [
+export def "get-version" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -247,7 +247,7 @@ export def "about-version get" [
 #
 # POST /auth
 # operationId: post_auth
-export def "auth create" [
+export def "post-auth" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -289,7 +289,7 @@ export def "auth create" [
 #
 # GET /auth/api-key
 # operationId: get_api_keys_resource
-export def "auth-api-key list" [
+export def "get-api-keys-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -327,7 +327,7 @@ export def "auth-api-key list" [
 # POST /auth/api-key
 # operationId: post_api_keys_resource
 # --roles item shape: {document_id?: string, inbox?: string, role: string}
-export def "auth-api-key create-resource" [
+export def "post-api-keys-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -371,7 +371,7 @@ export def "auth-api-key create-resource" [
 #
 # GET /auth/api-key/inbox/{inbox_id}
 # operationId: get_api_keys_inbox_resource
-export def "auth-api-key-inbox get-resource" [
+export def "get-api-keys-inbox-resource" [
   inbox_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -411,7 +411,7 @@ export def "auth-api-key-inbox get-resource" [
 # POST /auth/api-key/inbox/{inbox_id}
 # operationId: post_api_keys_inbox_resource
 # --roles item shape: {document_id?: string, inbox?: string, role: string}
-export def "auth-api-key-inbox create-resource" [
+export def "post-api-keys-inbox-resource" [
   inbox_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -457,7 +457,7 @@ export def "auth-api-key-inbox create-resource" [
 #
 # DELETE /auth/api-key/{key}
 # operationId: delete_api_key_resource
-export def "auth-api-key delete-resource" [
+export def "delete-api-key-resource" [
   key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -493,7 +493,7 @@ export def "auth-api-key delete-resource" [
 #
 # GET /auth/api-key/{key}
 # operationId: get_api_key_resource
-export def "auth-api-key get-resource" [
+export def "get-api-key-resource" [
   key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -532,7 +532,7 @@ export def "auth-api-key get-resource" [
 #
 # PATCH /auth/api-key/{key}
 # operationId: patch_api_key_resource
-export def "auth-api-key update-resource" [
+export def "patch-api-key-resource" [
   key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -571,7 +571,7 @@ export def "auth-api-key update-resource" [
 #
 # POST /auth/ephemeral
 # operationId: post_ephemeral_token_resource
-export def "auth-ephemeral create-token-resource" [
+export def "post-ephemeral-token-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -611,7 +611,7 @@ export def "auth-ephemeral create-token-resource" [
 # operationId: post_get_jwt_resource
 # --roles item shape: {document_id?: string, inbox?: string, role: string}
 @deprecated
-export def "auth-get-jwt create-resource" [
+export def "post-get-jwt-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -653,7 +653,7 @@ export def "auth-get-jwt create-resource" [
 #
 # POST /auth/reset_password
 # operationId: post_reset_password
-export def "auth-reset-password create" [
+export def "post-reset-password" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -694,7 +694,7 @@ export def "auth-reset-password create" [
 # POST /auth/token
 # operationId: post_token_resource
 # --roles item shape: {document_id?: string, inbox?: string, role: string}
-export def "auth-token create-resource" [
+export def "post-token-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -736,7 +736,7 @@ export def "auth-token create-resource" [
 #
 # GET /connections
 # operationId: get_connections_resource
-export def "connections list" [
+export def "get-connections-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -774,7 +774,7 @@ export def "connections list" [
 # POST /connections
 # operationId: post_connections_resource
 # --routing item shape: {and_conditions?: record, target?: string}
-export def "connections create-resource" [
+export def "post-connections-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -819,7 +819,7 @@ export def "connections create-resource" [
 #
 # DELETE /connections/{connection_id}
 # operationId: delete_connection_resource
-export def "connections delete-resource" [
+export def "delete-connection-resource" [
   connection_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -855,7 +855,7 @@ export def "connections delete-resource" [
 #
 # GET /connections/{connection_id}
 # operationId: get_connection_resource
-export def "connections get-resource" [
+export def "get-connection-resource" [
   connection_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -895,7 +895,7 @@ export def "connections get-resource" [
 # PATCH /connections/{connection_id}
 # operationId: patch_connection_resource
 # --routing item shape: {and_conditions?: record, target?: string}
-export def "connections update-resource" [
+export def "patch-connection-resource" [
   connection_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -942,7 +942,7 @@ export def "connections update-resource" [
 #
 # GET /data_retention_settings
 # operationId: get_data_retention_resource
-export def "data-retention-settings get-resource" [
+export def "get-data-retention-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -979,7 +979,7 @@ export def "data-retention-settings get-resource" [
 #
 # DELETE /data_retention_settings/{level}/{id}
 # operationId: delete_data_retention_resource
-export def "data-retention-settings delete-resource" [
+export def "delete-data-retention-resource" [
   level: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1016,7 +1016,7 @@ export def "data-retention-settings delete-resource" [
 # Get scoped data retention settings
 #
 # GET /data_retention_settings/{level}/{id}
-export def "data-retention-settings get" [
+export def "get-data-retention-settings-level-id" [
   level: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1058,7 +1058,7 @@ export def "data-retention-settings get" [
 # PATCH /data_retention_settings/{level}/{id}
 # operationId: patch_data_retention_resource
 # --settings item shape: {age?: int, how?: "FULL"|"SOURCE_FILES", what?: "ALL"|"DONE"}
-export def "data-retention-settings update-resource" [
+export def "patch-data-retention-resource" [
   level: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1103,7 +1103,7 @@ export def "data-retention-settings update-resource" [
 #
 # POST /documents/
 # operationId: post_simple_documents_resource
-export def "documents create-simple-resource" [
+export def "post-simple-documents-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1148,7 +1148,7 @@ export def "documents create-simple-resource" [
 # operationId: post_document_custom_output_resource
 # --excel shape: {add_automation_blockers?: bool, add_confidence?: bool, add_text?: bool, enable_key_value: bool, multiple_value_separator?: string}
 # --filter shape: {end_date?: string, list?: list<string>, start_date?: string, type: "project"|"inbox"|"document"}
-export def "documents-custom-output create-resource" [
+export def "post-document-custom-output-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1187,7 +1187,7 @@ export def "documents-custom-output create-resource" [
 # POST /documents/enrich
 #
 # operationId: post_enrichment_resource
-export def "documents-enrich create-enrichment-resource" [
+export def "post-enrichment-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1224,7 +1224,7 @@ export def "documents-enrich create-enrichment-resource" [
 # POST /documents/file_query/{data_type}
 #
 # operationId: post_document_data_resource
-export def "documents-file-query create-resource" [
+export def "post-document-data-resource" [
   data_type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1264,7 +1264,7 @@ export def "documents-file-query create-resource" [
 #
 # operationId: post_document_query
 # --filter shape: {_id?: record, inbox?: record, timing_fields?: record, timings?: record}
-export def "documents-query create" [
+export def "post-document-query" [
   query_type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1305,7 +1305,7 @@ export def "documents-query create" [
 #
 # DELETE /documents/{document_id}
 # operationId: delete_document_delete_resource
-export def "documents delete-resource" [
+export def "delete-document-delete-resource" [
   document_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1343,7 +1343,7 @@ export def "documents delete-resource" [
 #
 # GET /documents/{document_id}
 # operationId: get_document_delete_resource
-export def "documents get-delete-resource" [
+export def "get-document-delete-resource" [
   document_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1378,7 +1378,7 @@ export def "documents get-delete-resource" [
 # POST /documents/{document_id}/compare_versions
 #
 # operationId: post_document_compare_versions_resource
-export def "documents-compare-versions create-resource" [
+export def "post-document-compare-versions-resource" [
   document_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1420,7 +1420,7 @@ export def "documents-compare-versions create-resource" [
 #
 # GET /documents/{document_id}/custom_output
 # operationId: get_document_transform_resource
-export def "documents-custom-output get-transform-resource" [
+export def "get-document-transform-resource" [
   document_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1459,7 +1459,7 @@ export def "documents-custom-output get-transform-resource" [
 # --annotations shape: {string?: list}
 # --lines shape: {string?: list}
 # --sections item shape: {confidence?: int, document_type?: string, format?: string, page: int}
-export def "documents-feedback create-submit-eval-resource" [
+export def "post-document-submit-eval-resource" [
   document_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1504,7 +1504,7 @@ export def "documents-feedback create-submit-eval-resource" [
 #
 # GET /documents/{document_id}/last_version
 # operationId: get_document_last_version_resource
-export def "documents-last-version get-resource" [
+export def "get-document-last-version-resource" [
   document_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1544,7 +1544,7 @@ export def "documents-last-version get-resource" [
 #
 # GET /documents/{document_id}/original_file
 # operationId: get_document_original_file_resource
-export def "documents-original-file get-resource" [
+export def "get-document-original-file-resource" [
   document_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1579,7 +1579,7 @@ export def "documents-original-file get-resource" [
 # GET /documents/{document_id}/page/{page_range}
 #
 # operationId: get_document_page_image_resource
-export def "documents-page get-image-resource" [
+export def "get-document-page-image-resource" [
   document_id: string
   page_range: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1616,7 +1616,7 @@ export def "documents-page get-image-resource" [
 # GET /documents/{document_id}/page_thumbnail/{page_range}
 #
 # operationId: get_document_page_image_thumbnail_resource
-export def "documents-page-thumbnail get-image-resource" [
+export def "get-document-page-image-thumbnail-resource" [
   document_id: string
   page_range: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1655,7 +1655,7 @@ export def "documents-page-thumbnail get-image-resource" [
 # POST /documents/{document_id}/process_table_annotation
 # operationId: post_document_process_table_annotation
 # --columns item shape: {field_name?: string, x_bounds?: list<int>}
-export def "documents-process-table-annotation create" [
+export def "post-document-process-table-annotation" [
   document_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1700,7 +1700,7 @@ export def "documents-process-table-annotation create" [
 #
 # POST /documents/{document_id}/reprocess
 # operationId: post_reprocess_document_resource
-export def "documents-reprocess create-resource" [
+export def "post-reprocess-document-resource" [
   document_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1741,7 +1741,7 @@ export def "documents-reprocess create-resource" [
 # GET /documents/{document_id}/reverse/{page_range}
 #
 # operationId: get_document_reverse_resource
-export def "documents-reverse get-resource" [
+export def "get-document-reverse-resource" [
   document_id: string
   page_range: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1786,7 +1786,7 @@ export def "documents-reverse get-resource" [
 # --status_data shape: {archived?: bool, data?: bool, escalate?: bool, feedback?: bool, lock?: bool, ready_accepted?: bool, ready_attempts?: int, reject?: bool, reject_accepted?: bool, reject_attempts?: int, sampling?: bool, submit_accepted?: bool, submit_attempts?: int, success?: bool}
 # --submitted shape: {by?: string, since?: string, value?: bool}
 # --timings shape: {done_time?: string, feedback_time?: string, processing_period?: float, receive_time?: string, start_time?: string, submit_time?: string}
-export def "documents-status-data create-resource" [
+export def "post-document-status-data-resource" [
   document_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1836,7 +1836,7 @@ export def "documents-status-data create-resource" [
 #
 # GET /documents/{document_id}/text
 # operationId: get_document_text_resource
-export def "documents-text get-resource" [
+export def "get-document-text-resource" [
   document_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1872,7 +1872,7 @@ export def "documents-text get-resource" [
 #
 # GET /documents/{document_id}/workflow
 # operationId: get_document_workflow_resource
-export def "documents-workflow get-resource" [
+export def "get-document-workflow-resource" [
   document_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1911,7 +1911,7 @@ export def "documents-workflow get-resource" [
 #
 # POST /documents/{inbox_id}
 # operationId: post_documents_resource
-export def "documents create-resource" [
+export def "post-documents-resource" [
   inbox_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1956,7 +1956,7 @@ export def "documents create-resource" [
 #
 # PATCH /documents/{inbox_id}/copy_inbox
 # operationId: patch_document_copy_resource
-export def "documents-copy-inbox update-resource" [
+export def "patch-document-copy-resource" [
   inbox_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1996,7 +1996,7 @@ export def "documents-copy-inbox update-resource" [
 #
 # PATCH /documents/{inbox_id}/move_inbox
 # operationId: patch_document_move_resource
-export def "documents-move-inbox update-resource" [
+export def "patch-document-move-resource" [
   inbox_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2036,7 +2036,7 @@ export def "documents-move-inbox update-resource" [
 #
 # GET /formats
 # operationId: get_formats_resource
-export def "formats list" [
+export def "get-formats-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2074,7 +2074,7 @@ export def "formats list" [
 # --labels item shape: {category?: "annotation"|"tag"|"separator"|"computed", count_in_evaluation?: bool, description?: string, display_name?: string, field_name: string, formula?: string, initialized?: bool, is_library?: bool, mandatory?: bool, mandatory_if?: record, multiple?: bool, options?: list, scope?: "document"|"page"|"section", type?: "string"|"date"|"integer"|"float"|"currency"|"alphanumeric"|"national_identification_number_be"|"boolean"|"datetime"|"address", visible?: bool, visible_if?: record}
 # --separators item shape: {name: string, page: int}
 # --table_types item shape: {collapsed?: bool, columns?: list, contains_line_items?: bool, initialized?: bool, label?: string, scope?: "document"|"page"|"section"}
-export def "formats create-resource" [
+export def "post-formats-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2117,7 +2117,7 @@ export def "formats create-resource" [
 #
 # GET /formats/document_types
 # operationId: get_formats_doc_types_resource
-export def "formats-document-types get-doc-resource" [
+export def "get-formats-doc-types-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2154,7 +2154,7 @@ export def "formats-document-types get-doc-resource" [
 #
 # DELETE /formats/{format_id}
 # operationId: delete_format_resource
-export def "formats delete-resource" [
+export def "delete-format-resource" [
   format_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2190,7 +2190,7 @@ export def "formats delete-resource" [
 #
 # GET /formats/{format_id}
 # operationId: get_format_resource
-export def "formats get-resource" [
+export def "get-format-resource" [
   format_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2230,7 +2230,7 @@ export def "formats get-resource" [
 # --labels item shape: {category?: "annotation"|"tag"|"separator"|"computed", count_in_evaluation?: bool, description?: string, display_name?: string, field_name: string, formula?: string, initialized?: bool, is_library?: bool, mandatory?: bool, mandatory_if?: record, multiple?: bool, options?: list, scope?: "document"|"page"|"section", type?: "string"|"date"|"integer"|"float"|"currency"|"alphanumeric"|"national_identification_number_be"|"boolean"|"datetime"|"address", visible?: bool, visible_if?: record}
 # --separators item shape: {name: string, page: int}
 # --table_types item shape: {collapsed?: bool, columns?: list, contains_line_items?: bool, initialized?: bool, label?: string, scope?: "document"|"page"|"section"}
-export def "formats update-resource" [
+export def "patch-format-resource" [
   format_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2278,7 +2278,7 @@ export def "formats update-resource" [
 #
 # GET /formats/{scope}/tag_fields
 # operationId: get_format_tag_fields_resource
-export def "formats-tag-fields get-resource" [
+export def "get-format-tag-fields-resource" [
   scope: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2317,7 +2317,7 @@ export def "formats-tag-fields get-resource" [
 #
 # GET /inboxes
 # operationId: get_inboxes_resource
-export def "inboxes list" [
+export def "get-inboxes-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2354,7 +2354,7 @@ export def "inboxes list" [
 #
 # POST /inboxes
 # operationId: post_inboxes_resource
-export def "inboxes create-resource" [
+export def "post-inboxes-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2396,7 +2396,7 @@ export def "inboxes create-resource" [
 #
 # DELETE /inboxes/{inbox_id}
 # operationId: delete_inbox_resource
-export def "inboxes delete-resource" [
+export def "delete-inbox-resource" [
   inbox_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2432,7 +2432,7 @@ export def "inboxes delete-resource" [
 #
 # GET /inboxes/{inbox_id}
 # operationId: get_inbox_resource
-export def "inboxes get-resource" [
+export def "get-inbox-resource" [
   inbox_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2471,7 +2471,7 @@ export def "inboxes get-resource" [
 #
 # PATCH /inboxes/{inbox_id}
 # operationId: patch_inbox_resource
-export def "inboxes update-resource" [
+export def "patch-inbox-resource" [
   inbox_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2514,7 +2514,7 @@ export def "inboxes update-resource" [
 # GET /inboxes/{inbox_id}/document_versions
 #
 # operationId: get_inbox_document_versions_resource
-export def "inboxes-document-versions get-resource" [
+export def "get-inbox-document-versions-resource" [
   inbox_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2550,7 +2550,7 @@ export def "inboxes-document-versions get-resource" [
 #
 # DELETE /inboxes/{inbox_id}/documents
 # operationId: delete_inbox_document_resource
-export def "inboxes-documents delete-resource" [
+export def "delete-inbox-document-resource" [
   inbox_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2591,7 +2591,7 @@ export def "inboxes-documents delete-resource" [
 #
 # GET /inboxes/{inbox_id}/documents
 # operationId: get_inbox_document_resource
-export def "inboxes-documents get-resource" [
+export def "get-inbox-document-resource" [
   inbox_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2630,7 +2630,7 @@ export def "inboxes-documents get-resource" [
 #
 # GET /inboxes/{inbox_id}/paginated
 # operationId: get_inbox_paginated_resource
-export def "inboxes-paginated get-resource" [
+export def "get-inbox-paginated-resource" [
   inbox_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2675,7 +2675,7 @@ export def "inboxes-paginated get-resource" [
 #
 # POST /inboxes/{inbox_id}/reprocess
 # operationId: post_inbox_reprocess_resource
-export def "inboxes-reprocess create-resource" [
+export def "post-inbox-reprocess-resource" [
   inbox_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2720,7 +2720,7 @@ export def "inboxes-reprocess create-resource" [
 #
 # GET /integrations/
 # operationId: get_integration_resources
-export def "integrations get-resources" [
+export def "get-integration-resources" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2754,7 +2754,7 @@ export def "integrations get-resources" [
 #
 # POST /integrations/
 # operationId: post_integration_resources
-export def "integrations create-resources" [
+export def "post-integration-resources" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2792,7 +2792,7 @@ export def "integrations create-resources" [
 #
 # DELETE /integrations/{integration_id}
 # operationId: delete_integration_resource
-export def "integrations delete-resource" [
+export def "delete-integration-resource" [
   integration_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2828,7 +2828,7 @@ export def "integrations delete-resource" [
 #
 # GET /integrations/{integration_id}
 # operationId: get_integration_resource
-export def "integrations get-resource" [
+export def "get-integration-resource" [
   integration_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2864,7 +2864,7 @@ export def "integrations get-resource" [
 #
 # PATCH /integrations/{integration_id}
 # operationId: patch_integration_resource
-export def "integrations update-resource" [
+export def "patch-integration-resource" [
   integration_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2903,7 +2903,7 @@ export def "integrations update-resource" [
 # GET /integrations/{integration_id}/activate
 #
 # operationId: get_email_integration_activation_resource
-export def "integrations-activate get-email-activation-resource" [
+export def "get-email-integration-activation-resource" [
   integration_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2941,7 +2941,7 @@ export def "integrations-activate get-email-activation-resource" [
 #
 # GET /predictor_settings
 # operationId: get_predictor_settings_resource
-export def "predictor-settings list" [
+export def "get-predictor-settings-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2978,7 +2978,7 @@ export def "predictor-settings list" [
 #
 # DELETE /predictor_settings/{scope}
 # operationId: delete_predictor_setting_resource
-export def "predictor-settings delete-resource" [
+export def "delete-predictor-setting-resource" [
   scope: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3014,7 +3014,7 @@ export def "predictor-settings delete-resource" [
 #
 # GET /predictor_settings/{scope}
 # operationId: get_predictor_setting_resource
-export def "predictor-settings get-resource" [
+export def "get-predictor-setting-resource" [
   scope: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3055,7 +3055,7 @@ export def "predictor-settings get-resource" [
 # operationId: patch_predictor_setting_resource
 # --key_value_pairs shape: {classification_cutoff?: int, rule_config?: record, splitting_cutoff?: int, uer_pre_config?: record}
 # --table_extraction_settings shape: {field_settings?: record}
-export def "predictor-settings update-resource" [
+export def "patch-predictor-setting-resource" [
   scope: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3103,7 +3103,7 @@ export def "predictor-settings update-resource" [
 #
 # GET /projects
 # operationId: get_projects_resource
-export def "projects list" [
+export def "get-projects-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3137,7 +3137,7 @@ export def "projects list" [
 #
 # POST /projects
 # operationId: post_projects_resource
-export def "projects create-resource" [
+export def "post-projects-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3181,7 +3181,7 @@ export def "projects create-resource" [
 #
 # DELETE /projects/{project_id}
 # operationId: delete_project_resource
-export def "projects delete-resource" [
+export def "delete-project-resource" [
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3217,7 +3217,7 @@ export def "projects delete-resource" [
 #
 # GET /projects/{project_id}
 # operationId: get_project_resource
-export def "projects get-resource" [
+export def "get-project-resource" [
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3253,7 +3253,7 @@ export def "projects get-resource" [
 #
 # PATCH /projects/{project_id}
 # operationId: patch_project_resource
-export def "projects update-resource" [
+export def "patch-project-resource" [
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3299,7 +3299,7 @@ export def "projects update-resource" [
 #
 # GET /reports
 # operationId: get_reports_resource
-export def "reports list" [
+export def "get-reports-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3349,7 +3349,7 @@ export def "reports list" [
 # --page_classification shape: {include?: bool}
 # --sections shape: {include?: bool}
 # --text shape: {include?: bool}
-export def "reports create-resource" [
+export def "post-reports-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3422,7 +3422,7 @@ export def "reports create-resource" [
 # --page_classification shape: {include?: bool}
 # --sections shape: {include?: bool}
 # --text shape: {include?: bool}
-export def "reports-generate create-resource" [
+export def "post-generate-report-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3483,7 +3483,7 @@ export def "reports-generate create-resource" [
 #
 # DELETE /reports/{report_id}
 # operationId: delete_report_resource
-export def "reports delete-resource" [
+export def "delete-report-resource" [
   report_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3519,7 +3519,7 @@ export def "reports delete-resource" [
 #
 # GET /reports/{report_id}
 # operationId: get_report_resource
-export def "reports get-resource" [
+export def "get-report-resource" [
   report_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3571,7 +3571,7 @@ export def "reports get-resource" [
 # --page_classification shape: {include?: bool}
 # --sections shape: {include?: bool}
 # --text shape: {include?: bool}
-export def "reports update-resource" [
+export def "patch-report-resource" [
   report_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3633,7 +3633,7 @@ export def "reports update-resource" [
 #
 # POST /reports/{report_id}/generate
 # operationId: post_generate_report_id_resource
-export def "reports-generate create-resource-by-report-id" [
+export def "post-generate-report-id-resource" [
   report_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3674,7 +3674,7 @@ export def "reports-generate create-resource-by-report-id" [
 #
 # GET /roles
 # operationId: get_roles_resource
-export def "roles list" [
+export def "get-roles-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3712,7 +3712,7 @@ export def "roles list" [
 # POST /roles
 # operationId: post_roles_resource
 # --permissions shape: {create_dropbox_user?: bool, create_inbox?: bool, create_webhook?: bool, de_escalate_document?: bool, delete_tenant?: bool, delete_webhook?: bool, edit_backend_settings?: bool, edit_beats?: bool, edit_dashboard_settings?: bool, edit_data_retention_settings?: bool, edit_flow_settings?: bool, edit_format_settings?: bool, edit_integration_settings?: bool, edit_integrations?: bool, edit_predictor_settings?: bool, edit_reports?: bool, edit_retention_settings?: bool, edit_review_settings?: bool, ... (32 more fields)}
-export def "roles create-resource" [
+export def "post-roles-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3754,7 +3754,7 @@ export def "roles create-resource" [
 #
 # DELETE /roles/{role_id}
 # operationId: delete_role_resource
-export def "roles delete-resource" [
+export def "delete-role-resource" [
   role_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3790,7 +3790,7 @@ export def "roles delete-resource" [
 #
 # GET /roles/{role_id}
 # operationId: get_role_resource
-export def "roles get-resource" [
+export def "get-role-resource" [
   role_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3830,7 +3830,7 @@ export def "roles get-resource" [
 # PATCH /roles/{role_id}
 # operationId: patch_role_resource
 # --permissions shape: {create_dropbox_user?: bool, create_inbox?: bool, create_webhook?: bool, de_escalate_document?: bool, delete_tenant?: bool, delete_webhook?: bool, edit_backend_settings?: bool, edit_beats?: bool, edit_dashboard_settings?: bool, edit_data_retention_settings?: bool, edit_flow_settings?: bool, edit_format_settings?: bool, edit_integration_settings?: bool, edit_integrations?: bool, edit_predictor_settings?: bool, edit_reports?: bool, edit_retention_settings?: bool, edit_review_settings?: bool, ... (32 more fields)}
-export def "roles update-resource" [
+export def "patch-role-resource" [
   role_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3874,7 +3874,7 @@ export def "roles update-resource" [
 #
 # GET /rule_config
 # operationId: get_rule_configs_resource
-export def "rule-config list" [
+export def "get-rule-configs-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3911,7 +3911,7 @@ export def "rule-config list" [
 #
 # POST /rule_config/rule_entity/
 # operationId: post_debug_rule_entity_resource
-export def "rule-config-rule-entity create-debug-resource" [
+export def "post-debug-rule-entity-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3949,7 +3949,7 @@ export def "rule-config-rule-entity create-debug-resource" [
 #
 # POST /rule_config/rule_entity/{document_id}
 # operationId: post_debug_rule_entity_document_resource
-export def "rule-config-rule-entity create-debug-resource-by-document-id" [
+export def "post-debug-rule-entity-document-resource" [
   document_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3989,7 +3989,7 @@ export def "rule-config-rule-entity create-debug-resource-by-document-id" [
 #
 # POST /rule_config/where_to_search/{document_id}
 # operationId: post_debug_where_to_search
-export def "rule-config-where-to-search create-debug" [
+export def "post-debug-where-to-search" [
   document_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4029,7 +4029,7 @@ export def "rule-config-where-to-search create-debug" [
 #
 # DELETE /rule_config/{scope}
 # operationId: delete_rule_config_resource
-export def "rule-config delete-resource" [
+export def "delete-rule-config-resource" [
   scope: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4065,7 +4065,7 @@ export def "rule-config delete-resource" [
 #
 # GET /rule_config/{scope}
 # operationId: get_rule_config_resource
-export def "rule-config get-resource" [
+export def "get-rule-config-resource" [
   scope: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4104,7 +4104,7 @@ export def "rule-config get-resource" [
 #
 # PATCH /rule_config/{scope}
 # operationId: patch_rule_config_resource
-export def "rule-config update-resource" [
+export def "patch-rule-config-resource" [
   scope: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4147,7 +4147,7 @@ export def "rule-config update-resource" [
 #
 # GET /sampling_settings
 # operationId: get_setting_samplings_resource
-export def "sampling-settings list" [
+export def "get-setting-samplings-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4184,7 +4184,7 @@ export def "sampling-settings list" [
 #
 # DELETE /sampling_settings/{scope}
 # operationId: delete_setting_sampling_resource
-export def "sampling-settings delete-resource" [
+export def "delete-setting-sampling-resource" [
   scope: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4220,7 +4220,7 @@ export def "sampling-settings delete-resource" [
 #
 # GET /sampling_settings/{scope}
 # operationId: get_setting_sampling_resource
-export def "sampling-settings get-resource" [
+export def "get-setting-sampling-resource" [
   scope: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4259,7 +4259,7 @@ export def "sampling-settings get-resource" [
 #
 # PATCH /sampling_settings/{scope}
 # operationId: patch_setting_sampling_resource
-export def "sampling-settings update-resource" [
+export def "patch-setting-sampling-resource" [
   scope: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4305,7 +4305,7 @@ export def "sampling-settings update-resource" [
 #
 # GET /settings/dashboard
 # operationId: get_dashboard_settings_atomic_resource
-export def "settings-dashboard get-atomic-resource" [
+export def "get-dashboard-settings-atomic-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4346,7 +4346,7 @@ export def "settings-dashboard get-atomic-resource" [
 # PATCH /settings/dashboard
 # operationId: patch_dashboard_settings_atomic_resource
 # --settings shape: {autolearning?: bool, dashboard_timeout?: int, default_date_range?: record, default_inbox_size?: record, default_inbox_sorting?: record, flexible_filters?: list, navigation_menu?: record, process_unreadable?: bool, sequence_columns_of_inbox?: record, show_digital_annotations?: bool, show_filters?: record, show_inbox_actions?: record, studio_format_options?: record, upload_options?: record, welcome_counters?: bool, welcome_counters_options?: record}
-export def "settings-dashboard update-atomic-resource" [
+export def "patch-dashboard-settings-atomic-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4388,7 +4388,7 @@ export def "settings-dashboard update-atomic-resource" [
 #
 # GET /settings/review
 # operationId: get_review_settings_atomic_resource
-export def "settings-review get-atomic-resource" [
+export def "get-review-settings-atomic-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4429,7 +4429,7 @@ export def "settings-review get-atomic-resource" [
 # PATCH /settings/review
 # operationId: patch_review_settings_atomic_resource
 # --settings shape: {default_zoom?: record, first_toolbar?: record, lock_expiry?: record, review_options?: record, second_toolbar?: record}
-export def "settings-review update-atomic-resource" [
+export def "patch-review-settings-atomic-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4470,7 +4470,7 @@ export def "settings-review update-atomic-resource" [
 # GET /sso/config
 #
 # operationId: get_sso_config_resources
-export def "sso-config get-resources" [
+export def "get-sso-config-resources" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4507,7 +4507,7 @@ export def "sso-config get-resources" [
 #
 # operationId: post_sso_config_resources
 # --extra shape: {entity_id?: string, specification_url?: string}
-export def "sso-config create-resources" [
+export def "post-sso-config-resources" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4551,7 +4551,7 @@ export def "sso-config create-resources" [
 #
 # DELETE /sso/config/{sso_config_id}
 # operationId: delete_sso_config_resources
-export def "sso-config delete-resources" [
+export def "delete-sso-config-resources" [
   sso_config_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4586,7 +4586,7 @@ export def "sso-config delete-resources" [
 # POST /sso/login
 #
 # operationId: post_oauth_login_resource
-export def "sso-login create-oauth-resource" [
+export def "post-oauth-login-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4624,7 +4624,7 @@ export def "sso-login create-oauth-resource" [
 # GET /stats/usage
 #
 # operationId: get_usage_stats_resource
-export def "stats-usage get-resource" [
+export def "get-usage-stats-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4663,7 +4663,7 @@ export def "stats-usage get-resource" [
 #
 # GET /stats/{inbox_id}
 # operationId: get_stats_resource
-export def "stats get-resource" [
+export def "get-stats-resource" [
   inbox_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4704,7 +4704,7 @@ export def "stats get-resource" [
 #
 # GET /stats/{inbox_id}/automation_blockers
 # operationId: get_automation_blockers_stats
-export def "stats-automation-blockers get" [
+export def "get-automation-blockers-stats" [
   inbox_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4745,7 +4745,7 @@ export def "stats-automation-blockers get" [
 #
 # POST /stats/{inbox_id}/blue_dots
 # operationId: post_blue_dots_resource
-export def "stats-blue-dots create-resource" [
+export def "post-blue-dots-resource" [
   inbox_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4792,7 +4792,7 @@ export def "stats-blue-dots create-resource" [
 #
 # GET /stats/{inbox_id}/evaluated_versions
 # operationId: get_evaluated_versions
-export def "stats-evaluated-versions get" [
+export def "get-evaluated-versions" [
   inbox_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4834,7 +4834,7 @@ export def "stats-evaluated-versions get" [
 #
 # GET /stats/{inbox_id}/processing
 # operationId: get_processing_stats
-export def "stats-processing get" [
+export def "get-processing-stats" [
   inbox_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4874,7 +4874,7 @@ export def "stats-processing get" [
 #
 # GET /stats/{inbox_id}/volume
 # operationId: get_volume_stats
-export def "stats-volume get" [
+export def "get-volume-stats" [
   inbox_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4915,7 +4915,7 @@ export def "stats-volume get" [
 #
 # GET /stats/{scope}/accuracy
 # operationId: get_accuracy_resource
-export def "stats-accuracy get-resource" [
+export def "get-accuracy-resource" [
   scope: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4958,7 +4958,7 @@ export def "stats-accuracy get-resource" [
 #
 # GET /stats/{scope}/stp
 # operationId: get_stp_resource
-export def "stats-stp get-resource" [
+export def "get-stp-resource" [
   scope: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4999,7 +4999,7 @@ export def "stats-stp get-resource" [
 #
 # GET /style/custom.css
 # operationId: get_style_sheet_resource
-export def "style-custom-css get-sheet-resource" [
+export def "get-style-sheet-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5033,7 +5033,7 @@ export def "style-custom-css get-sheet-resource" [
 #
 # POST /style/custom.css
 # operationId: post_style_sheet_resource
-export def "style-custom-css create-sheet-resource" [
+export def "post-style-sheet-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5073,7 +5073,7 @@ export def "style-custom-css create-sheet-resource" [
 #
 # GET /style/logo.png
 # operationId: get_style_logo_resource
-export def "style-logo-png get-resource" [
+export def "get-style-logo-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5107,7 +5107,7 @@ export def "style-logo-png get-resource" [
 #
 # POST /style/logo.png
 # operationId: post_style_logo_resource
-export def "style-logo-png create-resource" [
+export def "post-style-logo-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5146,7 +5146,7 @@ export def "style-logo-png create-resource" [
 # DELETE /tenant
 #
 # operationId: delete_tenant_resource
-export def "tenant delete-resource" [
+export def "delete-tenant-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5179,7 +5179,7 @@ export def "tenant delete-resource" [
 # PATCH /tenant/activate
 #
 # operationId: patch_activate_tenant_resource
-export def "tenant-activate update-resource" [
+export def "patch-activate-tenant-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5221,7 +5221,7 @@ export def "tenant-activate update-resource" [
 #
 # GET /threshold_settings
 # operationId: get_settings_threshold_resource
-export def "threshold-settings list" [
+export def "get-settings-threshold-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5258,7 +5258,7 @@ export def "threshold-settings list" [
 #
 # DELETE /threshold_settings/{scope}
 # operationId: delete_setting_threshold_resource
-export def "threshold-settings delete-resource" [
+export def "delete-setting-threshold-resource" [
   scope: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5294,7 +5294,7 @@ export def "threshold-settings delete-resource" [
 #
 # GET /threshold_settings/{scope}
 # operationId: get_setting_threshold_resource
-export def "threshold-settings get-resource" [
+export def "get-setting-threshold-resource" [
   scope: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5336,7 +5336,7 @@ export def "threshold-settings get-resource" [
 # PATCH /threshold_settings/{scope}
 # operationId: patch_setting_threshold_resource
 # --thresholds shape: {annotations?: record, lines?: record, sections?: record}
-export def "threshold-settings update-resource" [
+export def "patch-setting-threshold-resource" [
   scope: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5379,7 +5379,7 @@ export def "threshold-settings update-resource" [
 #
 # GET /users
 # operationId: get_users_resource
-export def "users list" [
+export def "get-users-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5417,7 +5417,7 @@ export def "users list" [
 # POST /users
 # operationId: post_users_resource
 # --roles item shape: {document_id?: string, inbox?: string, role: string}
-export def "users create-resource" [
+export def "post-users-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5461,7 +5461,7 @@ export def "users create-resource" [
 #
 # GET /users/me
 # operationId: get_me
-export def "users-me get" [
+export def "get-me" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5498,7 +5498,7 @@ export def "users-me get" [
 #
 # POST /users/me/change_password
 # operationId: post_change_password
-export def "users-me-change-password create" [
+export def "post-change-password" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5537,7 +5537,7 @@ export def "users-me-change-password create" [
 #
 # DELETE /users/{user_id}
 # operationId: delete_user_resource
-export def "users delete-resource" [
+export def "delete-user-resource" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5573,7 +5573,7 @@ export def "users delete-resource" [
 #
 # GET /users/{user_id}
 # operationId: get_user_resource
-export def "users get-resource" [
+export def "get-user-resource" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5613,7 +5613,7 @@ export def "users get-resource" [
 # PATCH /users/{user_id}
 # operationId: patch_user_resource
 # --roles item shape: {inbox?: string, role?: string}
-export def "users update-resource" [
+export def "patch-user-resource" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

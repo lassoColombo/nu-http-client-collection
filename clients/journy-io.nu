@@ -109,7 +109,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "accounts delete" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "delete-account" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -134,7 +134,7 @@ export def commands []: nothing -> table {
 # DELETE /accounts
 # operationId: deleteAccount
 # --identification shape: {accountId?: string, domain?: string}
-export def "accounts delete" [
+export def "delete-account" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -173,7 +173,7 @@ export def "accounts delete" [
 # POST /accounts/upsert
 # operationId: upsertAccount
 # --identification shape: {accountId?: string, domain?: string}
-export def "accounts-upsert update" [
+export def "upsert-account" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -214,7 +214,7 @@ export def "accounts-upsert update" [
 # operationId: addUserToAccount
 # --account shape: {accountId?: string, domain?: string}
 # --users item shape: {identification: record}
-export def "accounts-users-add create" [
+export def "add-user-to-account" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -255,7 +255,7 @@ export def "accounts-users-add create" [
 # operationId: removeUserFromAccount
 # --account shape: {accountId?: string, domain?: string}
 # --users item shape: {identification: record}
-export def "accounts-users-remove delete" [
+export def "remove-user-from-account" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -294,7 +294,7 @@ export def "accounts-users-remove delete" [
 #
 # GET /events
 # operationId: getEvents
-export def "events get" [
+export def "get-events" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -331,7 +331,7 @@ export def "events get" [
 # operationId: trackJourneyEvent
 # --identification shape: {account?: record, user?: record}
 @deprecated
-export def "events create-track-journey" [
+export def "track-journey-event" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -373,7 +373,7 @@ export def "events create-track-journey" [
 # POST /link
 # operationId: link
 # --identification shape: {email?: string, userId?: string}
-export def "link create" [
+export def "link" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -412,7 +412,7 @@ export def "link create" [
 #
 # GET /properties/accounts
 # operationId: getAccountProperties
-export def "properties-accounts get" [
+export def "get-account-properties" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -446,7 +446,7 @@ export def "properties-accounts get" [
 #
 # GET /properties/users
 # operationId: getUserProperties
-export def "properties-users get" [
+export def "get-user-properties" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -480,7 +480,7 @@ export def "properties-users get" [
 #
 # GET /segments/accounts
 # operationId: getAccountSegments
-export def "segments-accounts get" [
+export def "get-account-segments" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -514,7 +514,7 @@ export def "segments-accounts get" [
 #
 # GET /segments/users
 # operationId: getUserSegments
-export def "segments-users get" [
+export def "get-user-segments" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -549,7 +549,7 @@ export def "segments-users get" [
 # POST /track
 # operationId: trackEvent
 # --identification shape: {account?: record, user?: record}
-export def "track create-event" [
+export def "track-event" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -590,7 +590,7 @@ export def "track create-event" [
 #
 # GET /tracking/snippet
 # operationId: getTrackingSnippet
-export def "tracking-snippet get" [
+export def "get-tracking-snippet" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -627,7 +627,7 @@ export def "tracking-snippet get" [
 # DELETE /users
 # operationId: deleteUser
 # --identification shape: {email?: string, userId?: string}
-export def "users delete" [
+export def "delete-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -666,7 +666,7 @@ export def "users delete" [
 # POST /users/upsert
 # operationId: upsertUser
 # --identification shape: {email?: string, userId?: string}
-export def "users-upsert update" [
+export def "upsert-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -705,7 +705,7 @@ export def "users-upsert update" [
 #
 # GET /validate
 # operationId: getValidity
-export def "validate get-validity" [
+export def "get-validity" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

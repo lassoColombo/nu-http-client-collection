@@ -122,7 +122,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "applications-attribute-groups update-associate" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "associate-attribute-group" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -146,7 +146,7 @@ export def commands []: nothing -> table {
 #
 # PUT /applications/{application}/attribute-groups/{attributeGroup}
 # operationId: AssociateAttributeGroup
-export def "applications-attribute-groups update-associate" [
+export def "associate-attribute-group" [
   application: string
   attribute_group: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -193,7 +193,7 @@ export def "applications-attribute-groups update-associate" [
 #
 # DELETE /applications/{application}/attribute-groups/{attributeGroup}
 # operationId: DisassociateAttributeGroup
-export def "applications-attribute-groups delete-disassociate" [
+export def "disassociate-attribute-group" [
   application: string
   attribute_group: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -240,7 +240,7 @@ export def "applications-attribute-groups delete-disassociate" [
 #
 # PUT /applications/{application}/resources/{resourceType}/{resource}
 # operationId: AssociateResource
-export def "applications-resources update-associate" [
+export def "associate-resource" [
   application: string
   resource_type: string
   resource: string
@@ -289,7 +289,7 @@ export def "applications-resources update-associate" [
 #
 # DELETE /applications/{application}/resources/{resourceType}/{resource}
 # operationId: DisassociateResource
-export def "applications-resources delete-disassociate" [
+export def "disassociate-resource" [
   application: string
   resource_type: string
   resource: string
@@ -338,7 +338,7 @@ export def "applications-resources delete-disassociate" [
 #
 # GET /applications/{application}/resources/{resourceType}/{resource}
 # operationId: GetAssociatedResource
-export def "applications-resources get-associated" [
+export def "get-associated-resource" [
   application: string
   resource_type: string
   resource: string
@@ -387,7 +387,7 @@ export def "applications-resources get-associated" [
 #
 # POST /applications
 # operationId: CreateApplication
-export def "applications create" [
+export def "create-application" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -437,7 +437,7 @@ export def "applications create" [
 #
 # GET /applications
 # operationId: ListApplications
-export def "applications list" [
+export def "list-applications" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -483,7 +483,7 @@ export def "applications list" [
 #
 # POST /attribute-groups
 # operationId: CreateAttributeGroup
-export def "attribute-groups create" [
+export def "create-attribute-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -534,7 +534,7 @@ export def "attribute-groups create" [
 #
 # GET /attribute-groups
 # operationId: ListAttributeGroups
-export def "attribute-groups list" [
+export def "list-attribute-groups" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -580,7 +580,7 @@ export def "attribute-groups list" [
 #
 # DELETE /applications/{application}
 # operationId: DeleteApplication
-export def "applications delete" [
+export def "delete-application" [
   application: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -625,7 +625,7 @@ export def "applications delete" [
 #
 # GET /applications/{application}
 # operationId: GetApplication
-export def "applications get" [
+export def "get-application" [
   application: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -670,7 +670,7 @@ export def "applications get" [
 #
 # PATCH /applications/{application}
 # operationId: UpdateApplication
-export def "applications update" [
+export def "update-application" [
   application: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -720,7 +720,7 @@ export def "applications update" [
 #
 # DELETE /attribute-groups/{attributeGroup}
 # operationId: DeleteAttributeGroup
-export def "attribute-groups delete" [
+export def "delete-attribute-group" [
   attribute_group: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -765,7 +765,7 @@ export def "attribute-groups delete" [
 #
 # GET /attribute-groups/{attributeGroup}
 # operationId: GetAttributeGroup
-export def "attribute-groups get" [
+export def "get-attribute-group" [
   attribute_group: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -810,7 +810,7 @@ export def "attribute-groups get" [
 #
 # PATCH /attribute-groups/{attributeGroup}
 # operationId: UpdateAttributeGroup
-export def "attribute-groups update" [
+export def "update-attribute-group" [
   attribute_group: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -861,7 +861,7 @@ export def "attribute-groups update" [
 #
 # GET /configuration
 # operationId: GetConfiguration
-export def "configuration get" [
+export def "get-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -905,7 +905,7 @@ export def "configuration get" [
 # PUT /configuration
 # operationId: PutConfiguration
 # --configuration shape: {tagQueryConfiguration?: any}
-export def "configuration update" [
+export def "put-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -952,7 +952,7 @@ export def "configuration update" [
 #
 # GET /applications/{application}/attribute-groups
 # operationId: ListAssociatedAttributeGroups
-export def "applications-attribute-groups list-associated" [
+export def "list-associated-attribute-groups" [
   application: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1000,7 +1000,7 @@ export def "applications-attribute-groups list-associated" [
 #
 # GET /applications/{application}/resources
 # operationId: ListAssociatedResources
-export def "applications-resources list-associated" [
+export def "list-associated-resources" [
   application: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1048,7 +1048,7 @@ export def "applications-resources list-associated" [
 #
 # GET /applications/{application}/attribute-group-details
 # operationId: ListAttributeGroupsForApplication
-export def "applications-attribute-group-details list" [
+export def "list-attribute-groups-for-application" [
   application: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1096,7 +1096,7 @@ export def "applications-attribute-group-details list" [
 #
 # GET /tags/{resourceArn}
 # operationId: ListTagsForResource
-export def "tags list-for-resource" [
+export def "list-tags-for-resource" [
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1141,7 +1141,7 @@ export def "tags list-for-resource" [
 #
 # POST /tags/{resourceArn}
 # operationId: TagResource
-export def "tags tag-resource" [
+export def "tag-resource" [
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1190,7 +1190,7 @@ export def "tags tag-resource" [
 #
 # POST /sync/{resourceType}/{resource}
 # operationId: SyncResource
-export def "sync create" [
+export def "sync-resource" [
   resource_type: string
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1237,7 +1237,7 @@ export def "sync create" [
 #
 # DELETE /tags/{resourceArn}
 # operationId: UntagResource
-export def "tags untag-resource" [
+export def "untag-resource" [
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

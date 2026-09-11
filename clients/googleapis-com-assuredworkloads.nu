@@ -132,7 +132,7 @@ def restriction-type-completer [] { ["ALLOW_ALL_GCP_RESOURCES" "ALLOW_COMPLIANT_
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "v1beta1 delete" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "assuredworkloads-organizations-locations-workloads-delete" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -156,7 +156,7 @@ export def commands []: nothing -> table {
 #
 # DELETE /v1beta1/{name}
 # operationId: assuredworkloads.organizations.locations.workloads.delete
-export def "v1beta1 delete" [
+export def "assuredworkloads-organizations-locations-workloads-delete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -205,7 +205,7 @@ export def "v1beta1 delete" [
 #
 # GET /v1beta1/{name}
 # operationId: assuredworkloads.organizations.locations.workloads.violations.get
-export def "v1beta1 get" [
+export def "assuredworkloads-organizations-locations-workloads-violations-get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -263,7 +263,7 @@ export def "v1beta1 get" [
 # --resourceSettings item shape: {displayName?: string, resourceId?: string, resourceType?: "RESOURCE_TYPE_UNSPECIFIED"|"CONSUMER_PROJECT"|"CONSUMER_FOLDER"|"ENCRYPTION_KEYS_PROJECT"|"KEYRING"}
 # --resources item shape: {resourceId?: string, resourceType?: "RESOURCE_TYPE_UNSPECIFIED"|"CONSUMER_PROJECT"|"CONSUMER_FOLDER"|"ENCRYPTION_KEYS_PROJECT"|"KEYRING"}
 # --saaEnrollmentResponse shape: {setupErrors?: list<string>, setupStatus?: "SETUP_STATE_UNSPECIFIED"|"STATUS_PENDING"|"STATUS_COMPLETE"}
-export def "v1beta1 update" [
+export def "assuredworkloads-organizations-locations-workloads-patch" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -334,7 +334,7 @@ export def "v1beta1 update" [
 #
 # GET /v1beta1/{name}/operations
 # operationId: assuredworkloads.organizations.locations.operations.list
-export def "v1beta1-operations list" [
+export def "assuredworkloads-organizations-locations-operations-list" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -385,7 +385,7 @@ export def "v1beta1-operations list" [
 #
 # POST /v1beta1/{name}:acknowledge
 # operationId: assuredworkloads.organizations.locations.workloads.violations.acknowledge
-export def "v1beta1 create-acknowledge" [
+export def "assuredworkloads-organizations-locations-workloads-violations-acknowledge" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -438,7 +438,7 @@ export def "v1beta1 create-acknowledge" [
 #
 # POST /v1beta1/{name}:restrictAllowedResources
 # operationId: assuredworkloads.organizations.locations.workloads.restrictAllowedResources
-export def "v1beta1 create-restrict-allowed-resources" [
+export def "assuredworkloads-organizations-locations-workloads-restrict-allowed-resources" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -490,7 +490,7 @@ export def "v1beta1 create-restrict-allowed-resources" [
 #
 # GET /v1beta1/{parent}/violations
 # operationId: assuredworkloads.organizations.locations.workloads.violations.list
-export def "v1beta1-violations list" [
+export def "assuredworkloads-organizations-locations-workloads-violations-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -543,7 +543,7 @@ export def "v1beta1-violations list" [
 #
 # GET /v1beta1/{parent}/workloads
 # operationId: assuredworkloads.organizations.locations.workloads.list
-export def "v1beta1-workloads list" [
+export def "assuredworkloads-organizations-locations-workloads-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -604,7 +604,7 @@ export def "v1beta1-workloads list" [
 # --resourceSettings item shape: {displayName?: string, resourceId?: string, resourceType?: "RESOURCE_TYPE_UNSPECIFIED"|"CONSUMER_PROJECT"|"CONSUMER_FOLDER"|"ENCRYPTION_KEYS_PROJECT"|"KEYRING"}
 # --resources item shape: {resourceId?: string, resourceType?: "RESOURCE_TYPE_UNSPECIFIED"|"CONSUMER_PROJECT"|"CONSUMER_FOLDER"|"ENCRYPTION_KEYS_PROJECT"|"KEYRING"}
 # --saaEnrollmentResponse shape: {setupErrors?: list<string>, setupStatus?: "SETUP_STATE_UNSPECIFIED"|"STATUS_PENDING"|"STATUS_COMPLETE"}
-export def "v1beta1-workloads create" [
+export def "assuredworkloads-organizations-locations-workloads-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -675,7 +675,7 @@ export def "v1beta1-workloads create" [
 #
 # GET /v1beta1/{project}/{target}:analyzeWorkloadMove
 # operationId: assuredworkloads.projects.organizations.locations.workloads.analyzeWorkloadMove
-export def "v1beta1 move-analyze-workload-by-project-target" [
+export def "assuredworkloads-projects-organizations-locations-workloads-analyze-workload-move" [
   project: string
   target: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -726,7 +726,7 @@ export def "v1beta1 move-analyze-workload-by-project-target" [
 #
 # GET /v1beta1/{source}/{target}:analyzeWorkloadMove
 # operationId: assuredworkloads.organizations.locations.workloads.organizations.locations.workloads.analyzeWorkloadMove
-export def "v1beta1 move-analyze-workload-by-source-target" [
+export def "assuredworkloads-organizations-locations-workloads-organizations-locations-workloads-analyze-workload-move" [
   source: string
   target: string
   --base-url(-b): string@base-url-completer # API base URL

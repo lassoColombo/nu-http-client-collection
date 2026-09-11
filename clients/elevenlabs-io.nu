@@ -137,7 +137,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "history get-generated-items" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-generated-items-v1-history-get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -161,7 +161,7 @@ export def commands []: nothing -> table {
 #
 # GET /v1/history
 # operationId: Get_generated_items_v1_history_get
-export def "history get-generated-items" [
+export def "get-generated-items-v1-history-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -200,7 +200,7 @@ export def "history get-generated-items" [
 # DEPRECATED
 # operationId: Delete_history_items_v1_history_delete_post
 @deprecated
-export def "history-delete create-items" [
+export def "delete-history-items-v1-history-delete-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -241,7 +241,7 @@ export def "history-delete create-items" [
 #
 # POST /v1/history/download
 # operationId: Download_history_items_v1_history_download_post
-export def "history-download create-items" [
+export def "download-history-items-v1-history-download-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -282,7 +282,7 @@ export def "history-download create-items" [
 #
 # DELETE /v1/history/{history_item_id}
 # operationId: Delete_history_item_v1_history__history_item_id__delete
-export def "history delete" [
+export def "delete-history-item-v1-history-history-item-id-delete" [
   history_item_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -321,7 +321,7 @@ export def "history delete" [
 #
 # GET /v1/history/{history_item_id}/audio
 # operationId: Get_audio_from_history_item_v1_history__history_item_id__audio_get
-export def "history-audio get-from" [
+export def "get-audio-from-history-item-v1-history-history-item-id-audio-get" [
   history_item_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -360,7 +360,7 @@ export def "history-audio get-from" [
 #
 # POST /v1/text-to-speech/{voice_id}
 # operationId: Text_to_speech_v1_text_to_speech__voice_id__post
-export def "text-to-speech create" [
+export def "text-to-speech-v1-text-to-speech-voice-id-post" [
   voice_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -404,7 +404,7 @@ export def "text-to-speech create" [
 #
 # POST /v1/text-to-speech/{voice_id}/stream
 # operationId: Text_to_speech_v1_text_to_speech__voice_id__stream_post
-export def "text-to-speech-stream create" [
+export def "text-to-speech-v1-text-to-speech-voice-id-stream-post" [
   voice_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -448,7 +448,7 @@ export def "text-to-speech-stream create" [
 #
 # GET /v1/user
 # operationId: Get_user_info_v1_user_get
-export def "user get" [
+export def "get-user-info-v1-user-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -485,7 +485,7 @@ export def "user get" [
 #
 # GET /v1/user/subscription
 # operationId: Get_user_subscription_info_v1_user_subscription_get
-export def "user-subscription get" [
+export def "get-user-subscription-info-v1-user-subscription-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -522,7 +522,7 @@ export def "user-subscription get" [
 #
 # GET /v1/voices
 # operationId: Get_voices_v1_voices_get
-export def "voices list" [
+export def "get-voices-v1-voices-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -559,7 +559,7 @@ export def "voices list" [
 #
 # POST /v1/voices/add
 # operationId: Add_voice_v1_voices_add_post
-export def "voices-add create" [
+export def "add-voice-v1-voices-add-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -605,7 +605,7 @@ export def "voices-add create" [
 #
 # GET /v1/voices/settings/default
 # operationId: Get_default_voice_settings__v1_voices_settings_default_get
-export def "voices-settings-default get" [
+export def "get-default-voice-settings-v1-voices-settings-default-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -639,7 +639,7 @@ export def "voices-settings-default get" [
 #
 # DELETE /v1/voices/{voice_id}
 # operationId: Delete_voice_v1_voices__voice_id__delete
-export def "voices delete" [
+export def "delete-voice-v1-voices-voice-id-delete" [
   voice_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -678,7 +678,7 @@ export def "voices delete" [
 #
 # GET /v1/voices/{voice_id}
 # operationId: Get_voice_v1_voices__voice_id__get
-export def "voices get" [
+export def "get-voice-v1-voices-voice-id-get" [
   voice_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -719,7 +719,7 @@ export def "voices get" [
 #
 # POST /v1/voices/{voice_id}/edit
 # operationId: Edit_voice_v1_voices__voice_id__edit_post
-export def "voices-edit create" [
+export def "edit-voice-v1-voices-voice-id-edit-post" [
   voice_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -767,7 +767,7 @@ export def "voices-edit create" [
 #
 # DELETE /v1/voices/{voice_id}/samples/{sample_id}
 # operationId: Delete_sample_v1_voices__voice_id__samples__sample_id__delete
-export def "voices-samples delete" [
+export def "delete-sample-v1-voices-voice-id-samples-sample-id-delete" [
   voice_id: string
   sample_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -808,7 +808,7 @@ export def "voices-samples delete" [
 #
 # GET /v1/voices/{voice_id}/samples/{sample_id}/audio
 # operationId: Get_audio_from_sample_v1_voices__voice_id__samples__sample_id__audio_get
-export def "voices-samples-audio get-from" [
+export def "get-audio-from-sample-v1-voices-voice-id-samples-sample-id-audio-get" [
   voice_id: string
   sample_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -849,7 +849,7 @@ export def "voices-samples-audio get-from" [
 #
 # GET /v1/voices/{voice_id}/settings
 # operationId: Get_voice_settings_v1_voices__voice_id__settings_get
-export def "voices-settings get" [
+export def "get-voice-settings-v1-voices-voice-id-settings-get" [
   voice_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -888,7 +888,7 @@ export def "voices-settings get" [
 #
 # POST /v1/voices/{voice_id}/settings/edit
 # operationId: Edit_voice_settings_v1_voices__voice_id__settings_edit_post
-export def "voices-settings-edit create" [
+export def "edit-voice-settings-v1-voices-voice-id-settings-edit-post" [
   voice_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

@@ -120,7 +120,7 @@ def state-completer [] { ["CANCELLED" "ERROR" "FINISHED" "INCOMPATIBLE_ARCHITECT
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "application-detail-service-get-apk-details get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "testing-application-detail-service-get-apk-details" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -144,7 +144,7 @@ export def commands []: nothing -> table {
 #
 # POST /v1/applicationDetailService/getApkDetails
 # operationId: testing.applicationDetailService.getApkDetails
-export def "application-detail-service-get-apk-details get" [
+export def "testing-application-detail-service-get-apk-details" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -199,7 +199,7 @@ export def "application-detail-service-get-apk-details get" [
 # --resultStorage shape: {googleCloudStorage?: record, resultsUrl?: string, toolResultsExecution?: record, toolResultsHistory?: record}
 # --testExecutions item shape: {environment?: record, id?: string, matrixId?: string, projectId?: string, shard?: record, state?: "TEST_STATE_UNSPECIFIED"|"VALIDATING"|"PENDING"|"RUNNING"|"FINISHED"|"ERROR"|"UNSUPPORTED_ENVIRONMENT"|"INCOMPATIBLE_ENVIRONMENT"|"INCOMPATIBLE_ARCHITECTURE"|"CANCELLED"|"INVALID", testDetails?: record, testSpecification?: record, timestamp?: string, toolResultsStep?: record}
 # --testSpecification shape: {androidInstrumentationTest?: record, androidRoboTest?: record, androidTestLoop?: record, disablePerformanceMetrics?: bool, disableVideoRecording?: bool, iosTestLoop?: record, iosTestSetup?: record, iosXcTest?: record, testSetup?: record, testTimeout?: string}
-export def "projects-test-matrices create" [
+export def "testing-projects-test-matrices-create" [
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -264,7 +264,7 @@ export def "projects-test-matrices create" [
 #
 # GET /v1/projects/{projectId}/testMatrices/{testMatrixId}
 # operationId: testing.projects.testMatrices.get
-export def "projects-test-matrices get" [
+export def "testing-projects-test-matrices-get" [
   project_id: string
   test_matrix_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -314,7 +314,7 @@ export def "projects-test-matrices get" [
 #
 # POST /v1/projects/{projectId}/testMatrices/{testMatrixId}:cancel
 # operationId: testing.projects.testMatrices.cancel
-export def "projects-test-matrices cancel" [
+export def "testing-projects-test-matrices-cancel" [
   project_id: string
   test_matrix_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -364,7 +364,7 @@ export def "projects-test-matrices cancel" [
 #
 # GET /v1/testEnvironmentCatalog/{environmentType}
 # operationId: testing.testEnvironmentCatalog.get
-export def "test-environment-catalog get" [
+export def "testing-test-environment-catalog-get" [
   environment_type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)

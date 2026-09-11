@@ -114,7 +114,7 @@ def content-type-completer-1 [] { ["application/vnd.climate.as-applied.zip" "app
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "boundaries upload-boundary" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "upload-boundary" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -139,7 +139,7 @@ export def commands []: nothing -> table {
 # POST /v4/boundaries
 # operationId: uploadBoundary
 # --geometry shape: {coordinates: list<string>, type: "Point"|"Polygon"|"MultiPolygon"}
-export def "boundaries upload-boundary" [
+export def "upload-boundary" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -177,7 +177,7 @@ export def "boundaries upload-boundary" [
 #
 # POST /v4/boundaries/query
 # operationId: fetchBoundaries
-export def "boundaries-query get" [
+export def "fetch-boundaries" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -215,7 +215,7 @@ export def "boundaries-query get" [
 #
 # GET /v4/boundaries/{boundaryId}
 # operationId: fetchBoundaryById
-export def "boundaries get-boundary" [
+export def "fetch-boundary-by-id" [
   boundary_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -251,7 +251,7 @@ export def "boundaries get-boundary" [
 #
 # POST /v4/exports
 # operationId: postExport
-export def "exports create" [
+export def "post-export" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -290,7 +290,7 @@ export def "exports create" [
 #
 # GET /v4/exports/{exportId}/contents
 # operationId: fetchExportContentsById
-export def "exports-contents get" [
+export def "fetch-export-contents-by-id" [
   export_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -330,7 +330,7 @@ export def "exports-contents get" [
 #
 # GET /v4/exports/{exportId}/status
 # operationId: fetchExportStatusById
-export def "exports-status get" [
+export def "fetch-export-status-by-id" [
   export_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -366,7 +366,7 @@ export def "exports-status get" [
 #
 # GET /v4/farmOrganizations/{farmOrganizationType}/{farmOrganizationId}
 # operationId: fetchFarmOrganizationByTypeAndId
-export def "farm-organizations get-by-type-and" [
+export def "fetch-farm-organization-by-type-and-id" [
   farm_organization_type: string
   farm_organization_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -404,7 +404,7 @@ export def "farm-organizations get-by-type-and" [
 #
 # GET /v4/fields
 # operationId: fetchFields
-export def "fields list" [
+export def "fetch-fields" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -444,7 +444,7 @@ export def "fields list" [
 #
 # GET /v4/fields/all
 # operationId: fetchAllFields
-export def "fields-all get" [
+export def "fetch-all-fields" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -484,7 +484,7 @@ export def "fields-all get" [
 #
 # GET /v4/fields/{fieldId}
 # operationId: fetchFieldById
-export def "fields get" [
+export def "fetch-field-by-id" [
   field_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -519,7 +519,7 @@ export def "fields get" [
 # Retrieve a list of application activities
 #
 # GET /v4/layers/asApplied
-export def "layers-as-applied get" [
+export def "get-v4-layers-as-applied" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -562,7 +562,7 @@ export def "layers-as-applied get" [
 # Retrieve the raw application activity
 #
 # GET /v4/layers/asApplied/{activityId}/contents
-export def "layers-as-applied-contents get" [
+export def "get-v4-layers-as-applied-activity-id-contents" [
   activity_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -601,7 +601,7 @@ export def "layers-as-applied-contents get" [
 # Retrieve a list of harvest activities
 #
 # GET /v4/layers/asHarvested
-export def "layers-as-harvested get" [
+export def "get-v4-layers-as-harvested" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -644,7 +644,7 @@ export def "layers-as-harvested get" [
 # Retrieve the raw harvest activity
 #
 # GET /v4/layers/asHarvested/{activityId}/contents
-export def "layers-as-harvested-contents get" [
+export def "get-v4-layers-as-harvested-activity-id-contents" [
   activity_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -683,7 +683,7 @@ export def "layers-as-harvested-contents get" [
 # Retrieve a list of planting activities
 #
 # GET /v4/layers/asPlanted
-export def "layers-as-planted get" [
+export def "get-v4-layers-as-planted" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -726,7 +726,7 @@ export def "layers-as-planted get" [
 # Retrieve the raw planting activity
 #
 # GET /v4/layers/asPlanted/{activityId}/contents
-export def "layers-as-planted-contents get" [
+export def "get-v4-layers-as-planted-activity-id-contents" [
   activity_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -765,7 +765,7 @@ export def "layers-as-planted-contents get" [
 # Retrieve a list of scouting observations
 #
 # GET /v4/layers/scoutingObservations
-export def "layers-scouting-observations list" [
+export def "get-v4-layers-scouting-observations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -805,7 +805,7 @@ export def "layers-scouting-observations list" [
 # Retrieve individual scouting observation
 #
 # GET /v4/layers/scoutingObservations/{scoutingObservationId}
-export def "layers-scouting-observations get" [
+export def "get-v4-layers-scouting-observations-scouting-observation-id" [
   scouting_observation_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -840,7 +840,7 @@ export def "layers-scouting-observations get" [
 # Retrieve attachments associated with a given scouting observation.
 #
 # GET /v4/layers/scoutingObservations/{scoutingObservationId}/attachments
-export def "layers-scouting-observations-attachments get" [
+export def "get-v4-layers-scouting-observations-scouting-observation-id-attachments" [
   scouting_observation_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -879,7 +879,7 @@ export def "layers-scouting-observations-attachments get" [
 # Retrieve the binary contents of a scouting observation’s attachment.
 #
 # GET /v4/layers/scoutingObservations/{scoutingObservationId}/attachments/{attachmentId}/contents
-export def "layers-scouting-observations-attachments-contents get" [
+export def "get-v4-layers-scouting-observations-scouting-observation-id-attachments-attachment-id-contents" [
   scouting_observation_id: string
   attachment_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -921,7 +921,7 @@ export def "layers-scouting-observations-attachments-contents get" [
 #
 # GET /v4/operations/all
 # operationId: fetchOperations
-export def "operations-all get" [
+export def "fetch-operations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -957,7 +957,7 @@ export def "operations-all get" [
 #
 # GET /v4/resourceOwners/{resourceOwnerId}
 # operationId: getResourceOwner
-export def "resource-owners get" [
+export def "get-resource-owner" [
   resource_owner_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -993,7 +993,7 @@ export def "resource-owners get" [
 #
 # POST /v4/uploads
 # operationId: postUpload
-export def "uploads create" [
+export def "post-upload" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1037,7 +1037,7 @@ export def "uploads create" [
 #
 # POST /v4/uploads/status/query
 # operationId: fetchUploadStatuses
-export def "uploads-status-query get-statuses" [
+export def "fetch-upload-statuses" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1075,7 +1075,7 @@ export def "uploads-status-query get-statuses" [
 #
 # PUT /v4/uploads/{uploadId}
 # operationId: chunkedUpload
-export def "uploads upload-chunked" [
+export def "chunked-upload" [
   upload_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1115,7 +1115,7 @@ export def "uploads upload-chunked" [
 #
 # GET /v4/uploads/{uploadId}/status
 # operationId: fetchUploadStatusById
-export def "uploads-status get" [
+export def "fetch-upload-status-by-id" [
   upload_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

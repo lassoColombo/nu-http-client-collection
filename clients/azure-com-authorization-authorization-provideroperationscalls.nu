@@ -98,7 +98,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-authorization-provider-operations list-metadata" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "provider-operations-metadata-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -122,7 +122,7 @@ export def commands []: nothing -> table {
 #
 # GET /providers/Microsoft.Authorization/providerOperations
 # operationId: ProviderOperationsMetadata_List
-export def "providers-microsoft-authorization-provider-operations list-metadata" [
+export def "provider-operations-metadata-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -159,7 +159,7 @@ export def "providers-microsoft-authorization-provider-operations list-metadata"
 #
 # GET /providers/Microsoft.Authorization/providerOperations/{resourceProviderNamespace}
 # operationId: ProviderOperationsMetadata_Get
-export def "providers-microsoft-authorization-provider-operations get-metadata" [
+export def "provider-operations-metadata-get" [
   resource_provider_namespace: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

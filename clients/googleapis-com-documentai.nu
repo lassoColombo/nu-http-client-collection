@@ -124,7 +124,7 @@ def priority-completer [] { ["DEFAULT" "URGENT"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "v1beta3 create-review-document" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "documentai-projects-locations-processors-human-review-config-review-document" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -151,7 +151,7 @@ export def commands []: nothing -> table {
 # --document shape: {content?: string, entities?: list, entityRelations?: list, error?: record, mimeType?: string, pages?: list, revisions?: list, shardInfo?: record, text?: string, textChanges?: list, textStyles?: list, uri?: string}
 # --documentSchema shape: {description?: string, displayName?: string, entityTypes?: list, metadata?: record}
 # --inlineDocument shape: {content?: string, entities?: list, entityRelations?: list, error?: record, mimeType?: string, pages?: list, revisions?: list, shardInfo?: record, text?: string, textChanges?: list, textStyles?: list, uri?: string}
-export def "v1beta3 create-review-document" [
+export def "documentai-projects-locations-processors-human-review-config-review-document" [
   human_review_config: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -207,7 +207,7 @@ export def "v1beta3 create-review-document" [
 #
 # DELETE /v1beta3/{name}
 # operationId: documentai.projects.locations.processors.processorVersions.delete
-export def "v1beta3 delete" [
+export def "documentai-projects-locations-processors-processor-versions-delete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -255,7 +255,7 @@ export def "v1beta3 delete" [
 #
 # GET /v1beta3/{name}
 # operationId: documentai.projects.locations.processorTypes.get
-export def "v1beta3 get" [
+export def "documentai-projects-locations-processor-types-get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -306,7 +306,7 @@ export def "v1beta3 get" [
 #
 # GET /v1beta3/{name}/locations
 # operationId: documentai.projects.locations.list
-export def "v1beta3-locations list" [
+export def "documentai-projects-locations-list" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -362,7 +362,7 @@ export def "v1beta3-locations list" [
 # --inputDocuments shape: {gcsDocuments?: record, gcsPrefix?: record}
 # --outputConfig shape: {gcsDestination?: string}
 # --processOptions shape: {ocrConfig?: record}
-export def "v1beta3 create-batch-process" [
+export def "documentai-projects-locations-processors-processor-versions-batch-process" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -419,7 +419,7 @@ export def "v1beta3 create-batch-process" [
 #
 # POST /v1beta3/{name}:cancel
 # operationId: documentai.projects.locations.operations.cancel
-export def "v1beta3 cancel" [
+export def "documentai-projects-locations-operations-cancel" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -467,7 +467,7 @@ export def "v1beta3 cancel" [
 #
 # POST /v1beta3/{name}:deploy
 # operationId: documentai.projects.locations.processors.processorVersions.deploy
-export def "v1beta3 create-deploy" [
+export def "documentai-projects-locations-processors-processor-versions-deploy" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -519,7 +519,7 @@ export def "v1beta3 create-deploy" [
 #
 # POST /v1beta3/{name}:disable
 # operationId: documentai.projects.locations.processors.disable
-export def "v1beta3 disable" [
+export def "documentai-projects-locations-processors-disable" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -571,7 +571,7 @@ export def "v1beta3 disable" [
 #
 # POST /v1beta3/{name}:enable
 # operationId: documentai.projects.locations.processors.enable
-export def "v1beta3 enable" [
+export def "documentai-projects-locations-processors-enable" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -627,7 +627,7 @@ export def "v1beta3 enable" [
 # --inlineDocument shape: {content?: string, entities?: list, entityRelations?: list, error?: record, mimeType?: string, pages?: list, revisions?: list, shardInfo?: record, text?: string, textChanges?: list, textStyles?: list, uri?: string}
 # --processOptions shape: {ocrConfig?: record}
 # --rawDocument shape: {content?: string, mimeType?: string}
-export def "v1beta3 create-process" [
+export def "documentai-projects-locations-processors-processor-versions-process" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -684,7 +684,7 @@ export def "v1beta3 create-process" [
 #
 # POST /v1beta3/{name}:undeploy
 # operationId: documentai.projects.locations.processors.processorVersions.undeploy
-export def "v1beta3 create-undeploy" [
+export def "documentai-projects-locations-processors-processor-versions-undeploy" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -736,7 +736,7 @@ export def "v1beta3 create-undeploy" [
 #
 # GET /v1beta3/{parent}/evaluations
 # operationId: documentai.projects.locations.processors.processorVersions.evaluations.list
-export def "v1beta3-evaluations list" [
+export def "documentai-projects-locations-processors-processor-versions-evaluations-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -786,7 +786,7 @@ export def "v1beta3-evaluations list" [
 #
 # GET /v1beta3/{parent}/processorTypes
 # operationId: documentai.projects.locations.processorTypes.list
-export def "v1beta3-processor-types list" [
+export def "documentai-projects-locations-processor-types-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -836,7 +836,7 @@ export def "v1beta3-processor-types list" [
 #
 # GET /v1beta3/{parent}/processorVersions
 # operationId: documentai.projects.locations.processors.processorVersions.list
-export def "v1beta3-processor-versions list" [
+export def "documentai-projects-locations-processors-processor-versions-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -886,7 +886,7 @@ export def "v1beta3-processor-versions list" [
 #
 # POST /v1beta3/{parent}/processorVersions:importProcessorVersion
 # operationId: documentai.projects.locations.processors.processorVersions.importProcessorVersion
-export def "v1beta3-processor-versions-import-processor-version import" [
+export def "documentai-projects-locations-processors-processor-versions-import-processor-version" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -941,7 +941,7 @@ export def "v1beta3-processor-versions-import-processor-version import" [
 # --documentSchema shape: {description?: string, displayName?: string, entityTypes?: list, metadata?: record}
 # --inputData shape: {testDocuments?: record, trainingDocuments?: record}
 # --processorVersion shape: {createTime?: string, deprecationInfo?: record, displayName?: string, documentSchema?: record, googleManaged?: bool, kmsKeyName?: string, kmsKeyVersionName?: string, latestEvaluation?: record, name?: string, state?: "STATE_UNSPECIFIED"|"DEPLOYED"|"DEPLOYING"|"UNDEPLOYED"|"UNDEPLOYING"|"CREATING"|"DELETING"|"FAILED"|"IMPORTING"}
-export def "v1beta3-processor-versions-train create" [
+export def "documentai-projects-locations-processors-processor-versions-train" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -996,7 +996,7 @@ export def "v1beta3-processor-versions-train create" [
 #
 # GET /v1beta3/{parent}/processors
 # operationId: documentai.projects.locations.processors.list
-export def "v1beta3-processors list" [
+export def "documentai-projects-locations-processors-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1046,7 +1046,7 @@ export def "v1beta3-processors list" [
 #
 # POST /v1beta3/{parent}/processors
 # operationId: documentai.projects.locations.processors.create
-export def "v1beta3-processors create" [
+export def "documentai-projects-locations-processors-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1102,7 +1102,7 @@ export def "v1beta3-processors create" [
 #
 # GET /v1beta3/{parent}:fetchProcessorTypes
 # operationId: documentai.projects.locations.fetchProcessorTypes
-export def "v1beta3 get-processor-types" [
+export def "documentai-projects-locations-fetch-processor-types" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1151,7 +1151,7 @@ export def "v1beta3 get-processor-types" [
 # POST /v1beta3/{processorVersion}:evaluateProcessorVersion
 # operationId: documentai.projects.locations.processors.processorVersions.evaluateProcessorVersion
 # --evaluationDocuments shape: {gcsDocuments?: record, gcsPrefix?: record}
-export def "v1beta3 version-evaluate-processor" [
+export def "documentai-projects-locations-processors-processor-versions-evaluate-processor-version" [
   processor_version: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1203,7 +1203,7 @@ export def "v1beta3 version-evaluate-processor" [
 #
 # POST /v1beta3/{processor}:setDefaultProcessorVersion
 # operationId: documentai.projects.locations.processors.setDefaultProcessorVersion
-export def "v1beta3 update-default-version" [
+export def "documentai-projects-locations-processors-set-default-processor-version" [
   processor: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)

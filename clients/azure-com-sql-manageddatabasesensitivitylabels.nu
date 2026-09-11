@@ -116,7 +116,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resource-groups-providers-microsoft-sql-managed-instances-databases-current-sensitivity-labels list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "managed-database-sensitivity-labels-list-current-by-database" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -140,7 +140,7 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/managedInstances/{managedInstanceName}/databases/{databaseName}/currentSensitivityLabels
 # operationId: ManagedDatabaseSensitivityLabels_ListCurrentByDatabase
-export def "subscriptions-resource-groups-providers-microsoft-sql-managed-instances-databases-current-sensitivity-labels list" [
+export def "managed-database-sensitivity-labels-list-current-by-database" [
   subscription_id: string
   resource_group_name: string
   managed_instance_name: string
@@ -185,7 +185,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-managed-instan
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/managedInstances/{managedInstanceName}/databases/{databaseName}/recommendedSensitivityLabels
 # operationId: ManagedDatabaseSensitivityLabels_ListRecommendedByDatabase
-export def "subscriptions-resource-groups-providers-microsoft-sql-managed-instances-databases-recommended-sensitivity-labels list" [
+export def "managed-database-sensitivity-labels-list-recommended-by-database" [
   subscription_id: string
   resource_group_name: string
   managed_instance_name: string
@@ -232,7 +232,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-managed-instan
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/managedInstances/{managedInstanceName}/databases/{databaseName}/schemas/{schemaName}/tables/{tableName}/columns/{columnName}/sensitivityLabels/{sensitivityLabelSource}
 # operationId: ManagedDatabaseSensitivityLabels_Delete
-export def "subscriptions-resource-groups-providers-microsoft-sql-managed-instances-databases-schemas-tables-columns-sensitivity-labels delete" [
+export def "managed-database-sensitivity-labels-delete" [
   subscription_id: string
   resource_group_name: string
   managed_instance_name: string
@@ -284,7 +284,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-managed-instan
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/managedInstances/{managedInstanceName}/databases/{databaseName}/schemas/{schemaName}/tables/{tableName}/columns/{columnName}/sensitivityLabels/{sensitivityLabelSource}
 # operationId: ManagedDatabaseSensitivityLabels_Get
-export def "subscriptions-resource-groups-providers-microsoft-sql-managed-instances-databases-schemas-tables-columns-sensitivity-labels get" [
+export def "managed-database-sensitivity-labels-get" [
   subscription_id: string
   resource_group_name: string
   managed_instance_name: string
@@ -337,7 +337,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-managed-instan
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/managedInstances/{managedInstanceName}/databases/{databaseName}/schemas/{schemaName}/tables/{tableName}/columns/{columnName}/sensitivityLabels/{sensitivityLabelSource}
 # operationId: ManagedDatabaseSensitivityLabels_CreateOrUpdate
 # --properties shape: {informationType?: string, informationTypeId?: string, labelId?: string, labelName?: string, rank?: "None"|"Low"|"Medium"|"High"|"Critical"}
-export def "subscriptions-resource-groups-providers-microsoft-sql-managed-instances-databases-schemas-tables-columns-sensitivity-labels create-or-update" [
+export def "managed-database-sensitivity-labels-create-or-update" [
   subscription_id: string
   resource_group_name: string
   managed_instance_name: string
@@ -393,7 +393,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-managed-instan
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/managedInstances/{managedInstanceName}/databases/{databaseName}/schemas/{schemaName}/tables/{tableName}/columns/{columnName}/sensitivityLabels/{sensitivityLabelSource}/disable
 # operationId: ManagedDatabaseSensitivityLabels_DisableRecommendation
-export def "subscriptions-resource-groups-providers-microsoft-sql-managed-instances-databases-schemas-tables-columns-sensitivity-labels-disable disable-recommendation" [
+export def "managed-database-sensitivity-labels-disable-recommendation" [
   subscription_id: string
   resource_group_name: string
   managed_instance_name: string
@@ -445,7 +445,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-managed-instan
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/managedInstances/{managedInstanceName}/databases/{databaseName}/schemas/{schemaName}/tables/{tableName}/columns/{columnName}/sensitivityLabels/{sensitivityLabelSource}/enable
 # operationId: ManagedDatabaseSensitivityLabels_EnableRecommendation
-export def "subscriptions-resource-groups-providers-microsoft-sql-managed-instances-databases-schemas-tables-columns-sensitivity-labels-enable enable-recommendation" [
+export def "managed-database-sensitivity-labels-enable-recommendation" [
   subscription_id: string
   resource_group_name: string
   managed_instance_name: string

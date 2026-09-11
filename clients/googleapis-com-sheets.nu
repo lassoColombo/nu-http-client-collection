@@ -130,7 +130,7 @@ def insert-data-option-completer [] { ["INSERT_ROWS" "OVERWRITE"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "spreadsheets create" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "sheets-spreadsheets-create" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -160,7 +160,7 @@ export def commands []: nothing -> table {
 # --namedRanges item shape: {name?: string, namedRangeId?: string, range?: record}
 # --properties shape: {autoRecalc?: "RECALCULATION_INTERVAL_UNSPECIFIED"|"ON_CHANGE"|"MINUTE"|"HOUR", defaultFormat?: record, iterativeCalculationSettings?: record, locale?: string, spreadsheetTheme?: record, timeZone?: string, title?: string}
 # --sheets item shape: {bandedRanges?: list, basicFilter?: record, charts?: list, columnGroups?: list, conditionalFormats?: list, data?: list, developerMetadata?: list, filterViews?: list, merges?: list, properties?: record, protectedRanges?: list, rowGroups?: list, slicers?: list}
-export def "spreadsheets create" [
+export def "sheets-spreadsheets-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -216,7 +216,7 @@ export def "spreadsheets create" [
 #
 # GET /v4/spreadsheets/{spreadsheetId}
 # operationId: sheets.spreadsheets.get
-export def "spreadsheets get" [
+export def "sheets-spreadsheets-get" [
   spreadsheet_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -266,7 +266,7 @@ export def "spreadsheets get" [
 #
 # GET /v4/spreadsheets/{spreadsheetId}/developerMetadata/{metadataId}
 # operationId: sheets.spreadsheets.developerMetadata.get
-export def "spreadsheets-developer-metadata get" [
+export def "sheets-spreadsheets-developer-metadata-get" [
   spreadsheet_id: string
   metadata_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -317,7 +317,7 @@ export def "spreadsheets-developer-metadata get" [
 # POST /v4/spreadsheets/{spreadsheetId}/developerMetadata:search
 # operationId: sheets.spreadsheets.developerMetadata.search
 # --dataFilters item shape: {a1Range?: string, developerMetadataLookup?: record, gridRange?: record}
-export def "spreadsheets-developer-metadata-search list" [
+export def "sheets-spreadsheets-developer-metadata-search" [
   spreadsheet_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -369,7 +369,7 @@ export def "spreadsheets-developer-metadata-search list" [
 #
 # POST /v4/spreadsheets/{spreadsheetId}/sheets/{sheetId}:copyTo
 # operationId: sheets.spreadsheets.sheets.copyTo
-export def "spreadsheets-sheets copy" [
+export def "sheets-spreadsheets-sheets-copy-to" [
   spreadsheet_id: string
   sheet_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -423,7 +423,7 @@ export def "spreadsheets-sheets copy" [
 #
 # GET /v4/spreadsheets/{spreadsheetId}/values/{range}
 # operationId: sheets.spreadsheets.values.get
-export def "spreadsheets-values get" [
+export def "sheets-spreadsheets-values-get" [
   spreadsheet_id: string
   range: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -476,7 +476,7 @@ export def "spreadsheets-values get" [
 #
 # PUT /v4/spreadsheets/{spreadsheetId}/values/{range}
 # operationId: sheets.spreadsheets.values.update
-export def "spreadsheets-values update" [
+export def "sheets-spreadsheets-values-update" [
   spreadsheet_id: string
   range: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -536,7 +536,7 @@ export def "spreadsheets-values update" [
 #
 # POST /v4/spreadsheets/{spreadsheetId}/values/{range}:append
 # operationId: sheets.spreadsheets.values.append
-export def "spreadsheets-values create" [
+export def "sheets-spreadsheets-values-append" [
   spreadsheet_id: string
   range: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -597,7 +597,7 @@ export def "spreadsheets-values create" [
 #
 # POST /v4/spreadsheets/{spreadsheetId}/values/{range}:clear
 # operationId: sheets.spreadsheets.values.clear
-export def "spreadsheets-values create-clear" [
+export def "sheets-spreadsheets-values-clear" [
   spreadsheet_id: string
   range: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -651,7 +651,7 @@ export def "spreadsheets-values create-clear" [
 #
 # POST /v4/spreadsheets/{spreadsheetId}/values:batchClear
 # operationId: sheets.spreadsheets.values.batchClear
-export def "spreadsheets-values-batch-clear create" [
+export def "sheets-spreadsheets-values-batch-clear" [
   spreadsheet_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -704,7 +704,7 @@ export def "spreadsheets-values-batch-clear create" [
 # POST /v4/spreadsheets/{spreadsheetId}/values:batchClearByDataFilter
 # operationId: sheets.spreadsheets.values.batchClearByDataFilter
 # --dataFilters item shape: {a1Range?: string, developerMetadataLookup?: record, gridRange?: record}
-export def "spreadsheets-values-batch-clear-by-data-filter create" [
+export def "sheets-spreadsheets-values-batch-clear-by-data-filter" [
   spreadsheet_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -756,7 +756,7 @@ export def "spreadsheets-values-batch-clear-by-data-filter create" [
 #
 # GET /v4/spreadsheets/{spreadsheetId}/values:batchGet
 # operationId: sheets.spreadsheets.values.batchGet
-export def "spreadsheets-values-batch-get get" [
+export def "sheets-spreadsheets-values-batch-get" [
   spreadsheet_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -809,7 +809,7 @@ export def "spreadsheets-values-batch-get get" [
 # POST /v4/spreadsheets/{spreadsheetId}/values:batchGetByDataFilter
 # operationId: sheets.spreadsheets.values.batchGetByDataFilter
 # --dataFilters item shape: {a1Range?: string, developerMetadataLookup?: record, gridRange?: record}
-export def "spreadsheets-values-batch-get-by-data-filter get" [
+export def "sheets-spreadsheets-values-batch-get-by-data-filter" [
   spreadsheet_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -865,7 +865,7 @@ export def "spreadsheets-values-batch-get-by-data-filter get" [
 # POST /v4/spreadsheets/{spreadsheetId}/values:batchUpdate
 # operationId: sheets.spreadsheets.values.batchUpdate
 # --data item shape: {majorDimension?: "DIMENSION_UNSPECIFIED"|"ROWS"|"COLUMNS", range?: string, values?: list}
-export def "spreadsheets-values-batch-update update" [
+export def "sheets-spreadsheets-values-batch-update" [
   spreadsheet_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -922,7 +922,7 @@ export def "spreadsheets-values-batch-update update" [
 # POST /v4/spreadsheets/{spreadsheetId}/values:batchUpdateByDataFilter
 # operationId: sheets.spreadsheets.values.batchUpdateByDataFilter
 # --data item shape: {dataFilter?: record, majorDimension?: "DIMENSION_UNSPECIFIED"|"ROWS"|"COLUMNS", values?: list}
-export def "spreadsheets-values-batch-update-by-data-filter update" [
+export def "sheets-spreadsheets-values-batch-update-by-data-filter" [
   spreadsheet_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -979,7 +979,7 @@ export def "spreadsheets-values-batch-update-by-data-filter update" [
 # POST /v4/spreadsheets/{spreadsheetId}:batchUpdate
 # operationId: sheets.spreadsheets.batchUpdate
 # --requests item shape: {addBanding?: record, addChart?: record, addConditionalFormatRule?: record, addDataSource?: record, addDimensionGroup?: record, addFilterView?: record, addNamedRange?: record, addProtectedRange?: record, addSheet?: record, addSlicer?: record, appendCells?: record, appendDimension?: record, autoFill?: record, autoResizeDimensions?: record, clearBasicFilter?: record, copyPaste?: record, createDeveloperMetadata?: record, cutPaste?: record, deleteBanding?: record, deleteConditionalFormatRule?: record, ... (45 more fields)}
-export def "spreadsheets update-batch" [
+export def "sheets-spreadsheets-batch-update" [
   spreadsheet_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1035,7 +1035,7 @@ export def "spreadsheets update-batch" [
 # POST /v4/spreadsheets/{spreadsheetId}:getByDataFilter
 # operationId: sheets.spreadsheets.getByDataFilter
 # --dataFilters item shape: {a1Range?: string, developerMetadataLookup?: record, gridRange?: record}
-export def "spreadsheets get-by-data-filter" [
+export def "sheets-spreadsheets-get-by-data-filter" [
   spreadsheet_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)

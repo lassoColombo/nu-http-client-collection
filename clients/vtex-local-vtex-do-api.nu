@@ -121,7 +121,7 @@ def auth-scheme-completer [] { ["x-vtex-api-appkey" "x-vtex-api-apptoken"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "notes get-notesbyorder" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-notesbyorder-id" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -145,7 +145,7 @@ export def commands []: nothing -> table {
 #
 # GET /notes
 # operationId: GetNotesbyorderId
-export def "notes get-notesbyorder" [
+export def "get-notesbyorder-id" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
   --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
@@ -189,7 +189,7 @@ export def "notes get-notesbyorder" [
 # POST /notes
 # operationId: NewNote
 # --target shape: {id?: string, type?: string, url?: string}
-export def "notes create-new" [
+export def "new-note" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
   --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
@@ -235,7 +235,7 @@ export def "notes create-new" [
 #
 # GET /notes/{noteId}
 # operationId: GetNote
-export def "notes get" [
+export def "get-note" [
   note_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -277,7 +277,7 @@ export def "notes get" [
 #
 # GET /tasks
 # operationId: Listtasksbyassignee
-export def "tasks list-tasksbyassignee" [
+export def "listtasksbyassignee" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
   --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
@@ -325,7 +325,7 @@ export def "tasks list-tasksbyassignee" [
 # --assignee shape: {email: string, id: string, name: string}
 # --followers item shape: {email: string, id: string, name: string}
 # --target item shape: {id: string, type: string, url: string}
-export def "tasks create-new" [
+export def "new-task" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
   --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
@@ -379,7 +379,7 @@ export def "tasks create-new" [
 #
 # GET /tasks/{taskId}
 # operationId: GetTask
-export def "tasks get" [
+export def "get-task" [
   task_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -419,7 +419,7 @@ export def "tasks get" [
 #
 # PUT /tasks/{taskId}
 # operationId: EditTask
-export def "tasks update-edit" [
+export def "edit-task" [
   task_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -465,7 +465,7 @@ export def "tasks update-edit" [
 #
 # POST /tasks/{taskId}/comments
 # operationId: AddComment
-export def "tasks-comments create" [
+export def "add-comment" [
   task_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)

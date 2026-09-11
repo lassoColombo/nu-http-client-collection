@@ -100,7 +100,7 @@ def alt-completer [] { ["json" "media" "proto"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "autnum get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "domainsrdap-autnum-get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -124,7 +124,7 @@ export def commands []: nothing -> table {
 #
 # GET /v1/autnum/{autnumId}
 # operationId: domainsrdap.autnum.get
-export def "autnum get" [
+export def "domainsrdap-autnum-get" [
   autnum_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -172,7 +172,7 @@ export def "autnum get" [
 #
 # GET /v1/domain/{domainName}
 # operationId: domainsrdap.domain.get
-export def "domain get" [
+export def "domainsrdap-domain-get" [
   domain_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -220,7 +220,7 @@ export def "domain get" [
 #
 # GET /v1/domains
 # operationId: domainsrdap.getDomains
-export def "domains get" [
+export def "domainsrdap-get-domains" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -266,7 +266,7 @@ export def "domains get" [
 #
 # GET /v1/entities
 # operationId: domainsrdap.getEntities
-export def "entities get" [
+export def "domainsrdap-get-entities" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -312,7 +312,7 @@ export def "entities get" [
 #
 # GET /v1/entity/{entityId}
 # operationId: domainsrdap.entity.get
-export def "entity get" [
+export def "domainsrdap-entity-get" [
   entity_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -360,7 +360,7 @@ export def "entity get" [
 #
 # GET /v1/help
 # operationId: domainsrdap.getHelp
-export def "help get" [
+export def "domainsrdap-get-help" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -406,7 +406,7 @@ export def "help get" [
 #
 # GET /v1/ip
 # operationId: domainsrdap.getIp
-export def "ip get" [
+export def "domainsrdap-get-ip" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -452,7 +452,7 @@ export def "ip get" [
 #
 # GET /v1/ip/{ipId}/{ipId1}
 # operationId: domainsrdap.ip.get
-export def "ip get-by-ip-id-ip-id1" [
+export def "domainsrdap-ip-get" [
   ip_id: string
   ip_id1: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -502,7 +502,7 @@ export def "ip get-by-ip-id-ip-id1" [
 #
 # GET /v1/nameserver/{nameserverId}
 # operationId: domainsrdap.nameserver.get
-export def "nameserver get" [
+export def "domainsrdap-nameserver-get" [
   nameserver_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -550,7 +550,7 @@ export def "nameserver get" [
 #
 # GET /v1/nameservers
 # operationId: domainsrdap.getNameservers
-export def "nameservers get" [
+export def "domainsrdap-get-nameservers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

@@ -111,7 +111,7 @@ def grant-type-completer [] { ["authorization_code" "refresh_token"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "oauth-access-tokens get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-oauth-v1-access-tokens-get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -134,7 +134,7 @@ export def commands []: nothing -> table {
 # GET /oauth/v1/access-tokens/{token}
 #
 # operationId: get-/oauth/v1/access-tokens/{token}_get
-export def "oauth-access-tokens get" [
+export def "get-oauth-v1-access-tokens-get" [
   token_arg: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -169,7 +169,7 @@ export def "oauth-access-tokens get" [
 # DELETE /oauth/v1/refresh-tokens/{token}
 #
 # operationId: delete-/oauth/v1/refresh-tokens/{token}_archive
-export def "oauth-refresh-tokens delete-archive" [
+export def "delete-oauth-v1-refresh-tokens-archive" [
   token_arg: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -204,7 +204,7 @@ export def "oauth-refresh-tokens delete-archive" [
 # GET /oauth/v1/refresh-tokens/{token}
 #
 # operationId: get-/oauth/v1/refresh-tokens/{token}_get
-export def "oauth-refresh-tokens get" [
+export def "get-oauth-v1-refresh-tokens-get" [
   token_arg: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -239,7 +239,7 @@ export def "oauth-refresh-tokens get" [
 # POST /oauth/v1/token
 #
 # operationId: post-/oauth/v1/token_create
-export def "oauth-token create" [
+export def "post-oauth-v1-token-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

@@ -102,7 +102,7 @@ def accept-completer [] { ["application/xml" "text/xml"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "predictions get-5476365e031f5909e4fe331e" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "5476365e031f5909e4fe331e" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -126,7 +126,7 @@ export def commands []: nothing -> table {
 #
 # GET /Predictions
 # operationId: 5476365e031f5909e4fe331e
-export def "predictions get-5476365e031f5909e4fe331e" [
+export def "5476365e031f5909e4fe331e" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -163,7 +163,7 @@ export def "predictions get-5476365e031f5909e4fe331e" [
 #
 # GET /json/jPredictions
 # operationId: 5476365e031f5909e4fe331d
-export def "json-j-predictions get-5476365e031f5909e4fe331d" [
+export def "5476365e031f5909e4fe331d" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

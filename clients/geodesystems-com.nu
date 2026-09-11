@@ -99,7 +99,7 @@ def auth-scheme-completer [] { ["basic" "basic-credentials"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "repository-entry-show get-media-tabular-extractsheet" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "media-tabular-extractsheet" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -123,7 +123,7 @@ export def commands []: nothing -> table {
 #
 # GET /repository/entry/show
 # operationId: media_tabular_extractsheet
-export def "repository-entry-show get-media-tabular-extractsheet" [
+export def "media-tabular-extractsheet" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -161,7 +161,7 @@ export def "repository-entry-show get-media-tabular-extractsheet" [
 #
 # GET /repository/search/type/2017_boulder_election_expenditures
 # operationId: search_2017_boulder_election_expenditures
-export def "repository-search-type-2017-boulder-election-expenditures list" [
+export def "search-2017-boulder-election-expenditures" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -222,7 +222,7 @@ export def "repository-search-type-2017-boulder-election-expenditures list" [
 #
 # GET /repository/search/type/any
 # operationId: search_any
-export def "repository-search-type-any list" [
+export def "search-any" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -274,7 +274,7 @@ export def "repository-search-type-any list" [
 #
 # GET /repository/search/type/beforeafter
 # operationId: search_beforeafter
-export def "repository-search-type-beforeafter list" [
+export def "search-beforeafter" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -326,7 +326,7 @@ export def "repository-search-type-beforeafter list" [
 #
 # GET /repository/search/type/biblio
 # operationId: search_biblio
-export def "repository-search-type-biblio list" [
+export def "search-biblio" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -383,7 +383,7 @@ export def "repository-search-type-biblio list" [
 #
 # GET /repository/search/type/bio_dicom
 # operationId: search_bio_dicom
-export def "repository-search-type-bio-dicom list" [
+export def "search-bio-dicom" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -435,7 +435,7 @@ export def "repository-search-type-bio-dicom list" [
 #
 # GET /repository/search/type/bio_dicom_test
 # operationId: search_bio_dicom_test
-export def "repository-search-type-bio-dicom-test list" [
+export def "search-bio-dicom-test" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -489,7 +489,7 @@ export def "repository-search-type-bio-dicom-test list" [
 #
 # GET /repository/search/type/bio_fasta
 # operationId: search_bio_fasta
-export def "repository-search-type-bio-fasta list" [
+export def "search-bio-fasta" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -541,7 +541,7 @@ export def "repository-search-type-bio-fasta list" [
 #
 # GET /repository/search/type/bio_fastq
 # operationId: search_bio_fastq
-export def "repository-search-type-bio-fastq list" [
+export def "search-bio-fastq" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -593,7 +593,7 @@ export def "repository-search-type-bio-fastq list" [
 #
 # GET /repository/search/type/bio_hmmer_index
 # operationId: search_bio_hmmer_index
-export def "repository-search-type-bio-hmmer-index list" [
+export def "search-bio-hmmer-index" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -645,7 +645,7 @@ export def "repository-search-type-bio-hmmer-index list" [
 #
 # GET /repository/search/type/bio_ome_tiff
 # operationId: search_bio_ome_tiff
-export def "repository-search-type-bio-ome-tiff list" [
+export def "search-bio-ome-tiff" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -697,7 +697,7 @@ export def "repository-search-type-bio-ome-tiff list" [
 #
 # GET /repository/search/type/bio_ontology_assay
 # operationId: search_bio_ontology_assay
-export def "repository-search-type-bio-ontology-assay list" [
+export def "search-bio-ontology-assay" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -749,7 +749,7 @@ export def "repository-search-type-bio-ontology-assay list" [
 #
 # GET /repository/search/type/bio_ontology_cohort
 # operationId: search_bio_ontology_cohort
-export def "repository-search-type-bio-ontology-cohort list" [
+export def "search-bio-ontology-cohort" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -801,7 +801,7 @@ export def "repository-search-type-bio-ontology-cohort list" [
 #
 # GET /repository/search/type/bio_ontology_person
 # operationId: search_bio_ontology_person
-export def "repository-search-type-bio-ontology-person list" [
+export def "search-bio-ontology-person" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -854,7 +854,7 @@ export def "repository-search-type-bio-ontology-person list" [
 #
 # GET /repository/search/type/bio_ontology_sample
 # operationId: search_bio_ontology_sample
-export def "repository-search-type-bio-ontology-sample list" [
+export def "search-bio-ontology-sample" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -906,7 +906,7 @@ export def "repository-search-type-bio-ontology-sample list" [
 #
 # GET /repository/search/type/bio_ontology_series
 # operationId: search_bio_ontology_series
-export def "repository-search-type-bio-ontology-series list" [
+export def "search-bio-ontology-series" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -958,7 +958,7 @@ export def "repository-search-type-bio-ontology-series list" [
 #
 # GET /repository/search/type/bio_ontology_study
 # operationId: search_bio_ontology_study
-export def "repository-search-type-bio-ontology-study list" [
+export def "search-bio-ontology-study" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1010,7 +1010,7 @@ export def "repository-search-type-bio-ontology-study list" [
 #
 # GET /repository/search/type/bio_sam
 # operationId: search_bio_sam
-export def "repository-search-type-bio-sam list" [
+export def "search-bio-sam" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1062,7 +1062,7 @@ export def "repository-search-type-bio-sam list" [
 #
 # GET /repository/search/type/bio_sf_pdb
 # operationId: search_bio_sf_pdb
-export def "repository-search-type-bio-sf-pdb list" [
+export def "search-bio-sf-pdb" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1114,7 +1114,7 @@ export def "repository-search-type-bio-sf-pdb list" [
 #
 # GET /repository/search/type/bio_sra
 # operationId: search_bio_sra
-export def "repository-search-type-bio-sra list" [
+export def "search-bio-sra" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1166,7 +1166,7 @@ export def "repository-search-type-bio-sra list" [
 #
 # GET /repository/search/type/bio_stockholm
 # operationId: search_bio_stockholm
-export def "repository-search-type-bio-stockholm list" [
+export def "search-bio-stockholm" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1218,7 +1218,7 @@ export def "repository-search-type-bio-stockholm list" [
 #
 # GET /repository/search/type/bio_taxonomy
 # operationId: search_bio_taxonomy
-export def "repository-search-type-bio-taxonomy list" [
+export def "search-bio-taxonomy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1275,7 +1275,7 @@ export def "repository-search-type-bio-taxonomy list" [
 #
 # GET /repository/search/type/blogentry
 # operationId: search_blogentry
-export def "repository-search-type-blogentry list" [
+export def "search-blogentry" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1328,7 +1328,7 @@ export def "repository-search-type-blogentry list" [
 #
 # GET /repository/search/type/bolder_rental_housing
 # operationId: search_bolder_rental_housing
-export def "repository-search-type-bolder-rental-housing list" [
+export def "search-bolder-rental-housing" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1400,7 +1400,7 @@ export def "repository-search-type-bolder-rental-housing list" [
 #
 # GET /repository/search/type/bookmarks
 # operationId: search_bookmarks
-export def "repository-search-type-bookmarks list" [
+export def "search-bookmarks" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1456,7 +1456,7 @@ export def "repository-search-type-bookmarks list" [
 #
 # GET /repository/search/type/boston_crime
 # operationId: search_boston_crime
-export def "repository-search-type-boston-crime list" [
+export def "search-boston-crime" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1520,7 +1520,7 @@ export def "repository-search-type-boston-crime list" [
 #
 # GET /repository/search/type/boulder_2017_election_contributions
 # operationId: search_boulder_2017_election_contributions
-export def "repository-search-type-boulder-2017-election-contributions list" [
+export def "search-boulder-2017-election-contributions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1586,7 +1586,7 @@ export def "repository-search-type-boulder-2017-election-contributions list" [
 #
 # GET /repository/search/type/boulder_campaign_contributions
 # operationId: search_boulder_campaign_contributions
-export def "repository-search-type-boulder-campaign-contributions list" [
+export def "search-boulder-campaign-contributions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1657,7 +1657,7 @@ export def "repository-search-type-boulder-campaign-contributions list" [
 #
 # GET /repository/search/type/boulder_consulting_services
 # operationId: search_boulder_consulting_services
-export def "repository-search-type-boulder-consulting-services list" [
+export def "search-boulder-consulting-services" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1720,7 +1720,7 @@ export def "repository-search-type-boulder-consulting-services list" [
 #
 # GET /repository/search/type/boulder_county_voter_details
 # operationId: search_boulder_county_voter_details
-export def "repository-search-type-boulder-county-voter-details list" [
+export def "search-boulder-county-voter-details" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1791,7 +1791,7 @@ export def "repository-search-type-boulder-county-voter-details list" [
 #
 # GET /repository/search/type/boulder_crimes
 # operationId: search_boulder_crimes
-export def "repository-search-type-boulder-crimes list" [
+export def "search-boulder-crimes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1847,7 +1847,7 @@ export def "repository-search-type-boulder-crimes list" [
 #
 # GET /repository/search/type/boulder_emails
 # operationId: search_boulder_emails
-export def "repository-search-type-boulder-emails list" [
+export def "search-boulder-emails" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1905,7 +1905,7 @@ export def "repository-search-type-boulder-emails list" [
 #
 # GET /repository/search/type/boulder_employee_salaries
 # operationId: search_boulder_employee_salaries
-export def "repository-search-type-boulder-employee-salaries list" [
+export def "search-boulder-employee-salaries" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1965,7 +1965,7 @@ export def "repository-search-type-boulder-employee-salaries list" [
 #
 # GET /repository/search/type/calendar
 # operationId: search_calendar
-export def "repository-search-type-calendar list" [
+export def "search-calendar" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2017,7 +2017,7 @@ export def "repository-search-type-calendar list" [
 #
 # GET /repository/search/type/campaign_donors
 # operationId: search_campaign_donors
-export def "repository-search-type-campaign-donors list" [
+export def "search-campaign-donors" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2081,7 +2081,7 @@ export def "repository-search-type-campaign-donors list" [
 #
 # GET /repository/search/type/campaign_expenditures
 # operationId: search_campaign_expenditures
-export def "repository-search-type-campaign-expenditures list" [
+export def "search-campaign-expenditures" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2144,7 +2144,7 @@ export def "repository-search-type-campaign-expenditures list" [
 #
 # GET /repository/search/type/cataloglink
 # operationId: search_cataloglink
-export def "repository-search-type-cataloglink list" [
+export def "search-cataloglink" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2196,7 +2196,7 @@ export def "repository-search-type-cataloglink list" [
 #
 # GET /repository/search/type/cdm_grid
 # operationId: search_cdm_grid
-export def "repository-search-type-cdm-grid list" [
+export def "search-cdm-grid" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2248,7 +2248,7 @@ export def "repository-search-type-cdm-grid list" [
 #
 # GET /repository/search/type/chatroom
 # operationId: search_chatroom
-export def "repository-search-type-chatroom list" [
+export def "search-chatroom" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2300,7 +2300,7 @@ export def "repository-search-type-chatroom list" [
 #
 # GET /repository/search/type/colorado_water_rights
 # operationId: search_colorado_water_rights
-export def "repository-search-type-colorado-water-rights list" [
+export def "search-colorado-water-rights" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2369,7 +2369,7 @@ export def "repository-search-type-colorado-water-rights list" [
 #
 # GET /repository/search/type/committee_donations
 # operationId: search_committee_donations
-export def "repository-search-type-committee-donations list" [
+export def "search-committee-donations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2431,7 +2431,7 @@ export def "repository-search-type-committee-donations list" [
 #
 # GET /repository/search/type/community_datahub
 # operationId: search_community_datahub
-export def "repository-search-type-community-datahub list" [
+export def "search-community-datahub" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2483,7 +2483,7 @@ export def "repository-search-type-community-datahub list" [
 #
 # GET /repository/search/type/community_resource
 # operationId: search_community_resource
-export def "repository-search-type-community-resource list" [
+export def "search-community-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2540,7 +2540,7 @@ export def "repository-search-type-community-resource list" [
 #
 # GET /repository/search/type/construction_permits
 # operationId: search_construction_permits
-export def "repository-search-type-construction-permits list" [
+export def "search-construction-permits" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2622,7 +2622,7 @@ export def "repository-search-type-construction-permits list" [
 #
 # GET /repository/search/type/contact
 # operationId: search_contact
-export def "repository-search-type-contact list" [
+export def "search-contact" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2677,7 +2677,7 @@ export def "repository-search-type-contact list" [
 #
 # GET /repository/search/type/db_co_indicators
 # operationId: search_db_co_indicators
-export def "repository-search-type-db-co-indicators list" [
+export def "search-db-co-indicators" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2736,7 +2736,7 @@ export def "repository-search-type-db-co-indicators list" [
 #
 # GET /repository/search/type/earth_satellite_landsat
 # operationId: search_earth_satellite_landsat
-export def "repository-search-type-earth-satellite-landsat list" [
+export def "search-earth-satellite-landsat" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2794,7 +2794,7 @@ export def "repository-search-type-earth-satellite-landsat list" [
 #
 # GET /repository/search/type/faq
 # operationId: search_faq
-export def "repository-search-type-faq list" [
+export def "search-faq" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2846,7 +2846,7 @@ export def "repository-search-type-faq list" [
 #
 # GET /repository/search/type/fec_pacs
 # operationId: search_fec_pacs
-export def "repository-search-type-fec-pacs list" [
+export def "search-fec-pacs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2915,7 +2915,7 @@ export def "repository-search-type-fec-pacs list" [
 #
 # GET /repository/search/type/feccandidates
 # operationId: search_feccandidates
-export def "repository-search-type-feccandidates list" [
+export def "search-feccandidates" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2990,7 +2990,7 @@ export def "repository-search-type-feccandidates list" [
 #
 # GET /repository/search/type/feed
 # operationId: search_feed
-export def "repository-search-type-feed list" [
+export def "search-feed" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3042,7 +3042,7 @@ export def "repository-search-type-feed list" [
 #
 # GET /repository/search/type/file
 # operationId: search_file
-export def "repository-search-type-file list" [
+export def "search-file" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3094,7 +3094,7 @@ export def "repository-search-type-file list" [
 #
 # GET /repository/search/type/fits_data
 # operationId: search_fits_data
-export def "repository-search-type-fits-data list" [
+export def "search-fits-data" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3149,7 +3149,7 @@ export def "repository-search-type-fits-data list" [
 #
 # GET /repository/search/type/ftp
 # operationId: search_ftp
-export def "repository-search-type-ftp list" [
+export def "search-ftp" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3201,7 +3201,7 @@ export def "repository-search-type-ftp list" [
 #
 # GET /repository/search/type/gadgets_countdown
 # operationId: search_gadgets_countdown
-export def "repository-search-type-gadgets-countdown list" [
+export def "search-gadgets-countdown" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3253,7 +3253,7 @@ export def "repository-search-type-gadgets-countdown list" [
 #
 # GET /repository/search/type/gadgets_stock
 # operationId: search_gadgets_stock
-export def "repository-search-type-gadgets-stock list" [
+export def "search-gadgets-stock" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3305,7 +3305,7 @@ export def "repository-search-type-gadgets-stock list" [
 #
 # GET /repository/search/type/gadgets_weather
 # operationId: search_gadgets_weather
-export def "repository-search-type-gadgets-weather list" [
+export def "search-gadgets-weather" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3357,7 +3357,7 @@ export def "repository-search-type-gadgets-weather list" [
 #
 # GET /repository/search/type/gazeteer_census_tracts
 # operationId: search_gazeteer_census_tracts
-export def "repository-search-type-gazeteer-census-tracts list" [
+export def "search-gazeteer-census-tracts" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3418,7 +3418,7 @@ export def "repository-search-type-gazeteer-census-tracts list" [
 #
 # GET /repository/search/type/gazeteer_counties
 # operationId: search_gazeteer_counties
-export def "repository-search-type-gazeteer-counties list" [
+export def "search-gazeteer-counties" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3478,7 +3478,7 @@ export def "repository-search-type-gazeteer-counties list" [
 #
 # GET /repository/search/type/geo_geojson
 # operationId: search_geo_geojson
-export def "repository-search-type-geo-geojson list" [
+export def "search-geo-geojson" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3530,7 +3530,7 @@ export def "repository-search-type-geo-geojson list" [
 #
 # GET /repository/search/type/geo_geotiff
 # operationId: search_geo_geotiff
-export def "repository-search-type-geo-geotiff list" [
+export def "search-geo-geotiff" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3582,7 +3582,7 @@ export def "repository-search-type-geo-geotiff list" [
 #
 # GET /repository/search/type/geo_gpx
 # operationId: search_geo_gpx
-export def "repository-search-type-geo-gpx list" [
+export def "search-geo-gpx" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3640,7 +3640,7 @@ export def "repository-search-type-geo-gpx list" [
 #
 # GET /repository/search/type/geo_hdf5
 # operationId: search_geo_hdf5
-export def "repository-search-type-geo-hdf5 list" [
+export def "search-geo-hdf5" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3692,7 +3692,7 @@ export def "repository-search-type-geo-hdf5 list" [
 #
 # GET /repository/search/type/geo_kml
 # operationId: search_geo_kml
-export def "repository-search-type-geo-kml list" [
+export def "search-geo-kml" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3744,7 +3744,7 @@ export def "repository-search-type-geo-kml list" [
 #
 # GET /repository/search/type/geo_shapefile
 # operationId: search_geo_shapefile
-export def "repository-search-type-geo-shapefile list" [
+export def "search-geo-shapefile" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3796,7 +3796,7 @@ export def "repository-search-type-geo-shapefile list" [
 #
 # GET /repository/search/type/geo_shapefile_fips
 # operationId: search_geo_shapefile_fips
-export def "repository-search-type-geo-shapefile-fips list" [
+export def "search-geo-shapefile-fips" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3848,7 +3848,7 @@ export def "repository-search-type-geo-shapefile-fips list" [
 #
 # GET /repository/search/type/glossary
 # operationId: search_glossary
-export def "repository-search-type-glossary list" [
+export def "search-glossary" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3900,7 +3900,7 @@ export def "repository-search-type-glossary list" [
 #
 # GET /repository/search/type/gridaggregation
 # operationId: search_gridaggregation
-export def "repository-search-type-gridaggregation list" [
+export def "search-gridaggregation" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3952,7 +3952,7 @@ export def "repository-search-type-gridaggregation list" [
 #
 # GET /repository/search/type/group
 # operationId: search_group
-export def "repository-search-type-group list" [
+export def "search-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4004,7 +4004,7 @@ export def "repository-search-type-group list" [
 #
 # GET /repository/search/type/hipchat_group
 # operationId: search_hipchat_group
-export def "repository-search-type-hipchat-group list" [
+export def "search-hipchat-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4056,7 +4056,7 @@ export def "repository-search-type-hipchat-group list" [
 #
 # GET /repository/search/type/homepage
 # operationId: search_homepage
-export def "repository-search-type-homepage list" [
+export def "search-homepage" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4108,7 +4108,7 @@ export def "repository-search-type-homepage list" [
 #
 # GET /repository/search/type/incident
 # operationId: search_incident
-export def "repository-search-type-incident list" [
+export def "search-incident" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4163,7 +4163,7 @@ export def "repository-search-type-incident list" [
 #
 # GET /repository/search/type/jeopardy
 # operationId: search_jeopardy
-export def "repository-search-type-jeopardy list" [
+export def "search-jeopardy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4220,7 +4220,7 @@ export def "repository-search-type-jeopardy list" [
 #
 # GET /repository/search/type/latlonimage
 # operationId: search_latlonimage
-export def "repository-search-type-latlonimage list" [
+export def "search-latlonimage" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4272,7 +4272,7 @@ export def "repository-search-type-latlonimage list" [
 #
 # GET /repository/search/type/lidar_collection
 # operationId: search_lidar_collection
-export def "repository-search-type-lidar-collection list" [
+export def "search-lidar-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4324,7 +4324,7 @@ export def "repository-search-type-lidar-collection list" [
 #
 # GET /repository/search/type/lidar_las
 # operationId: search_lidar_las
-export def "repository-search-type-lidar-las list" [
+export def "search-lidar-las" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4376,7 +4376,7 @@ export def "repository-search-type-lidar-las list" [
 #
 # GET /repository/search/type/lidar_lvis
 # operationId: search_lidar_lvis
-export def "repository-search-type-lidar-lvis list" [
+export def "search-lidar-lvis" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4428,7 +4428,7 @@ export def "repository-search-type-lidar-lvis list" [
 #
 # GET /repository/search/type/link
 # operationId: search_link
-export def "repository-search-type-link list" [
+export def "search-link" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4480,7 +4480,7 @@ export def "repository-search-type-link list" [
 #
 # GET /repository/search/type/localfiles
 # operationId: search_localfiles
-export def "repository-search-type-localfiles list" [
+export def "search-localfiles" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4532,7 +4532,7 @@ export def "repository-search-type-localfiles list" [
 #
 # GET /repository/search/type/locations
 # operationId: search_locations
-export def "repository-search-type-locations list" [
+export def "search-locations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4587,7 +4587,7 @@ export def "repository-search-type-locations list" [
 #
 # GET /repository/search/type/map_googlemap
 # operationId: search_map_googlemap
-export def "repository-search-type-map-googlemap list" [
+export def "search-map-googlemap" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4639,7 +4639,7 @@ export def "repository-search-type-map-googlemap list" [
 #
 # GET /repository/search/type/media_audiofile
 # operationId: search_media_audiofile
-export def "repository-search-type-media-audiofile list" [
+export def "search-media-audiofile" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4691,7 +4691,7 @@ export def "repository-search-type-media-audiofile list" [
 #
 # GET /repository/search/type/media_imageloop
 # operationId: search_media_imageloop
-export def "repository-search-type-media-imageloop list" [
+export def "search-media-imageloop" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4743,7 +4743,7 @@ export def "repository-search-type-media-imageloop list" [
 #
 # GET /repository/search/type/media_photoalbum
 # operationId: search_media_photoalbum
-export def "repository-search-type-media-photoalbum list" [
+export def "search-media-photoalbum" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4795,7 +4795,7 @@ export def "repository-search-type-media-photoalbum list" [
 #
 # GET /repository/search/type/media_video_channel
 # operationId: search_media_video_channel
-export def "repository-search-type-media-video-channel list" [
+export def "search-media-video-channel" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4847,7 +4847,7 @@ export def "repository-search-type-media-video-channel list" [
 #
 # GET /repository/search/type/media_video_quicktime
 # operationId: search_media_video_quicktime
-export def "repository-search-type-media-video-quicktime list" [
+export def "search-media-video-quicktime" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4899,7 +4899,7 @@ export def "repository-search-type-media-video-quicktime list" [
 #
 # GET /repository/search/type/media_youtubevideo
 # operationId: search_media_youtubevideo
-export def "repository-search-type-media-youtubevideo list" [
+export def "search-media-youtubevideo" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4951,7 +4951,7 @@ export def "repository-search-type-media-youtubevideo list" [
 #
 # GET /repository/search/type/notes
 # operationId: search_notes
-export def "repository-search-type-notes list" [
+export def "search-notes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5004,7 +5004,7 @@ export def "repository-search-type-notes list" [
 #
 # GET /repository/search/type/notes_jsonfile
 # operationId: search_notes_jsonfile
-export def "repository-search-type-notes-jsonfile list" [
+export def "search-notes-jsonfile" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5056,7 +5056,7 @@ export def "repository-search-type-notes-jsonfile list" [
 #
 # GET /repository/search/type/notes_note
 # operationId: search_notes_note
-export def "repository-search-type-notes-note list" [
+export def "search-notes-note" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5108,7 +5108,7 @@ export def "repository-search-type-notes-note list" [
 #
 # GET /repository/search/type/notes_notebook
 # operationId: search_notes_notebook
-export def "repository-search-type-notes-notebook list" [
+export def "search-notes-notebook" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5160,7 +5160,7 @@ export def "repository-search-type-notes-notebook list" [
 #
 # GET /repository/search/type/nwsfeed
 # operationId: search_nwsfeed
-export def "repository-search-type-nwsfeed list" [
+export def "search-nwsfeed" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5212,7 +5212,7 @@ export def "repository-search-type-nwsfeed list" [
 #
 # GET /repository/search/type/opendaplink
 # operationId: search_opendaplink
-export def "repository-search-type-opendaplink list" [
+export def "search-opendaplink" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5264,7 +5264,7 @@ export def "repository-search-type-opendaplink list" [
 #
 # GET /repository/search/type/owl.class
 # operationId: search_owl.class
-export def "repository-search-type-owl-class get" [
+export def "search-owl-class" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5316,7 +5316,7 @@ export def "repository-search-type-owl-class get" [
 #
 # GET /repository/search/type/owl.ontology
 # operationId: search_owl.ontology
-export def "repository-search-type-owl-ontology get" [
+export def "search-owl-ontology" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5368,7 +5368,7 @@ export def "repository-search-type-owl-ontology get" [
 #
 # GET /repository/search/type/pasteitentry
 # operationId: search_pasteitentry
-export def "repository-search-type-pasteitentry list" [
+export def "search-pasteitentry" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5420,7 +5420,7 @@ export def "repository-search-type-pasteitentry list" [
 #
 # GET /repository/search/type/point_text
 # operationId: search_point_text
-export def "repository-search-type-point-text list" [
+export def "search-point-text" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5472,7 +5472,7 @@ export def "repository-search-type-point-text list" [
 #
 # GET /repository/search/type/police_stop_data
 # operationId: search_police_stop_data
-export def "repository-search-type-police-stop-data list" [
+export def "search-police-stop-data" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5531,7 +5531,7 @@ export def "repository-search-type-police-stop-data list" [
 #
 # GET /repository/search/type/poll
 # operationId: search_poll
-export def "repository-search-type-poll list" [
+export def "search-poll" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5583,7 +5583,7 @@ export def "repository-search-type-poll list" [
 #
 # GET /repository/search/type/project_campaign
 # operationId: search_project_campaign
-export def "repository-search-type-project-campaign list" [
+export def "search-project-campaign" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5635,7 +5635,7 @@ export def "repository-search-type-project-campaign list" [
 #
 # GET /repository/search/type/project_casestudy
 # operationId: search_project_casestudy
-export def "repository-search-type-project-casestudy list" [
+export def "search-project-casestudy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5689,7 +5689,7 @@ export def "repository-search-type-project-casestudy list" [
 #
 # GET /repository/search/type/project_contribution
 # operationId: search_project_contribution
-export def "repository-search-type-project-contribution list" [
+export def "search-project-contribution" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5741,7 +5741,7 @@ export def "repository-search-type-project-contribution list" [
 #
 # GET /repository/search/type/project_dataformat
 # operationId: search_project_dataformat
-export def "repository-search-type-project-dataformat list" [
+export def "search-project-dataformat" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5795,7 +5795,7 @@ export def "repository-search-type-project-dataformat list" [
 #
 # GET /repository/search/type/project_dataset
 # operationId: search_project_dataset
-export def "repository-search-type-project-dataset list" [
+export def "search-project-dataset" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5850,7 +5850,7 @@ export def "repository-search-type-project-dataset list" [
 #
 # GET /repository/search/type/project_deployment
 # operationId: search_project_deployment
-export def "repository-search-type-project-deployment list" [
+export def "search-project-deployment" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5902,7 +5902,7 @@ export def "repository-search-type-project-deployment list" [
 #
 # GET /repository/search/type/project_experiment
 # operationId: search_project_experiment
-export def "repository-search-type-project-experiment list" [
+export def "search-project-experiment" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5954,7 +5954,7 @@ export def "repository-search-type-project-experiment list" [
 #
 # GET /repository/search/type/project_fieldnote
 # operationId: search_project_fieldnote
-export def "repository-search-type-project-fieldnote list" [
+export def "search-project-fieldnote" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6006,7 +6006,7 @@ export def "repository-search-type-project-fieldnote list" [
 #
 # GET /repository/search/type/project_gps_controlpoints
 # operationId: search_project_gps_controlpoints
-export def "repository-search-type-project-gps-controlpoints list" [
+export def "search-project-gps-controlpoints" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6058,7 +6058,7 @@ export def "repository-search-type-project-gps-controlpoints list" [
 #
 # GET /repository/search/type/project_gps_raw
 # operationId: search_project_gps_raw
-export def "repository-search-type-project-gps-raw list" [
+export def "search-project-gps-raw" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6110,7 +6110,7 @@ export def "repository-search-type-project-gps-raw list" [
 #
 # GET /repository/search/type/project_gps_rinex
 # operationId: search_project_gps_rinex
-export def "repository-search-type-project-gps-rinex list" [
+export def "search-project-gps-rinex" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6162,7 +6162,7 @@ export def "repository-search-type-project-gps-rinex list" [
 #
 # GET /repository/search/type/project_instrument
 # operationId: search_project_instrument
-export def "repository-search-type-project-instrument list" [
+export def "search-project-instrument" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6214,7 +6214,7 @@ export def "repository-search-type-project-instrument list" [
 #
 # GET /repository/search/type/project_learning_resource
 # operationId: search_project_learning_resource
-export def "repository-search-type-project-learning-resource list" [
+export def "search-project-learning-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6268,7 +6268,7 @@ export def "repository-search-type-project-learning-resource list" [
 #
 # GET /repository/search/type/project_meeting
 # operationId: search_project_meeting
-export def "repository-search-type-project-meeting list" [
+export def "search-project-meeting" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6323,7 +6323,7 @@ export def "repository-search-type-project-meeting list" [
 #
 # GET /repository/search/type/project_organization
 # operationId: search_project_organization
-export def "repository-search-type-project-organization list" [
+export def "search-project-organization" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6377,7 +6377,7 @@ export def "repository-search-type-project-organization list" [
 #
 # GET /repository/search/type/project_program
 # operationId: search_project_program
-export def "repository-search-type-project-program list" [
+export def "search-project-program" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6429,7 +6429,7 @@ export def "repository-search-type-project-program list" [
 #
 # GET /repository/search/type/project_project
 # operationId: search_project_project
-export def "repository-search-type-project-project list" [
+export def "search-project-project" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6481,7 +6481,7 @@ export def "repository-search-type-project-project list" [
 #
 # GET /repository/search/type/project_service
 # operationId: search_project_service
-export def "repository-search-type-project-service list" [
+export def "search-project-service" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6535,7 +6535,7 @@ export def "repository-search-type-project-service list" [
 #
 # GET /repository/search/type/project_site
 # operationId: search_project_site
-export def "repository-search-type-project-site list" [
+export def "search-project-site" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6594,7 +6594,7 @@ export def "repository-search-type-project-site list" [
 #
 # GET /repository/search/type/project_softwarepackage
 # operationId: search_project_softwarepackage
-export def "repository-search-type-project-softwarepackage list" [
+export def "search-project-softwarepackage" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6653,7 +6653,7 @@ export def "repository-search-type-project-softwarepackage list" [
 #
 # GET /repository/search/type/project_standard_name
 # operationId: search_project_standard_name
-export def "repository-search-type-project-standard-name list" [
+export def "search-project-standard-name" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6707,7 +6707,7 @@ export def "repository-search-type-project-standard-name list" [
 #
 # GET /repository/search/type/project_surveylocation
 # operationId: search_project_surveylocation
-export def "repository-search-type-project-surveylocation list" [
+export def "search-project-surveylocation" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6759,7 +6759,7 @@ export def "repository-search-type-project-surveylocation list" [
 #
 # GET /repository/search/type/project_term
 # operationId: search_project_term
-export def "repository-search-type-project-term list" [
+export def "search-project-term" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6812,7 +6812,7 @@ export def "repository-search-type-project-term list" [
 #
 # GET /repository/search/type/project_visit
 # operationId: search_project_visit
-export def "repository-search-type-project-visit list" [
+export def "search-project-visit" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6864,7 +6864,7 @@ export def "repository-search-type-project-visit list" [
 #
 # GET /repository/search/type/project_vocabulary
 # operationId: search_project_vocabulary
-export def "repository-search-type-project-vocabulary list" [
+export def "search-project-vocabulary" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6916,7 +6916,7 @@ export def "repository-search-type-project-vocabulary list" [
 #
 # GET /repository/search/type/property_sales
 # operationId: search_property_sales
-export def "repository-search-type-property-sales list" [
+export def "search-property-sales" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6980,7 +6980,7 @@ export def "repository-search-type-property-sales list" [
 #
 # GET /repository/search/type/propertydb
 # operationId: search_propertydb
-export def "repository-search-type-propertydb list" [
+export def "search-propertydb" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7044,7 +7044,7 @@ export def "repository-search-type-propertydb list" [
 #
 # GET /repository/search/type/python_notebook
 # operationId: search_python_notebook
-export def "repository-search-type-python-notebook list" [
+export def "search-python-notebook" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7096,7 +7096,7 @@ export def "repository-search-type-python-notebook list" [
 #
 # GET /repository/search/type/slack_team
 # operationId: search_slack_team
-export def "repository-search-type-slack-team list" [
+export def "search-slack-team" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7148,7 +7148,7 @@ export def "repository-search-type-slack-team list" [
 #
 # GET /repository/search/type/statusboard
 # operationId: search_statusboard
-export def "repository-search-type-statusboard list" [
+export def "search-statusboard" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7202,7 +7202,7 @@ export def "repository-search-type-statusboard list" [
 #
 # GET /repository/search/type/sunrisesunset
 # operationId: search_sunrisesunset
-export def "repository-search-type-sunrisesunset list" [
+export def "search-sunrisesunset" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7254,7 +7254,7 @@ export def "repository-search-type-sunrisesunset list" [
 #
 # GET /repository/search/type/tasks
 # operationId: search_tasks
-export def "repository-search-type-tasks list" [
+export def "search-tasks" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7313,7 +7313,7 @@ export def "repository-search-type-tasks list" [
 #
 # GET /repository/search/type/tmdbmovies
 # operationId: search_tmdbmovies
-export def "repository-search-type-tmdbmovies list" [
+export def "search-tmdbmovies" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7385,7 +7385,7 @@ export def "repository-search-type-tmdbmovies list" [
 #
 # GET /repository/search/type/todo
 # operationId: search_todo
-export def "repository-search-type-todo list" [
+export def "search-todo" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7440,7 +7440,7 @@ export def "repository-search-type-todo list" [
 #
 # GET /repository/search/type/trip_event
 # operationId: search_trip_event
-export def "repository-search-type-trip-event list" [
+export def "search-trip-event" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7492,7 +7492,7 @@ export def "repository-search-type-trip-event list" [
 #
 # GET /repository/search/type/trip_flight
 # operationId: search_trip_flight
-export def "repository-search-type-trip-flight list" [
+export def "search-trip-flight" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7544,7 +7544,7 @@ export def "repository-search-type-trip-flight list" [
 #
 # GET /repository/search/type/trip_hotel
 # operationId: search_trip_hotel
-export def "repository-search-type-trip-hotel list" [
+export def "search-trip-hotel" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7596,7 +7596,7 @@ export def "repository-search-type-trip-hotel list" [
 #
 # GET /repository/search/type/trip_report
 # operationId: search_trip_report
-export def "repository-search-type-trip-report list" [
+export def "search-trip-report" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7648,7 +7648,7 @@ export def "repository-search-type-trip-report list" [
 #
 # GET /repository/search/type/trip_trip
 # operationId: search_trip_trip
-export def "repository-search-type-trip-trip list" [
+export def "search-trip-trip" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7700,7 +7700,7 @@ export def "repository-search-type-trip-trip list" [
 #
 # GET /repository/search/type/type_awc_metar
 # operationId: search_type_awc_metar
-export def "repository-search-type-type-awc-metar list" [
+export def "search-type-awc-metar" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7753,7 +7753,7 @@ export def "repository-search-type-type-awc-metar list" [
 #
 # GET /repository/search/type/type_biz_stockseries
 # operationId: search_type_biz_stockseries
-export def "repository-search-type-type-biz-stockseries list" [
+export def "search-type-biz-stockseries" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7805,7 +7805,7 @@ export def "repository-search-type-type-biz-stockseries list" [
 #
 # GET /repository/search/type/type_bls_series
 # operationId: search_type_bls_series
-export def "repository-search-type-type-bls-series list" [
+export def "search-type-bls-series" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7864,7 +7864,7 @@ export def "repository-search-type-type-bls-series list" [
 #
 # GET /repository/search/type/type_bls_survey
 # operationId: search_type_bls_survey
-export def "repository-search-type-type-bls-survey list" [
+export def "search-type-bls-survey" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7916,7 +7916,7 @@ export def "repository-search-type-type-bls-survey list" [
 #
 # GET /repository/search/type/type_census_acs
 # operationId: search_type_census_acs
-export def "repository-search-type-type-census-acs list" [
+export def "search-type-census-acs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7972,7 +7972,7 @@ export def "repository-search-type-type-census-acs list" [
 #
 # GET /repository/search/type/type_daymet
 # operationId: search_type_daymet
-export def "repository-search-type-type-daymet list" [
+export def "search-type-daymet" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8024,7 +8024,7 @@ export def "repository-search-type-type-daymet list" [
 #
 # GET /repository/search/type/type_db_table
 # operationId: search_type_db_table
-export def "repository-search-type-type-db-table list" [
+export def "search-type-db-table" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8076,7 +8076,7 @@ export def "repository-search-type-type-db-table list" [
 #
 # GET /repository/search/type/type_document_csv
 # operationId: search_type_document_csv
-export def "repository-search-type-type-document-csv list" [
+export def "search-type-document-csv" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8128,7 +8128,7 @@ export def "repository-search-type-type-document-csv list" [
 #
 # GET /repository/search/type/type_document_doc
 # operationId: search_type_document_doc
-export def "repository-search-type-type-document-doc list" [
+export def "search-type-document-doc" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8180,7 +8180,7 @@ export def "repository-search-type-type-document-doc list" [
 #
 # GET /repository/search/type/type_document_html
 # operationId: search_type_document_html
-export def "repository-search-type-type-document-html list" [
+export def "search-type-document-html" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8232,7 +8232,7 @@ export def "repository-search-type-type-document-html list" [
 #
 # GET /repository/search/type/type_document_pdf
 # operationId: search_type_document_pdf
-export def "repository-search-type-type-document-pdf list" [
+export def "search-type-document-pdf" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8284,7 +8284,7 @@ export def "repository-search-type-type-document-pdf list" [
 #
 # GET /repository/search/type/type_document_ppt
 # operationId: search_type_document_ppt
-export def "repository-search-type-type-document-ppt list" [
+export def "search-type-document-ppt" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8336,7 +8336,7 @@ export def "repository-search-type-type-document-ppt list" [
 #
 # GET /repository/search/type/type_document_xls
 # operationId: search_type_document_xls
-export def "repository-search-type-type-document-xls list" [
+export def "search-type-document-xls" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8388,7 +8388,7 @@ export def "repository-search-type-type-document-xls list" [
 #
 # GET /repository/search/type/type_drilsdown_casestudy
 # operationId: search_type_drilsdown_casestudy
-export def "repository-search-type-type-drilsdown-casestudy list" [
+export def "search-type-drilsdown-casestudy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8440,7 +8440,7 @@ export def "repository-search-type-type-drilsdown-casestudy list" [
 #
 # GET /repository/search/type/type_edgar_filing
 # operationId: search_type_edgar_filing
-export def "repository-search-type-type-edgar-filing list" [
+export def "search-type-edgar-filing" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8498,7 +8498,7 @@ export def "repository-search-type-type-edgar-filing list" [
 #
 # GET /repository/search/type/type_eia_category
 # operationId: search_type_eia_category
-export def "repository-search-type-type-eia-category list" [
+export def "search-type-eia-category" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8550,7 +8550,7 @@ export def "repository-search-type-type-eia-category list" [
 #
 # GET /repository/search/type/type_eia_series
 # operationId: search_type_eia_series
-export def "repository-search-type-type-eia-series list" [
+export def "search-type-eia-series" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8602,7 +8602,7 @@ export def "repository-search-type-type-eia-series list" [
 #
 # GET /repository/search/type/type_esri_featureserver
 # operationId: search_type_esri_featureserver
-export def "repository-search-type-type-esri-featureserver list" [
+export def "search-type-esri-featureserver" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8654,7 +8654,7 @@ export def "repository-search-type-type-esri-featureserver list" [
 #
 # GET /repository/search/type/type_esri_geometryserver
 # operationId: search_type_esri_geometryserver
-export def "repository-search-type-type-esri-geometryserver list" [
+export def "search-type-esri-geometryserver" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8706,7 +8706,7 @@ export def "repository-search-type-type-esri-geometryserver list" [
 #
 # GET /repository/search/type/type_esri_gpserver
 # operationId: search_type_esri_gpserver
-export def "repository-search-type-type-esri-gpserver list" [
+export def "search-type-esri-gpserver" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8758,7 +8758,7 @@ export def "repository-search-type-type-esri-gpserver list" [
 #
 # GET /repository/search/type/type_esri_imageserver
 # operationId: search_type_esri_imageserver
-export def "repository-search-type-type-esri-imageserver list" [
+export def "search-type-esri-imageserver" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8810,7 +8810,7 @@ export def "repository-search-type-type-esri-imageserver list" [
 #
 # GET /repository/search/type/type_esri_layer
 # operationId: search_type_esri_layer
-export def "repository-search-type-type-esri-layer list" [
+export def "search-type-esri-layer" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8863,7 +8863,7 @@ export def "repository-search-type-type-esri-layer list" [
 #
 # GET /repository/search/type/type_esri_mapserver
 # operationId: search_type_esri_mapserver
-export def "repository-search-type-type-esri-mapserver list" [
+export def "search-type-esri-mapserver" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8915,7 +8915,7 @@ export def "repository-search-type-type-esri-mapserver list" [
 #
 # GET /repository/search/type/type_esri_restfolder
 # operationId: search_type_esri_restfolder
-export def "repository-search-type-type-esri-restfolder list" [
+export def "search-type-esri-restfolder" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8967,7 +8967,7 @@ export def "repository-search-type-type-esri-restfolder list" [
 #
 # GET /repository/search/type/type_esri_restserver
 # operationId: search_type_esri_restserver
-export def "repository-search-type-type-esri-restserver list" [
+export def "search-type-esri-restserver" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9019,7 +9019,7 @@ export def "repository-search-type-type-esri-restserver list" [
 #
 # GET /repository/search/type/type_esri_restservice
 # operationId: search_type_esri_restservice
-export def "repository-search-type-type-esri-restservice list" [
+export def "search-type-esri-restservice" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9071,7 +9071,7 @@ export def "repository-search-type-type-esri-restservice list" [
 #
 # GET /repository/search/type/type_extremes
 # operationId: search_type_extremes
-export def "repository-search-type-type-extremes list" [
+export def "search-type-extremes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9125,7 +9125,7 @@ export def "repository-search-type-type-extremes list" [
 #
 # GET /repository/search/type/type_fred_category
 # operationId: search_type_fred_category
-export def "repository-search-type-type-fred-category list" [
+export def "search-type-fred-category" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9177,7 +9177,7 @@ export def "repository-search-type-type-fred-category list" [
 #
 # GET /repository/search/type/type_fred_series
 # operationId: search_type_fred_series
-export def "repository-search-type-type-fred-series list" [
+export def "search-type-fred-series" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9229,7 +9229,7 @@ export def "repository-search-type-type-fred-series list" [
 #
 # GET /repository/search/type/type_gtfs_agency
 # operationId: search_type_gtfs_agency
-export def "repository-search-type-type-gtfs-agency list" [
+export def "search-type-gtfs-agency" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9281,7 +9281,7 @@ export def "repository-search-type-type-gtfs-agency list" [
 #
 # GET /repository/search/type/type_gtfs_route
 # operationId: search_type_gtfs_route
-export def "repository-search-type-type-gtfs-route list" [
+export def "search-type-gtfs-route" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9335,7 +9335,7 @@ export def "repository-search-type-type-gtfs-route list" [
 #
 # GET /repository/search/type/type_gtfs_routes
 # operationId: search_type_gtfs_routes
-export def "repository-search-type-type-gtfs-routes list" [
+export def "search-type-gtfs-routes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9387,7 +9387,7 @@ export def "repository-search-type-type-gtfs-routes list" [
 #
 # GET /repository/search/type/type_gtfs_stop
 # operationId: search_type_gtfs_stop
-export def "repository-search-type-type-gtfs-stop list" [
+export def "search-type-gtfs-stop" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9444,7 +9444,7 @@ export def "repository-search-type-type-gtfs-stop list" [
 #
 # GET /repository/search/type/type_gtfs_stops
 # operationId: search_type_gtfs_stops
-export def "repository-search-type-type-gtfs-stops list" [
+export def "search-type-gtfs-stops" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9496,7 +9496,7 @@ export def "repository-search-type-type-gtfs-stops list" [
 #
 # GET /repository/search/type/type_gtfs_trip
 # operationId: search_type_gtfs_trip
-export def "repository-search-type-type-gtfs-trip list" [
+export def "search-type-gtfs-trip" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9552,7 +9552,7 @@ export def "repository-search-type-type-gtfs-trip list" [
 #
 # GET /repository/search/type/type_hazarddata
 # operationId: search_type_hazarddata
-export def "repository-search-type-type-hazarddata list" [
+export def "search-type-hazarddata" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9605,7 +9605,7 @@ export def "repository-search-type-type-hazarddata list" [
 #
 # GET /repository/search/type/type_hydro_colorado
 # operationId: search_type_hydro_colorado
-export def "repository-search-type-type-hydro-colorado list" [
+export def "search-type-hydro-colorado" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9658,7 +9658,7 @@ export def "repository-search-type-type-hydro-colorado list" [
 #
 # GET /repository/search/type/type_idv_bundle
 # operationId: search_type_idv_bundle
-export def "repository-search-type-type-idv-bundle list" [
+export def "search-type-idv-bundle" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9710,7 +9710,7 @@ export def "repository-search-type-type-idv-bundle list" [
 #
 # GET /repository/search/type/type_image
 # operationId: search_type_image
-export def "repository-search-type-type-image list" [
+export def "search-type-image" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9762,7 +9762,7 @@ export def "repository-search-type-type-image list" [
 #
 # GET /repository/search/type/type_image_airport
 # operationId: search_type_image_airport
-export def "repository-search-type-type-image-airport list" [
+export def "search-type-image-airport" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9814,7 +9814,7 @@ export def "repository-search-type-type-image-airport list" [
 #
 # GET /repository/search/type/type_image_webcam
 # operationId: search_type_image_webcam
-export def "repository-search-type-type-image-webcam list" [
+export def "search-type-image-webcam" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9866,7 +9866,7 @@ export def "repository-search-type-type-image-webcam list" [
 #
 # GET /repository/search/type/type_mb
 # operationId: search_type_mb
-export def "repository-search-type-type-mb list" [
+export def "search-type-mb" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9918,7 +9918,7 @@ export def "repository-search-type-type-mb list" [
 #
 # GET /repository/search/type/type_mb_collection
 # operationId: search_type_mb_collection
-export def "repository-search-type-type-mb-collection list" [
+export def "search-type-mb-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9970,7 +9970,7 @@ export def "repository-search-type-type-mb-collection list" [
 #
 # GET /repository/search/type/type_mb_point_basic
 # operationId: search_type_mb_point_basic
-export def "repository-search-type-type-mb-point-basic list" [
+export def "search-type-mb-point-basic" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10022,7 +10022,7 @@ export def "repository-search-type-type-mb-point-basic list" [
 #
 # GET /repository/search/type/type_metameta_dictionary
 # operationId: search_type_metameta_dictionary
-export def "repository-search-type-type-metameta-dictionary list" [
+export def "search-type-metameta-dictionary" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10082,7 +10082,7 @@ export def "repository-search-type-type-metameta-dictionary list" [
 #
 # GET /repository/search/type/type_metameta_field
 # operationId: search_type_metameta_field
-export def "repository-search-type-type-metameta-field list" [
+export def "search-type-metameta-field" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10142,7 +10142,7 @@ export def "repository-search-type-type-metameta-field list" [
 #
 # GET /repository/search/type/type_nasaames
 # operationId: search_type_nasaames
-export def "repository-search-type-type-nasaames list" [
+export def "search-type-nasaames" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10194,7 +10194,7 @@ export def "repository-search-type-type-nasaames list" [
 #
 # GET /repository/search/type/type_ncss
 # operationId: search_type_ncss
-export def "repository-search-type-type-ncss list" [
+export def "search-type-ncss" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10246,7 +10246,7 @@ export def "repository-search-type-type-ncss list" [
 #
 # GET /repository/search/type/type_nitf
 # operationId: search_type_nitf
-export def "repository-search-type-type-nitf list" [
+export def "search-type-nitf" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10298,7 +10298,7 @@ export def "repository-search-type-type-nitf list" [
 #
 # GET /repository/search/type/type_point_ameriflux_level2
 # operationId: search_type_point_ameriflux_level2
-export def "repository-search-type-type-point-ameriflux-level2 list" [
+export def "search-type-point-ameriflux-level2" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10353,7 +10353,7 @@ export def "repository-search-type-type-point-ameriflux-level2 list" [
 #
 # GET /repository/search/type/type_point_amrc_final
 # operationId: search_type_point_amrc_final
-export def "repository-search-type-type-point-amrc-final list" [
+export def "search-type-point-amrc-final" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10408,7 +10408,7 @@ export def "repository-search-type-type-point-amrc-final list" [
 #
 # GET /repository/search/type/type_point_amrc_freewave
 # operationId: search_type_point_amrc_freewave
-export def "repository-search-type-type-point-amrc-freewave list" [
+export def "search-type-point-amrc-freewave" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10464,7 +10464,7 @@ export def "repository-search-type-type-point-amrc-freewave list" [
 #
 # GET /repository/search/type/type_point_czo
 # operationId: search_type_point_czo
-export def "repository-search-type-type-point-czo list" [
+export def "search-type-point-czo" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10516,7 +10516,7 @@ export def "repository-search-type-type-point-czo list" [
 #
 # GET /repository/search/type/type_point_gcnet
 # operationId: search_type_point_gcnet
-export def "repository-search-type-type-point-gcnet list" [
+export def "search-type-point-gcnet" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10568,7 +10568,7 @@ export def "repository-search-type-type-point-gcnet list" [
 #
 # GET /repository/search/type/type_point_geomag_iaga2002
 # operationId: search_type_point_geomag_iaga2002
-export def "repository-search-type-type-point-geomag-iaga2002 list" [
+export def "search-type-point-geomag-iaga2002" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10626,7 +10626,7 @@ export def "repository-search-type-type-point-geomag-iaga2002 list" [
 #
 # GET /repository/search/type/type_point_hydro_waterml
 # operationId: search_type_point_hydro_waterml
-export def "repository-search-type-type-point-hydro-waterml list" [
+export def "search-type-point-hydro-waterml" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10680,7 +10680,7 @@ export def "repository-search-type-type-point-hydro-waterml list" [
 #
 # GET /repository/search/type/type_point_icebridge_atm_icessn
 # operationId: search_type_point_icebridge_atm_icessn
-export def "repository-search-type-type-point-icebridge-atm-icessn list" [
+export def "search-type-point-icebridge-atm-icessn" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10732,7 +10732,7 @@ export def "repository-search-type-type-point-icebridge-atm-icessn list" [
 #
 # GET /repository/search/type/type_point_icebridge_atm_qfit
 # operationId: search_type_point_icebridge_atm_qfit
-export def "repository-search-type-type-point-icebridge-atm-qfit list" [
+export def "search-type-point-icebridge-atm-qfit" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10784,7 +10784,7 @@ export def "repository-search-type-type-point-icebridge-atm-qfit list" [
 #
 # GET /repository/search/type/type_point_icebridge_mccords_irmcr2
 # operationId: search_type_point_icebridge_mccords_irmcr2
-export def "repository-search-type-type-point-icebridge-mccords-irmcr2 list" [
+export def "search-type-point-icebridge-mccords-irmcr2" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10836,7 +10836,7 @@ export def "repository-search-type-type-point-icebridge-mccords-irmcr2 list" [
 #
 # GET /repository/search/type/type_point_icebridge_mccords_irmcr3
 # operationId: search_type_point_icebridge_mccords_irmcr3
-export def "repository-search-type-type-point-icebridge-mccords-irmcr3 list" [
+export def "search-type-point-icebridge-mccords-irmcr3" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10888,7 +10888,7 @@ export def "repository-search-type-type-point-icebridge-mccords-irmcr3 list" [
 #
 # GET /repository/search/type/type_point_icebridge_paris
 # operationId: search_type_point_icebridge_paris
-export def "repository-search-type-type-point-icebridge-paris list" [
+export def "search-type-point-icebridge-paris" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10940,7 +10940,7 @@ export def "repository-search-type-type-point-icebridge-paris list" [
 #
 # GET /repository/search/type/type_point_idv
 # operationId: search_type_point_idv
-export def "repository-search-type-type-point-idv list" [
+export def "search-type-point-idv" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -10992,7 +10992,7 @@ export def "repository-search-type-type-point-idv list" [
 #
 # GET /repository/search/type/type_point_inline
 # operationId: search_type_point_inline
-export def "repository-search-type-type-point-inline list" [
+export def "search-type-point-inline" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11044,7 +11044,7 @@ export def "repository-search-type-type-point-inline list" [
 #
 # GET /repository/search/type/type_point_ncdc_climate
 # operationId: search_type_point_ncdc_climate
-export def "repository-search-type-type-point-ncdc-climate list" [
+export def "search-type-point-ncdc-climate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11096,7 +11096,7 @@ export def "repository-search-type-type-point-ncdc-climate list" [
 #
 # GET /repository/search/type/type_point_netcdf
 # operationId: search_type_point_netcdf
-export def "repository-search-type-type-point-netcdf list" [
+export def "search-type-point-netcdf" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11148,7 +11148,7 @@ export def "repository-search-type-type-point-netcdf list" [
 #
 # GET /repository/search/type/type_point_noaa_carbon
 # operationId: search_type_point_noaa_carbon
-export def "repository-search-type-type-point-noaa-carbon list" [
+export def "search-type-point-noaa-carbon" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11205,7 +11205,7 @@ export def "repository-search-type-type-point-noaa-carbon list" [
 #
 # GET /repository/search/type/type_point_noaa_flask_event
 # operationId: search_type_point_noaa_flask_event
-export def "repository-search-type-type-point-noaa-flask-event list" [
+export def "search-type-point-noaa-flask-event" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11262,7 +11262,7 @@ export def "repository-search-type-type-point-noaa-flask-event list" [
 #
 # GET /repository/search/type/type_point_noaa_flask_month
 # operationId: search_type_point_noaa_flask_month
-export def "repository-search-type-type-point-noaa-flask-month list" [
+export def "search-type-point-noaa-flask-month" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11319,7 +11319,7 @@ export def "repository-search-type-type-point-noaa-flask-month list" [
 #
 # GET /repository/search/type/type_point_noaa_madis
 # operationId: search_type_point_noaa_madis
-export def "repository-search-type-type-point-noaa-madis list" [
+export def "search-type-point-noaa-madis" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11371,7 +11371,7 @@ export def "repository-search-type-type-point-noaa-madis list" [
 #
 # GET /repository/search/type/type_point_noaa_tower
 # operationId: search_type_point_noaa_tower
-export def "repository-search-type-type-point-noaa-tower list" [
+export def "search-type-point-noaa-tower" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11424,7 +11424,7 @@ export def "repository-search-type-type-point-noaa-tower list" [
 #
 # GET /repository/search/type/type_point_ocean_cnv
 # operationId: search_type_point_ocean_cnv
-export def "repository-search-type-type-point-ocean-cnv list" [
+export def "search-type-point-ocean-cnv" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11476,7 +11476,7 @@ export def "repository-search-type-type-point-ocean-cnv list" [
 #
 # GET /repository/search/type/type_point_ocean_csv_sado_TTS
 # operationId: search_type_point_ocean_csv_sado_TTS
-export def "repository-search-type-type-point-ocean-csv-sado-tts list" [
+export def "search-type-point-ocean-csv-sado-tts" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11528,7 +11528,7 @@ export def "repository-search-type-type-point-ocean-csv-sado-tts list" [
 #
 # GET /repository/search/type/type_point_ocean_csv_sado_meteo
 # operationId: search_type_point_ocean_csv_sado_meteo
-export def "repository-search-type-type-point-ocean-csv-sado-meteo list" [
+export def "search-type-point-ocean-csv-sado-meteo" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11580,7 +11580,7 @@ export def "repository-search-type-type-point-ocean-csv-sado-meteo list" [
 #
 # GET /repository/search/type/type_point_ocean_csv_sado_position
 # operationId: search_type_point_ocean_csv_sado_position
-export def "repository-search-type-type-point-ocean-csv-sado-position list" [
+export def "search-type-point-ocean-csv-sado-position" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11632,7 +11632,7 @@ export def "repository-search-type-type-point-ocean-csv-sado-position list" [
 #
 # GET /repository/search/type/type_point_ocean_netcdf_glider
 # operationId: search_type_point_ocean_netcdf_glider
-export def "repository-search-type-type-point-ocean-netcdf-glider list" [
+export def "search-type-point-ocean-netcdf-glider" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11685,7 +11685,7 @@ export def "repository-search-type-type-point-ocean-netcdf-glider list" [
 #
 # GET /repository/search/type/type_point_ocean_netcdf_track
 # operationId: search_type_point_ocean_netcdf_track
-export def "repository-search-type-type-point-ocean-netcdf-track list" [
+export def "search-type-point-ocean-netcdf-track" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11738,7 +11738,7 @@ export def "repository-search-type-type-point-ocean-netcdf-track list" [
 #
 # GET /repository/search/type/type_point_ocean_ooi_dmgx
 # operationId: search_type_point_ocean_ooi_dmgx
-export def "repository-search-type-type-point-ocean-ooi-dmgx list" [
+export def "search-type-point-ocean-ooi-dmgx" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11790,7 +11790,7 @@ export def "repository-search-type-type-point-ocean-ooi-dmgx list" [
 #
 # GET /repository/search/type/type_point_openaq
 # operationId: search_type_point_openaq
-export def "repository-search-type-type-point-openaq list" [
+export def "search-type-point-openaq" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11846,7 +11846,7 @@ export def "repository-search-type-type-point-openaq list" [
 #
 # GET /repository/search/type/type_point_pbo_position_time_series
 # operationId: search_type_point_pbo_position_time_series
-export def "repository-search-type-type-point-pbo-position-time-series list" [
+export def "search-type-point-pbo-position-time-series" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11903,7 +11903,7 @@ export def "repository-search-type-type-point-pbo-position-time-series list" [
 #
 # GET /repository/search/type/type_point_simple_records
 # operationId: search_type_point_simple_records
-export def "repository-search-type-type-point-simple-records list" [
+export def "search-type-point-simple-records" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -11955,7 +11955,7 @@ export def "repository-search-type-type-point-simple-records list" [
 #
 # GET /repository/search/type/type_point_snotel
 # operationId: search_type_point_snotel
-export def "repository-search-type-type-point-snotel list" [
+export def "search-type-point-snotel" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12013,7 +12013,7 @@ export def "repository-search-type-type-point-snotel list" [
 #
 # GET /repository/search/type/type_point_text
 # operationId: search_type_point_text
-export def "repository-search-type-type-point-text list" [
+export def "search-type-point-text" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12065,7 +12065,7 @@ export def "repository-search-type-type-point-text list" [
 #
 # GET /repository/search/type/type_point_wsbb_ggp
 # operationId: search_type_point_wsbb_ggp
-export def "repository-search-type-type-point-wsbb-ggp list" [
+export def "search-type-point-wsbb-ggp" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12120,7 +12120,7 @@ export def "repository-search-type-type-point-wsbb-ggp list" [
 #
 # GET /repository/search/type/type_psd_monthly_climate_index
 # operationId: search_type_psd_monthly_climate_index
-export def "repository-search-type-type-psd-monthly-climate-index list" [
+export def "search-type-psd-monthly-climate-index" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12173,7 +12173,7 @@ export def "repository-search-type-type-psd-monthly-climate-index list" [
 #
 # GET /repository/search/type/type_quandl_series
 # operationId: search_type_quandl_series
-export def "repository-search-type-type-quandl-series list" [
+export def "search-type-quandl-series" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12225,7 +12225,7 @@ export def "repository-search-type-type-quandl-series list" [
 #
 # GET /repository/search/type/type_service_group
 # operationId: search_type_service_group
-export def "repository-search-type-type-service-group list" [
+export def "search-type-service-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12277,7 +12277,7 @@ export def "repository-search-type-type-service-group list" [
 #
 # GET /repository/search/type/type_service_link
 # operationId: search_type_service_link
-export def "repository-search-type-type-service-link list" [
+export def "search-type-service-link" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12329,7 +12329,7 @@ export def "repository-search-type-type-service-link list" [
 #
 # GET /repository/search/type/type_socrata_series
 # operationId: search_type_socrata_series
-export def "repository-search-type-type-socrata-series list" [
+export def "search-type-socrata-series" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12381,7 +12381,7 @@ export def "repository-search-type-type-socrata-series list" [
 #
 # GET /repository/search/type/type_sounding_cod
 # operationId: search_type_sounding_cod
-export def "repository-search-type-type-sounding-cod list" [
+export def "search-type-sounding-cod" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12433,7 +12433,7 @@ export def "repository-search-type-type-sounding-cod list" [
 #
 # GET /repository/search/type/type_sounding_frd
 # operationId: search_type_sounding_frd
-export def "repository-search-type-type-sounding-frd list" [
+export def "search-type-sounding-frd" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12485,7 +12485,7 @@ export def "repository-search-type-type-sounding-frd list" [
 #
 # GET /repository/search/type/type_sounding_gsd
 # operationId: search_type_sounding_gsd
-export def "repository-search-type-type-sounding-gsd list" [
+export def "search-type-sounding-gsd" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12537,7 +12537,7 @@ export def "repository-search-type-type-sounding-gsd list" [
 #
 # GET /repository/search/type/type_sounding_wyoming
 # operationId: search_type_sounding_wyoming
-export def "repository-search-type-type-sounding-wyoming list" [
+export def "search-type-sounding-wyoming" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12589,7 +12589,7 @@ export def "repository-search-type-type-sounding-wyoming list" [
 #
 # GET /repository/search/type/type_tmy
 # operationId: search_type_tmy
-export def "repository-search-type-type-tmy list" [
+export def "search-type-tmy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12641,7 +12641,7 @@ export def "repository-search-type-type-tmy list" [
 #
 # GET /repository/search/type/type_tweet
 # operationId: search_type_tweet
-export def "repository-search-type-type-tweet list" [
+export def "search-type-tweet" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12693,7 +12693,7 @@ export def "repository-search-type-type-tweet list" [
 #
 # GET /repository/search/type/type_usgs_gauge
 # operationId: search_type_usgs_gauge
-export def "repository-search-type-type-usgs-gauge list" [
+export def "search-type-usgs-gauge" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12745,7 +12745,7 @@ export def "repository-search-type-type-usgs-gauge list" [
 #
 # GET /repository/search/type/type_virtual
 # operationId: search_type_virtual
-export def "repository-search-type-type-virtual list" [
+export def "search-type-virtual" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12797,7 +12797,7 @@ export def "repository-search-type-type-virtual list" [
 #
 # GET /repository/search/type/type_wms_capabilities
 # operationId: search_type_wms_capabilities
-export def "repository-search-type-type-wms-capabilities list" [
+export def "search-type-wms-capabilities" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12849,7 +12849,7 @@ export def "repository-search-type-type-wms-capabilities list" [
 #
 # GET /repository/search/type/type_wms_layer
 # operationId: search_type_wms_layer
-export def "repository-search-type-type-wms-layer list" [
+export def "search-type-wms-layer" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12901,7 +12901,7 @@ export def "repository-search-type-type-wms-layer list" [
 #
 # GET /repository/search/type/ufo_sightings
 # operationId: search_ufo_sightings
-export def "repository-search-type-ufo-sightings list" [
+export def "search-ufo-sightings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12964,7 +12964,7 @@ export def "repository-search-type-ufo-sightings list" [
 #
 # GET /repository/search/type/us_places
 # operationId: search_us_places
-export def "repository-search-type-us-places list" [
+export def "search-us-places" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -13022,7 +13022,7 @@ export def "repository-search-type-us-places list" [
 #
 # GET /repository/search/type/vote_yesno
 # operationId: search_vote_yesno
-export def "repository-search-type-vote-yesno list" [
+export def "search-vote-yesno" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -13075,7 +13075,7 @@ export def "repository-search-type-vote-yesno list" [
 #
 # GET /repository/search/type/weblog
 # operationId: search_weblog
-export def "repository-search-type-weblog list" [
+export def "search-weblog" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -13127,7 +13127,7 @@ export def "repository-search-type-weblog list" [
 #
 # GET /repository/search/type/wikipage
 # operationId: search_wikipage
-export def "repository-search-type-wikipage list" [
+export def "search-wikipage" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

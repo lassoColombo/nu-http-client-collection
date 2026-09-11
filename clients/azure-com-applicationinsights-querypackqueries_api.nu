@@ -116,7 +116,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resource-groups-providers-microsoft-insights-query-packs-queries list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "queries-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -140,7 +140,7 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/microsoft.insights/queryPacks/{queryPackName}/queries
 # operationId: Queries_List
-export def "subscriptions-resource-groups-providers-microsoft-insights-query-packs-queries list" [
+export def "queries-list" [
   subscription_id: string
   resource_group_name: string
   query_pack_name: string
@@ -185,7 +185,7 @@ export def "subscriptions-resource-groups-providers-microsoft-insights-query-pac
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/microsoft.insights/queryPacks/{queryPackName}/queries/search
 # operationId: Queries_Search
-export def "subscriptions-resource-groups-providers-microsoft-insights-query-packs-queries-search list" [
+export def "queries-search" [
   subscription_id: string
   resource_group_name: string
   query_pack_name: string
@@ -236,7 +236,7 @@ export def "subscriptions-resource-groups-providers-microsoft-insights-query-pac
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/microsoft.insights/queryPacks/{queryPackName}/queries/{queryId}
 # operationId: Queries_Delete
-export def "subscriptions-resource-groups-providers-microsoft-insights-query-packs-queries delete" [
+export def "queries-delete" [
   subscription_id: string
   resource_group_name: string
   query_pack_name: string
@@ -280,7 +280,7 @@ export def "subscriptions-resource-groups-providers-microsoft-insights-query-pac
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/microsoft.insights/queryPacks/{queryPackName}/queries/{queryId}
 # operationId: Queries_Get
-export def "subscriptions-resource-groups-providers-microsoft-insights-query-packs-queries get" [
+export def "queries-get" [
   subscription_id: string
   resource_group_name: string
   query_pack_name: string
@@ -325,7 +325,7 @@ export def "subscriptions-resource-groups-providers-microsoft-insights-query-pac
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/microsoft.insights/queryPacks/{queryPackName}/queries/{queryId}
 # operationId: Queries_Put
 # --properties shape: {body: string, categories?: list<string>, description?: string, displayName: string, labels?: list<string>, linkedResourceId?: string, resourceTypes?: list<string>}
-export def "subscriptions-resource-groups-providers-microsoft-insights-query-packs-queries update" [
+export def "queries-put" [
   subscription_id: string
   resource_group_name: string
   query_pack_name: string

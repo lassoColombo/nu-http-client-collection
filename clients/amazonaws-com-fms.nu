@@ -142,7 +142,7 @@ def x-amz-target-completer-41 [] { ["AWSFMS_20180101.UntagResource"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "api create-associate-admin-account" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "associate-admin-account" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -166,7 +166,7 @@ export def commands []: nothing -> table {
 #
 # POST /
 # operationId: AssociateAdminAccount
-export def "api create-associate-admin-account" [
+export def "associate-admin-account" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -214,7 +214,7 @@ export def "api create-associate-admin-account" [
 #
 # POST /
 # operationId: AssociateThirdPartyFirewall
-export def "api create-associate-third-party-firewall" [
+export def "associate-third-party-firewall" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -262,7 +262,7 @@ export def "api create-associate-third-party-firewall" [
 #
 # POST /
 # operationId: BatchAssociateResource
-export def "api create-batch-associate-resource" [
+export def "batch-associate-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -311,7 +311,7 @@ export def "api create-batch-associate-resource" [
 #
 # POST /
 # operationId: BatchDisassociateResource
-export def "api create-batch-disassociate-resource" [
+export def "batch-disassociate-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -360,7 +360,7 @@ export def "api create-batch-disassociate-resource" [
 #
 # POST /
 # operationId: DeleteAppsList
-export def "api delete-apps-list" [
+export def "delete-apps-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -408,7 +408,7 @@ export def "api delete-apps-list" [
 #
 # POST /
 # operationId: DeleteNotificationChannel
-export def "api delete-notification-channel" [
+export def "delete-notification-channel" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -456,7 +456,7 @@ export def "api delete-notification-channel" [
 #
 # POST /
 # operationId: DeletePolicy
-export def "api delete-policy" [
+export def "delete-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -505,7 +505,7 @@ export def "api delete-policy" [
 #
 # POST /
 # operationId: DeleteProtocolsList
-export def "api delete-protocols-list" [
+export def "delete-protocols-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -553,7 +553,7 @@ export def "api delete-protocols-list" [
 #
 # POST /
 # operationId: DeleteResourceSet
-export def "api delete-resource-update" [
+export def "delete-resource-set" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -601,7 +601,7 @@ export def "api delete-resource-update" [
 #
 # POST /
 # operationId: DisassociateAdminAccount
-export def "api create-disassociate-admin-account" [
+export def "disassociate-admin-account" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -649,7 +649,7 @@ export def "api create-disassociate-admin-account" [
 #
 # POST /
 # operationId: DisassociateThirdPartyFirewall
-export def "api create-disassociate-third-party-firewall" [
+export def "disassociate-third-party-firewall" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -697,7 +697,7 @@ export def "api create-disassociate-third-party-firewall" [
 #
 # POST /
 # operationId: GetAdminAccount
-export def "api get-admin-account" [
+export def "get-admin-account" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -745,7 +745,7 @@ export def "api get-admin-account" [
 #
 # POST /
 # operationId: GetAdminScope
-export def "api get-admin-scope" [
+export def "get-admin-scope" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -793,7 +793,7 @@ export def "api get-admin-scope" [
 #
 # POST /
 # operationId: GetAppsList
-export def "api get-apps-list" [
+export def "get-apps-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -842,7 +842,7 @@ export def "api get-apps-list" [
 #
 # POST /
 # operationId: GetComplianceDetail
-export def "api get-compliance-detail" [
+export def "get-compliance-detail" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -891,7 +891,7 @@ export def "api get-compliance-detail" [
 #
 # POST /
 # operationId: GetNotificationChannel
-export def "api get-notification-channel" [
+export def "get-notification-channel" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -939,7 +939,7 @@ export def "api get-notification-channel" [
 #
 # POST /
 # operationId: GetPolicy
-export def "api get-policy" [
+export def "get-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -987,7 +987,7 @@ export def "api get-policy" [
 #
 # POST /
 # operationId: GetProtectionStatus
-export def "api get-protection-status" [
+export def "get-protection-status" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1040,7 +1040,7 @@ export def "api get-protection-status" [
 #
 # POST /
 # operationId: GetProtocolsList
-export def "api get-protocols-list" [
+export def "get-protocols-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1089,7 +1089,7 @@ export def "api get-protocols-list" [
 #
 # POST /
 # operationId: GetResourceSet
-export def "api get-resource-update" [
+export def "get-resource-set" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1137,7 +1137,7 @@ export def "api get-resource-update" [
 #
 # POST /
 # operationId: GetThirdPartyFirewallAssociationStatus
-export def "api get-third-party-firewall-association-status" [
+export def "get-third-party-firewall-association-status" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1185,7 +1185,7 @@ export def "api get-third-party-firewall-association-status" [
 #
 # POST /
 # operationId: GetViolationDetails
-export def "api get-violation-details" [
+export def "get-violation-details" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1236,7 +1236,7 @@ export def "api get-violation-details" [
 #
 # POST /
 # operationId: ListAdminAccountsForOrganization
-export def "api list-admin-accounts-for-organization" [
+export def "list-admin-accounts-for-organization" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1288,7 +1288,7 @@ export def "api list-admin-accounts-for-organization" [
 #
 # POST /
 # operationId: ListAdminsManagingAccount
-export def "api list-admins-managing-account" [
+export def "list-admins-managing-account" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1340,7 +1340,7 @@ export def "api list-admins-managing-account" [
 #
 # POST /
 # operationId: ListAppsLists
-export def "api list-apps-lists" [
+export def "list-apps-lists" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1393,7 +1393,7 @@ export def "api list-apps-lists" [
 #
 # POST /
 # operationId: ListComplianceStatus
-export def "api list-compliance-status" [
+export def "list-compliance-status" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1446,7 +1446,7 @@ export def "api list-compliance-status" [
 #
 # POST /
 # operationId: ListDiscoveredResources
-export def "api list-discovered-resources" [
+export def "list-discovered-resources" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1497,7 +1497,7 @@ export def "api list-discovered-resources" [
 #
 # POST /
 # operationId: ListMemberAccounts
-export def "api list-member-accounts" [
+export def "list-member-accounts" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1549,7 +1549,7 @@ export def "api list-member-accounts" [
 #
 # POST /
 # operationId: ListPolicies
-export def "api list-policies" [
+export def "list-policies" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1601,7 +1601,7 @@ export def "api list-policies" [
 #
 # POST /
 # operationId: ListProtocolsLists
-export def "api list-protocols-lists" [
+export def "list-protocols-lists" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1654,7 +1654,7 @@ export def "api list-protocols-lists" [
 #
 # POST /
 # operationId: ListResourceSetResources
-export def "api list-resource-update-resources" [
+export def "list-resource-set-resources" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1704,7 +1704,7 @@ export def "api list-resource-update-resources" [
 #
 # POST /
 # operationId: ListResourceSets
-export def "api list-resource-sets" [
+export def "list-resource-sets" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1753,7 +1753,7 @@ export def "api list-resource-sets" [
 #
 # POST /
 # operationId: ListTagsForResource
-export def "api list-tags-for-resource" [
+export def "list-tags-for-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1801,7 +1801,7 @@ export def "api list-tags-for-resource" [
 #
 # POST /
 # operationId: ListThirdPartyFirewallFirewallPolicies
-export def "api list-third-party-firewall-firewall-policies" [
+export def "list-third-party-firewall-firewall-policies" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1854,7 +1854,7 @@ export def "api list-third-party-firewall-firewall-policies" [
 #
 # POST /
 # operationId: PutAdminAccount
-export def "api update-admin-account" [
+export def "put-admin-account" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1903,7 +1903,7 @@ export def "api update-admin-account" [
 #
 # POST /
 # operationId: PutAppsList
-export def "api update-apps-list" [
+export def "put-apps-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1952,7 +1952,7 @@ export def "api update-apps-list" [
 #
 # POST /
 # operationId: PutNotificationChannel
-export def "api update-notification-channel" [
+export def "put-notification-channel" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2001,7 +2001,7 @@ export def "api update-notification-channel" [
 #
 # POST /
 # operationId: PutPolicy
-export def "api update-policy" [
+export def "put-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2050,7 +2050,7 @@ export def "api update-policy" [
 #
 # POST /
 # operationId: PutProtocolsList
-export def "api update-protocols-list" [
+export def "put-protocols-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2099,7 +2099,7 @@ export def "api update-protocols-list" [
 #
 # POST /
 # operationId: PutResourceSet
-export def "api update-resource" [
+export def "put-resource-set" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2148,7 +2148,7 @@ export def "api update-resource" [
 #
 # POST /
 # operationId: TagResource
-export def "api tag-resource" [
+export def "tag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2197,7 +2197,7 @@ export def "api tag-resource" [
 #
 # POST /
 # operationId: UntagResource
-export def "api untag-resource" [
+export def "untag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

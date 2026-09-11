@@ -113,7 +113,7 @@ def x-amz-target-completer-12 [] { ["AWSCloud9WorkspaceManagementService.UpdateE
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "api create-environment-ec2" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "create-environment-ec2" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -137,7 +137,7 @@ export def commands []: nothing -> table {
 #
 # POST /
 # operationId: CreateEnvironmentEC2
-export def "api create-environment-ec2" [
+export def "create-environment-ec2" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -195,7 +195,7 @@ export def "api create-environment-ec2" [
 #
 # POST /
 # operationId: CreateEnvironmentMembership
-export def "api create-environment-membership" [
+export def "create-environment-membership" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -245,7 +245,7 @@ export def "api create-environment-membership" [
 #
 # POST /
 # operationId: DeleteEnvironment
-export def "api delete-environment" [
+export def "delete-environment" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -293,7 +293,7 @@ export def "api delete-environment" [
 #
 # POST /
 # operationId: DeleteEnvironmentMembership
-export def "api delete-environment-membership" [
+export def "delete-environment-membership" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -342,7 +342,7 @@ export def "api delete-environment-membership" [
 #
 # POST /
 # operationId: DescribeEnvironmentMemberships
-export def "api get-environment-memberships" [
+export def "describe-environment-memberships" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -397,7 +397,7 @@ export def "api get-environment-memberships" [
 #
 # POST /
 # operationId: DescribeEnvironmentStatus
-export def "api get-environment-status" [
+export def "describe-environment-status" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -445,7 +445,7 @@ export def "api get-environment-status" [
 #
 # POST /
 # operationId: DescribeEnvironments
-export def "api get-environments" [
+export def "describe-environments" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -493,7 +493,7 @@ export def "api get-environments" [
 #
 # POST /
 # operationId: ListEnvironments
-export def "api list-environments" [
+export def "list-environments" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -545,7 +545,7 @@ export def "api list-environments" [
 #
 # POST /
 # operationId: ListTagsForResource
-export def "api list-tags-for-resource" [
+export def "list-tags-for-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -593,7 +593,7 @@ export def "api list-tags-for-resource" [
 #
 # POST /
 # operationId: TagResource
-export def "api tag-resource" [
+export def "tag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -642,7 +642,7 @@ export def "api tag-resource" [
 #
 # POST /
 # operationId: UntagResource
-export def "api untag-resource" [
+export def "untag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -691,7 +691,7 @@ export def "api untag-resource" [
 #
 # POST /
 # operationId: UpdateEnvironment
-export def "api update-environment" [
+export def "update-environment" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -742,7 +742,7 @@ export def "api update-environment" [
 #
 # POST /
 # operationId: UpdateEnvironmentMembership
-export def "api update-environment-membership" [
+export def "update-environment-membership" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

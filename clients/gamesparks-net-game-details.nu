@@ -152,7 +152,7 @@ def query-name-completer [] { ["activeUsersNow" "averageDailyActiveUsers" "avera
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "restv2-game-regions list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-region-options-using-get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -176,7 +176,7 @@ export def commands []: nothing -> table {
 #
 # GET /restv2/game/regions
 # operationId: getRegionOptionsUsingGET
-export def "restv2-game-regions list" [
+export def "get-region-options-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -210,7 +210,7 @@ export def "restv2-game-regions list" [
 #
 # GET /restv2/game/{apiKey}/admin/analytics
 # operationId: getAnalyticsDataUsingGET
-export def "restv2-game-admin-analytics get-data-using" [
+export def "get-analytics-data-using-get" [
   api_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -253,7 +253,7 @@ export def "restv2-game-admin-analytics get-data-using" [
 #
 # GET /restv2/game/{apiKey}/admin/analytics/count
 # operationId: getDataCountUsingGET
-export def "restv2-game-admin-analytics-count get-data-using" [
+export def "get-data-count-using-get" [
   api_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -292,7 +292,7 @@ export def "restv2-game-admin-analytics-count get-data-using" [
 #
 # GET /restv2/game/{apiKey}/admin/analytics/rollingRetention
 # operationId: getRetentionUsingGET
-export def "restv2-game-admin-analytics-rolling-retention get-using" [
+export def "get-retention-using-get" [
   api_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -330,7 +330,7 @@ export def "restv2-game-admin-analytics-rolling-retention get-using" [
 #
 # GET /restv2/game/{apiKey}/admin/billingDetails
 # operationId: getBillingDetails
-export def "restv2-game-admin-billing-details get" [
+export def "get-billing-details" [
   api_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -366,7 +366,7 @@ export def "restv2-game-admin-billing-details get" [
 #
 # PUT /restv2/game/{apiKey}/admin/billingDetails
 # operationId: putBillingDetails
-export def "restv2-game-admin-billing-details update" [
+export def "put-billing-details" [
   api_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -422,7 +422,7 @@ export def "restv2-game-admin-billing-details update" [
 #
 # GET /restv2/game/{apiKey}/admin/notifications/summary
 # operationId: getGameSummaryUsingGET
-export def "restv2-game-admin-notifications-summary get-using" [
+export def "get-game-summary-using-get" [
   api_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -462,7 +462,7 @@ export def "restv2-game-admin-notifications-summary get-using" [
 #
 # POST /restv2/game/{apiKey}/admin/pushNotifications/test/amazon
 # operationId: testPushAmazonNotificationsUsingPOST
-export def "restv2-game-admin-push-notifications-test-amazon create-using" [
+export def "test-push-amazon-notifications-using-post" [
   api_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -507,7 +507,7 @@ export def "restv2-game-admin-push-notifications-test-amazon create-using" [
 #
 # POST /restv2/game/{apiKey}/admin/pushNotifications/test/apple/development
 # operationId: testPushAppleDevNotificationsUsingPOST
-export def "restv2-game-admin-push-notifications-test-apple-development create-dev-using" [
+export def "test-push-apple-dev-notifications-using-post" [
   api_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -552,7 +552,7 @@ export def "restv2-game-admin-push-notifications-test-apple-development create-d
 #
 # POST /restv2/game/{apiKey}/admin/pushNotifications/test/apple/production
 # operationId: testPushAppleProdNotificationsUsingPOST
-export def "restv2-game-admin-push-notifications-test-apple-production create-prod-using" [
+export def "test-push-apple-prod-notifications-using-post" [
   api_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -597,7 +597,7 @@ export def "restv2-game-admin-push-notifications-test-apple-production create-pr
 #
 # POST /restv2/game/{apiKey}/admin/pushNotifications/test/google
 # operationId: testPushGoogleNotificationsUsingPOST
-export def "restv2-game-admin-push-notifications-test-google create-using" [
+export def "test-push-google-notifications-using-post" [
   api_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -642,7 +642,7 @@ export def "restv2-game-admin-push-notifications-test-google create-using" [
 #
 # POST /restv2/game/{apiKey}/admin/pushNotifications/test/microsoft/windows8
 # operationId: testWindows8NotificationsUsingPOST
-export def "restv2-game-admin-push-notifications-test-microsoft-windows8 create-using" [
+export def "test-windows8-notifications-using-post" [
   api_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -687,7 +687,7 @@ export def "restv2-game-admin-push-notifications-test-microsoft-windows8 create-
 #
 # POST /restv2/game/{apiKey}/admin/pushNotifications/test/microsoft/windowsPhone8
 # operationId: testWindowsPhone8NotificationsUsingPOST
-export def "restv2-game-admin-push-notifications-test-microsoft-windows-phone8 create-using" [
+export def "test-windows-phone8-notifications-using-post" [
   api_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -732,7 +732,7 @@ export def "restv2-game-admin-push-notifications-test-microsoft-windows-phone8 c
 #
 # POST /restv2/game/{apiKey}/admin/pushNotifications/test/viber/integration
 # operationId: testViberIntegrationNotificationsUsingPOST
-export def "restv2-game-admin-push-notifications-test-viber-integration create-using" [
+export def "test-viber-integration-notifications-using-post" [
   api_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -777,7 +777,7 @@ export def "restv2-game-admin-push-notifications-test-viber-integration create-u
 #
 # POST /restv2/game/{apiKey}/admin/pushNotifications/test/viber/production
 # operationId: testViberProductionNotificationsUsingPOST
-export def "restv2-game-admin-push-notifications-test-viber-production create-using" [
+export def "test-viber-production-notifications-using-post" [
   api_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -822,7 +822,7 @@ export def "restv2-game-admin-push-notifications-test-viber-production create-us
 #
 # GET /restv2/game/{apiKey}/admin/scripts/differences/{snapshotId1}/{snapshotId2}
 # operationId: getScriptDifferencesUsingGET
-export def "restv2-game-admin-scripts-differences get-using" [
+export def "get-script-differences-using-get" [
   api_key: string
   snapshot_id1: string
   snapshot_id2: string
@@ -862,7 +862,7 @@ export def "restv2-game-admin-scripts-differences get-using" [
 #
 # GET /restv2/game/{apiKey}/admin/scripts/export
 # operationId: exportZipUsingGET
-export def "restv2-game-admin-scripts-export get-zip-using" [
+export def "export-zip-using-get" [
   api_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -898,7 +898,7 @@ export def "restv2-game-admin-scripts-export get-zip-using" [
 #
 # POST /restv2/game/{apiKey}/admin/scripts/import/accept
 # operationId: importAcceptUsingPOST
-export def "restv2-game-admin-scripts-import-accept create-using" [
+export def "import-accept-using-post" [
   api_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -942,7 +942,7 @@ export def "restv2-game-admin-scripts-import-accept create-using" [
 #
 # POST /restv2/game/{apiKey}/admin/scripts/import/preview
 # operationId: importZipUsingPOST
-export def "restv2-game-admin-scripts-import-preview create-zip-using" [
+export def "import-zip-using-post" [
   api_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -984,7 +984,7 @@ export def "restv2-game-admin-scripts-import-preview create-zip-using" [
 #
 # GET /restv2/game/{apiKey}/admin/scripts/versions
 # operationId: getScriptVersionsUsingGET_1
-export def "restv2-game-admin-scripts-versions get-using-by-api-key" [
+export def "get-script-versions-using-get-1" [
   api_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1022,7 +1022,7 @@ export def "restv2-game-admin-scripts-versions get-using-by-api-key" [
 #
 # GET /restv2/game/{apiKey}/admin/scripts/versions/{page}
 # operationId: getScriptVersionsUsingGET
-export def "restv2-game-admin-scripts-versions get-using" [
+export def "get-script-versions-using-get" [
   api_key: string
   page: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -1062,7 +1062,7 @@ export def "restv2-game-admin-scripts-versions get-using" [
 #
 # GET /restv2/game/{apiKey}/admin/segmentQueryFilters
 # operationId: getSegmentQueryFiltersUsingGET
-export def "restv2-game-admin-segment-query-filters get-using" [
+export def "get-segment-query-filters-using-get" [
   api_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1098,7 +1098,7 @@ export def "restv2-game-admin-segment-query-filters get-using" [
 #
 # GET /restv2/game/{apiKey}/admin/segmentQueryFilters/config
 # operationId: getSegmentQueryFiltersConfigUsingGET
-export def "restv2-game-admin-segment-query-filters-config get-using" [
+export def "get-segment-query-filters-config-using-get" [
   api_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1135,7 +1135,7 @@ export def "restv2-game-admin-segment-query-filters-config get-using" [
 # PUT /restv2/game/{apiKey}/admin/segmentQueryFilters/config
 # operationId: updateSegmentQueryFiltersConfigUsingPUT
 # --customFilters item shape: {key?: string, name?: string, options?: list, type?: string}
-export def "restv2-game-admin-segment-query-filters-config update-using" [
+export def "update-segment-query-filters-config-using-put" [
   api_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1176,7 +1176,7 @@ export def "restv2-game-admin-segment-query-filters-config update-using" [
 #
 # GET /restv2/game/{apiKey}/admin/segmentQueryFilters/standardFilters
 # operationId: getSegmentQueryStandardFiltersUsingGET
-export def "restv2-game-admin-segment-query-filters-standard-filters get-using" [
+export def "get-segment-query-standard-filters-using-get" [
   api_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1212,7 +1212,7 @@ export def "restv2-game-admin-segment-query-filters-standard-filters get-using" 
 #
 # GET /restv2/game/{apiKey}/admin/snapshots
 # operationId: getSnapshotsUsingGET_1
-export def "restv2-game-admin-snapshots get-using-by-api-key" [
+export def "get-snapshots-using-get-1" [
   api_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1250,7 +1250,7 @@ export def "restv2-game-admin-snapshots get-using-by-api-key" [
 #
 # POST /restv2/game/{apiKey}/admin/snapshots
 # operationId: createSnapshotsUsingPOST
-export def "restv2-game-admin-snapshots create-using" [
+export def "create-snapshots-using-post" [
   api_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1290,7 +1290,7 @@ export def "restv2-game-admin-snapshots create-using" [
 #
 # GET /restv2/game/{apiKey}/admin/snapshots/liveSnapshotId
 # operationId: getLiveSnapshotIdUsingGET
-export def "restv2-game-admin-snapshots-live-snapshot-id get-using" [
+export def "get-live-snapshot-id-using-get" [
   api_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1326,7 +1326,7 @@ export def "restv2-game-admin-snapshots-live-snapshot-id get-using" [
 #
 # GET /restv2/game/{apiKey}/admin/snapshots/page/{page}
 # operationId: getSnapshotsUsingGET
-export def "restv2-game-admin-snapshots-page get-using" [
+export def "get-snapshots-using-get" [
   api_key: string
   page: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -1366,7 +1366,7 @@ export def "restv2-game-admin-snapshots-page get-using" [
 #
 # POST /restv2/game/{apiKey}/admin/snapshots/revert/to/{snapshotId}
 # operationId: revertToSnapshotUsingPOST
-export def "restv2-game-admin-snapshots-revert-to create-using" [
+export def "revert-to-snapshot-using-post" [
   api_key: string
   snapshot_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1404,7 +1404,7 @@ export def "restv2-game-admin-snapshots-revert-to create-using" [
 #
 # DELETE /restv2/game/{apiKey}/admin/snapshots/{snapshotId}
 # operationId: deleteSnapshotUsingDELETE_1
-export def "restv2-game-admin-snapshots delete-using-by-api-key-snapshot-id" [
+export def "delete-snapshot-using-delete-1" [
   api_key: string
   snapshot_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1442,7 +1442,7 @@ export def "restv2-game-admin-snapshots delete-using-by-api-key-snapshot-id" [
 #
 # GET /restv2/game/{apiKey}/admin/snapshots/{snapshotId}
 # operationId: getSnapshotUsingGET
-export def "restv2-game-admin-snapshots get-using" [
+export def "get-snapshot-using-get" [
   api_key: string
   snapshot_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1480,7 +1480,7 @@ export def "restv2-game-admin-snapshots get-using" [
 #
 # POST /restv2/game/{apiKey}/admin/snapshots/{snapshotId}/copy
 # operationId: copySnapshotToNewGameUsingPOST
-export def "restv2-game-admin-snapshots-copy create-to-new-using" [
+export def "copy-snapshot-to-new-game-using-post" [
   api_key: string
   snapshot_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1523,7 +1523,7 @@ export def "restv2-game-admin-snapshots-copy create-to-new-using" [
 #
 # POST /restv2/game/{apiKey}/admin/snapshots/{snapshotId}/copy/to/{targetApiKey}
 # operationId: copySnapshotToExistingGameUsingPOST_1
-export def "restv2-game-admin-snapshots-copy-to create-existing-using-by-api-key-snapshot-id-target-api-key" [
+export def "copy-snapshot-to-existing-game-using-post-1" [
   api_key: string
   snapshot_id: string
   target_api_key: string
@@ -1568,7 +1568,7 @@ export def "restv2-game-admin-snapshots-copy-to create-existing-using-by-api-key
 #
 # POST /restv2/game/{apiKey}/admin/snapshots/{snapshotId}/publish
 # operationId: publishSnapshotUsingPOST_1
-export def "restv2-game-admin-snapshots-publish create-using-by-api-key-snapshot-id" [
+export def "publish-snapshot-using-post-1" [
   api_key: string
   snapshot_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1606,7 +1606,7 @@ export def "restv2-game-admin-snapshots-publish create-using-by-api-key-snapshot
 #
 # POST /restv2/game/{apiKey}/admin/snapshots/{snapshotId}/unpublish
 # operationId: unpublishSnapshotUsingPOST
-export def "restv2-game-admin-snapshots-unpublish create-using" [
+export def "unpublish-snapshot-using-post" [
   api_key: string
   snapshot_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1644,7 +1644,7 @@ export def "restv2-game-admin-snapshots-unpublish create-using" [
 #
 # GET /restv2/game/{apiKey}/admin/testHarness/scenarios
 # operationId: getTestHarnessScenariosUsingGET
-export def "restv2-game-admin-test-harness-scenarios list" [
+export def "get-test-harness-scenarios-using-get" [
   api_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1680,7 +1680,7 @@ export def "restv2-game-admin-test-harness-scenarios list" [
 #
 # POST /restv2/game/{apiKey}/admin/testHarness/scenarios
 # operationId: createTestHarnessScenarioUsingPOST
-export def "restv2-game-admin-test-harness-scenarios create-using" [
+export def "create-test-harness-scenario-using-post" [
   api_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1721,7 +1721,7 @@ export def "restv2-game-admin-test-harness-scenarios create-using" [
 #
 # DELETE /restv2/game/{apiKey}/admin/testHarness/scenarios/{scenarioName}
 # operationId: deleteTestHarnessScenarioUsingDELETE
-export def "restv2-game-admin-test-harness-scenarios delete-using" [
+export def "delete-test-harness-scenario-using-delete" [
   api_key: string
   scenario_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1759,7 +1759,7 @@ export def "restv2-game-admin-test-harness-scenarios delete-using" [
 #
 # GET /restv2/game/{apiKey}/admin/testHarness/scenarios/{scenarioName}
 # operationId: getTestHarnessScenarioUsingGET
-export def "restv2-game-admin-test-harness-scenarios get-using" [
+export def "get-test-harness-scenario-using-get" [
   api_key: string
   scenario_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1797,7 +1797,7 @@ export def "restv2-game-admin-test-harness-scenarios get-using" [
 #
 # PUT /restv2/game/{apiKey}/admin/testHarness/scenarios/{scenarioName}
 # operationId: updateTestHarnessScenarioUsingPUT
-export def "restv2-game-admin-test-harness-scenarios update-using" [
+export def "update-test-harness-scenario-using-put" [
   api_key: string
   scenario_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1840,7 +1840,7 @@ export def "restv2-game-admin-test-harness-scenarios update-using" [
 #
 # POST /restv2/game/{apiKey}/config/~credentials/{credentialName}/resetSecret
 # operationId: updateCredentialSecretUsingPOST
-export def "restv2-game-config-credentials-reset-secret update-credential-using-create" [
+export def "update-credential-secret-using-post" [
   api_key: string
   credential_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1878,7 +1878,7 @@ export def "restv2-game-config-credentials-reset-secret update-credential-using-
 #
 # GET /restv2/game/{apiKey}/endpoints
 # operationId: getGamesEndpointsUsingGET
-export def "restv2-game-endpoints get-using" [
+export def "get-games-endpoints-using-get" [
   api_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1914,7 +1914,7 @@ export def "restv2-game-endpoints get-using" [
 #
 # GET /restv2/game/{apiKey}/manage/experiments
 # operationId: getExperimentsUsingGET
-export def "restv2-game-manage-experiments list" [
+export def "get-experiments-using-get" [
   api_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1951,7 +1951,7 @@ export def "restv2-game-manage-experiments list" [
 # POST /restv2/game/{apiKey}/manage/experiments
 # operationId: createExperimentUsingPOST
 # --config shape: {playerMongoQuery?: string, playerQuery?: string, variants?: string}
-export def "restv2-game-manage-experiments create-using" [
+export def "create-experiment-using-post" [
   api_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2002,7 +2002,7 @@ export def "restv2-game-manage-experiments create-using" [
 #
 # DELETE /restv2/game/{apiKey}/manage/experiments/{id}
 # operationId: deleteExperimentUsingDELETE
-export def "restv2-game-manage-experiments delete-using" [
+export def "delete-experiment-using-delete" [
   api_key: string
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -2040,7 +2040,7 @@ export def "restv2-game-manage-experiments delete-using" [
 #
 # GET /restv2/game/{apiKey}/manage/experiments/{id}
 # operationId: getExperimentUsingGET
-export def "restv2-game-manage-experiments get-using" [
+export def "get-experiment-using-get" [
   api_key: string
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -2079,7 +2079,7 @@ export def "restv2-game-manage-experiments get-using" [
 # PUT /restv2/game/{apiKey}/manage/experiments/{id}
 # operationId: updateExperimentUsingPUT
 # --config shape: {playerMongoQuery?: string, playerQuery?: string, variants?: string}
-export def "restv2-game-manage-experiments update-using" [
+export def "update-experiment-using-put" [
   api_key: string
   id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -2132,7 +2132,7 @@ export def "restv2-game-manage-experiments update-using" [
 #
 # POST /restv2/game/{apiKey}/manage/experiments/{id}/{action}
 # operationId: doActionExperimentUsingPOST
-export def "restv2-game-manage-experiments create-do-using" [
+export def "do-action-experiment-using-post" [
   api_key: string
   id: int
   action: string
@@ -2172,7 +2172,7 @@ export def "restv2-game-manage-experiments create-do-using" [
 #
 # GET /restv2/game/{apiKey}/manage/queries
 # operationId: listQueriesUsingGET
-export def "restv2-game-manage-queries list-using-get" [
+export def "list-queries-using-get" [
   api_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2208,7 +2208,7 @@ export def "restv2-game-manage-queries list-using-get" [
 #
 # POST /restv2/game/{apiKey}/manage/queries
 # operationId: createQueryUsingPOST
-export def "restv2-game-manage-queries create-list-using" [
+export def "create-query-using-post" [
   api_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2251,7 +2251,7 @@ export def "restv2-game-manage-queries create-list-using" [
 #
 # DELETE /restv2/game/{apiKey}/manage/queries/{shortCode}
 # operationId: deleteQueryUsingDELETE
-export def "restv2-game-manage-queries delete-list-using" [
+export def "delete-query-using-delete" [
   api_key: string
   short_code: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2289,7 +2289,7 @@ export def "restv2-game-manage-queries delete-list-using" [
 #
 # GET /restv2/game/{apiKey}/manage/queries/{shortCode}
 # operationId: getQueryUsingGET
-export def "restv2-game-manage-queries get-list-using" [
+export def "get-query-using-get" [
   api_key: string
   short_code: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2327,7 +2327,7 @@ export def "restv2-game-manage-queries get-list-using" [
 #
 # PUT /restv2/game/{apiKey}/manage/queries/{shortCode}
 # operationId: updateQueryUsingPUT
-export def "restv2-game-manage-queries update-list-using" [
+export def "update-query-using-put" [
   api_key: string
   short_code: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2372,7 +2372,7 @@ export def "restv2-game-manage-queries update-list-using" [
 #
 # GET /restv2/game/{apiKey}/manage/screens
 # operationId: listScreensUsingGET
-export def "restv2-game-manage-screens list-using-get" [
+export def "list-screens-using-get" [
   api_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2408,7 +2408,7 @@ export def "restv2-game-manage-screens list-using-get" [
 #
 # POST /restv2/game/{apiKey}/manage/screens
 # operationId: createScreenUsingPOST
-export def "restv2-game-manage-screens create-using" [
+export def "create-screen-using-post" [
   api_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2451,7 +2451,7 @@ export def "restv2-game-manage-screens create-using" [
 #
 # GET /restv2/game/{apiKey}/manage/screens/executable
 # operationId: listExecutableScreensUsingGET
-export def "restv2-game-manage-screens-executable list-using-get" [
+export def "list-executable-screens-using-get" [
   api_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2487,7 +2487,7 @@ export def "restv2-game-manage-screens-executable list-using-get" [
 #
 # DELETE /restv2/game/{apiKey}/manage/screens/{shortCode}
 # operationId: deleteScreenUsingDELETE
-export def "restv2-game-manage-screens delete-using" [
+export def "delete-screen-using-delete" [
   api_key: string
   short_code: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2525,7 +2525,7 @@ export def "restv2-game-manage-screens delete-using" [
 #
 # GET /restv2/game/{apiKey}/manage/screens/{shortCode}
 # operationId: getScreenUsingGET
-export def "restv2-game-manage-screens get-using" [
+export def "get-screen-using-get" [
   api_key: string
   short_code: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2563,7 +2563,7 @@ export def "restv2-game-manage-screens get-using" [
 #
 # PUT /restv2/game/{apiKey}/manage/screens/{shortCode}
 # operationId: updateScreenUsingPUT
-export def "restv2-game-manage-screens update-using" [
+export def "update-screen-using-put" [
   api_key: string
   short_code: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2608,7 +2608,7 @@ export def "restv2-game-manage-screens update-using" [
 #
 # GET /restv2/game/{apiKey}/manage/snapshots
 # operationId: listSnapshotsUsingGET
-export def "restv2-game-manage-snapshots list-using-get" [
+export def "list-snapshots-using-get" [
   api_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2644,7 +2644,7 @@ export def "restv2-game-manage-snapshots list-using-get" [
 #
 # POST /restv2/game/{apiKey}/manage/snapshots
 # operationId: createSnapshotUsingPOST
-export def "restv2-game-manage-snapshots create-using" [
+export def "create-snapshot-using-post" [
   api_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2684,7 +2684,7 @@ export def "restv2-game-manage-snapshots create-using" [
 #
 # DELETE /restv2/game/{apiKey}/manage/snapshots/{snapshotId}
 # operationId: deleteSnapshotUsingDELETE
-export def "restv2-game-manage-snapshots delete-using" [
+export def "delete-snapshot-using-delete" [
   api_key: string
   snapshot_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2722,7 +2722,7 @@ export def "restv2-game-manage-snapshots delete-using" [
 #
 # POST /restv2/game/{apiKey}/manage/snapshots/{snapshotId}/copy/to/{targetApiKey}
 # operationId: copySnapshotToExistingGameUsingPOST
-export def "restv2-game-manage-snapshots-copy-to create-existing-using" [
+export def "copy-snapshot-to-existing-game-using-post" [
   api_key: string
   snapshot_id: string
   target_api_key: string
@@ -2762,7 +2762,7 @@ export def "restv2-game-manage-snapshots-copy-to create-existing-using" [
 #
 # POST /restv2/game/{apiKey}/manage/snapshots/{snapshotId}/publish
 # operationId: publishSnapshotUsingPOST
-export def "restv2-game-manage-snapshots-publish create-using" [
+export def "publish-snapshot-using-post" [
   api_key: string
   snapshot_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2800,7 +2800,7 @@ export def "restv2-game-manage-snapshots-publish create-using" [
 #
 # POST /restv2/game/{apiKey}/manage/snapshots/{snapshotId}/revert
 # operationId: revertSnapshotUsingPOST
-export def "restv2-game-manage-snapshots-revert create-using" [
+export def "revert-snapshot-using-post" [
   api_key: string
   snapshot_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2838,7 +2838,7 @@ export def "restv2-game-manage-snapshots-revert create-using" [
 #
 # GET /restv2/game/{apiKey}/manage/snippets
 # operationId: listSnippetsUsingGET
-export def "restv2-game-manage-snippets list-using-get" [
+export def "list-snippets-using-get" [
   api_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2874,7 +2874,7 @@ export def "restv2-game-manage-snippets list-using-get" [
 #
 # POST /restv2/game/{apiKey}/manage/snippets
 # operationId: createSnippetUsingPOST
-export def "restv2-game-manage-snippets create-using" [
+export def "create-snippet-using-post" [
   api_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2919,7 +2919,7 @@ export def "restv2-game-manage-snippets create-using" [
 #
 # DELETE /restv2/game/{apiKey}/manage/snippets/{shortCode}
 # operationId: deleteSnippetUsingDELETE
-export def "restv2-game-manage-snippets delete-using" [
+export def "delete-snippet-using-delete" [
   api_key: string
   short_code: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2957,7 +2957,7 @@ export def "restv2-game-manage-snippets delete-using" [
 #
 # GET /restv2/game/{apiKey}/manage/snippets/{shortCode}
 # operationId: getSnippetUsingGET
-export def "restv2-game-manage-snippets get-using" [
+export def "get-snippet-using-get" [
   api_key: string
   short_code: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2995,7 +2995,7 @@ export def "restv2-game-manage-snippets get-using" [
 #
 # PUT /restv2/game/{apiKey}/manage/snippets/{shortCode}
 # operationId: updateSnippetUsingPUT
-export def "restv2-game-manage-snippets update-using" [
+export def "update-snippet-using-put" [
   api_key: string
   short_code: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3042,7 +3042,7 @@ export def "restv2-game-manage-snippets update-using" [
 #
 # POST /restv2/game/{apiKey}/restore
 # operationId: restoreDeletedGameUsingPOST
-export def "restv2-game-restore create-deleted-using" [
+export def "restore-deleted-game-using-post" [
   api_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3078,7 +3078,7 @@ export def "restv2-game-restore create-deleted-using" [
 #
 # POST /restv2/game/{gameApiKey}/region/{regionCode}
 # operationId: setGameRegionUsingPOST
-export def "restv2-game-region update-using-create" [
+export def "set-game-region-using-post" [
   game_api_key: string
   region_code: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3116,7 +3116,7 @@ export def "restv2-game-region update-using-create" [
 #
 # GET /restv2/game/{gameApiKey}/regions
 # operationId: getGameRegionOptionsUsingGET
-export def "restv2-game-regions get-options-using" [
+export def "get-game-region-options-using-get" [
   game_api_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3152,7 +3152,7 @@ export def "restv2-game-regions get-options-using" [
 #
 # GET /restv2/games
 # operationId: listUsingGET
-export def "restv2-games list-using-get" [
+export def "list-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3186,7 +3186,7 @@ export def "restv2-games list-using-get" [
 #
 # GET /restv2/games/deleted
 # operationId: listDeletedUsingGET
-export def "restv2-games-deleted list-using-get" [
+export def "list-deleted-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

@@ -119,7 +119,7 @@ def protocol-completer [] { ["http" "http2" "http_auto" "tcp"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "admin-user-self get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-admin-user-self" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -142,7 +142,7 @@ export def commands []: nothing -> table {
 # Returns the user object for the account authorized and making this request.
 #
 # GET /admin/user/self
-export def "admin-user-self get" [
+export def "get-admin-user-self" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -175,7 +175,7 @@ export def "admin-user-self get" [
 # Delete the specified access token.
 #
 # DELETE /admin/user/self/access_token/{access-token-key}
-export def "admin-user-self-access-token delete" [
+export def "delete-admin-user-self-access-token-access-token-key" [
   access_token_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -212,7 +212,7 @@ export def "admin-user-self-access-token delete" [
 # Lists Access Tokens that are configured for the authenticated user.
 #
 # GET /admin/user/self/access_tokens
-export def "admin-user-self-access-tokens get" [
+export def "get-admin-user-self-access-tokens" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -245,7 +245,7 @@ export def "admin-user-self-access-tokens get" [
 # Creates a new Access Token and associates it with the authenticated user.
 #
 # POST /admin/user/self/access_tokens
-export def "admin-user-self-access-tokens create" [
+export def "post-admin-user-self-access-tokens" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -282,7 +282,7 @@ export def "admin-user-self-access-tokens create" [
 # Allows an arbitrary filter to be specified and applied to the org\'s change log.
 #
 # GET /changelog/adhoc
-export def "changelog-adhoc get" [
+export def "get-changelog-adhoc" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -317,7 +317,7 @@ export def "changelog-adhoc get" [
 # get changes related to the indicated cluster
 #
 # GET /changelog/cluster-graph/{clusterKey}
-export def "changelog-cluster-graph get" [
+export def "get-changelog-cluster-graph-cluster-key" [
   cluster_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -358,7 +358,7 @@ export def "changelog-cluster-graph get" [
 # get changes related to the indicated domain
 #
 # GET /changelog/domain-graph/{domainKey}
-export def "changelog-domain-graph get" [
+export def "get-changelog-domain-graph-domain-key" [
   domain_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -399,7 +399,7 @@ export def "changelog-domain-graph get" [
 # get changes related to the indicated route
 #
 # GET /changelog/route-graph/{routeKey}
-export def "changelog-route-graph get" [
+export def "get-changelog-route-graph-route-key" [
   route_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -440,7 +440,7 @@ export def "changelog-route-graph get" [
 # get changes related to the indicated SharedRules
 #
 # GET /changelog/shared-rules-graph/{sharedRulesKey}
-export def "changelog-shared-rules-graph get" [
+export def "get-changelog-shared-rules-graph-shared-rules-key" [
   shared_rules_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -481,7 +481,7 @@ export def "changelog-shared-rules-graph get" [
 # get changes in a specified zone
 #
 # GET /changelog/zone/{zoneKey}
-export def "changelog-zone get" [
+export def "get-changelog-zone-zone-key" [
   zone_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -522,7 +522,7 @@ export def "changelog-zone get" [
 # get clusters
 #
 # GET /cluster
-export def "cluster list" [
+export def "get-cluster" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -561,7 +561,7 @@ export def "cluster list" [
 # --health_checks item shape: {health_checker: record, healthy_edge_interval_msec?: int, healthy_threshold: int, interval_jitter_msec?: int, interval_msec: int, no_traffic_interval_msec?: int, reuse_connection?: bool, timeout_msec: int, unhealthy_edge_interval_msec?: int, unhealthy_interval_msec?: int, unhealthy_threshold: int}
 # --instances item shape: {host?: string, metadata?: list, port?: int}
 # --outlier_detection shape: {base_ejection_time_msec?: int, consecutive_5xx?: int, consecutive_gateway_failure?: int, enforcing_consecutive_5xx?: int, enforcing_consecutive_gateway_failure?: int, enforcing_success_rate?: int, interval_msec?: int, max_ejection_percent?: int, success_rate_minimum_hosts?: int, success_rate_request_volume?: int, success_rate_stdev_factor?: int}
-export def "cluster create" [
+export def "post-cluster" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -604,7 +604,7 @@ export def "cluster create" [
 # delete cluster
 #
 # DELETE /cluster/{clusterKey}
-export def "cluster delete" [
+export def "delete-cluster-cluster-key" [
   cluster_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -641,7 +641,7 @@ export def "cluster delete" [
 # get cluster
 #
 # GET /cluster/{clusterKey}
-export def "cluster get" [
+export def "get-cluster-cluster-key" [
   cluster_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -680,7 +680,7 @@ export def "cluster get" [
 # --health_checks item shape: {health_checker: record, healthy_edge_interval_msec?: int, healthy_threshold: int, interval_jitter_msec?: int, interval_msec: int, no_traffic_interval_msec?: int, reuse_connection?: bool, timeout_msec: int, unhealthy_edge_interval_msec?: int, unhealthy_interval_msec?: int, unhealthy_threshold: int}
 # --instances item shape: {host?: string, metadata?: list, port?: int}
 # --outlier_detection shape: {base_ejection_time_msec?: int, consecutive_5xx?: int, consecutive_gateway_failure?: int, enforcing_consecutive_5xx?: int, enforcing_consecutive_gateway_failure?: int, enforcing_success_rate?: int, interval_msec?: int, max_ejection_percent?: int, success_rate_minimum_hosts?: int, success_rate_request_volume?: int, success_rate_stdev_factor?: int}
-export def "cluster update" [
+export def "put-cluster-cluster-key" [
   cluster_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -728,7 +728,7 @@ export def "cluster update" [
 #
 # POST /cluster/{clusterKey}/instances
 # --metadata item shape: {key?: string, value?: string}
-export def "cluster-instances create" [
+export def "post-cluster-cluster-key-instances" [
   cluster_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -769,7 +769,7 @@ export def "cluster-instances create" [
 # remove instance
 #
 # DELETE /cluster/{clusterKey}/instances/{instanceIdentifier}
-export def "cluster-instances delete" [
+export def "delete-cluster-cluster-key-instances-instance-identifier" [
   cluster_key: string
   instance_identifier: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -808,7 +808,7 @@ export def "cluster-instances delete" [
 # get domains
 #
 # GET /domain
-export def "domain list" [
+export def "get-domain" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -846,7 +846,7 @@ export def "domain list" [
 # --cors_config shape: {allow_credentials?: bool, allowed_headers?: list<string>, allowed_methods: list<string>, allowed_origins: list<string>, exposed_headers?: list<string>, max_age?: int}
 # --redirects item shape: {from: string, header_constraints?: list, name: string, redirect_type: "permanent"|"temporary", to: string}
 # --ssl_config shape: {cert_key_pairs: list, cipher_filter?: string, protocols?: list<string>}
-export def "domain create" [
+export def "post-domain" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -893,7 +893,7 @@ export def "domain create" [
 # delete domain
 #
 # DELETE /domain/{domainKey}
-export def "domain delete" [
+export def "delete-domain-domain-key" [
   domain_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -930,7 +930,7 @@ export def "domain delete" [
 # get domain
 #
 # GET /domain/{domainKey}
-export def "domain get" [
+export def "get-domain-domain-key" [
   domain_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -965,7 +965,7 @@ export def "domain get" [
 # list listeners
 #
 # GET /listener
-export def "listener list" [
+export def "get-listener" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1001,7 +1001,7 @@ export def "listener list" [
 #
 # POST /listener
 # --tracing_config shape: {ingress?: bool, request_headers_for_tags?: list<string>}
-export def "listener create" [
+export def "post-listener" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1044,7 +1044,7 @@ export def "listener create" [
 # delete listener
 #
 # DELETE /listener/{listenerKey}
-export def "listener delete" [
+export def "delete-listener-listener-key" [
   listener_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1081,7 +1081,7 @@ export def "listener delete" [
 # get listener
 #
 # GET /listener/{listenerKey}
-export def "listener get" [
+export def "get-listener-listener-key" [
   listener_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1117,7 +1117,7 @@ export def "listener get" [
 #
 # PUT /listener/{listenerKey}
 # --tracing_config shape: {ingress?: bool, request_headers_for_tags?: list<string>}
-export def "listener update" [
+export def "put-listener-listener-key" [
   listener_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1164,7 +1164,7 @@ export def "listener update" [
 # list proxies
 #
 # GET /proxy
-export def "proxy list" [
+export def "get-proxy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1199,7 +1199,7 @@ export def "proxy list" [
 # create proxy
 #
 # POST /proxy
-export def "proxy create" [
+export def "post-proxy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1239,7 +1239,7 @@ export def "proxy create" [
 # delete proxy
 #
 # DELETE /proxy/{proxyKey}
-export def "proxy delete" [
+export def "delete-proxy-proxy-key" [
   proxy_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1276,7 +1276,7 @@ export def "proxy delete" [
 # get proxy
 #
 # GET /proxy/{proxyKey}
-export def "proxy get" [
+export def "get-proxy-proxy-key" [
   proxy_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1311,7 +1311,7 @@ export def "proxy get" [
 # get routes
 #
 # GET /route
-export def "route list" [
+export def "get-route" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1349,7 +1349,7 @@ export def "route list" [
 # --cohort_seed shape: {name?: string, type?: "header"|"cookie"|"query", use_zero_value_seed?: bool}
 # --retry_policy shape: {num_retries?: int, per_try_timeout_msec?: int, timeout_msec?: int}
 # --rules item shape: {cohort_seed?: record, constraints?: record, matches?: list, methods?: list<string>, rule_key?: string}
-export def "route create" [
+export def "post-route" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1395,7 +1395,7 @@ export def "route create" [
 # delete route
 #
 # DELETE /route/{routeKey}
-export def "route delete" [
+export def "delete-route-route-key" [
   route_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1432,7 +1432,7 @@ export def "route delete" [
 # get route
 #
 # GET /route/{routeKey}
-export def "route get" [
+export def "get-route-route-key" [
   route_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1470,7 +1470,7 @@ export def "route get" [
 # --cohort_seed shape: {name?: string, type?: "header"|"cookie"|"query", use_zero_value_seed?: bool}
 # --retry_policy shape: {num_retries?: int, per_try_timeout_msec?: int, timeout_msec?: int}
 # --rules item shape: {cohort_seed?: record, constraints?: record, matches?: list, methods?: list<string>, rule_key?: string}
-export def "route update" [
+export def "put-route-route-key" [
   route_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1518,7 +1518,7 @@ export def "route update" [
 # get shared_rules
 #
 # GET /shared_rules
-export def "shared-rules list" [
+export def "get-shared-rules" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1558,7 +1558,7 @@ export def "shared-rules list" [
 # --properties item shape: {key?: string, value?: string}
 # --retry_policy shape: {num_retries?: int, per_try_timeout_msec?: int, timeout_msec?: int}
 # --rules item shape: {cohort_seed?: record, constraints?: record, matches?: list, methods?: list<string>, rule_key?: string}
-export def "shared-rules create" [
+export def "post-shared-rules" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1603,7 +1603,7 @@ export def "shared-rules create" [
 # delete shared_rules object
 #
 # DELETE /shared_rules/{sharedRulesKey}
-export def "shared-rules delete" [
+export def "delete-shared-rules-shared-rules-key" [
   shared_rules_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1640,7 +1640,7 @@ export def "shared-rules delete" [
 # get shared_rules object
 #
 # GET /shared_rules/{sharedRulesKey}
-export def "shared-rules get" [
+export def "get-shared-rules-shared-rules-key" [
   shared_rules_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1680,7 +1680,7 @@ export def "shared-rules get" [
 # --properties item shape: {key?: string, value?: string}
 # --retry_policy shape: {num_retries?: int, per_try_timeout_msec?: int, timeout_msec?: int}
 # --rules item shape: {cohort_seed?: record, constraints?: record, matches?: list, methods?: list<string>, rule_key?: string}
-export def "shared-rules update" [
+export def "put-shared-rules-shared-rules-key" [
   shared_rules_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1727,7 +1727,7 @@ export def "shared-rules update" [
 # get a list of zones
 #
 # GET /zone
-export def "zone list" [
+export def "get-zone" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1762,7 +1762,7 @@ export def "zone list" [
 # create zone
 #
 # POST /zone
-export def "zone create" [
+export def "post-zone" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1799,7 +1799,7 @@ export def "zone create" [
 # delete zone
 #
 # DELETE /zone/{zoneKey}
-export def "zone delete" [
+export def "delete-zone-zone-key" [
   zone_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1836,7 +1836,7 @@ export def "zone delete" [
 # get zone
 #
 # GET /zone/{zoneKey}
-export def "zone get" [
+export def "get-zone-zone-key" [
   zone_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

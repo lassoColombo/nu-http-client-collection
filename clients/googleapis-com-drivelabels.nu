@@ -123,7 +123,7 @@ def role-completer [] { ["APPLIER" "EDITOR" "LABEL_ROLE_UNSPECIFIED" "ORGANIZER"
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "v2beta-labels list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "drivelabels-labels-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -147,7 +147,7 @@ export def commands []: nothing -> table {
 #
 # GET /v2beta/labels
 # operationId: drivelabels.labels.list
-export def "v2beta-labels list" [
+export def "drivelabels-labels-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -212,7 +212,7 @@ export def "v2beta-labels list" [
 # --publisher shape: {person?: string}
 # --revisionCreator shape: {person?: string}
 # --schemaCapabilities shape: {canDelete?: bool, canDisable?: bool, canEnable?: bool, canUpdate?: bool}
-export def "v2beta-labels create" [
+export def "drivelabels-labels-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -277,7 +277,7 @@ export def "v2beta-labels create" [
 #
 # GET /v2beta/limits/label
 # operationId: drivelabels.limits.getLabel
-export def "v2beta-limits-label get" [
+export def "drivelabels-limits-get-label" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -324,7 +324,7 @@ export def "v2beta-limits-label get" [
 #
 # DELETE /v2beta/{name}
 # operationId: drivelabels.labels.revisions.permissions.delete
-export def "v2beta delete" [
+export def "drivelabels-labels-revisions-permissions-delete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -374,7 +374,7 @@ export def "v2beta delete" [
 #
 # GET /v2beta/{name}
 # operationId: drivelabels.users.getCapabilities
-export def "v2beta get-capabilities" [
+export def "drivelabels-users-get-capabilities" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -427,7 +427,7 @@ export def "v2beta get-capabilities" [
 # operationId: drivelabels.labels.delta
 # --requests item shape: {createField?: record, createSelectionChoice?: record, deleteField?: record, deleteSelectionChoice?: record, disableField?: record, disableSelectionChoice?: record, enableField?: record, enableSelectionChoice?: record, updateField?: record, updateFieldType?: record, updateLabel?: record, updateSelectionChoiceProperties?: record}
 # --writeControl shape: {requiredRevisionId?: string}
-export def "v2beta create-delta" [
+export def "drivelabels-labels-delta" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -485,7 +485,7 @@ export def "v2beta create-delta" [
 # operationId: drivelabels.labels.disable
 # --disabledPolicy shape: {hideInSearch?: bool, showInApply?: bool}
 # --writeControl shape: {requiredRevisionId?: string}
-export def "v2beta disable" [
+export def "drivelabels-labels-disable" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -542,7 +542,7 @@ export def "v2beta disable" [
 # POST /v2beta/{name}:enable
 # operationId: drivelabels.labels.enable
 # --writeControl shape: {requiredRevisionId?: string}
-export def "v2beta enable" [
+export def "drivelabels-labels-enable" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -597,7 +597,7 @@ export def "v2beta enable" [
 # POST /v2beta/{name}:publish
 # operationId: drivelabels.labels.publish
 # --writeControl shape: {requiredRevisionId?: string}
-export def "v2beta publish" [
+export def "drivelabels-labels-publish" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -651,7 +651,7 @@ export def "v2beta publish" [
 #
 # POST /v2beta/{name}:updateLabelCopyMode
 # operationId: drivelabels.labels.updateLabelCopyMode
-export def "v2beta update-label-copy-mode" [
+export def "drivelabels-labels-update-label-copy-mode" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -706,7 +706,7 @@ export def "v2beta update-label-copy-mode" [
 #
 # GET /v2beta/{parent}/locks
 # operationId: drivelabels.labels.revisions.locks.list
-export def "v2beta-locks list" [
+export def "drivelabels-labels-revisions-locks-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -756,7 +756,7 @@ export def "v2beta-locks list" [
 #
 # GET /v2beta/{parent}/permissions
 # operationId: drivelabels.labels.revisions.permissions.list
-export def "v2beta-permissions list" [
+export def "drivelabels-labels-revisions-permissions-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -807,7 +807,7 @@ export def "v2beta-permissions list" [
 #
 # PATCH /v2beta/{parent}/permissions
 # operationId: drivelabels.labels.revisions.updatePermissions
-export def "v2beta-permissions update" [
+export def "drivelabels-labels-revisions-update-permissions" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -865,7 +865,7 @@ export def "v2beta-permissions update" [
 #
 # POST /v2beta/{parent}/permissions
 # operationId: drivelabels.labels.revisions.permissions.create
-export def "v2beta-permissions create" [
+export def "drivelabels-labels-revisions-permissions-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -924,7 +924,7 @@ export def "v2beta-permissions create" [
 # POST /v2beta/{parent}/permissions:batchDelete
 # operationId: drivelabels.labels.revisions.permissions.batchDelete
 # --requests item shape: {name?: string, useAdminAccess?: bool}
-export def "v2beta-permissions-batch-delete delete" [
+export def "drivelabels-labels-revisions-permissions-batch-delete" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -978,7 +978,7 @@ export def "v2beta-permissions-batch-delete delete" [
 # POST /v2beta/{parent}/permissions:batchUpdate
 # operationId: drivelabels.labels.revisions.permissions.batchUpdate
 # --requests item shape: {labelPermission?: record, parent?: string, useAdminAccess?: bool}
-export def "v2beta-permissions-batch-update update" [
+export def "drivelabels-labels-revisions-permissions-batch-update" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

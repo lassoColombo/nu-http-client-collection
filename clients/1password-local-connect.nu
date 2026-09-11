@@ -124,7 +124,7 @@ def category-completer [] { ["API_CREDENTIAL" "BANK_ACCOUNT" "CREDIT_CARD" "CUST
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "activity get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-api-activity" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -148,7 +148,7 @@ export def commands []: nothing -> table {
 #
 # GET /activity
 # operationId: GetApiActivity
-export def "activity get" [
+export def "get-api-activity" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -185,7 +185,7 @@ export def "activity get" [
 #
 # GET /health
 # operationId: GetServerHealth
-export def "health get-server" [
+export def "get-server-health" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -219,7 +219,7 @@ export def "health get-server" [
 #
 # GET /heartbeat
 # operationId: GetHeartbeat
-export def "heartbeat get" [
+export def "get-heartbeat" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -253,7 +253,7 @@ export def "heartbeat get" [
 #
 # GET /metrics
 # operationId: GetPrometheusMetrics
-export def "metrics get-prometheus" [
+export def "get-prometheus-metrics" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -287,7 +287,7 @@ export def "metrics get-prometheus" [
 #
 # GET /vaults
 # operationId: GetVaults
-export def "vaults list" [
+export def "get-vaults" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -323,7 +323,7 @@ export def "vaults list" [
 #
 # GET /vaults/{vaultUuid}
 # operationId: GetVaultById
-export def "vaults get" [
+export def "get-vault-by-id" [
   vault_uuid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -359,7 +359,7 @@ export def "vaults get" [
 #
 # GET /vaults/{vaultUuid}/items
 # operationId: GetVaultItems
-export def "vaults-items list" [
+export def "get-vault-items" [
   vault_uuid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -402,7 +402,7 @@ export def "vaults-items list" [
 # --fields item shape: {generate?: bool, id: string, label?: string, purpose?: ""|"USERNAME"|"PASSWORD"|"NOTES", recipe?: record, section?: record, type: "STRING"|"EMAIL"|"CONCEALED"|"URL"|"TOTP"|"DATE"|"MONTH_YEAR"|"MENU", value?: string}
 # --files item shape: {content?: string, id?: string, name?: string, section?: record, size?: int}
 # --sections item shape: {id?: string, label?: string}
-export def "vaults-items create" [
+export def "create-vault-item" [
   vault_uuid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -452,7 +452,7 @@ export def "vaults-items create" [
 #
 # DELETE /vaults/{vaultUuid}/items/{itemUuid}
 # operationId: DeleteVaultItem
-export def "vaults-items delete" [
+export def "delete-vault-item" [
   vault_uuid: string
   item_uuid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -490,7 +490,7 @@ export def "vaults-items delete" [
 #
 # GET /vaults/{vaultUuid}/items/{itemUuid}
 # operationId: GetVaultItemById
-export def "vaults-items get" [
+export def "get-vault-item-by-id" [
   vault_uuid: string
   item_uuid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -528,7 +528,7 @@ export def "vaults-items get" [
 #
 # PATCH /vaults/{vaultUuid}/items/{itemUuid}
 # operationId: PatchVaultItem
-export def "vaults-items update-by-vault-uuid-item-uuid" [
+export def "patch-vault-item" [
   vault_uuid: string
   item_uuid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -575,7 +575,7 @@ export def "vaults-items update-by-vault-uuid-item-uuid" [
 # --fields item shape: {generate?: bool, id: string, label?: string, purpose?: ""|"USERNAME"|"PASSWORD"|"NOTES", recipe?: record, section?: record, type: "STRING"|"EMAIL"|"CONCEALED"|"URL"|"TOTP"|"DATE"|"MONTH_YEAR"|"MENU", value?: string}
 # --files item shape: {content?: string, id?: string, name?: string, section?: record, size?: int}
 # --sections item shape: {id?: string, label?: string}
-export def "vaults-items update-by-vault-uuid-item-uuid-1" [
+export def "update-vault-item" [
   vault_uuid: string
   item_uuid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -627,7 +627,7 @@ export def "vaults-items update-by-vault-uuid-item-uuid-1" [
 #
 # GET /vaults/{vaultUuid}/items/{itemUuid}/files
 # operationId: GetItemFiles
-export def "vaults-items-files get" [
+export def "get-item-files" [
   vault_uuid: string
   item_uuid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -667,7 +667,7 @@ export def "vaults-items-files get" [
 #
 # GET /vaults/{vaultUuid}/items/{itemUuid}/files/{fileUuid}
 # operationId: GetDetailsOfFileById
-export def "vaults-items-files get-details-of" [
+export def "get-details-of-file-by-id" [
   vault_uuid: string
   item_uuid: string
   file_uuid: string
@@ -709,7 +709,7 @@ export def "vaults-items-files get-details-of" [
 #
 # GET /vaults/{vaultUuid}/items/{itemUuid}/files/{fileUuid}/content
 # operationId: DownloadFileByID
-export def "vaults-items-files-content download" [
+export def "download-file-by-id" [
   vault_uuid: string
   item_uuid: string
   file_uuid: string

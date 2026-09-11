@@ -113,7 +113,7 @@ def failure-behavior-completer [] { ["Continue" "Fail"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "batch-delete-worlds delete" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "batch-delete-worlds" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -137,7 +137,7 @@ export def commands []: nothing -> table {
 #
 # POST /batchDeleteWorlds
 # operationId: BatchDeleteWorlds
-export def "batch-delete-worlds delete" [
+export def "batch-delete-worlds" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -184,7 +184,7 @@ export def "batch-delete-worlds delete" [
 #
 # POST /batchDescribeSimulationJob
 # operationId: BatchDescribeSimulationJob
-export def "batch-describe-simulation-job get" [
+export def "batch-describe-simulation-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -233,7 +233,7 @@ export def "batch-describe-simulation-job get" [
 # DEPRECATED
 # operationId: CancelDeploymentJob
 @deprecated
-export def "cancel-deployment-job cancel" [
+export def "cancel-deployment-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -280,7 +280,7 @@ export def "cancel-deployment-job cancel" [
 #
 # POST /cancelSimulationJob
 # operationId: CancelSimulationJob
-export def "cancel-simulation-job cancel" [
+export def "cancel-simulation-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -327,7 +327,7 @@ export def "cancel-simulation-job cancel" [
 #
 # POST /cancelSimulationJobBatch
 # operationId: CancelSimulationJobBatch
-export def "cancel-simulation-job-batch cancel" [
+export def "cancel-simulation-job-batch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -374,7 +374,7 @@ export def "cancel-simulation-job-batch cancel" [
 #
 # POST /cancelWorldExportJob
 # operationId: CancelWorldExportJob
-export def "cancel-world-export-job cancel" [
+export def "cancel-world-export-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -421,7 +421,7 @@ export def "cancel-world-export-job cancel" [
 #
 # POST /cancelWorldGenerationJob
 # operationId: CancelWorldGenerationJob
-export def "cancel-world-generation-job cancel" [
+export def "cancel-world-generation-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -472,7 +472,7 @@ export def "cancel-world-generation-job cancel" [
 # --deploymentConfig shape: {concurrentDeploymentPercentage?: any, failureThresholdPercentage?: any, robotDeploymentTimeoutInSeconds?: any, downloadConditionFile?: any}
 # --deploymentApplicationConfigs item shape: {application: any, applicationVersion: any, launchConfig: any}
 @deprecated
-export def "create-deployment-job create" [
+export def "create-deployment-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -525,7 +525,7 @@ export def "create-deployment-job create" [
 # DEPRECATED
 # operationId: CreateFleet
 @deprecated
-export def "create-fleet create" [
+export def "create-fleet" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -575,7 +575,7 @@ export def "create-fleet create" [
 # DEPRECATED
 # operationId: CreateRobot
 @deprecated
-export def "create-robot create" [
+export def "create-robot" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -628,7 +628,7 @@ export def "create-robot create" [
 # --sources item shape: {s3Bucket?: any, s3Key?: any, architecture?: any}
 # --robotSoftwareSuite shape: {name?: any, version?: any}
 # --environment shape: {uri?: any}
-export def "create-robot-application create" [
+export def "create-robot-application" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -679,7 +679,7 @@ export def "create-robot-application create" [
 #
 # POST /createRobotApplicationVersion
 # operationId: CreateRobotApplicationVersion
-export def "create-robot-application-version create" [
+export def "create-robot-application-version" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -734,7 +734,7 @@ export def "create-robot-application-version create" [
 # --robotSoftwareSuite shape: {name?: any, version?: any}
 # --renderingEngine shape: {name?: any, version?: any}
 # --environment shape: {uri?: any}
-export def "create-simulation-application create" [
+export def "create-simulation-application" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -787,7 +787,7 @@ export def "create-simulation-application create" [
 #
 # POST /createSimulationApplicationVersion
 # operationId: CreateSimulationApplicationVersion
-export def "create-simulation-application-version create" [
+export def "create-simulation-application-version" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -844,7 +844,7 @@ export def "create-simulation-application-version create" [
 # --dataSources item shape: {name: any, s3Bucket: any, s3Keys: any, type?: any, destination?: any}
 # --vpcConfig shape: {subnets?: any, securityGroups?: any, assignPublicIp?: any}
 # --compute shape: {simulationUnitLimit?: any, computeType?: any, gpuUnitLimit?: any}
-export def "create-simulation-job create" [
+export def "create-simulation-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -903,7 +903,7 @@ export def "create-simulation-job create" [
 # POST /createWorldExportJob
 # operationId: CreateWorldExportJob
 # --outputLocation shape: {s3Bucket?: any, s3Prefix?: any}
-export def "create-world-export-job create" [
+export def "create-world-export-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -955,7 +955,7 @@ export def "create-world-export-job create" [
 # POST /createWorldGenerationJob
 # operationId: CreateWorldGenerationJob
 # --worldCount shape: {floorplanCount?: any, interiorCountPerFloorplan?: any}
-export def "create-world-generation-job create" [
+export def "create-world-generation-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1007,7 +1007,7 @@ export def "create-world-generation-job create" [
 # POST /createWorldTemplate
 # operationId: CreateWorldTemplate
 # --templateLocation shape: {s3Bucket?: any, s3Key?: any}
-export def "create-world-template create" [
+export def "create-world-template" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1060,7 +1060,7 @@ export def "create-world-template create" [
 # DEPRECATED
 # operationId: DeleteFleet
 @deprecated
-export def "delete-fleet delete" [
+export def "delete-fleet" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1109,7 +1109,7 @@ export def "delete-fleet delete" [
 # DEPRECATED
 # operationId: DeleteRobot
 @deprecated
-export def "delete-robot delete" [
+export def "delete-robot" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1156,7 +1156,7 @@ export def "delete-robot delete" [
 #
 # POST /deleteRobotApplication
 # operationId: DeleteRobotApplication
-export def "delete-robot-application delete" [
+export def "delete-robot-application" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1204,7 +1204,7 @@ export def "delete-robot-application delete" [
 #
 # POST /deleteSimulationApplication
 # operationId: DeleteSimulationApplication
-export def "delete-simulation-application delete" [
+export def "delete-simulation-application" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1252,7 +1252,7 @@ export def "delete-simulation-application delete" [
 #
 # POST /deleteWorldTemplate
 # operationId: DeleteWorldTemplate
-export def "delete-world-template delete" [
+export def "delete-world-template" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1301,7 +1301,7 @@ export def "delete-world-template delete" [
 # DEPRECATED
 # operationId: DeregisterRobot
 @deprecated
-export def "deregister-robot create" [
+export def "deregister-robot" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1351,7 +1351,7 @@ export def "deregister-robot create" [
 # DEPRECATED
 # operationId: DescribeDeploymentJob
 @deprecated
-export def "describe-deployment-job get" [
+export def "describe-deployment-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1400,7 +1400,7 @@ export def "describe-deployment-job get" [
 # DEPRECATED
 # operationId: DescribeFleet
 @deprecated
-export def "describe-fleet get" [
+export def "describe-fleet" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1449,7 +1449,7 @@ export def "describe-fleet get" [
 # DEPRECATED
 # operationId: DescribeRobot
 @deprecated
-export def "describe-robot get" [
+export def "describe-robot" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1496,7 +1496,7 @@ export def "describe-robot get" [
 #
 # POST /describeRobotApplication
 # operationId: DescribeRobotApplication
-export def "describe-robot-application get" [
+export def "describe-robot-application" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1544,7 +1544,7 @@ export def "describe-robot-application get" [
 #
 # POST /describeSimulationApplication
 # operationId: DescribeSimulationApplication
-export def "describe-simulation-application get" [
+export def "describe-simulation-application" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1592,7 +1592,7 @@ export def "describe-simulation-application get" [
 #
 # POST /describeSimulationJob
 # operationId: DescribeSimulationJob
-export def "describe-simulation-job get" [
+export def "describe-simulation-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1639,7 +1639,7 @@ export def "describe-simulation-job get" [
 #
 # POST /describeSimulationJobBatch
 # operationId: DescribeSimulationJobBatch
-export def "describe-simulation-job-batch get" [
+export def "describe-simulation-job-batch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1686,7 +1686,7 @@ export def "describe-simulation-job-batch get" [
 #
 # POST /describeWorld
 # operationId: DescribeWorld
-export def "describe-world get" [
+export def "describe-world" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1733,7 +1733,7 @@ export def "describe-world get" [
 #
 # POST /describeWorldExportJob
 # operationId: DescribeWorldExportJob
-export def "describe-world-export-job get" [
+export def "describe-world-export-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1780,7 +1780,7 @@ export def "describe-world-export-job get" [
 #
 # POST /describeWorldGenerationJob
 # operationId: DescribeWorldGenerationJob
-export def "describe-world-generation-job get" [
+export def "describe-world-generation-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1827,7 +1827,7 @@ export def "describe-world-generation-job get" [
 #
 # POST /describeWorldTemplate
 # operationId: DescribeWorldTemplate
-export def "describe-world-template get" [
+export def "describe-world-template" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1874,7 +1874,7 @@ export def "describe-world-template get" [
 #
 # POST /getWorldTemplateBody
 # operationId: GetWorldTemplateBody
-export def "get-world-template-body get" [
+export def "get-world-template-body" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1925,7 +1925,7 @@ export def "get-world-template-body get" [
 # operationId: ListDeploymentJobs
 # --filters item shape: {name?: any, values?: any}
 @deprecated
-export def "list-deployment-jobs list" [
+export def "list-deployment-jobs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1980,7 +1980,7 @@ export def "list-deployment-jobs list" [
 # operationId: ListFleets
 # --filters item shape: {name?: any, values?: any}
 @deprecated
-export def "list-fleets list" [
+export def "list-fleets" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2033,7 +2033,7 @@ export def "list-fleets list" [
 # POST /listRobotApplications
 # operationId: ListRobotApplications
 # --filters item shape: {name?: any, values?: any}
-export def "list-robot-applications list" [
+export def "list-robot-applications" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2089,7 +2089,7 @@ export def "list-robot-applications list" [
 # operationId: ListRobots
 # --filters item shape: {name?: any, values?: any}
 @deprecated
-export def "list-robots list" [
+export def "list-robots" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2142,7 +2142,7 @@ export def "list-robots list" [
 # POST /listSimulationApplications
 # operationId: ListSimulationApplications
 # --filters item shape: {name?: any, values?: any}
-export def "list-simulation-applications list" [
+export def "list-simulation-applications" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2196,7 +2196,7 @@ export def "list-simulation-applications list" [
 # POST /listSimulationJobBatches
 # operationId: ListSimulationJobBatches
 # --filters item shape: {name?: any, values?: any}
-export def "list-simulation-job-batches list" [
+export def "list-simulation-job-batches" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2249,7 +2249,7 @@ export def "list-simulation-job-batches list" [
 # POST /listSimulationJobs
 # operationId: ListSimulationJobs
 # --filters item shape: {name?: any, values?: any}
-export def "list-simulation-jobs list" [
+export def "list-simulation-jobs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2301,7 +2301,7 @@ export def "list-simulation-jobs list" [
 #
 # GET /tags/{resourceArn}
 # operationId: ListTagsForResource
-export def "tags list-for-resource" [
+export def "list-tags-for-resource" [
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2346,7 +2346,7 @@ export def "tags list-for-resource" [
 #
 # POST /tags/{resourceArn}
 # operationId: TagResource
-export def "tags tag-resource" [
+export def "tag-resource" [
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2396,7 +2396,7 @@ export def "tags tag-resource" [
 # POST /listWorldExportJobs
 # operationId: ListWorldExportJobs
 # --filters item shape: {name?: any, values?: any}
-export def "list-world-export-jobs list" [
+export def "list-world-export-jobs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2449,7 +2449,7 @@ export def "list-world-export-jobs list" [
 # POST /listWorldGenerationJobs
 # operationId: ListWorldGenerationJobs
 # --filters item shape: {name?: any, values?: any}
-export def "list-world-generation-jobs list" [
+export def "list-world-generation-jobs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2501,7 +2501,7 @@ export def "list-world-generation-jobs list" [
 #
 # POST /listWorldTemplates
 # operationId: ListWorldTemplates
-export def "list-world-templates list" [
+export def "list-world-templates" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2553,7 +2553,7 @@ export def "list-world-templates list" [
 # POST /listWorlds
 # operationId: ListWorlds
 # --filters item shape: {name?: any, values?: any}
-export def "list-worlds list" [
+export def "list-worlds" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2607,7 +2607,7 @@ export def "list-worlds list" [
 # DEPRECATED
 # operationId: RegisterRobot
 @deprecated
-export def "register-robot create" [
+export def "register-robot" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2655,7 +2655,7 @@ export def "register-robot create" [
 #
 # POST /restartSimulationJob
 # operationId: RestartSimulationJob
-export def "restart-simulation-job restart" [
+export def "restart-simulation-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2704,7 +2704,7 @@ export def "restart-simulation-job restart" [
 # operationId: StartSimulationJobBatch
 # --batchPolicy shape: {timeoutInSeconds?: any, maxConcurrency?: any}
 # --createSimulationJobRequests item shape: {outputLocation?: record, loggingConfig?: record, maxJobDurationInSeconds: any, iamRole?: any, failureBehavior?: any, useDefaultApplications?: any, robotApplications?: any, simulationApplications?: any, dataSources?: any, vpcConfig?: record, compute?: any, tags?: any}
-export def "start-simulation-job-batch start" [
+export def "start-simulation-job-batch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2756,7 +2756,7 @@ export def "start-simulation-job-batch start" [
 # DEPRECATED
 # operationId: SyncDeploymentJob
 @deprecated
-export def "sync-deployment-job sync" [
+export def "sync-deployment-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2804,7 +2804,7 @@ export def "sync-deployment-job sync" [
 #
 # DELETE /tags/{resourceArn}
 # operationId: UntagResource
-export def "tags untag-resource" [
+export def "untag-resource" [
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2854,7 +2854,7 @@ export def "tags untag-resource" [
 # --sources item shape: {s3Bucket?: any, s3Key?: any, architecture?: any}
 # --robotSoftwareSuite shape: {name?: any, version?: any}
 # --environment shape: {uri?: any}
-export def "update-robot-application update" [
+export def "update-robot-application" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2910,7 +2910,7 @@ export def "update-robot-application update" [
 # --robotSoftwareSuite shape: {name?: any, version?: any}
 # --renderingEngine shape: {name?: any, version?: any}
 # --environment shape: {uri?: any}
-export def "update-simulation-application update" [
+export def "update-simulation-application" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2964,7 +2964,7 @@ export def "update-simulation-application update" [
 # POST /updateWorldTemplate
 # operationId: UpdateWorldTemplate
 # --templateLocation shape: {s3Bucket?: any, s3Key?: any}
-export def "update-world-template update" [
+export def "update-world-template" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

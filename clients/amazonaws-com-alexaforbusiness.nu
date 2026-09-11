@@ -193,7 +193,7 @@ def x-amz-target-completer-92 [] { ["AlexaForBusiness.UpdateSkillGroup"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "api approve-skill" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "approve-skill" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -217,7 +217,7 @@ export def commands []: nothing -> table {
 #
 # POST /
 # operationId: ApproveSkill
-export def "api approve-skill" [
+export def "approve-skill" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -265,7 +265,7 @@ export def "api approve-skill" [
 #
 # POST /
 # operationId: AssociateContactWithAddressBook
-export def "api create-associate-contact-with-address-book" [
+export def "associate-contact-with-address-book" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -314,7 +314,7 @@ export def "api create-associate-contact-with-address-book" [
 #
 # POST /
 # operationId: AssociateDeviceWithNetworkProfile
-export def "api create-associate-device-with-network-profile" [
+export def "associate-device-with-network-profile" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -363,7 +363,7 @@ export def "api create-associate-device-with-network-profile" [
 #
 # POST /
 # operationId: AssociateDeviceWithRoom
-export def "api create-associate-device-with-room" [
+export def "associate-device-with-room" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -412,7 +412,7 @@ export def "api create-associate-device-with-room" [
 #
 # POST /
 # operationId: AssociateSkillGroupWithRoom
-export def "api create-associate-skill-group-with-room" [
+export def "associate-skill-group-with-room" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -461,7 +461,7 @@ export def "api create-associate-skill-group-with-room" [
 #
 # POST /
 # operationId: AssociateSkillWithSkillGroup
-export def "api create-associate-skill-with-skill-group" [
+export def "associate-skill-with-skill-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -510,7 +510,7 @@ export def "api create-associate-skill-with-skill-group" [
 #
 # POST /
 # operationId: AssociateSkillWithUsers
-export def "api create-associate-skill-with-users" [
+export def "associate-skill-with-users" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -558,7 +558,7 @@ export def "api create-associate-skill-with-users" [
 #
 # POST /
 # operationId: CreateAddressBook
-export def "api create-address-book" [
+export def "create-address-book" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -609,7 +609,7 @@ export def "api create-address-book" [
 #
 # POST /
 # operationId: CreateBusinessReportSchedule
-export def "api create-business-report-schedule" [
+export def "create-business-report-schedule" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -664,7 +664,7 @@ export def "api create-business-report-schedule" [
 #
 # POST /
 # operationId: CreateConferenceProvider
-export def "api create-conference-provider" [
+export def "create-conference-provider" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -718,7 +718,7 @@ export def "api create-conference-provider" [
 #
 # POST /
 # operationId: CreateContact
-export def "api create-contact" [
+export def "create-contact" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -773,7 +773,7 @@ export def "api create-contact" [
 #
 # POST /
 # operationId: CreateGatewayGroup
-export def "api create-gateway-group" [
+export def "create-gateway-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -824,7 +824,7 @@ export def "api create-gateway-group" [
 #
 # POST /
 # operationId: CreateNetworkProfile
-export def "api create-network-profile" [
+export def "create-network-profile" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -882,7 +882,7 @@ export def "api create-network-profile" [
 #
 # POST /
 # operationId: CreateProfile
-export def "api create-profile" [
+export def "create-profile" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -943,7 +943,7 @@ export def "api create-profile" [
 #
 # POST /
 # operationId: CreateRoom
-export def "api create-room" [
+export def "create-room" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -996,7 +996,7 @@ export def "api create-room" [
 #
 # POST /
 # operationId: CreateSkillGroup
-export def "api create-skill-group" [
+export def "create-skill-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1047,7 +1047,7 @@ export def "api create-skill-group" [
 #
 # POST /
 # operationId: CreateUser
-export def "api create-user" [
+export def "create-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1100,7 +1100,7 @@ export def "api create-user" [
 #
 # POST /
 # operationId: DeleteAddressBook
-export def "api delete-address-book" [
+export def "delete-address-book" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1148,7 +1148,7 @@ export def "api delete-address-book" [
 #
 # POST /
 # operationId: DeleteBusinessReportSchedule
-export def "api delete-business-report-schedule" [
+export def "delete-business-report-schedule" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1196,7 +1196,7 @@ export def "api delete-business-report-schedule" [
 #
 # POST /
 # operationId: DeleteConferenceProvider
-export def "api delete-conference-provider" [
+export def "delete-conference-provider" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1244,7 +1244,7 @@ export def "api delete-conference-provider" [
 #
 # POST /
 # operationId: DeleteContact
-export def "api delete-contact" [
+export def "delete-contact" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1292,7 +1292,7 @@ export def "api delete-contact" [
 #
 # POST /
 # operationId: DeleteDevice
-export def "api delete-device" [
+export def "delete-device" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1340,7 +1340,7 @@ export def "api delete-device" [
 #
 # POST /
 # operationId: DeleteDeviceUsageData
-export def "api delete-device-usage-data" [
+export def "delete-device-usage-data" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1389,7 +1389,7 @@ export def "api delete-device-usage-data" [
 #
 # POST /
 # operationId: DeleteGatewayGroup
-export def "api delete-gateway-group" [
+export def "delete-gateway-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1437,7 +1437,7 @@ export def "api delete-gateway-group" [
 #
 # POST /
 # operationId: DeleteNetworkProfile
-export def "api delete-network-profile" [
+export def "delete-network-profile" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1485,7 +1485,7 @@ export def "api delete-network-profile" [
 #
 # POST /
 # operationId: DeleteProfile
-export def "api delete-profile" [
+export def "delete-profile" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1533,7 +1533,7 @@ export def "api delete-profile" [
 #
 # POST /
 # operationId: DeleteRoom
-export def "api delete-room" [
+export def "delete-room" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1581,7 +1581,7 @@ export def "api delete-room" [
 #
 # POST /
 # operationId: DeleteRoomSkillParameter
-export def "api delete-room-skill-parameter" [
+export def "delete-room-skill-parameter" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1631,7 +1631,7 @@ export def "api delete-room-skill-parameter" [
 #
 # POST /
 # operationId: DeleteSkillAuthorization
-export def "api delete-skill-authorization" [
+export def "delete-skill-authorization" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1680,7 +1680,7 @@ export def "api delete-skill-authorization" [
 #
 # POST /
 # operationId: DeleteSkillGroup
-export def "api delete-skill-group" [
+export def "delete-skill-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1728,7 +1728,7 @@ export def "api delete-skill-group" [
 #
 # POST /
 # operationId: DeleteUser
-export def "api delete-user" [
+export def "delete-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1777,7 +1777,7 @@ export def "api delete-user" [
 #
 # POST /
 # operationId: DisassociateContactFromAddressBook
-export def "api create-disassociate-contact-from-address-book" [
+export def "disassociate-contact-from-address-book" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1826,7 +1826,7 @@ export def "api create-disassociate-contact-from-address-book" [
 #
 # POST /
 # operationId: DisassociateDeviceFromRoom
-export def "api create-disassociate-device-from-room" [
+export def "disassociate-device-from-room" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1874,7 +1874,7 @@ export def "api create-disassociate-device-from-room" [
 #
 # POST /
 # operationId: DisassociateSkillFromSkillGroup
-export def "api create-disassociate-skill-from-skill-group" [
+export def "disassociate-skill-from-skill-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1923,7 +1923,7 @@ export def "api create-disassociate-skill-from-skill-group" [
 #
 # POST /
 # operationId: DisassociateSkillFromUsers
-export def "api create-disassociate-skill-from-users" [
+export def "disassociate-skill-from-users" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1971,7 +1971,7 @@ export def "api create-disassociate-skill-from-users" [
 #
 # POST /
 # operationId: DisassociateSkillGroupFromRoom
-export def "api create-disassociate-skill-group-from-room" [
+export def "disassociate-skill-group-from-room" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2020,7 +2020,7 @@ export def "api create-disassociate-skill-group-from-room" [
 #
 # POST /
 # operationId: ForgetSmartHomeAppliances
-export def "api create-forget-smart-home-appliances" [
+export def "forget-smart-home-appliances" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2068,7 +2068,7 @@ export def "api create-forget-smart-home-appliances" [
 #
 # POST /
 # operationId: GetAddressBook
-export def "api get-address-book" [
+export def "get-address-book" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2116,7 +2116,7 @@ export def "api get-address-book" [
 #
 # POST /
 # operationId: GetConferencePreference
-export def "api get-conference-preference" [
+export def "get-conference-preference" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2164,7 +2164,7 @@ export def "api get-conference-preference" [
 #
 # POST /
 # operationId: GetConferenceProvider
-export def "api get-conference-provider" [
+export def "get-conference-provider" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2212,7 +2212,7 @@ export def "api get-conference-provider" [
 #
 # POST /
 # operationId: GetContact
-export def "api get-contact" [
+export def "get-contact" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2260,7 +2260,7 @@ export def "api get-contact" [
 #
 # POST /
 # operationId: GetDevice
-export def "api get-device" [
+export def "get-device" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2308,7 +2308,7 @@ export def "api get-device" [
 #
 # POST /
 # operationId: GetGateway
-export def "api get-gateway" [
+export def "get-gateway" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2356,7 +2356,7 @@ export def "api get-gateway" [
 #
 # POST /
 # operationId: GetGatewayGroup
-export def "api get-gateway-group" [
+export def "get-gateway-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2404,7 +2404,7 @@ export def "api get-gateway-group" [
 #
 # POST /
 # operationId: GetInvitationConfiguration
-export def "api get-invitation-configuration" [
+export def "get-invitation-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2452,7 +2452,7 @@ export def "api get-invitation-configuration" [
 #
 # POST /
 # operationId: GetNetworkProfile
-export def "api get-network-profile" [
+export def "get-network-profile" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2500,7 +2500,7 @@ export def "api get-network-profile" [
 #
 # POST /
 # operationId: GetProfile
-export def "api get-profile" [
+export def "get-profile" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2548,7 +2548,7 @@ export def "api get-profile" [
 #
 # POST /
 # operationId: GetRoom
-export def "api get-room" [
+export def "get-room" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2596,7 +2596,7 @@ export def "api get-room" [
 #
 # POST /
 # operationId: GetRoomSkillParameter
-export def "api get-room-skill-parameter" [
+export def "get-room-skill-parameter" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2646,7 +2646,7 @@ export def "api get-room-skill-parameter" [
 #
 # POST /
 # operationId: GetSkillGroup
-export def "api get-skill-group" [
+export def "get-skill-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2694,7 +2694,7 @@ export def "api get-skill-group" [
 #
 # POST /
 # operationId: ListBusinessReportSchedules
-export def "api list-business-report-schedules" [
+export def "list-business-report-schedules" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2746,7 +2746,7 @@ export def "api list-business-report-schedules" [
 #
 # POST /
 # operationId: ListConferenceProviders
-export def "api list-conference-providers" [
+export def "list-conference-providers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2798,7 +2798,7 @@ export def "api list-conference-providers" [
 #
 # POST /
 # operationId: ListDeviceEvents
-export def "api list-device-events" [
+export def "list-device-events" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2852,7 +2852,7 @@ export def "api list-device-events" [
 #
 # POST /
 # operationId: ListGatewayGroups
-export def "api list-gateway-groups" [
+export def "list-gateway-groups" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2904,7 +2904,7 @@ export def "api list-gateway-groups" [
 #
 # POST /
 # operationId: ListGateways
-export def "api list-gateways" [
+export def "list-gateways" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2957,7 +2957,7 @@ export def "api list-gateways" [
 #
 # POST /
 # operationId: ListSkills
-export def "api list-skills" [
+export def "list-skills" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3012,7 +3012,7 @@ export def "api list-skills" [
 #
 # POST /
 # operationId: ListSkillsStoreCategories
-export def "api list-skills-store-categories" [
+export def "list-skills-store-categories" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3064,7 +3064,7 @@ export def "api list-skills-store-categories" [
 #
 # POST /
 # operationId: ListSkillsStoreSkillsByCategory
-export def "api list-skills-store-skills-by-category" [
+export def "list-skills-store-skills-by-category" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3117,7 +3117,7 @@ export def "api list-skills-store-skills-by-category" [
 #
 # POST /
 # operationId: ListSmartHomeAppliances
-export def "api list-smart-home-appliances" [
+export def "list-smart-home-appliances" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3170,7 +3170,7 @@ export def "api list-smart-home-appliances" [
 #
 # POST /
 # operationId: ListTags
-export def "api list-tags" [
+export def "list-tags" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3223,7 +3223,7 @@ export def "api list-tags" [
 #
 # POST /
 # operationId: PutConferencePreference
-export def "api update-conference-preference" [
+export def "put-conference-preference" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3271,7 +3271,7 @@ export def "api update-conference-preference" [
 #
 # POST /
 # operationId: PutInvitationConfiguration
-export def "api update-invitation-configuration" [
+export def "put-invitation-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3321,7 +3321,7 @@ export def "api update-invitation-configuration" [
 #
 # POST /
 # operationId: PutRoomSkillParameter
-export def "api update-room-skill-parameter" [
+export def "put-room-skill-parameter" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3371,7 +3371,7 @@ export def "api update-room-skill-parameter" [
 #
 # POST /
 # operationId: PutSkillAuthorization
-export def "api update-skill-authorization" [
+export def "put-skill-authorization" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3421,7 +3421,7 @@ export def "api update-skill-authorization" [
 #
 # POST /
 # operationId: RegisterAVSDevice
-export def "api create-avs-device" [
+export def "register-avs-device" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3475,7 +3475,7 @@ export def "api create-avs-device" [
 #
 # POST /
 # operationId: RejectSkill
-export def "api reject-skill" [
+export def "reject-skill" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3523,7 +3523,7 @@ export def "api reject-skill" [
 #
 # POST /
 # operationId: ResolveRoom
-export def "api create-resolve-room" [
+export def "resolve-room" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3572,7 +3572,7 @@ export def "api create-resolve-room" [
 #
 # POST /
 # operationId: RevokeInvitation
-export def "api delete-invitation" [
+export def "revoke-invitation" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3621,7 +3621,7 @@ export def "api delete-invitation" [
 #
 # POST /
 # operationId: SearchAddressBooks
-export def "api list-address-books" [
+export def "search-address-books" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3675,7 +3675,7 @@ export def "api list-address-books" [
 #
 # POST /
 # operationId: SearchContacts
-export def "api list-contacts" [
+export def "search-contacts" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3729,7 +3729,7 @@ export def "api list-contacts" [
 #
 # POST /
 # operationId: SearchDevices
-export def "api list-devices" [
+export def "search-devices" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3783,7 +3783,7 @@ export def "api list-devices" [
 #
 # POST /
 # operationId: SearchNetworkProfiles
-export def "api list-network-profiles" [
+export def "search-network-profiles" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3837,7 +3837,7 @@ export def "api list-network-profiles" [
 #
 # POST /
 # operationId: SearchProfiles
-export def "api list-profiles" [
+export def "search-profiles" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3891,7 +3891,7 @@ export def "api list-profiles" [
 #
 # POST /
 # operationId: SearchRooms
-export def "api list-rooms" [
+export def "search-rooms" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3945,7 +3945,7 @@ export def "api list-rooms" [
 #
 # POST /
 # operationId: SearchSkillGroups
-export def "api list-skill-groups" [
+export def "search-skill-groups" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3999,7 +3999,7 @@ export def "api list-skill-groups" [
 #
 # POST /
 # operationId: SearchUsers
-export def "api list-users" [
+export def "search-users" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4053,7 +4053,7 @@ export def "api list-users" [
 #
 # POST /
 # operationId: SendAnnouncement
-export def "api send-announcement" [
+export def "send-announcement" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4104,7 +4104,7 @@ export def "api send-announcement" [
 #
 # POST /
 # operationId: SendInvitation
-export def "api send-invitation" [
+export def "send-invitation" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4152,7 +4152,7 @@ export def "api send-invitation" [
 #
 # POST /
 # operationId: StartDeviceSync
-export def "api start-device-sync" [
+export def "start-device-sync" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4202,7 +4202,7 @@ export def "api start-device-sync" [
 #
 # POST /
 # operationId: StartSmartHomeApplianceDiscovery
-export def "api start-smart-home-appliance-discovery" [
+export def "start-smart-home-appliance-discovery" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4250,7 +4250,7 @@ export def "api start-smart-home-appliance-discovery" [
 #
 # POST /
 # operationId: TagResource
-export def "api tag-resource" [
+export def "tag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4299,7 +4299,7 @@ export def "api tag-resource" [
 #
 # POST /
 # operationId: UntagResource
-export def "api untag-resource" [
+export def "untag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4348,7 +4348,7 @@ export def "api untag-resource" [
 #
 # POST /
 # operationId: UpdateAddressBook
-export def "api update-address-book" [
+export def "update-address-book" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4398,7 +4398,7 @@ export def "api update-address-book" [
 #
 # POST /
 # operationId: UpdateBusinessReportSchedule
-export def "api update-business-report-schedule" [
+export def "update-business-report-schedule" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4451,7 +4451,7 @@ export def "api update-business-report-schedule" [
 #
 # POST /
 # operationId: UpdateConferenceProvider
-export def "api update-conference-provider" [
+export def "update-conference-provider" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4503,7 +4503,7 @@ export def "api update-conference-provider" [
 #
 # POST /
 # operationId: UpdateContact
-export def "api update-contact" [
+export def "update-contact" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4557,7 +4557,7 @@ export def "api update-contact" [
 #
 # POST /
 # operationId: UpdateDevice
-export def "api update-device" [
+export def "update-device" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4606,7 +4606,7 @@ export def "api update-device" [
 #
 # POST /
 # operationId: UpdateGateway
-export def "api update-gateway" [
+export def "update-gateway" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4657,7 +4657,7 @@ export def "api update-gateway" [
 #
 # POST /
 # operationId: UpdateGatewayGroup
-export def "api update-gateway-group" [
+export def "update-gateway-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4707,7 +4707,7 @@ export def "api update-gateway-group" [
 #
 # POST /
 # operationId: UpdateNetworkProfile
-export def "api update-network-profile" [
+export def "update-network-profile" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4761,7 +4761,7 @@ export def "api update-network-profile" [
 #
 # POST /
 # operationId: UpdateProfile
-export def "api update-profile" [
+export def "update-profile" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4822,7 +4822,7 @@ export def "api update-profile" [
 #
 # POST /
 # operationId: UpdateRoom
-export def "api update-room" [
+export def "update-room" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4874,7 +4874,7 @@ export def "api update-room" [
 #
 # POST /
 # operationId: UpdateSkillGroup
-export def "api update-skill-group" [
+export def "update-skill-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

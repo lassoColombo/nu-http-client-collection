@@ -112,7 +112,7 @@ def alt-completer [] { ["json" "media" "proto"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "v1p1beta1-files-annotate create" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "vision-files-annotate" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -137,7 +137,7 @@ export def commands []: nothing -> table {
 # POST /v1p1beta1/files:annotate
 # operationId: vision.files.annotate
 # --requests item shape: {features?: list, imageContext?: record, inputConfig?: record, pages?: list<int>}
-export def "v1p1beta1-files-annotate create" [
+export def "vision-files-annotate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -189,7 +189,7 @@ export def "v1p1beta1-files-annotate create" [
 # POST /v1p1beta1/files:asyncBatchAnnotate
 # operationId: vision.files.asyncBatchAnnotate
 # --requests item shape: {features?: list, imageContext?: record, inputConfig?: record, outputConfig?: record}
-export def "v1p1beta1-files-async-batch-annotate create" [
+export def "vision-files-async-batch-annotate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -241,7 +241,7 @@ export def "v1p1beta1-files-async-batch-annotate create" [
 # POST /v1p1beta1/images:annotate
 # operationId: vision.images.annotate
 # --requests item shape: {features?: list, image?: record, imageContext?: record}
-export def "v1p1beta1-images-annotate create" [
+export def "vision-images-annotate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -294,7 +294,7 @@ export def "v1p1beta1-images-annotate create" [
 # operationId: vision.images.asyncBatchAnnotate
 # --outputConfig shape: {batchSize?: int, gcsDestination?: record}
 # --requests item shape: {features?: list, image?: record, imageContext?: record}
-export def "v1p1beta1-images-async-batch-annotate create" [
+export def "vision-images-async-batch-annotate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -347,7 +347,7 @@ export def "v1p1beta1-images-async-batch-annotate create" [
 # POST /v1p1beta1/{parent}/files:annotate
 # operationId: vision.projects.locations.files.annotate
 # --requests item shape: {features?: list, imageContext?: record, inputConfig?: record, pages?: list<int>}
-export def "v1p1beta1-files-annotate create-by-parent" [
+export def "vision-projects-locations-files-annotate" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -401,7 +401,7 @@ export def "v1p1beta1-files-annotate create-by-parent" [
 # POST /v1p1beta1/{parent}/files:asyncBatchAnnotate
 # operationId: vision.projects.locations.files.asyncBatchAnnotate
 # --requests item shape: {features?: list, imageContext?: record, inputConfig?: record, outputConfig?: record}
-export def "v1p1beta1-files-async-batch-annotate create-by-parent" [
+export def "vision-projects-locations-files-async-batch-annotate" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -455,7 +455,7 @@ export def "v1p1beta1-files-async-batch-annotate create-by-parent" [
 # POST /v1p1beta1/{parent}/images:annotate
 # operationId: vision.projects.locations.images.annotate
 # --requests item shape: {features?: list, image?: record, imageContext?: record}
-export def "v1p1beta1-images-annotate create-by-parent" [
+export def "vision-projects-locations-images-annotate" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -510,7 +510,7 @@ export def "v1p1beta1-images-annotate create-by-parent" [
 # operationId: vision.projects.locations.images.asyncBatchAnnotate
 # --outputConfig shape: {batchSize?: int, gcsDestination?: record}
 # --requests item shape: {features?: list, image?: record, imageContext?: record}
-export def "v1p1beta1-images-async-batch-annotate create-by-parent" [
+export def "vision-projects-locations-images-async-batch-annotate" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)

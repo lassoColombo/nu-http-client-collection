@@ -129,7 +129,7 @@ def alt-completer [] { ["json" "media" "proto"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "v1beta1 delete" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "billingbudgets-billing-accounts-budgets-delete" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -153,7 +153,7 @@ export def commands []: nothing -> table {
 #
 # DELETE /v1beta1/{name}
 # operationId: billingbudgets.billingAccounts.budgets.delete
-export def "v1beta1 delete" [
+export def "billingbudgets-billing-accounts-budgets-delete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -201,7 +201,7 @@ export def "v1beta1 delete" [
 #
 # GET /v1beta1/{name}
 # operationId: billingbudgets.billingAccounts.budgets.get
-export def "v1beta1 get" [
+export def "billingbudgets-billing-accounts-budgets-get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -250,7 +250,7 @@ export def "v1beta1 get" [
 # PATCH /v1beta1/{name}
 # operationId: billingbudgets.billingAccounts.budgets.patch
 # --budget shape: {allUpdatesRule?: record, amount?: record, budgetFilter?: record, displayName?: string, etag?: string, thresholdRules?: list}
-export def "v1beta1 update" [
+export def "billingbudgets-billing-accounts-budgets-patch" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -303,7 +303,7 @@ export def "v1beta1 update" [
 #
 # GET /v1beta1/{parent}/budgets
 # operationId: billingbudgets.billingAccounts.budgets.list
-export def "v1beta1-budgets list" [
+export def "billingbudgets-billing-accounts-budgets-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -354,7 +354,7 @@ export def "v1beta1-budgets list" [
 # POST /v1beta1/{parent}/budgets
 # operationId: billingbudgets.billingAccounts.budgets.create
 # --budget shape: {allUpdatesRule?: record, amount?: record, budgetFilter?: record, displayName?: string, etag?: string, thresholdRules?: list}
-export def "v1beta1-budgets create" [
+export def "billingbudgets-billing-accounts-budgets-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)

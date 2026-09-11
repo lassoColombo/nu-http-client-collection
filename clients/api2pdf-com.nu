@@ -107,7 +107,7 @@ def accept-completer [] { ["application/json" "application/pdf"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "chrome-html create-from" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "chrome-from-html-post" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -132,7 +132,7 @@ export def commands []: nothing -> table {
 # POST /chrome/html
 # operationId: chromeFromHtmlPost
 # --options shape: {landscape?: string, printBackground?: bool}
-export def "chrome-html create-from" [
+export def "chrome-from-html-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -173,7 +173,7 @@ export def "chrome-html create-from" [
 #
 # GET /chrome/url
 # operationId: chromeFromUrlGET
-export def "chrome-url get-from" [
+export def "chrome-from-url-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -212,7 +212,7 @@ export def "chrome-url get-from" [
 # POST /chrome/url
 # operationId: chromeFromUrlPost
 # --options shape: {landscape?: string, printBackground?: bool}
-export def "chrome-url create-from" [
+export def "chrome-from-url-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -253,7 +253,7 @@ export def "chrome-url create-from" [
 #
 # POST /libreoffice/convert
 # operationId: libreConvertPost
-export def "libreoffice-convert create-libre" [
+export def "libre-convert-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -293,7 +293,7 @@ export def "libreoffice-convert create-libre" [
 #
 # POST /merge
 # operationId: mergePost
-export def "merge create" [
+export def "merge-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -334,7 +334,7 @@ export def "merge create" [
 # POST /wkhtmltopdf/html
 # operationId: wkhtmltopdfFromHtmlPost
 # --options shape: {orientation?: string, pageSize?: string}
-export def "wkhtmltopdf-html create-from" [
+export def "wkhtmltopdf-from-html-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -375,7 +375,7 @@ export def "wkhtmltopdf-html create-from" [
 #
 # GET /wkhtmltopdf/url
 # operationId: wkhtmltopdfFromUrlGET
-export def "wkhtmltopdf-url get-from" [
+export def "wkhtmltopdf-from-url-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -414,7 +414,7 @@ export def "wkhtmltopdf-url get-from" [
 # POST /wkhtmltopdf/url
 # operationId: wkhtmltopdfFromUrlPost
 # --options shape: {orientation?: string, pageSize?: string}
-export def "wkhtmltopdf-url create-from" [
+export def "wkhtmltopdf-from-url-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -455,7 +455,7 @@ export def "wkhtmltopdf-url create-from" [
 #
 # GET /zebra
 # operationId: zebraGET
-export def "zebra get" [
+export def "zebra-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

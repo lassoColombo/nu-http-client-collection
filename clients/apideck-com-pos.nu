@@ -127,7 +127,7 @@ def status-completer-2 [] { ["approved" "canceled" "completed" "failed" "other" 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "pos-items list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "items-all" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -151,7 +151,7 @@ export def commands []: nothing -> table {
 #
 # GET /pos/items
 # operationId: itemsAll
-export def "pos-items list" [
+export def "items-all" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -198,7 +198,7 @@ export def "pos-items list" [
 # --categories item shape: {image_ids?: list<string>, name?: string}
 # --options item shape: {attribute_id?: string, id?: string, name?: string}
 # --variations item shape: {name?: string, present_at_all_locations?: bool, price_amount?: float, ... (5 more fields)}
-export def "pos-items create" [
+export def "items-add" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -266,7 +266,7 @@ export def "pos-items create" [
 #
 # DELETE /pos/items/{id}
 # operationId: itemsDelete
-export def "pos-items delete" [
+export def "items-delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -309,7 +309,7 @@ export def "pos-items delete" [
 #
 # GET /pos/items/{id}
 # operationId: itemsOne
-export def "pos-items get-one" [
+export def "items-one" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -356,7 +356,7 @@ export def "pos-items get-one" [
 # --categories item shape: {image_ids?: list<string>, name?: string}
 # --options item shape: {attribute_id?: string, id?: string, name?: string}
 # --variations item shape: {name?: string, present_at_all_locations?: bool, price_amount?: float, ... (5 more fields)}
-export def "pos-items update" [
+export def "items-update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -426,7 +426,7 @@ export def "pos-items update" [
 #
 # GET /pos/locations
 # operationId: locationsAll
-export def "pos-locations list" [
+export def "locations-all" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -471,7 +471,7 @@ export def "pos-locations list" [
 # POST /pos/locations
 # operationId: locationsAdd
 # --address shape: {city?: string, contact_name?: string, country?: string, county?: string, email?: string, fax?: string, id?: string, latitude?: string, line1?: string, line2?: string, line3?: string, line4?: string, longitude?: string, name?: string, phone_number?: string, postal_code?: string, row_version?: string, salutation?: string, state?: string, street_number?: string, string?: string, type?: "primary"|"secondary"|"home"|"office"|"shipping"|"billing"|"other", website?: string}
-export def "pos-locations create" [
+export def "locations-add" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -521,7 +521,7 @@ export def "pos-locations create" [
 #
 # DELETE /pos/locations/{id}
 # operationId: locationsDelete
-export def "pos-locations delete" [
+export def "locations-delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -564,7 +564,7 @@ export def "pos-locations delete" [
 #
 # GET /pos/locations/{id}
 # operationId: locationsOne
-export def "pos-locations get-one" [
+export def "locations-one" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -609,7 +609,7 @@ export def "pos-locations get-one" [
 # PATCH /pos/locations/{id}
 # operationId: locationsUpdate
 # --address shape: {city?: string, contact_name?: string, country?: string, county?: string, email?: string, fax?: string, id?: string, latitude?: string, line1?: string, line2?: string, line3?: string, line4?: string, longitude?: string, name?: string, phone_number?: string, postal_code?: string, row_version?: string, salutation?: string, state?: string, street_number?: string, string?: string, type?: "primary"|"secondary"|"home"|"office"|"shipping"|"billing"|"other", website?: string}
-export def "pos-locations update" [
+export def "locations-update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -661,7 +661,7 @@ export def "pos-locations update" [
 #
 # GET /pos/merchants
 # operationId: merchantsAll
-export def "pos-merchants list" [
+export def "merchants-all" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -707,7 +707,7 @@ export def "pos-merchants list" [
 # operationId: merchantsAdd
 # --address shape: {city?: string, contact_name?: string, country?: string, county?: string, email?: string, fax?: string, id?: string, latitude?: string, line1?: string, line2?: string, line3?: string, line4?: string, longitude?: string, name?: string, phone_number?: string, postal_code?: string, row_version?: string, salutation?: string, state?: string, street_number?: string, string?: string, type?: "primary"|"secondary"|"home"|"office"|"shipping"|"billing"|"other", website?: string}
 # --service_charges item shape: {active?: bool, amount?: float, ... (4 more fields)}
-export def "pos-merchants create" [
+export def "merchants-add" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -759,7 +759,7 @@ export def "pos-merchants create" [
 #
 # DELETE /pos/merchants/{id}
 # operationId: merchantsDelete
-export def "pos-merchants delete" [
+export def "merchants-delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -802,7 +802,7 @@ export def "pos-merchants delete" [
 #
 # GET /pos/merchants/{id}
 # operationId: merchantsOne
-export def "pos-merchants get-one" [
+export def "merchants-one" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -848,7 +848,7 @@ export def "pos-merchants get-one" [
 # operationId: merchantsUpdate
 # --address shape: {city?: string, contact_name?: string, country?: string, county?: string, email?: string, fax?: string, id?: string, latitude?: string, line1?: string, line2?: string, line3?: string, line4?: string, longitude?: string, name?: string, phone_number?: string, postal_code?: string, row_version?: string, salutation?: string, state?: string, street_number?: string, string?: string, type?: "primary"|"secondary"|"home"|"office"|"shipping"|"billing"|"other", website?: string}
 # --service_charges item shape: {active?: bool, amount?: float, ... (4 more fields)}
-export def "pos-merchants update" [
+export def "merchants-update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -902,7 +902,7 @@ export def "pos-merchants update" [
 #
 # GET /pos/modifier-groups
 # operationId: modifierGroupsAll
-export def "pos-modifier-groups list" [
+export def "modifier-groups-all" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -947,7 +947,7 @@ export def "pos-modifier-groups list" [
 # POST /pos/modifier-groups
 # operationId: modifierGroupsAdd
 # --modifiers item shape: {alternate_name?: string, available?: bool, ... (4 more fields)}
-export def "pos-modifier-groups create" [
+export def "modifier-groups-add" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1000,7 +1000,7 @@ export def "pos-modifier-groups create" [
 #
 # DELETE /pos/modifier-groups/{id}
 # operationId: modifierGroupsDelete
-export def "pos-modifier-groups delete" [
+export def "modifier-groups-delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1043,7 +1043,7 @@ export def "pos-modifier-groups delete" [
 #
 # GET /pos/modifier-groups/{id}
 # operationId: modifierGroupsOne
-export def "pos-modifier-groups get-one" [
+export def "modifier-groups-one" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1088,7 +1088,7 @@ export def "pos-modifier-groups get-one" [
 # PATCH /pos/modifier-groups/{id}
 # operationId: modifierGroupsUpdate
 # --modifiers item shape: {alternate_name?: string, available?: bool, ... (4 more fields)}
-export def "pos-modifier-groups update" [
+export def "modifier-groups-update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1143,7 +1143,7 @@ export def "pos-modifier-groups update" [
 #
 # GET /pos/modifiers
 # operationId: modifiersAll
-export def "pos-modifiers list" [
+export def "modifiers-all" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1187,7 +1187,7 @@ export def "pos-modifiers list" [
 #
 # POST /pos/modifiers
 # operationId: modifiersAdd
-export def "pos-modifiers create" [
+export def "modifiers-add" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1238,7 +1238,7 @@ export def "pos-modifiers create" [
 #
 # DELETE /pos/modifiers/{id}
 # operationId: modifiersDelete
-export def "pos-modifiers delete" [
+export def "modifiers-delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1282,7 +1282,7 @@ export def "pos-modifiers delete" [
 #
 # GET /pos/modifiers/{id}
 # operationId: modifiersOne
-export def "pos-modifiers get-one" [
+export def "modifiers-one" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1327,7 +1327,7 @@ export def "pos-modifiers get-one" [
 #
 # PATCH /pos/modifiers/{id}
 # operationId: modifiersUpdate
-export def "pos-modifiers update" [
+export def "modifiers-update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1380,7 +1380,7 @@ export def "pos-modifiers update" [
 #
 # GET /pos/order-types
 # operationId: orderTypesAll
-export def "pos-order-types list" [
+export def "order-types-all" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1424,7 +1424,7 @@ export def "pos-order-types list" [
 #
 # POST /pos/order-types
 # operationId: orderTypesAdd
-export def "pos-order-types create" [
+export def "order-types-add" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1470,7 +1470,7 @@ export def "pos-order-types create" [
 #
 # DELETE /pos/order-types/{id}
 # operationId: orderTypesDelete
-export def "pos-order-types delete" [
+export def "order-types-delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1513,7 +1513,7 @@ export def "pos-order-types delete" [
 #
 # GET /pos/order-types/{id}
 # operationId: orderTypesOne
-export def "pos-order-types get-one" [
+export def "order-types-one" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1557,7 +1557,7 @@ export def "pos-order-types get-one" [
 #
 # PATCH /pos/order-types/{id}
 # operationId: orderTypesUpdate
-export def "pos-order-types update" [
+export def "order-types-update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1605,7 +1605,7 @@ export def "pos-order-types update" [
 #
 # GET /pos/orders
 # operationId: ordersAll
-export def "pos-orders list" [
+export def "orders-all" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1659,7 +1659,7 @@ export def "pos-orders list" [
 # --service_charges item shape: {active?: bool, amount?: float, ... (4 more fields)}
 # --taxes item shape: {amount?: int, auto_applied?: bool, ... (6 more fields)}
 # --tenders item shape: {amount?: float, buyer_tendered_cash_amount?: int, card?: record, card_entry_method?: "evm"|"swiped"|"keyed"|"on-file"|"contactless", card_status?: "authorized"|"captured"|"failed"|"voided", change_back_cash_amount?: int, ... (12 more fields)}
-export def "pos-orders create" [
+export def "orders-add" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1738,7 +1738,7 @@ export def "pos-orders create" [
 #
 # DELETE /pos/orders/{id}
 # operationId: ordersDelete
-export def "pos-orders delete" [
+export def "orders-delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1781,7 +1781,7 @@ export def "pos-orders delete" [
 #
 # GET /pos/orders/{id}
 # operationId: ordersOne
-export def "pos-orders get-one" [
+export def "orders-one" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1834,7 +1834,7 @@ export def "pos-orders get-one" [
 # --service_charges item shape: {active?: bool, amount?: float, ... (4 more fields)}
 # --taxes item shape: {amount?: int, auto_applied?: bool, ... (6 more fields)}
 # --tenders item shape: {amount?: float, buyer_tendered_cash_amount?: int, card?: record, card_entry_method?: "evm"|"swiped"|"keyed"|"on-file"|"contactless", card_status?: "authorized"|"captured"|"failed"|"voided", change_back_cash_amount?: int, ... (12 more fields)}
-export def "pos-orders update" [
+export def "orders-update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1924,7 +1924,7 @@ export def "pos-orders update" [
 # --service_charges item shape: {active?: bool, amount?: float, ... (4 more fields)}
 # --taxes item shape: {amount?: int, auto_applied?: bool, ... (6 more fields)}
 # --tenders item shape: {amount?: float, buyer_tendered_cash_amount?: int, card?: record, card_entry_method?: "evm"|"swiped"|"keyed"|"on-file"|"contactless", card_status?: "authorized"|"captured"|"failed"|"voided", change_back_cash_amount?: int, ... (12 more fields)}
-export def "pos-orders-pay create" [
+export def "orders-pay" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2006,7 +2006,7 @@ export def "pos-orders-pay create" [
 #
 # GET /pos/payments
 # operationId: paymentsAll
-export def "pos-payments list" [
+export def "payments-all" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2057,7 +2057,7 @@ export def "pos-payments list" [
 # --processing_fees item shape: {amount?: float, effective_at?: string, processing_type?: "initial"|"adjustment"}
 # --service_charges item shape: {active?: bool, amount?: float, ... (4 more fields)}
 # --wallet shape: {status?: "authorized"|"captured"|"voided"|"failed"|"other"}
-export def "pos-payments create" [
+export def "payments-add" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2129,7 +2129,7 @@ export def "pos-payments create" [
 #
 # DELETE /pos/payments/{id}
 # operationId: paymentsDelete
-export def "pos-payments delete" [
+export def "payments-delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2172,7 +2172,7 @@ export def "pos-payments delete" [
 #
 # GET /pos/payments/{id}
 # operationId: paymentsOne
-export def "pos-payments get-one" [
+export def "payments-one" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2223,7 +2223,7 @@ export def "pos-payments get-one" [
 # --processing_fees item shape: {amount?: float, effective_at?: string, processing_type?: "initial"|"adjustment"}
 # --service_charges item shape: {active?: bool, amount?: float, ... (4 more fields)}
 # --wallet shape: {status?: "authorized"|"captured"|"voided"|"failed"|"other"}
-export def "pos-payments update" [
+export def "payments-update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2297,7 +2297,7 @@ export def "pos-payments update" [
 #
 # GET /pos/tenders
 # operationId: tendersAll
-export def "pos-tenders list" [
+export def "tenders-all" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2341,7 +2341,7 @@ export def "pos-tenders list" [
 #
 # POST /pos/tenders
 # operationId: tendersAdd
-export def "pos-tenders create" [
+export def "tenders-add" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2392,7 +2392,7 @@ export def "pos-tenders create" [
 #
 # DELETE /pos/tenders/{id}
 # operationId: tendersDelete
-export def "pos-tenders delete" [
+export def "tenders-delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2435,7 +2435,7 @@ export def "pos-tenders delete" [
 #
 # GET /pos/tenders/{id}
 # operationId: tendersOne
-export def "pos-tenders get-one" [
+export def "tenders-one" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2479,7 +2479,7 @@ export def "pos-tenders get-one" [
 #
 # PATCH /pos/tenders/{id}
 # operationId: tendersUpdate
-export def "pos-tenders update" [
+export def "tenders-update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

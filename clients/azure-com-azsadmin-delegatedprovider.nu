@@ -98,7 +98,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-providers-microsoft-subscriptions-admin-delegated-providers list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "delegated-providers-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -122,7 +122,7 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Subscriptions.Admin/delegatedProviders
 # operationId: DelegatedProviders_List
-export def "subscriptions-providers-microsoft-subscriptions-admin-delegated-providers list" [
+export def "delegated-providers-list" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -160,7 +160,7 @@ export def "subscriptions-providers-microsoft-subscriptions-admin-delegated-prov
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Subscriptions.Admin/delegatedProviders/{delegatedProvider}
 # operationId: DelegatedProviders_Get
-export def "subscriptions-providers-microsoft-subscriptions-admin-delegated-providers get" [
+export def "delegated-providers-get" [
   subscription_id: string
   delegated_provider: string
   --base-url(-b): string@base-url-completer # API base URL

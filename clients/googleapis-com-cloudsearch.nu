@@ -137,7 +137,7 @@ def mode-completer [] { ["ASYNCHRONOUS" "SYNCHRONOUS" "UNSPECIFIED"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "debug-items-search-by-view-url list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "cloudsearch-debug-datasources-items-search-by-view-url" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -162,7 +162,7 @@ export def commands []: nothing -> table {
 # POST /v1/debug/{name}/items:searchByViewUrl
 # operationId: cloudsearch.debug.datasources.items.searchByViewUrl
 # --debugOptions shape: {enableDebugging?: bool}
-export def "debug-items-search-by-view-url list" [
+export def "cloudsearch-debug-datasources-items-search-by-view-url" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -217,7 +217,7 @@ export def "debug-items-search-by-view-url list" [
 # POST /v1/debug/{name}:checkAccess
 # operationId: cloudsearch.debug.datasources.items.checkAccess
 # --gsuitePrincipal shape: {gsuiteDomain?: bool, gsuiteGroupEmail?: string, gsuiteUserEmail?: string}
-export def "debug check-access" [
+export def "cloudsearch-debug-datasources-items-check-access" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -272,7 +272,7 @@ export def "debug check-access" [
 #
 # GET /v1/debug/{parent}/items:forunmappedidentity
 # operationId: cloudsearch.debug.identitysources.items.listForunmappedidentity
-export def "debug-items-forunmappedidentity list" [
+export def "cloudsearch-debug-identitysources-items-list-forunmappedidentity" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -325,7 +325,7 @@ export def "debug-items-forunmappedidentity list" [
 #
 # GET /v1/debug/{parent}/unmappedids
 # operationId: cloudsearch.debug.identitysources.unmappedids.list
-export def "debug-unmappedids list" [
+export def "cloudsearch-debug-identitysources-unmappedids-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -377,7 +377,7 @@ export def "debug-unmappedids list" [
 #
 # DELETE /v1/indexing/{name}
 # operationId: cloudsearch.indexing.datasources.items.delete
-export def "indexing delete" [
+export def "cloudsearch-indexing-datasources-items-delete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -429,7 +429,7 @@ export def "indexing delete" [
 #
 # GET /v1/indexing/{name}
 # operationId: cloudsearch.indexing.datasources.items.get
-export def "indexing get" [
+export def "cloudsearch-indexing-datasources-items-get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -479,7 +479,7 @@ export def "indexing get" [
 #
 # GET /v1/indexing/{name}/items
 # operationId: cloudsearch.indexing.datasources.items.list
-export def "indexing-items list" [
+export def "cloudsearch-indexing-datasources-items-list" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -533,7 +533,7 @@ export def "indexing-items list" [
 # POST /v1/indexing/{name}/items:deleteQueueItems
 # operationId: cloudsearch.indexing.datasources.items.deleteQueueItems
 # --debugOptions shape: {enableDebugging?: bool}
-export def "indexing-items-delete-queue-items delete" [
+export def "cloudsearch-indexing-datasources-items-delete-queue-items" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -588,7 +588,7 @@ export def "indexing-items-delete-queue-items delete" [
 # POST /v1/indexing/{name}/items:poll
 # operationId: cloudsearch.indexing.datasources.items.poll
 # --debugOptions shape: {enableDebugging?: bool}
-export def "indexing-items-poll create" [
+export def "cloudsearch-indexing-datasources-items-poll" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -645,7 +645,7 @@ export def "indexing-items-poll create" [
 # POST /v1/indexing/{name}/items:unreserve
 # operationId: cloudsearch.indexing.datasources.items.unreserve
 # --debugOptions shape: {enableDebugging?: bool}
-export def "indexing-items-unreserve create" [
+export def "cloudsearch-indexing-datasources-items-unreserve" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -699,7 +699,7 @@ export def "indexing-items-unreserve create" [
 #
 # DELETE /v1/indexing/{name}/schema
 # operationId: cloudsearch.indexing.datasources.deleteSchema
-export def "indexing-schema delete" [
+export def "cloudsearch-indexing-datasources-delete-schema" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -748,7 +748,7 @@ export def "indexing-schema delete" [
 #
 # GET /v1/indexing/{name}/schema
 # operationId: cloudsearch.indexing.datasources.getSchema
-export def "indexing-schema get" [
+export def "cloudsearch-indexing-datasources-get-schema" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -799,7 +799,7 @@ export def "indexing-schema get" [
 # operationId: cloudsearch.indexing.datasources.updateSchema
 # --debugOptions shape: {enableDebugging?: bool}
 # --schema shape: {objectDefinitions?: list, operationIds?: list<string>}
-export def "indexing-schema update" [
+export def "cloudsearch-indexing-datasources-update-schema" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -856,7 +856,7 @@ export def "indexing-schema update" [
 # --debugOptions shape: {enableDebugging?: bool}
 # --indexItemOptions shape: {allowUnknownGsuitePrincipals?: bool}
 # --item shape: {acl?: record, content?: record, itemType?: "UNSPECIFIED"|"CONTENT_ITEM"|"CONTAINER_ITEM"|"VIRTUAL_CONTAINER_ITEM", metadata?: record, name?: string, payload?: string, queue?: string, status?: record, structuredData?: record, version?: string}
-export def "indexing create-index" [
+export def "cloudsearch-indexing-datasources-items-index" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -914,7 +914,7 @@ export def "indexing create-index" [
 # operationId: cloudsearch.indexing.datasources.items.push
 # --debugOptions shape: {enableDebugging?: bool}
 # --item shape: {contentHash?: string, metadataHash?: string, payload?: string, queue?: string, repositoryError?: record, structuredDataHash?: string, type?: "UNSPECIFIED"|"MODIFIED"|"NOT_MODIFIED"|"REPOSITORY_ERROR"|"REQUEUE"}
-export def "indexing push" [
+export def "cloudsearch-indexing-datasources-items-push" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -969,7 +969,7 @@ export def "indexing push" [
 # POST /v1/indexing/{name}:upload
 # operationId: cloudsearch.indexing.datasources.items.upload
 # --debugOptions shape: {enableDebugging?: bool}
-export def "indexing upload" [
+export def "cloudsearch-indexing-datasources-items-upload" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1022,7 +1022,7 @@ export def "indexing upload" [
 #
 # POST /v1/media/{resourceName}
 # operationId: cloudsearch.media.upload
-export def "media upload" [
+export def "cloudsearch-media-upload" [
   resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1080,7 +1080,7 @@ export def "media upload" [
 # --queryInterpretationOptions shape: {disableNlInterpretation?: bool, disableSupplementalResults?: bool, enableVerbatimMode?: bool}
 # --requestOptions shape: {debugOptions?: record, languageCode?: string, searchApplicationId?: string, timeZone?: string}
 # --sortOptions shape: {operatorName?: string, sortOrder?: "ASCENDING"|"DESCENDING"}
-export def "query-search list" [
+export def "cloudsearch-query-search" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -1138,7 +1138,7 @@ export def "query-search list" [
 #
 # GET /v1/query/sources
 # operationId: cloudsearch.query.sources.list
-export def "query-sources list" [
+export def "cloudsearch-query-sources-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -1191,7 +1191,7 @@ export def "query-sources list" [
 # operationId: cloudsearch.query.suggest
 # --dataSourceRestrictions item shape: {filterOptions?: list, source?: record}
 # --requestOptions shape: {debugOptions?: record, languageCode?: string, searchApplicationId?: string, timeZone?: string}
-export def "query-suggest create" [
+export def "cloudsearch-query-suggest" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -1243,7 +1243,7 @@ export def "query-suggest create" [
 #
 # GET /v1/settings/customer
 # operationId: cloudsearch.settings.getCustomer
-export def "settings-customer get" [
+export def "cloudsearch-settings-get-customer" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -1291,7 +1291,7 @@ export def "settings-customer get" [
 # operationId: cloudsearch.settings.updateCustomer
 # --auditLoggingSettings shape: {logAdminReadActions?: bool, logDataReadActions?: bool, logDataWriteActions?: bool, project?: string}
 # --vpcSettings shape: {project?: string}
-export def "settings-customer update" [
+export def "cloudsearch-settings-update-customer" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -1343,7 +1343,7 @@ export def "settings-customer update" [
 #
 # GET /v1/settings/datasources
 # operationId: cloudsearch.settings.datasources.list
-export def "settings-datasources list" [
+export def "cloudsearch-settings-datasources-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -1393,7 +1393,7 @@ export def "settings-datasources list" [
 # POST /v1/settings/datasources
 # operationId: cloudsearch.settings.datasources.create
 # --itemsVisibility item shape: {gsuiteDomain?: bool, gsuiteGroupEmail?: string, gsuiteUserEmail?: string}
-export def "settings-datasources create" [
+export def "cloudsearch-settings-datasources-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -1451,7 +1451,7 @@ export def "settings-datasources create" [
 #
 # GET /v1/settings/searchapplications
 # operationId: cloudsearch.settings.searchapplications.list
-export def "settings-searchapplications list" [
+export def "cloudsearch-settings-searchapplications-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -1506,7 +1506,7 @@ export def "settings-searchapplications list" [
 # --queryInterpretationConfig shape: {forceDisableSupplementalResults?: bool, forceVerbatimMode?: bool}
 # --scoringConfig shape: {disableFreshness?: bool, disablePersonalization?: bool}
 # --sourceConfig item shape: {crowdingConfig?: record, scoringConfig?: record, source?: record}
-export def "settings-searchapplications create" [
+export def "cloudsearch-settings-searchapplications-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -1565,7 +1565,7 @@ export def "settings-searchapplications create" [
 #
 # DELETE /v1/settings/{name}
 # operationId: cloudsearch.settings.searchapplications.delete
-export def "settings delete" [
+export def "cloudsearch-settings-searchapplications-delete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1614,7 +1614,7 @@ export def "settings delete" [
 #
 # GET /v1/settings/{name}
 # operationId: cloudsearch.settings.searchapplications.get
-export def "settings get" [
+export def "cloudsearch-settings-searchapplications-get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1669,7 +1669,7 @@ export def "settings get" [
 # --queryInterpretationConfig shape: {forceDisableSupplementalResults?: bool, forceVerbatimMode?: bool}
 # --scoringConfig shape: {disableFreshness?: bool, disablePersonalization?: bool}
 # --sourceConfig item shape: {crowdingConfig?: record, scoringConfig?: record, source?: record}
-export def "settings update-by-name" [
+export def "cloudsearch-settings-searchapplications-patch" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1737,7 +1737,7 @@ export def "settings update-by-name" [
 # --queryInterpretationConfig shape: {forceDisableSupplementalResults?: bool, forceVerbatimMode?: bool}
 # --scoringConfig shape: {disableFreshness?: bool, disablePersonalization?: bool}
 # --sourceConfig item shape: {crowdingConfig?: record, scoringConfig?: record, source?: record}
-export def "settings update-by-name-1" [
+export def "cloudsearch-settings-searchapplications-update" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1800,7 +1800,7 @@ export def "settings update-by-name-1" [
 # POST /v1/settings/{name}:reset
 # operationId: cloudsearch.settings.searchapplications.reset
 # --debugOptions shape: {enableDebugging?: bool}
-export def "settings reset" [
+export def "cloudsearch-settings-searchapplications-reset" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1852,7 +1852,7 @@ export def "settings reset" [
 #
 # GET /v1/stats/index
 # operationId: cloudsearch.stats.getIndex
-export def "stats-index list" [
+export def "cloudsearch-stats-get-index" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -1904,7 +1904,7 @@ export def "stats-index list" [
 #
 # GET /v1/stats/index/{name}
 # operationId: cloudsearch.stats.index.datasources.get
-export def "stats-index get" [
+export def "cloudsearch-stats-index-datasources-get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1958,7 +1958,7 @@ export def "stats-index get" [
 #
 # GET /v1/stats/query
 # operationId: cloudsearch.stats.getQuery
-export def "stats-query list" [
+export def "cloudsearch-stats-get-query" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -2010,7 +2010,7 @@ export def "stats-query list" [
 #
 # GET /v1/stats/query/{name}
 # operationId: cloudsearch.stats.query.searchapplications.get
-export def "stats-query get" [
+export def "cloudsearch-stats-query-searchapplications-get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2064,7 +2064,7 @@ export def "stats-query get" [
 #
 # GET /v1/stats/searchapplication
 # operationId: cloudsearch.stats.getSearchapplication
-export def "stats-searchapplication get" [
+export def "cloudsearch-stats-get-searchapplication" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -2116,7 +2116,7 @@ export def "stats-searchapplication get" [
 #
 # GET /v1/stats/session
 # operationId: cloudsearch.stats.getSession
-export def "stats-session list" [
+export def "cloudsearch-stats-get-session" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -2168,7 +2168,7 @@ export def "stats-session list" [
 #
 # GET /v1/stats/session/{name}
 # operationId: cloudsearch.stats.session.searchapplications.get
-export def "stats-session get" [
+export def "cloudsearch-stats-session-searchapplications-get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2222,7 +2222,7 @@ export def "stats-session get" [
 #
 # GET /v1/stats/user
 # operationId: cloudsearch.stats.getUser
-export def "stats-user list" [
+export def "cloudsearch-stats-get-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -2274,7 +2274,7 @@ export def "stats-user list" [
 #
 # GET /v1/stats/user/{name}
 # operationId: cloudsearch.stats.user.searchapplications.get
-export def "stats-user get" [
+export def "cloudsearch-stats-user-searchapplications-get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2328,7 +2328,7 @@ export def "stats-user get" [
 #
 # GET /v1/{name}
 # operationId: cloudsearch.operations.get
-export def "operations get" [
+export def "cloudsearch-operations-get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2376,7 +2376,7 @@ export def "operations get" [
 #
 # GET /v1/{name}/lro
 # operationId: cloudsearch.operations.lro.list
-export def "lro list" [
+export def "cloudsearch-operations-lro-list" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2427,7 +2427,7 @@ export def "lro list" [
 #
 # POST /v1:initializeCustomer
 # operationId: cloudsearch.initializeCustomer
-export def "v1-initialize-customer create" [
+export def "cloudsearch-initialize-customer" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)

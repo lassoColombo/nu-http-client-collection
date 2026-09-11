@@ -148,7 +148,7 @@ def action-completer-33 [] { ["SetSubnets"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "api get-create-listener-certificates" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-add-listener-certificates" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -172,7 +172,7 @@ export def commands []: nothing -> table {
 #
 # GET /
 # operationId: GET_AddListenerCertificates
-export def "api get-create-listener-certificates" [
+export def "get-add-listener-certificates" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -220,7 +220,7 @@ export def "api get-create-listener-certificates" [
 #
 # POST /
 # operationId: POST_AddListenerCertificates
-export def "api create-listener-certificates" [
+export def "post-add-listener-certificates" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -270,7 +270,7 @@ export def "api create-listener-certificates" [
 #
 # GET /
 # operationId: GET_AddTags
-export def "api get-create-tags" [
+export def "get-add-tags" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -318,7 +318,7 @@ export def "api get-create-tags" [
 #
 # POST /
 # operationId: POST_AddTags
-export def "api create-tags" [
+export def "post-add-tags" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -368,7 +368,7 @@ export def "api create-tags" [
 #
 # GET /
 # operationId: GET_CreateListener
-export def "api get-create-listener" [
+export def "get-create-listener" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -422,7 +422,7 @@ export def "api get-create-listener" [
 #
 # POST /
 # operationId: POST_CreateListener
-export def "api create-listener" [
+export def "post-create-listener" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -472,7 +472,7 @@ export def "api create-listener" [
 #
 # GET /
 # operationId: GET_CreateLoadBalancer
-export def "api get-create-load-balancer" [
+export def "get-create-load-balancer" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -527,7 +527,7 @@ export def "api get-create-load-balancer" [
 #
 # POST /
 # operationId: POST_CreateLoadBalancer
-export def "api create-load-balancer" [
+export def "post-create-load-balancer" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -577,7 +577,7 @@ export def "api create-load-balancer" [
 #
 # GET /
 # operationId: GET_CreateRule
-export def "api get-create-rule" [
+export def "get-create-rule" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -628,7 +628,7 @@ export def "api get-create-rule" [
 #
 # POST /
 # operationId: POST_CreateRule
-export def "api create-rule" [
+export def "post-create-rule" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -678,7 +678,7 @@ export def "api create-rule" [
 #
 # GET /
 # operationId: GET_CreateTargetGroup
-export def "api get-create-target-group" [
+export def "get-create-target-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -741,7 +741,7 @@ export def "api get-create-target-group" [
 #
 # POST /
 # operationId: POST_CreateTargetGroup
-export def "api create-target-group" [
+export def "post-create-target-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -791,7 +791,7 @@ export def "api create-target-group" [
 #
 # GET /
 # operationId: GET_DeleteListener
-export def "api get-delete-listener" [
+export def "get-delete-listener" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -838,7 +838,7 @@ export def "api get-delete-listener" [
 #
 # POST /
 # operationId: POST_DeleteListener
-export def "api create-delete-listener" [
+export def "post-delete-listener" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -888,7 +888,7 @@ export def "api create-delete-listener" [
 #
 # GET /
 # operationId: GET_DeleteLoadBalancer
-export def "api get-delete-load-balancer" [
+export def "get-delete-load-balancer" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -935,7 +935,7 @@ export def "api get-delete-load-balancer" [
 #
 # POST /
 # operationId: POST_DeleteLoadBalancer
-export def "api create-delete-load-balancer" [
+export def "post-delete-load-balancer" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -985,7 +985,7 @@ export def "api create-delete-load-balancer" [
 #
 # GET /
 # operationId: GET_DeleteRule
-export def "api get-delete-rule" [
+export def "get-delete-rule" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1032,7 +1032,7 @@ export def "api get-delete-rule" [
 #
 # POST /
 # operationId: POST_DeleteRule
-export def "api create-delete-rule" [
+export def "post-delete-rule" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1082,7 +1082,7 @@ export def "api create-delete-rule" [
 #
 # GET /
 # operationId: GET_DeleteTargetGroup
-export def "api get-delete-target-group" [
+export def "get-delete-target-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1129,7 +1129,7 @@ export def "api get-delete-target-group" [
 #
 # POST /
 # operationId: POST_DeleteTargetGroup
-export def "api create-delete-target-group" [
+export def "post-delete-target-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1179,7 +1179,7 @@ export def "api create-delete-target-group" [
 #
 # GET /
 # operationId: GET_DeregisterTargets
-export def "api get-deregister-targets" [
+export def "get-deregister-targets" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1227,7 +1227,7 @@ export def "api get-deregister-targets" [
 #
 # POST /
 # operationId: POST_DeregisterTargets
-export def "api create-deregister-targets" [
+export def "post-deregister-targets" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1277,7 +1277,7 @@ export def "api create-deregister-targets" [
 #
 # GET /
 # operationId: GET_DescribeAccountLimits
-export def "api get-account-limits" [
+export def "get-describe-account-limits" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1325,7 +1325,7 @@ export def "api get-account-limits" [
 #
 # POST /
 # operationId: POST_DescribeAccountLimits
-export def "api create-get-account-limits" [
+export def "post-describe-account-limits" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1375,7 +1375,7 @@ export def "api create-get-account-limits" [
 #
 # GET /
 # operationId: GET_DescribeListenerCertificates
-export def "api get-listener-certificates" [
+export def "get-describe-listener-certificates" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1424,7 +1424,7 @@ export def "api get-listener-certificates" [
 #
 # POST /
 # operationId: POST_DescribeListenerCertificates
-export def "api create-get-listener-certificates" [
+export def "post-describe-listener-certificates" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1474,7 +1474,7 @@ export def "api create-get-listener-certificates" [
 #
 # GET /
 # operationId: GET_DescribeListeners
-export def "api get-list-eners" [
+export def "get-describe-listeners" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1524,7 +1524,7 @@ export def "api get-list-eners" [
 #
 # POST /
 # operationId: POST_DescribeListeners
-export def "api create-get-list-eners" [
+export def "post-describe-listeners" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1575,7 +1575,7 @@ export def "api create-get-list-eners" [
 #
 # GET /
 # operationId: GET_DescribeLoadBalancerAttributes
-export def "api get-load-balancer-attributes" [
+export def "get-describe-load-balancer-attributes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1622,7 +1622,7 @@ export def "api get-load-balancer-attributes" [
 #
 # POST /
 # operationId: POST_DescribeLoadBalancerAttributes
-export def "api create-get-load-balancer-attributes" [
+export def "post-describe-load-balancer-attributes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1672,7 +1672,7 @@ export def "api create-get-load-balancer-attributes" [
 #
 # GET /
 # operationId: GET_DescribeLoadBalancers
-export def "api get-load-balancers" [
+export def "get-describe-load-balancers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1722,7 +1722,7 @@ export def "api get-load-balancers" [
 #
 # POST /
 # operationId: POST_DescribeLoadBalancers
-export def "api create-get-load-balancers" [
+export def "post-describe-load-balancers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1773,7 +1773,7 @@ export def "api create-get-load-balancers" [
 #
 # GET /
 # operationId: GET_DescribeRules
-export def "api get-rules" [
+export def "get-describe-rules" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1823,7 +1823,7 @@ export def "api get-rules" [
 #
 # POST /
 # operationId: POST_DescribeRules
-export def "api create-get-rules" [
+export def "post-describe-rules" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1873,7 +1873,7 @@ export def "api create-get-rules" [
 #
 # GET /
 # operationId: GET_DescribeSSLPolicies
-export def "api get-ssl-policies" [
+export def "get-describe-ssl-policies" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1923,7 +1923,7 @@ export def "api get-ssl-policies" [
 #
 # POST /
 # operationId: POST_DescribeSSLPolicies
-export def "api create-get-ssl-policies" [
+export def "post-describe-ssl-policies" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1973,7 +1973,7 @@ export def "api create-get-ssl-policies" [
 #
 # GET /
 # operationId: GET_DescribeTags
-export def "api get-tags" [
+export def "get-describe-tags" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2020,7 +2020,7 @@ export def "api get-tags" [
 #
 # POST /
 # operationId: POST_DescribeTags
-export def "api create-get-tags" [
+export def "post-describe-tags" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2070,7 +2070,7 @@ export def "api create-get-tags" [
 #
 # GET /
 # operationId: GET_DescribeTargetGroupAttributes
-export def "api get-target-group-attributes" [
+export def "get-describe-target-group-attributes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2117,7 +2117,7 @@ export def "api get-target-group-attributes" [
 #
 # POST /
 # operationId: POST_DescribeTargetGroupAttributes
-export def "api create-get-target-group-attributes" [
+export def "post-describe-target-group-attributes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2167,7 +2167,7 @@ export def "api create-get-target-group-attributes" [
 #
 # GET /
 # operationId: GET_DescribeTargetGroups
-export def "api get-target-groups" [
+export def "get-describe-target-groups" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2218,7 +2218,7 @@ export def "api get-target-groups" [
 #
 # POST /
 # operationId: POST_DescribeTargetGroups
-export def "api create-get-target-groups" [
+export def "post-describe-target-groups" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2269,7 +2269,7 @@ export def "api create-get-target-groups" [
 #
 # GET /
 # operationId: GET_DescribeTargetHealth
-export def "api get-target-health" [
+export def "get-describe-target-health" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2317,7 +2317,7 @@ export def "api get-target-health" [
 #
 # POST /
 # operationId: POST_DescribeTargetHealth
-export def "api create-get-target-health" [
+export def "post-describe-target-health" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2367,7 +2367,7 @@ export def "api create-get-target-health" [
 #
 # GET /
 # operationId: GET_ModifyListener
-export def "api get-modify-listener" [
+export def "get-modify-listener" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2420,7 +2420,7 @@ export def "api get-modify-listener" [
 #
 # POST /
 # operationId: POST_ModifyListener
-export def "api create-modify-listener" [
+export def "post-modify-listener" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2470,7 +2470,7 @@ export def "api create-modify-listener" [
 #
 # GET /
 # operationId: GET_ModifyLoadBalancerAttributes
-export def "api get-modify-load-balancer-attributes" [
+export def "get-modify-load-balancer-attributes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2518,7 +2518,7 @@ export def "api get-modify-load-balancer-attributes" [
 #
 # POST /
 # operationId: POST_ModifyLoadBalancerAttributes
-export def "api create-modify-load-balancer-attributes" [
+export def "post-modify-load-balancer-attributes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2568,7 +2568,7 @@ export def "api create-modify-load-balancer-attributes" [
 #
 # GET /
 # operationId: GET_ModifyRule
-export def "api get-modify-rule" [
+export def "get-modify-rule" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2617,7 +2617,7 @@ export def "api get-modify-rule" [
 #
 # POST /
 # operationId: POST_ModifyRule
-export def "api create-modify-rule" [
+export def "post-modify-rule" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2667,7 +2667,7 @@ export def "api create-modify-rule" [
 #
 # GET /
 # operationId: GET_ModifyTargetGroup
-export def "api get-modify-target-group" [
+export def "get-modify-target-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2723,7 +2723,7 @@ export def "api get-modify-target-group" [
 #
 # POST /
 # operationId: POST_ModifyTargetGroup
-export def "api create-modify-target-group" [
+export def "post-modify-target-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2773,7 +2773,7 @@ export def "api create-modify-target-group" [
 #
 # GET /
 # operationId: GET_ModifyTargetGroupAttributes
-export def "api get-modify-target-group-attributes" [
+export def "get-modify-target-group-attributes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2821,7 +2821,7 @@ export def "api get-modify-target-group-attributes" [
 #
 # POST /
 # operationId: POST_ModifyTargetGroupAttributes
-export def "api create-modify-target-group-attributes" [
+export def "post-modify-target-group-attributes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2871,7 +2871,7 @@ export def "api create-modify-target-group-attributes" [
 #
 # GET /
 # operationId: GET_RegisterTargets
-export def "api get-create-targets" [
+export def "get-register-targets" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2919,7 +2919,7 @@ export def "api get-create-targets" [
 #
 # POST /
 # operationId: POST_RegisterTargets
-export def "api create-targets" [
+export def "post-register-targets" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2969,7 +2969,7 @@ export def "api create-targets" [
 #
 # GET /
 # operationId: GET_RemoveListenerCertificates
-export def "api get-delete-listener-certificates" [
+export def "get-remove-listener-certificates" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3017,7 +3017,7 @@ export def "api get-delete-listener-certificates" [
 #
 # POST /
 # operationId: POST_RemoveListenerCertificates
-export def "api create-delete-listener-certificates" [
+export def "post-remove-listener-certificates" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3067,7 +3067,7 @@ export def "api create-delete-listener-certificates" [
 #
 # GET /
 # operationId: GET_RemoveTags
-export def "api get-delete-tags" [
+export def "get-remove-tags" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3115,7 +3115,7 @@ export def "api get-delete-tags" [
 #
 # POST /
 # operationId: POST_RemoveTags
-export def "api create-delete-tags" [
+export def "post-remove-tags" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3165,7 +3165,7 @@ export def "api create-delete-tags" [
 #
 # GET /
 # operationId: GET_SetIpAddressType
-export def "api get-update-ip-address-type" [
+export def "get-set-ip-address-type" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3213,7 +3213,7 @@ export def "api get-update-ip-address-type" [
 #
 # POST /
 # operationId: POST_SetIpAddressType
-export def "api create-update-ip-address-type" [
+export def "post-set-ip-address-type" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3263,7 +3263,7 @@ export def "api create-update-ip-address-type" [
 #
 # GET /
 # operationId: GET_SetRulePriorities
-export def "api get-update-rule-priorities" [
+export def "get-set-rule-priorities" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3310,7 +3310,7 @@ export def "api get-update-rule-priorities" [
 #
 # POST /
 # operationId: POST_SetRulePriorities
-export def "api create-update-rule-priorities" [
+export def "post-set-rule-priorities" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3360,7 +3360,7 @@ export def "api create-update-rule-priorities" [
 #
 # GET /
 # operationId: GET_SetSecurityGroups
-export def "api get-update-security-groups" [
+export def "get-set-security-groups" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3408,7 +3408,7 @@ export def "api get-update-security-groups" [
 #
 # POST /
 # operationId: POST_SetSecurityGroups
-export def "api create-update-security-groups" [
+export def "post-set-security-groups" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3458,7 +3458,7 @@ export def "api create-update-security-groups" [
 #
 # GET /
 # operationId: GET_SetSubnets
-export def "api get-update-subnets" [
+export def "get-set-subnets" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3508,7 +3508,7 @@ export def "api get-update-subnets" [
 #
 # POST /
 # operationId: POST_SetSubnets
-export def "api create-update-subnets" [
+export def "post-set-subnets" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

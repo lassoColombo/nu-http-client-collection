@@ -129,7 +129,7 @@ def sub-account-restriction-time-completer [] { ["0" "1"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "campagne get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-campagne" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -153,7 +153,7 @@ export def commands []: nothing -> table {
 #
 # GET /campagne
 # operationId: getCampagne
-export def "campagne get" [
+export def "get-campagne" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -193,7 +193,7 @@ export def "campagne get" [
 #
 # POST /comptage
 # operationId: comptage
-export def "comptage create" [
+export def "comptage" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -243,7 +243,7 @@ export def "comptage create" [
 #
 # GET /credit
 # operationId: getCredit
-export def "credit get" [
+export def "get-credit" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -280,7 +280,7 @@ export def "credit get" [
 #
 # POST /dellistenoire
 # operationId: delListeNoire
-export def "dellistenoire delete-liste-noire" [
+export def "del-liste-noire" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -318,7 +318,7 @@ export def "dellistenoire delete-liste-noire" [
 #
 # POST /getlistenoire
 # operationId: getListeNoire
-export def "get-listenoire get-liste-noire" [
+export def "get-liste-noire" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -355,7 +355,7 @@ export def "get-listenoire get-liste-noire" [
 #
 # POST /hlr
 # operationId: getHlr
-export def "hlr get" [
+export def "get-hlr" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -395,7 +395,7 @@ export def "hlr get" [
 #
 # POST /repertoire
 # operationId: repertoireCrea
-export def "repertoire create-crea" [
+export def "repertoire-crea" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -435,7 +435,7 @@ export def "repertoire create-crea" [
 #
 # PUT /repertoire
 # operationId: repertoire
-export def "repertoire update" [
+export def "repertoire" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -503,7 +503,7 @@ export def "repertoire update" [
 #
 # POST /setlistenoire
 # operationId: setListeNoire
-export def "setlistenoire update-liste-noire" [
+export def "set-liste-noire" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -541,7 +541,7 @@ export def "setlistenoire update-liste-noire" [
 #
 # POST /shortlink
 # operationId: addShortlink
-export def "shortlink create" [
+export def "add-shortlink" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -581,7 +581,7 @@ export def "shortlink create" [
 #
 # POST /sms
 # operationId: sendSms
-export def "sms send" [
+export def "send-sms" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -630,7 +630,7 @@ export def "sms send" [
 #
 # POST /smsmulti
 # operationId: sendSmsMulti
-export def "smsmulti send-sms-multi" [
+export def "send-sms-multi" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -680,7 +680,7 @@ export def "smsmulti send-sms-multi" [
 #
 # POST /subaccount
 # operationId: subaccountAdd
-export def "subaccount create" [
+export def "subaccount-add" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -722,7 +722,7 @@ export def "subaccount create" [
 #
 # PUT /subaccount
 # operationId: subaccountEdit
-export def "subaccount update-edit" [
+export def "subaccount-edit" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

@@ -110,7 +110,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resource-groups-providers-microsoft-sql-servers-encryption-protector list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "encryption-protectors-list-by-server" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -134,7 +134,7 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/servers/{serverName}/encryptionProtector
 # operationId: EncryptionProtectors_ListByServer
-export def "subscriptions-resource-groups-providers-microsoft-sql-servers-encryption-protector list" [
+export def "encryption-protectors-list-by-server" [
   subscription_id: string
   resource_group_name: string
   server_name: string
@@ -176,7 +176,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-servers-encryp
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/servers/{serverName}/encryptionProtector/{encryptionProtectorName}
 # operationId: EncryptionProtectors_Get
-export def "subscriptions-resource-groups-providers-microsoft-sql-servers-encryption-protector get" [
+export def "encryption-protectors-get" [
   subscription_id: string
   resource_group_name: string
   server_name: string
@@ -221,7 +221,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-servers-encryp
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/servers/{serverName}/encryptionProtector/{encryptionProtectorName}
 # operationId: EncryptionProtectors_CreateOrUpdate
 # --properties shape: {serverKeyName?: string, serverKeyType: "ServiceManaged"|"AzureKeyVault"}
-export def "subscriptions-resource-groups-providers-microsoft-sql-servers-encryption-protector create-or-update" [
+export def "encryption-protectors-create-or-update" [
   subscription_id: string
   resource_group_name: string
   server_name: string
@@ -269,7 +269,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-servers-encryp
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/servers/{serverName}/encryptionProtector/{encryptionProtectorName}/revalidate
 # operationId: EncryptionProtectors_Revalidate
-export def "subscriptions-resource-groups-providers-microsoft-sql-servers-encryption-protector-revalidate create" [
+export def "encryption-protectors-revalidate" [
   subscription_id: string
   resource_group_name: string
   server_name: string

@@ -124,7 +124,7 @@ def expand-completer [] { ["instanceView"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-hybrid-compute-operations list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "operations-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -148,7 +148,7 @@ export def commands []: nothing -> table {
 #
 # GET /providers/Microsoft.HybridCompute/operations
 # operationId: Operations_List
-export def "providers-microsoft-hybrid-compute-operations list" [
+export def "operations-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -184,7 +184,7 @@ export def "providers-microsoft-hybrid-compute-operations list" [
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.HybridCompute/machines
 # operationId: Machines_ListBySubscription
-export def "subscriptions-providers-microsoft-hybrid-compute-machines list" [
+export def "machines-list-by-subscription" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -222,7 +222,7 @@ export def "subscriptions-providers-microsoft-hybrid-compute-machines list" [
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.HybridCompute/machines
 # operationId: Machines_ListByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-hybrid-compute-machines list" [
+export def "machines-list-by-resource-group" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -262,7 +262,7 @@ export def "subscriptions-resource-groups-providers-microsoft-hybrid-compute-mac
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.HybridCompute/machines/{name}
 # operationId: Machines_Delete
-export def "subscriptions-resource-groups-providers-microsoft-hybrid-compute-machines delete" [
+export def "machines-delete" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -304,7 +304,7 @@ export def "subscriptions-resource-groups-providers-microsoft-hybrid-compute-mac
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.HybridCompute/machines/{name}
 # operationId: Machines_Get
-export def "subscriptions-resource-groups-providers-microsoft-hybrid-compute-machines get" [
+export def "machines-get" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -347,7 +347,7 @@ export def "subscriptions-resource-groups-providers-microsoft-hybrid-compute-mac
 #
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.HybridCompute/machines/{name}
 # operationId: Machines_Update
-export def "subscriptions-resource-groups-providers-microsoft-hybrid-compute-machines update" [
+export def "machines-update" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -395,7 +395,7 @@ export def "subscriptions-resource-groups-providers-microsoft-hybrid-compute-mac
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.HybridCompute/machines/{name}
 # operationId: Machines_CreateOrUpdate
-export def "subscriptions-resource-groups-providers-microsoft-hybrid-compute-machines create-or-update" [
+export def "machines-create-or-update" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -444,7 +444,7 @@ export def "subscriptions-resource-groups-providers-microsoft-hybrid-compute-mac
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.HybridCompute/machines/{name}/extensions
 # operationId: MachineExtensions_List
-export def "subscriptions-resource-groups-providers-microsoft-hybrid-compute-machines-extensions list" [
+export def "machine-extensions-list" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -487,7 +487,7 @@ export def "subscriptions-resource-groups-providers-microsoft-hybrid-compute-mac
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.HybridCompute/machines/{name}/extensions/{extensionName}
 # operationId: MachineExtensions_Delete
-export def "subscriptions-resource-groups-providers-microsoft-hybrid-compute-machines-extensions delete" [
+export def "machine-extensions-delete" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -531,7 +531,7 @@ export def "subscriptions-resource-groups-providers-microsoft-hybrid-compute-mac
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.HybridCompute/machines/{name}/extensions/{extensionName}
 # operationId: MachineExtensions_Get
-export def "subscriptions-resource-groups-providers-microsoft-hybrid-compute-machines-extensions get" [
+export def "machine-extensions-get" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -575,7 +575,7 @@ export def "subscriptions-resource-groups-providers-microsoft-hybrid-compute-mac
 #
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.HybridCompute/machines/{name}/extensions/{extensionName}
 # operationId: MachineExtensions_Update
-export def "subscriptions-resource-groups-providers-microsoft-hybrid-compute-machines-extensions update" [
+export def "machine-extensions-update" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -624,7 +624,7 @@ export def "subscriptions-resource-groups-providers-microsoft-hybrid-compute-mac
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.HybridCompute/machines/{name}/extensions/{extensionName}
 # operationId: MachineExtensions_CreateOrUpdate
-export def "subscriptions-resource-groups-providers-microsoft-hybrid-compute-machines-extensions create-or-update" [
+export def "machine-extensions-create-or-update" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -674,7 +674,7 @@ export def "subscriptions-resource-groups-providers-microsoft-hybrid-compute-mac
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.HybridCompute/machines/{name}/reconnect
 # operationId: Machines_Reconnect
-export def "subscriptions-resource-groups-providers-microsoft-hybrid-compute-machines-reconnect create" [
+export def "machines-reconnect" [
   subscription_id: string
   resource_group_name: string
   name: string

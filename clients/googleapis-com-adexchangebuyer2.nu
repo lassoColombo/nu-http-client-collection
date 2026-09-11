@@ -140,7 +140,7 @@ def time-series-granularity-completer [] { ["DAILY" "HOURLY" "TIME_SERIES_GRANUL
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "v2beta1-accounts-clients list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "adexchangebuyer2-accounts-clients-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -164,7 +164,7 @@ export def commands []: nothing -> table {
 #
 # GET /v2beta1/accounts/{accountId}/clients
 # operationId: adexchangebuyer2.accounts.clients.list
-export def "v2beta1-accounts-clients list" [
+export def "adexchangebuyer2-accounts-clients-list" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -215,7 +215,7 @@ export def "v2beta1-accounts-clients list" [
 #
 # POST /v2beta1/accounts/{accountId}/clients
 # operationId: adexchangebuyer2.accounts.clients.create
-export def "v2beta1-accounts-clients create" [
+export def "adexchangebuyer2-accounts-clients-create" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -275,7 +275,7 @@ export def "v2beta1-accounts-clients create" [
 #
 # GET /v2beta1/accounts/{accountId}/clients/{clientAccountId}
 # operationId: adexchangebuyer2.accounts.clients.get
-export def "v2beta1-accounts-clients get" [
+export def "adexchangebuyer2-accounts-clients-get" [
   account_id: string
   client_account_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -325,7 +325,7 @@ export def "v2beta1-accounts-clients get" [
 #
 # PUT /v2beta1/accounts/{accountId}/clients/{clientAccountId}
 # operationId: adexchangebuyer2.accounts.clients.update
-export def "v2beta1-accounts-clients update" [
+export def "adexchangebuyer2-accounts-clients-update" [
   account_id: string
   client_account_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -387,7 +387,7 @@ export def "v2beta1-accounts-clients update" [
 #
 # GET /v2beta1/accounts/{accountId}/clients/{clientAccountId}/invitations
 # operationId: adexchangebuyer2.accounts.clients.invitations.list
-export def "v2beta1-accounts-clients-invitations list" [
+export def "adexchangebuyer2-accounts-clients-invitations-list" [
   account_id: string
   client_account_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -439,7 +439,7 @@ export def "v2beta1-accounts-clients-invitations list" [
 #
 # POST /v2beta1/accounts/{accountId}/clients/{clientAccountId}/invitations
 # operationId: adexchangebuyer2.accounts.clients.invitations.create
-export def "v2beta1-accounts-clients-invitations create" [
+export def "adexchangebuyer2-accounts-clients-invitations-create" [
   account_id: string
   client_account_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -495,7 +495,7 @@ export def "v2beta1-accounts-clients-invitations create" [
 #
 # GET /v2beta1/accounts/{accountId}/clients/{clientAccountId}/invitations/{invitationId}
 # operationId: adexchangebuyer2.accounts.clients.invitations.get
-export def "v2beta1-accounts-clients-invitations get" [
+export def "adexchangebuyer2-accounts-clients-invitations-get" [
   account_id: string
   client_account_id: string
   invitation_id: string
@@ -547,7 +547,7 @@ export def "v2beta1-accounts-clients-invitations get" [
 #
 # GET /v2beta1/accounts/{accountId}/clients/{clientAccountId}/users
 # operationId: adexchangebuyer2.accounts.clients.users.list
-export def "v2beta1-accounts-clients-users list" [
+export def "adexchangebuyer2-accounts-clients-users-list" [
   account_id: string
   client_account_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -599,7 +599,7 @@ export def "v2beta1-accounts-clients-users list" [
 #
 # GET /v2beta1/accounts/{accountId}/clients/{clientAccountId}/users/{userId}
 # operationId: adexchangebuyer2.accounts.clients.users.get
-export def "v2beta1-accounts-clients-users get" [
+export def "adexchangebuyer2-accounts-clients-users-get" [
   account_id: string
   client_account_id: string
   user_id: string
@@ -651,7 +651,7 @@ export def "v2beta1-accounts-clients-users get" [
 #
 # PUT /v2beta1/accounts/{accountId}/clients/{clientAccountId}/users/{userId}
 # operationId: adexchangebuyer2.accounts.clients.users.update
-export def "v2beta1-accounts-clients-users update" [
+export def "adexchangebuyer2-accounts-clients-users-update" [
   account_id: string
   client_account_id: string
   user_id: string
@@ -710,7 +710,7 @@ export def "v2beta1-accounts-clients-users update" [
 #
 # GET /v2beta1/accounts/{accountId}/creatives
 # operationId: adexchangebuyer2.accounts.creatives.list
-export def "v2beta1-accounts-creatives list" [
+export def "adexchangebuyer2-accounts-creatives-list" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -767,7 +767,7 @@ export def "v2beta1-accounts-creatives list" [
 # --native shape: {advertiserName?: string, appIcon?: record, body?: string, callToAction?: string, clickLinkUrl?: string, clickTrackingUrl?: string, headline?: string, image?: record, logo?: record, priceDisplayText?: string, starRating?: float, storeUrl?: string, videoUrl?: string}
 # --servingRestrictions item shape: {contexts?: list, disapproval?: record, disapprovalReasons?: list, status?: "STATUS_UNSPECIFIED"|"DISAPPROVAL"|"PENDING_REVIEW"}
 # --video shape: {videoUrl?: string, videoVastXml?: string}
-export def "v2beta1-accounts-creatives create" [
+export def "adexchangebuyer2-accounts-creatives-create" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -845,7 +845,7 @@ export def "v2beta1-accounts-creatives create" [
 #
 # GET /v2beta1/accounts/{accountId}/creatives/{creativeId}
 # operationId: adexchangebuyer2.accounts.creatives.get
-export def "v2beta1-accounts-creatives get" [
+export def "adexchangebuyer2-accounts-creatives-get" [
   account_id: string
   creative_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -901,7 +901,7 @@ export def "v2beta1-accounts-creatives get" [
 # --native shape: {advertiserName?: string, appIcon?: record, body?: string, callToAction?: string, clickLinkUrl?: string, clickTrackingUrl?: string, headline?: string, image?: record, logo?: record, priceDisplayText?: string, starRating?: float, storeUrl?: string, videoUrl?: string}
 # --servingRestrictions item shape: {contexts?: list, disapproval?: record, disapprovalReasons?: list, status?: "STATUS_UNSPECIFIED"|"DISAPPROVAL"|"PENDING_REVIEW"}
 # --video shape: {videoUrl?: string, videoVastXml?: string}
-export def "v2beta1-accounts-creatives update" [
+export def "adexchangebuyer2-accounts-creatives-update" [
   account_id: string
   creative_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -980,7 +980,7 @@ export def "v2beta1-accounts-creatives update" [
 #
 # GET /v2beta1/accounts/{accountId}/creatives/{creativeId}/dealAssociations
 # operationId: adexchangebuyer2.accounts.creatives.dealAssociations.list
-export def "v2beta1-accounts-creatives-deal-associations list" [
+export def "adexchangebuyer2-accounts-creatives-deal-associations-list" [
   account_id: string
   creative_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1034,7 +1034,7 @@ export def "v2beta1-accounts-creatives-deal-associations list" [
 # POST /v2beta1/accounts/{accountId}/creatives/{creativeId}/dealAssociations:add
 # operationId: adexchangebuyer2.accounts.creatives.dealAssociations.add
 # --association shape: {accountId?: string, creativeId?: string, dealsId?: string}
-export def "v2beta1-accounts-creatives-deal-associations-add create" [
+export def "adexchangebuyer2-accounts-creatives-deal-associations-add" [
   account_id: string
   creative_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1089,7 +1089,7 @@ export def "v2beta1-accounts-creatives-deal-associations-add create" [
 # POST /v2beta1/accounts/{accountId}/creatives/{creativeId}/dealAssociations:remove
 # operationId: adexchangebuyer2.accounts.creatives.dealAssociations.remove
 # --association shape: {accountId?: string, creativeId?: string, dealsId?: string}
-export def "v2beta1-accounts-creatives-deal-associations-remove delete" [
+export def "adexchangebuyer2-accounts-creatives-deal-associations-remove" [
   account_id: string
   creative_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1143,7 +1143,7 @@ export def "v2beta1-accounts-creatives-deal-associations-remove delete" [
 #
 # POST /v2beta1/accounts/{accountId}/creatives/{creativeId}:stopWatching
 # operationId: adexchangebuyer2.accounts.creatives.stopWatching
-export def "v2beta1-accounts-creatives stop-watching" [
+export def "adexchangebuyer2-accounts-creatives-stop-watching" [
   account_id: string
   creative_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1197,7 +1197,7 @@ export def "v2beta1-accounts-creatives stop-watching" [
 #
 # POST /v2beta1/accounts/{accountId}/creatives/{creativeId}:watch
 # operationId: adexchangebuyer2.accounts.creatives.watch
-export def "v2beta1-accounts-creatives watch" [
+export def "adexchangebuyer2-accounts-creatives-watch" [
   account_id: string
   creative_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1251,7 +1251,7 @@ export def "v2beta1-accounts-creatives watch" [
 #
 # GET /v2beta1/accounts/{accountId}/finalizedProposals
 # operationId: adexchangebuyer2.accounts.finalizedProposals.list
-export def "v2beta1-accounts-finalized-proposals list" [
+export def "adexchangebuyer2-accounts-finalized-proposals-list" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1303,7 +1303,7 @@ export def "v2beta1-accounts-finalized-proposals list" [
 #
 # POST /v2beta1/accounts/{accountId}/finalizedProposals/{proposalId}:pause
 # operationId: adexchangebuyer2.accounts.finalizedProposals.pause
-export def "v2beta1-accounts-finalized-proposals pause" [
+export def "adexchangebuyer2-accounts-finalized-proposals-pause" [
   account_id: string
   proposal_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1358,7 +1358,7 @@ export def "v2beta1-accounts-finalized-proposals pause" [
 #
 # POST /v2beta1/accounts/{accountId}/finalizedProposals/{proposalId}:resume
 # operationId: adexchangebuyer2.accounts.finalizedProposals.resume
-export def "v2beta1-accounts-finalized-proposals create-resume" [
+export def "adexchangebuyer2-accounts-finalized-proposals-resume" [
   account_id: string
   proposal_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1412,7 +1412,7 @@ export def "v2beta1-accounts-finalized-proposals create-resume" [
 #
 # GET /v2beta1/accounts/{accountId}/products
 # operationId: adexchangebuyer2.accounts.products.list
-export def "v2beta1-accounts-products list" [
+export def "adexchangebuyer2-accounts-products-list" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1463,7 +1463,7 @@ export def "v2beta1-accounts-products list" [
 #
 # GET /v2beta1/accounts/{accountId}/products/{productId}
 # operationId: adexchangebuyer2.accounts.products.get
-export def "v2beta1-accounts-products get" [
+export def "adexchangebuyer2-accounts-products-get" [
   account_id: string
   product_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1513,7 +1513,7 @@ export def "v2beta1-accounts-products get" [
 #
 # GET /v2beta1/accounts/{accountId}/proposals
 # operationId: adexchangebuyer2.accounts.proposals.list
-export def "v2beta1-accounts-proposals list" [
+export def "adexchangebuyer2-accounts-proposals-list" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1573,7 +1573,7 @@ export def "v2beta1-accounts-proposals list" [
 # --notes item shape: {note?: string}
 # --seller shape: {accountId?: string}
 # --sellerContacts item shape: {email?: string, name?: string}
-export def "v2beta1-accounts-proposals create" [
+export def "adexchangebuyer2-accounts-proposals-create" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1631,7 +1631,7 @@ export def "v2beta1-accounts-proposals create" [
 #
 # GET /v2beta1/accounts/{accountId}/proposals/{proposalId}
 # operationId: adexchangebuyer2.accounts.proposals.get
-export def "v2beta1-accounts-proposals get" [
+export def "adexchangebuyer2-accounts-proposals-get" [
   account_id: string
   proposal_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1689,7 +1689,7 @@ export def "v2beta1-accounts-proposals get" [
 # --notes item shape: {note?: string}
 # --seller shape: {accountId?: string}
 # --sellerContacts item shape: {email?: string, name?: string}
-export def "v2beta1-accounts-proposals update" [
+export def "adexchangebuyer2-accounts-proposals-update" [
   account_id: string
   proposal_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1749,7 +1749,7 @@ export def "v2beta1-accounts-proposals update" [
 #
 # POST /v2beta1/accounts/{accountId}/proposals/{proposalId}:accept
 # operationId: adexchangebuyer2.accounts.proposals.accept
-export def "v2beta1-accounts-proposals create-accept" [
+export def "adexchangebuyer2-accounts-proposals-accept" [
   account_id: string
   proposal_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1804,7 +1804,7 @@ export def "v2beta1-accounts-proposals create-accept" [
 # POST /v2beta1/accounts/{accountId}/proposals/{proposalId}:addNote
 # operationId: adexchangebuyer2.accounts.proposals.addNote
 # --note shape: {note?: string}
-export def "v2beta1-accounts-proposals create-note" [
+export def "adexchangebuyer2-accounts-proposals-add-note" [
   account_id: string
   proposal_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1858,7 +1858,7 @@ export def "v2beta1-accounts-proposals create-note" [
 #
 # POST /v2beta1/accounts/{accountId}/proposals/{proposalId}:cancelNegotiation
 # operationId: adexchangebuyer2.accounts.proposals.cancelNegotiation
-export def "v2beta1-accounts-proposals cancel-negotiation" [
+export def "adexchangebuyer2-accounts-proposals-cancel-negotiation" [
   account_id: string
   proposal_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1912,7 +1912,7 @@ export def "v2beta1-accounts-proposals cancel-negotiation" [
 #
 # POST /v2beta1/accounts/{accountId}/proposals/{proposalId}:completeSetup
 # operationId: adexchangebuyer2.accounts.proposals.completeSetup
-export def "v2beta1-accounts-proposals complete-setup" [
+export def "adexchangebuyer2-accounts-proposals-complete-setup" [
   account_id: string
   proposal_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1966,7 +1966,7 @@ export def "v2beta1-accounts-proposals complete-setup" [
 #
 # POST /v2beta1/accounts/{accountId}/proposals/{proposalId}:pause
 # operationId: adexchangebuyer2.accounts.proposals.pause
-export def "v2beta1-accounts-proposals pause" [
+export def "adexchangebuyer2-accounts-proposals-pause" [
   account_id: string
   proposal_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2020,7 +2020,7 @@ export def "v2beta1-accounts-proposals pause" [
 #
 # POST /v2beta1/accounts/{accountId}/proposals/{proposalId}:resume
 # operationId: adexchangebuyer2.accounts.proposals.resume
-export def "v2beta1-accounts-proposals create-resume" [
+export def "adexchangebuyer2-accounts-proposals-resume" [
   account_id: string
   proposal_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2074,7 +2074,7 @@ export def "v2beta1-accounts-proposals create-resume" [
 #
 # GET /v2beta1/accounts/{accountId}/publisherProfiles
 # operationId: adexchangebuyer2.accounts.publisherProfiles.list
-export def "v2beta1-accounts-publisher-profiles list" [
+export def "adexchangebuyer2-accounts-publisher-profiles-list" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2124,7 +2124,7 @@ export def "v2beta1-accounts-publisher-profiles list" [
 #
 # GET /v2beta1/accounts/{accountId}/publisherProfiles/{publisherProfileId}
 # operationId: adexchangebuyer2.accounts.publisherProfiles.get
-export def "v2beta1-accounts-publisher-profiles get" [
+export def "adexchangebuyer2-accounts-publisher-profiles-get" [
   account_id: string
   publisher_profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2174,7 +2174,7 @@ export def "v2beta1-accounts-publisher-profiles get" [
 #
 # GET /v2beta1/{filterSetName}/bidMetrics
 # operationId: adexchangebuyer2.bidders.filterSets.bidMetrics.list
-export def "v2beta1-bid-metrics list" [
+export def "adexchangebuyer2-bidders-filter-sets-bid-metrics-list" [
   filter_set_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2224,7 +2224,7 @@ export def "v2beta1-bid-metrics list" [
 #
 # GET /v2beta1/{filterSetName}/bidResponseErrors
 # operationId: adexchangebuyer2.bidders.filterSets.bidResponseErrors.list
-export def "v2beta1-bid-response-errors list" [
+export def "adexchangebuyer2-bidders-filter-sets-bid-response-errors-list" [
   filter_set_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2274,7 +2274,7 @@ export def "v2beta1-bid-response-errors list" [
 #
 # GET /v2beta1/{filterSetName}/bidResponsesWithoutBids
 # operationId: adexchangebuyer2.bidders.filterSets.bidResponsesWithoutBids.list
-export def "v2beta1-bid-responses-without-bids list" [
+export def "adexchangebuyer2-bidders-filter-sets-bid-responses-without-bids-list" [
   filter_set_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2324,7 +2324,7 @@ export def "v2beta1-bid-responses-without-bids list" [
 #
 # GET /v2beta1/{filterSetName}/filteredBidRequests
 # operationId: adexchangebuyer2.bidders.filterSets.filteredBidRequests.list
-export def "v2beta1-filtered-bid-requests list" [
+export def "adexchangebuyer2-bidders-filter-sets-filtered-bid-requests-list" [
   filter_set_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2374,7 +2374,7 @@ export def "v2beta1-filtered-bid-requests list" [
 #
 # GET /v2beta1/{filterSetName}/filteredBids
 # operationId: adexchangebuyer2.bidders.filterSets.filteredBids.list
-export def "v2beta1-filtered-bids list" [
+export def "adexchangebuyer2-bidders-filter-sets-filtered-bids-list" [
   filter_set_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2424,7 +2424,7 @@ export def "v2beta1-filtered-bids list" [
 #
 # GET /v2beta1/{filterSetName}/filteredBids/{creativeStatusId}/creatives
 # operationId: adexchangebuyer2.bidders.filterSets.filteredBids.creatives.list
-export def "v2beta1-filtered-bids-creatives list" [
+export def "adexchangebuyer2-bidders-filter-sets-filtered-bids-creatives-list" [
   filter_set_name: string
   creative_status_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -2476,7 +2476,7 @@ export def "v2beta1-filtered-bids-creatives list" [
 #
 # GET /v2beta1/{filterSetName}/filteredBids/{creativeStatusId}/details
 # operationId: adexchangebuyer2.bidders.filterSets.filteredBids.details.list
-export def "v2beta1-filtered-bids-details list" [
+export def "adexchangebuyer2-bidders-filter-sets-filtered-bids-details-list" [
   filter_set_name: string
   creative_status_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -2528,7 +2528,7 @@ export def "v2beta1-filtered-bids-details list" [
 #
 # GET /v2beta1/{filterSetName}/impressionMetrics
 # operationId: adexchangebuyer2.bidders.filterSets.impressionMetrics.list
-export def "v2beta1-impression-metrics list" [
+export def "adexchangebuyer2-bidders-filter-sets-impression-metrics-list" [
   filter_set_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2578,7 +2578,7 @@ export def "v2beta1-impression-metrics list" [
 #
 # GET /v2beta1/{filterSetName}/losingBids
 # operationId: adexchangebuyer2.bidders.filterSets.losingBids.list
-export def "v2beta1-losing-bids list" [
+export def "adexchangebuyer2-bidders-filter-sets-losing-bids-list" [
   filter_set_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2628,7 +2628,7 @@ export def "v2beta1-losing-bids list" [
 #
 # GET /v2beta1/{filterSetName}/nonBillableWinningBids
 # operationId: adexchangebuyer2.bidders.filterSets.nonBillableWinningBids.list
-export def "v2beta1-non-billable-winning-bids list" [
+export def "adexchangebuyer2-bidders-filter-sets-non-billable-winning-bids-list" [
   filter_set_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2678,7 +2678,7 @@ export def "v2beta1-non-billable-winning-bids list" [
 #
 # DELETE /v2beta1/{name}
 # operationId: adexchangebuyer2.bidders.filterSets.delete
-export def "v2beta1 delete" [
+export def "adexchangebuyer2-bidders-filter-sets-delete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2726,7 +2726,7 @@ export def "v2beta1 delete" [
 #
 # GET /v2beta1/{name}
 # operationId: adexchangebuyer2.bidders.filterSets.get
-export def "v2beta1 get" [
+export def "adexchangebuyer2-bidders-filter-sets-get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2774,7 +2774,7 @@ export def "v2beta1 get" [
 #
 # GET /v2beta1/{ownerName}/filterSets
 # operationId: adexchangebuyer2.bidders.filterSets.list
-export def "v2beta1-filter-sets list" [
+export def "adexchangebuyer2-bidders-filter-sets-list" [
   owner_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2827,7 +2827,7 @@ export def "v2beta1-filter-sets list" [
 # --absoluteDateRange shape: {endDate?: record, startDate?: record}
 # --realtimeTimeRange shape: {startTimestamp?: string}
 # --relativeDateRange shape: {durationDays?: int, offsetDays?: int}
-export def "v2beta1-filter-sets create" [
+export def "adexchangebuyer2-bidders-filter-sets-create" [
   owner_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)

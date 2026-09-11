@@ -108,7 +108,7 @@ def threat-type-completer [] { ["ACCURACY_TIPS" "API_ABUSE" "APK_MALWARE_OFFLINE
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "encoded-full-hashes get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "safebrowsing-encoded-full-hashes-get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -131,7 +131,7 @@ export def commands []: nothing -> table {
 # GET /v4/encodedFullHashes/{encodedRequest}
 #
 # operationId: safebrowsing.encodedFullHashes.get
-export def "encoded-full-hashes get" [
+export def "safebrowsing-encoded-full-hashes-get" [
   encoded_request: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -180,7 +180,7 @@ export def "encoded-full-hashes get" [
 # GET /v4/encodedUpdates/{encodedRequest}
 #
 # operationId: safebrowsing.encodedUpdates.get
-export def "encoded-updates get" [
+export def "safebrowsing-encoded-updates-get" [
   encoded_request: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -233,7 +233,7 @@ export def "encoded-updates get" [
 # --apiClient shape: {clientId?: string, clientVersion?: string}
 # --client shape: {clientId?: string, clientVersion?: string}
 # --threatInfo shape: {platformTypes?: list<string>, threatEntries?: list, threatEntryTypes?: list<string>, threatTypes?: list<string>}
-export def "full-hashes-find find" [
+export def "safebrowsing-full-hashes-find" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -290,7 +290,7 @@ export def "full-hashes-find find" [
 # --entry shape: {digest?: string, hash?: string, url?: string}
 # --resources item shape: {referrer?: string, remoteIp?: string, type?: "THREAT_SOURCE_TYPE_UNSPECIFIED"|"MATCHING_URL"|"TAB_URL"|"TAB_REDIRECT"|"TAB_RESOURCE", url?: string}
 # --userInfo shape: {regionCode?: string, userId?: string}
-export def "threat-hits create" [
+export def "safebrowsing-threat-hits-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -347,7 +347,7 @@ export def "threat-hits create" [
 # operationId: safebrowsing.threatListUpdates.fetch
 # --client shape: {clientId?: string, clientVersion?: string}
 # --listUpdateRequests item shape: {constraints?: record, platformType?: "PLATFORM_TYPE_UNSPECIFIED"|"WINDOWS"|"LINUX"|"ANDROID"|"OSX"|"IOS"|"ANY_PLATFORM"|"ALL_PLATFORMS"|"CHROME", state?: string, threatEntryType?: "THREAT_ENTRY_TYPE_UNSPECIFIED"|"URL"|"EXECUTABLE"|"IP_RANGE"|"CHROME_EXTENSION"|"FILENAME"|"CERT", ... (1 more fields)}
-export def "threat-list-updates-fetch get" [
+export def "safebrowsing-threat-list-updates-fetch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -398,7 +398,7 @@ export def "threat-list-updates-fetch get" [
 #
 # GET /v4/threatLists
 # operationId: safebrowsing.threatLists.list
-export def "threat-lists list" [
+export def "safebrowsing-threat-lists-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -446,7 +446,7 @@ export def "threat-lists list" [
 # operationId: safebrowsing.threatMatches.find
 # --client shape: {clientId?: string, clientVersion?: string}
 # --threatInfo shape: {platformTypes?: list<string>, threatEntries?: list, threatEntryTypes?: list<string>, threatTypes?: list<string>}
-export def "threat-matches-find find" [
+export def "safebrowsing-threat-matches-find" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

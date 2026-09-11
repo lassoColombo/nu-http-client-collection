@@ -116,7 +116,7 @@ def auth-scheme-completer [] { ["vtexidclientautcookie" "x-vtex-api-appkey" "x-v
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "orders-extendsearch-orders list-orders2" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "list-orders2" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -140,7 +140,7 @@ export def commands []: nothing -> table {
 #
 # POST /api/orders/extendsearch/orders
 # operationId: ListOrders2
-export def "orders-extendsearch-orders list-orders2" [
+export def "list-orders2" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
   --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
@@ -189,7 +189,7 @@ export def "orders-extendsearch-orders list-orders2" [
 #
 # GET /api/orders/pvt/document/{orderId}
 # operationId: GetOrder2
-export def "orders-pvt-document get-order2" [
+export def "get-order2" [
   order_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -231,7 +231,7 @@ export def "orders-pvt-document get-order2" [
 #
 # POST /api/orders/pvt/document/{orderId}/actions/start-handling
 # operationId: StartHandling2
-export def "orders-pvt-document-actions-start-handling start-handling2" [
+export def "start-handling2" [
   order_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -271,7 +271,7 @@ export def "orders-pvt-document-actions-start-handling start-handling2" [
 #
 # POST /api/orders/pvt/document/{orderId}/cancel
 # operationId: CancelOrder2
-export def "orders-pvt-document-cancel cancel-order2" [
+export def "cancel-order2" [
   order_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -318,7 +318,7 @@ export def "orders-pvt-document-cancel cancel-order2" [
 # POST /api/orders/pvt/document/{orderId}/invoices
 # operationId: InvoiceNotification2
 # --items item shape: {itemIndex: string, price: int, quantity: int}
-export def "orders-pvt-document-invoices create-notification2" [
+export def "invoice-notification2" [
   order_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -376,7 +376,7 @@ export def "orders-pvt-document-invoices create-notification2" [
 #
 # POST /api/orders/pvt/document/{orderId}/payment/{paymentId}/notify-payment
 # operationId: SendPaymentNotification2
-export def "orders-pvt-document-payment-notify-payment send-notification2" [
+export def "send-payment-notification2" [
   order_id: string
   payment_id: string
   --base-url(-b): string@base-url-completer # API base URL

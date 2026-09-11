@@ -116,7 +116,7 @@ def auth-scheme-completer [] { ["query-user_key"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "atalk create-bot" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "atalk-bot" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -140,7 +140,7 @@ export def commands []: nothing -> table {
 #
 # POST /atalk/{app_id}/{botname}
 # operationId: atalkBot
-export def "atalk create-bot" [
+export def "atalk-bot" [
   app_id: string
   botname: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -183,7 +183,7 @@ export def "atalk create-bot" [
 #
 # GET /bot/{app_id}
 # operationId: listBots
-export def "bot list" [
+export def "list-bots" [
   app_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -219,7 +219,7 @@ export def "bot list" [
 #
 # DELETE /bot/{app_id}/{botname}
 # operationId: deleteBot
-export def "bot delete" [
+export def "delete-bot" [
   app_id: string
   botname: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -257,7 +257,7 @@ export def "bot delete" [
 #
 # GET /bot/{app_id}/{botname}
 # operationId: listBotFiles
-export def "bot list-files" [
+export def "list-bot-files" [
   app_id: string
   botname: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -297,7 +297,7 @@ export def "bot list-files" [
 #
 # PUT /bot/{app_id}/{botname}
 # operationId: createBot
-export def "bot create" [
+export def "create-bot" [
   app_id: string
   botname: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -335,7 +335,7 @@ export def "bot create" [
 #
 # GET /bot/{app_id}/{botname}/verify
 # operationId: compileBot
-export def "bot-verify get-compile" [
+export def "compile-bot" [
   app_id: string
   botname: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -373,7 +373,7 @@ export def "bot-verify get-compile" [
 #
 # DELETE /bot/{app_id}/{botname}/{file-kind}
 # operationId: deleteBotFile2
-export def "bot delete-file2" [
+export def "delete-bot-file2" [
   app_id: string
   botname: string
   file_kind: string
@@ -413,7 +413,7 @@ export def "bot delete-file2" [
 #
 # GET /bot/{app_id}/{botname}/{file-kind}
 # operationId: getBotFile2
-export def "bot get-file2" [
+export def "get-bot-file2" [
   app_id: string
   botname: string
   file_kind: string
@@ -453,7 +453,7 @@ export def "bot get-file2" [
 #
 # PUT /bot/{app_id}/{botname}/{file-kind}
 # operationId: uploadFile2
-export def "bot upload-file2" [
+export def "upload-file2" [
   app_id: string
   botname: string
   file_kind: string
@@ -497,7 +497,7 @@ export def "bot upload-file2" [
 #
 # DELETE /bot/{app_id}/{botname}/{file-kind}/{filename}
 # operationId: deleteBotFile1
-export def "bot delete-file1" [
+export def "delete-bot-file1" [
   app_id: string
   botname: string
   file_kind: string
@@ -539,7 +539,7 @@ export def "bot delete-file1" [
 #
 # GET /bot/{app_id}/{botname}/{file-kind}/{filename}
 # operationId: getBotFile1
-export def "bot get-file1" [
+export def "get-bot-file1" [
   app_id: string
   botname: string
   file_kind: string
@@ -581,7 +581,7 @@ export def "bot get-file1" [
 #
 # PUT /bot/{app_id}/{botname}/{file-kind}/{filename}
 # operationId: uploadFile1
-export def "bot upload-file1" [
+export def "upload-file1" [
   app_id: string
   botname: string
   file_kind: string
@@ -627,7 +627,7 @@ export def "bot upload-file1" [
 #
 # POST /talk/{app_id}/{botname}
 # operationId: debugBot
-export def "talk create-debug-bot" [
+export def "debug-bot" [
   app_id: string
   botname: string
   --base-url(-b): string@base-url-completer # API base URL

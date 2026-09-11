@@ -124,7 +124,7 @@ def protocol-completer [] { ["Http" "Https"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-providers-microsoft-network-application-gateway-available-request-headers list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "application-gateways-list-available-request-headers" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -148,7 +148,7 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Network/applicationGatewayAvailableRequestHeaders
 # operationId: ApplicationGateways_ListAvailableRequestHeaders
-export def "subscriptions-providers-microsoft-network-application-gateway-available-request-headers list" [
+export def "application-gateways-list-available-request-headers" [
   subscription_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -184,7 +184,7 @@ export def "subscriptions-providers-microsoft-network-application-gateway-availa
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Network/applicationGatewayAvailableResponseHeaders
 # operationId: ApplicationGateways_ListAvailableResponseHeaders
-export def "subscriptions-providers-microsoft-network-application-gateway-available-response-headers list" [
+export def "application-gateways-list-available-response-headers" [
   subscription_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -220,7 +220,7 @@ export def "subscriptions-providers-microsoft-network-application-gateway-availa
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Network/applicationGatewayAvailableServerVariables
 # operationId: ApplicationGateways_ListAvailableServerVariables
-export def "subscriptions-providers-microsoft-network-application-gateway-available-server-variables list" [
+export def "application-gateways-list-available-server-variables" [
   subscription_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -256,7 +256,7 @@ export def "subscriptions-providers-microsoft-network-application-gateway-availa
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Network/applicationGatewayAvailableSslOptions/default
 # operationId: ApplicationGateways_ListAvailableSslOptions
-export def "subscriptions-providers-microsoft-network-application-gateway-available-ssl-options-default list" [
+export def "application-gateways-list-available-ssl-options" [
   subscription_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -292,7 +292,7 @@ export def "subscriptions-providers-microsoft-network-application-gateway-availa
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Network/applicationGatewayAvailableSslOptions/default/predefinedPolicies
 # operationId: ApplicationGateways_ListAvailableSslPredefinedPolicies
-export def "subscriptions-providers-microsoft-network-application-gateway-available-ssl-options-default-predefined-policies list" [
+export def "application-gateways-list-available-ssl-predefined-policies" [
   subscription_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -328,7 +328,7 @@ export def "subscriptions-providers-microsoft-network-application-gateway-availa
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Network/applicationGatewayAvailableSslOptions/default/predefinedPolicies/{predefinedPolicyName}
 # operationId: ApplicationGateways_GetSslPredefinedPolicy
-export def "subscriptions-providers-microsoft-network-application-gateway-available-ssl-options-default-predefined-policies get-policy" [
+export def "application-gateways-get-ssl-predefined-policy" [
   subscription_id: any
   predefined_policy_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -366,7 +366,7 @@ export def "subscriptions-providers-microsoft-network-application-gateway-availa
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Network/applicationGatewayAvailableWafRuleSets
 # operationId: ApplicationGateways_ListAvailableWafRuleSets
-export def "subscriptions-providers-microsoft-network-application-gateway-available-waf-rule-sets list" [
+export def "application-gateways-list-available-waf-rule-sets" [
   subscription_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -402,7 +402,7 @@ export def "subscriptions-providers-microsoft-network-application-gateway-availa
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Network/applicationGateways
 # operationId: ApplicationGateways_ListAll
-export def "subscriptions-providers-microsoft-network-application-gateways list" [
+export def "application-gateways-list-all" [
   subscription_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -438,7 +438,7 @@ export def "subscriptions-providers-microsoft-network-application-gateways list"
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/applicationGateways
 # operationId: ApplicationGateways_List
-export def "subscriptions-resource-groups-providers-microsoft-network-application-gateways list" [
+export def "application-gateways-list" [
   subscription_id: any
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -476,7 +476,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-applicatio
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/applicationGateways/{applicationGatewayName}
 # operationId: ApplicationGateways_Delete
-export def "subscriptions-resource-groups-providers-microsoft-network-application-gateways delete" [
+export def "application-gateways-delete" [
   subscription_id: any
   resource_group_name: string
   application_gateway_name: string
@@ -516,7 +516,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-applicatio
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/applicationGateways/{applicationGatewayName}
 # operationId: ApplicationGateways_Get
-export def "subscriptions-resource-groups-providers-microsoft-network-application-gateways get" [
+export def "application-gateways-get" [
   subscription_id: any
   resource_group_name: string
   application_gateway_name: string
@@ -556,7 +556,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-applicatio
 #
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/applicationGateways/{applicationGatewayName}
 # operationId: ApplicationGateways_UpdateTags
-export def "subscriptions-resource-groups-providers-microsoft-network-application-gateways update-tags" [
+export def "application-gateways-update-tags" [
   subscription_id: any
   resource_group_name: string
   application_gateway_name: string
@@ -602,7 +602,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-applicatio
 # operationId: ApplicationGateways_CreateOrUpdate
 # --identity shape: {type?: "SystemAssigned"|"UserAssigned"|"SystemAssigned, UserAssigned"|"None", userAssignedIdentities?: record}
 # --properties shape: {authenticationCertificates?: list, autoscaleConfiguration?: any, backendAddressPools?: list, backendHttpSettingsCollection?: list, customErrorConfigurations?: list, enableFips?: bool, enableHttp2?: bool, firewallPolicy?: any, frontendIPConfigurations?: list, frontendPorts?: list, gatewayIPConfigurations?: list, httpListeners?: list, probes?: list, redirectConfigurations?: list, requestRoutingRules?: list, resourceGuid?: string, rewriteRuleSets?: list, sku?: any, sslCertificates?: list, ... (4 more fields)}
-export def "subscriptions-resource-groups-providers-microsoft-network-application-gateways create-or-update" [
+export def "application-gateways-create-or-update" [
   subscription_id: any
   resource_group_name: string
   application_gateway_name: string
@@ -652,7 +652,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-applicatio
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/applicationGateways/{applicationGatewayName}/backendhealth
 # operationId: ApplicationGateways_BackendHealth
-export def "subscriptions-resource-groups-providers-microsoft-network-application-gateways-backendhealth create-backend-health" [
+export def "application-gateways-backend-health" [
   subscription_id: string
   resource_group_name: string
   application_gateway_name: string
@@ -698,7 +698,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-applicatio
 # --backendAddressPool shape: {id?: string}
 # --backendHttpSettings shape: {id?: string}
 # --match shape: {body?: string, statusCodes?: list<string>}
-export def "subscriptions-resource-groups-providers-microsoft-network-application-gateways-get-backend-health-on-demand create" [
+export def "application-gateways-backend-health-on-demand" [
   subscription_id: any
   resource_group_name: string
   application_gateway_name: string
@@ -751,7 +751,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-applicatio
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/applicationGateways/{applicationGatewayName}/start
 # operationId: ApplicationGateways_Start
-export def "subscriptions-resource-groups-providers-microsoft-network-application-gateways-start start" [
+export def "application-gateways-start" [
   subscription_id: any
   resource_group_name: string
   application_gateway_name: string
@@ -791,7 +791,7 @@ export def "subscriptions-resource-groups-providers-microsoft-network-applicatio
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/applicationGateways/{applicationGatewayName}/stop
 # operationId: ApplicationGateways_Stop
-export def "subscriptions-resource-groups-providers-microsoft-network-application-gateways-stop stop" [
+export def "application-gateways-stop" [
   subscription_id: any
   resource_group_name: string
   application_gateway_name: string

@@ -98,7 +98,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-providers-microsoft-compute-admin-locations-disks list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "disks-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -122,7 +122,7 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Compute.Admin/locations/{location}/disks
 # operationId: Disks_List
-export def "subscriptions-providers-microsoft-compute-admin-locations-disks list" [
+export def "disks-list" [
   subscription_id: string
   location: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -167,7 +167,7 @@ export def "subscriptions-providers-microsoft-compute-admin-locations-disks list
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Compute.Admin/locations/{location}/disks/{DiskId}
 # operationId: Disks_Get
-export def "subscriptions-providers-microsoft-compute-admin-locations-disks get" [
+export def "disks-get" [
   subscription_id: string
   location: string
   disk_id: string

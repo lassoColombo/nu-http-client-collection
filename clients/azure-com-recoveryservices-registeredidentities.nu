@@ -105,7 +105,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-certificates create" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "vault-certificates-create" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -130,7 +130,7 @@ export def commands []: nothing -> table {
 # PUT /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{vaultName}/certificates/{certificateName}
 # operationId: VaultCertificates_Create
 # --properties shape: {authType?: "Invalid"|"ACS"|"AAD"|"AccessControlService"|"AzureActiveDirectory", certificate?: string}
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-certificates create" [
+export def "vault-certificates-create" [
   subscription_id: string
   resource_group_name: string
   vault_name: string
@@ -178,7 +178,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 #
 # DELETE /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{vaultName}/registeredIdentities/{identityName}
 # operationId: RegisteredIdentities_Delete
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-registered-identities delete" [
+export def "registered-identities-delete" [
   subscription_id: string
   resource_group_name: string
   vault_name: string

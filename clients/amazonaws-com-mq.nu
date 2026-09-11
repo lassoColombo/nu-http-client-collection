@@ -121,7 +121,7 @@ def storage-type-completer [] { ["EBS" "EFS"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "brokers create" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "create-broker" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -151,7 +151,7 @@ export def commands []: nothing -> table {
 # --logs shape: {Audit?: any, General?: any}
 # --maintenanceWindowStartTime shape: {DayOfWeek?: any, TimeOfDay?: any, TimeZone?: any}
 # --users item shape: {ConsoleAccess?: any, Groups?: any, Password: any, Username: any}
-export def "brokers create" [
+export def "create-broker" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -216,7 +216,7 @@ export def "brokers create" [
 #
 # GET /v1/brokers
 # operationId: ListBrokers
-export def "brokers list" [
+export def "list-brokers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -264,7 +264,7 @@ export def "brokers list" [
 #
 # POST /v1/configurations
 # operationId: CreateConfiguration
-export def "configurations create" [
+export def "create-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -315,7 +315,7 @@ export def "configurations create" [
 #
 # GET /v1/configurations
 # operationId: ListConfigurations
-export def "configurations list" [
+export def "list-configurations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -361,7 +361,7 @@ export def "configurations list" [
 #
 # POST /v1/tags/{resource-arn}
 # operationId: CreateTags
-export def "tags create" [
+export def "create-tags" [
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -410,7 +410,7 @@ export def "tags create" [
 #
 # GET /v1/tags/{resource-arn}
 # operationId: ListTags
-export def "tags list" [
+export def "list-tags" [
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -455,7 +455,7 @@ export def "tags list" [
 #
 # POST /v1/brokers/{broker-id}/users/{username}
 # operationId: CreateUser
-export def "brokers-users create" [
+export def "create-user" [
   broker_id: string
   username: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -508,7 +508,7 @@ export def "brokers-users create" [
 #
 # DELETE /v1/brokers/{broker-id}/users/{username}
 # operationId: DeleteUser
-export def "brokers-users delete" [
+export def "delete-user" [
   broker_id: string
   username: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -555,7 +555,7 @@ export def "brokers-users delete" [
 #
 # GET /v1/brokers/{broker-id}/users/{username}
 # operationId: DescribeUser
-export def "brokers-users get" [
+export def "describe-user" [
   broker_id: string
   username: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -602,7 +602,7 @@ export def "brokers-users get" [
 #
 # PUT /v1/brokers/{broker-id}/users/{username}
 # operationId: UpdateUser
-export def "brokers-users update" [
+export def "update-user" [
   broker_id: string
   username: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -655,7 +655,7 @@ export def "brokers-users update" [
 #
 # DELETE /v1/brokers/{broker-id}
 # operationId: DeleteBroker
-export def "brokers delete" [
+export def "delete-broker" [
   broker_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -700,7 +700,7 @@ export def "brokers delete" [
 #
 # GET /v1/brokers/{broker-id}
 # operationId: DescribeBroker
-export def "brokers get" [
+export def "describe-broker" [
   broker_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -749,7 +749,7 @@ export def "brokers get" [
 # --ldapServerMetadata shape: {Hosts?: any, RoleBase?: any, RoleName?: any, RoleSearchMatching?: any, RoleSearchSubtree?: any, ServiceAccountPassword?: any, ServiceAccountUsername?: any, UserBase?: any, UserRoleName?: any, UserSearchMatching?: any, UserSearchSubtree?: any}
 # --logs shape: {Audit?: any, General?: any}
 # --maintenanceWindowStartTime shape: {DayOfWeek?: any, TimeOfDay?: any, TimeZone?: any}
-export def "brokers update" [
+export def "update-broker" [
   broker_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -806,7 +806,7 @@ export def "brokers update" [
 #
 # DELETE /v1/tags/{resource-arn}
 # operationId: DeleteTags
-export def "tags delete" [
+export def "delete-tags" [
   resource_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -853,7 +853,7 @@ export def "tags delete" [
 #
 # GET /v1/broker-engine-types
 # operationId: DescribeBrokerEngineTypes
-export def "broker-engine-types get" [
+export def "describe-broker-engine-types" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -900,7 +900,7 @@ export def "broker-engine-types get" [
 #
 # GET /v1/broker-instance-options
 # operationId: DescribeBrokerInstanceOptions
-export def "broker-instance-options get" [
+export def "describe-broker-instance-options" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -949,7 +949,7 @@ export def "broker-instance-options get" [
 #
 # GET /v1/configurations/{configuration-id}
 # operationId: DescribeConfiguration
-export def "configurations get" [
+export def "describe-configuration" [
   configuration_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -994,7 +994,7 @@ export def "configurations get" [
 #
 # PUT /v1/configurations/{configuration-id}
 # operationId: UpdateConfiguration
-export def "configurations update" [
+export def "update-configuration" [
   configuration_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1044,7 +1044,7 @@ export def "configurations update" [
 #
 # GET /v1/configurations/{configuration-id}/revisions/{configuration-revision}
 # operationId: DescribeConfigurationRevision
-export def "configurations-revisions get" [
+export def "describe-configuration-revision" [
   configuration_id: string
   configuration_revision: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1091,7 +1091,7 @@ export def "configurations-revisions get" [
 #
 # GET /v1/configurations/{configuration-id}/revisions
 # operationId: ListConfigurationRevisions
-export def "configurations-revisions list" [
+export def "list-configuration-revisions" [
   configuration_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1139,7 +1139,7 @@ export def "configurations-revisions list" [
 #
 # GET /v1/brokers/{broker-id}/users
 # operationId: ListUsers
-export def "brokers-users list" [
+export def "list-users" [
   broker_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1187,7 +1187,7 @@ export def "brokers-users list" [
 #
 # POST /v1/brokers/{broker-id}/reboot
 # operationId: RebootBroker
-export def "brokers-reboot create" [
+export def "reboot-broker" [
   broker_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

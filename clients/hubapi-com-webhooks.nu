@@ -124,7 +124,7 @@ def event-type-completer [] { ["company.creation" "company.deletion" "company.pr
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "webhooks-settings delete-app-clear" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "delete-webhooks-v3-settings-clear" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -147,7 +147,7 @@ export def commands []: nothing -> table {
 # DELETE /webhooks/v3/{appId}/settings
 #
 # operationId: delete-/webhooks/v3/{appId}/settings_clear
-export def "webhooks-settings delete-app-clear" [
+export def "delete-webhooks-v3-settings-clear" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -182,7 +182,7 @@ export def "webhooks-settings delete-app-clear" [
 # GET /webhooks/v3/{appId}/settings
 #
 # operationId: get-/webhooks/v3/{appId}/settings_getAll
-export def "webhooks-settings get-app-list" [
+export def "get-webhooks-v3-settings-get-all" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -218,7 +218,7 @@ export def "webhooks-settings get-app-list" [
 #
 # operationId: put-/webhooks/v3/{appId}/settings_configure
 # --throttling shape: {maxConcurrentRequests: int, period: "SECONDLY"|"ROLLING_MINUTE"}
-export def "webhooks-settings update-app-configure" [
+export def "put-webhooks-v3-settings-configure" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -258,7 +258,7 @@ export def "webhooks-settings update-app-configure" [
 # GET /webhooks/v3/{appId}/subscriptions
 #
 # operationId: get-/webhooks/v3/{appId}/subscriptions_getAll
-export def "webhooks-subscriptions get-app-list" [
+export def "get-webhooks-v3-subscriptions-get-all" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -293,7 +293,7 @@ export def "webhooks-subscriptions get-app-list" [
 # POST /webhooks/v3/{appId}/subscriptions
 #
 # operationId: post-/webhooks/v3/{appId}/subscriptions_create
-export def "webhooks-subscriptions create-app" [
+export def "post-webhooks-v3-subscriptions-create" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -335,7 +335,7 @@ export def "webhooks-subscriptions create-app" [
 #
 # operationId: post-/webhooks/v3/{appId}/subscriptions/batch/update_updateBatch
 # --inputs item shape: {active: bool, id: int}
-export def "webhooks-subscriptions-batch-update create-app" [
+export def "post-webhooks-v3-subscriptions-batch-update-update-batch" [
   app_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -374,7 +374,7 @@ export def "webhooks-subscriptions-batch-update create-app" [
 # DELETE /webhooks/v3/{appId}/subscriptions/{subscriptionId}
 #
 # operationId: delete-/webhooks/v3/{appId}/subscriptions/{subscriptionId}_archive
-export def "webhooks-subscriptions delete-app-archive" [
+export def "delete-webhooks-v3-subscriptions-archive" [
   app_id: int
   subscription_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -411,7 +411,7 @@ export def "webhooks-subscriptions delete-app-archive" [
 # GET /webhooks/v3/{appId}/subscriptions/{subscriptionId}
 #
 # operationId: get-/webhooks/v3/{appId}/subscriptions/{subscriptionId}_getById
-export def "webhooks-subscriptions get-app" [
+export def "get-webhooks-v3-subscriptions-get-by-id" [
   app_id: int
   subscription_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -448,7 +448,7 @@ export def "webhooks-subscriptions get-app" [
 # PATCH /webhooks/v3/{appId}/subscriptions/{subscriptionId}
 #
 # operationId: patch-/webhooks/v3/{appId}/subscriptions/{subscriptionId}_update
-export def "webhooks-subscriptions update-app" [
+export def "patch-webhooks-v3-subscriptions-update" [
   app_id: int
   subscription_id: int
   --base-url(-b): string@base-url-completer # API base URL

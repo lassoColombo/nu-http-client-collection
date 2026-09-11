@@ -129,7 +129,7 @@ def alt-completer [] { ["json" "media" "proto"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "v1beta1 delete" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "eventarc-projects-locations-triggers-delete" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -153,7 +153,7 @@ export def commands []: nothing -> table {
 #
 # DELETE /v1beta1/{name}
 # operationId: eventarc.projects.locations.triggers.delete
-export def "v1beta1 delete" [
+export def "eventarc-projects-locations-triggers-delete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -204,7 +204,7 @@ export def "v1beta1 delete" [
 #
 # GET /v1beta1/{name}
 # operationId: eventarc.projects.locations.triggers.get
-export def "v1beta1 get" [
+export def "eventarc-projects-locations-triggers-get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -255,7 +255,7 @@ export def "v1beta1 get" [
 # --destination shape: {cloudRunService?: record}
 # --matchingCriteria item shape: {attribute?: string, value?: string}
 # --transport shape: {pubsub?: record}
-export def "v1beta1 update" [
+export def "eventarc-projects-locations-triggers-patch" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -315,7 +315,7 @@ export def "v1beta1 update" [
 #
 # GET /v1beta1/{name}/locations
 # operationId: eventarc.projects.locations.list
-export def "v1beta1-locations list" [
+export def "eventarc-projects-locations-list" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -366,7 +366,7 @@ export def "v1beta1-locations list" [
 #
 # GET /v1beta1/{name}/operations
 # operationId: eventarc.projects.locations.operations.list
-export def "v1beta1-operations list" [
+export def "eventarc-projects-locations-operations-list" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -417,7 +417,7 @@ export def "v1beta1-operations list" [
 #
 # POST /v1beta1/{name}:cancel
 # operationId: eventarc.projects.locations.operations.cancel
-export def "v1beta1 cancel" [
+export def "eventarc-projects-locations-operations-cancel" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -469,7 +469,7 @@ export def "v1beta1 cancel" [
 #
 # GET /v1beta1/{parent}/triggers
 # operationId: eventarc.projects.locations.triggers.list
-export def "v1beta1-triggers list" [
+export def "eventarc-projects-locations-triggers-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -523,7 +523,7 @@ export def "v1beta1-triggers list" [
 # --destination shape: {cloudRunService?: record}
 # --matchingCriteria item shape: {attribute?: string, value?: string}
 # --transport shape: {pubsub?: record}
-export def "v1beta1-triggers create" [
+export def "eventarc-projects-locations-triggers-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -582,7 +582,7 @@ export def "v1beta1-triggers create" [
 #
 # GET /v1beta1/{resource}:getIamPolicy
 # operationId: eventarc.projects.locations.triggers.getIamPolicy
-export def "v1beta1 get-iam-policy" [
+export def "eventarc-projects-locations-triggers-get-iam-policy" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -632,7 +632,7 @@ export def "v1beta1 get-iam-policy" [
 # POST /v1beta1/{resource}:setIamPolicy
 # operationId: eventarc.projects.locations.triggers.setIamPolicy
 # --policy shape: {auditConfigs?: list, bindings?: list, etag?: string, version?: int}
-export def "v1beta1 update-iam-policy" [
+export def "eventarc-projects-locations-triggers-set-iam-policy" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -685,7 +685,7 @@ export def "v1beta1 update-iam-policy" [
 #
 # POST /v1beta1/{resource}:testIamPermissions
 # operationId: eventarc.projects.locations.triggers.testIamPermissions
-export def "v1beta1 test-iam-permissions" [
+export def "eventarc-projects-locations-triggers-test-iam-permissions" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)

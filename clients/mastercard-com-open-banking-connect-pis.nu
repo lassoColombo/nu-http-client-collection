@@ -103,7 +103,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "payments-aspsps create" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "post-payments-aspsps" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -127,7 +127,7 @@ export def commands []: nothing -> table {
 #
 # POST /payments/aspsps
 # --requestInfo shape: {xRequestId: string}
-export def "payments-aspsps create" [
+export def "post-payments-aspsps" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -169,7 +169,7 @@ export def "payments-aspsps create" [
 #
 # POST /payments/consents/raw
 # --requestInfo shape: {aspspId: string, consentId: string, merchant?: record, xRequestId: string}
-export def "payments-consents-raw create" [
+export def "post-payments-consents-raw" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -207,7 +207,7 @@ export def "payments-consents-raw create" [
 #
 # POST /payments/cross-border-credit-transfers
 # --requestInfo shape: {aspspId: string, authorization: string, merchant?: record, xRequestId: string}
-export def "payments-cross-border-credit-transfers create" [
+export def "post-payments-cross-border-credit-transfers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -246,7 +246,7 @@ export def "payments-cross-border-credit-transfers create" [
 # POST /payments/cross-border-credit-transfers/consents
 # --payments shape: {creditorAccount: record, creditorAddress?: record, creditorAgent: record, creditorName: string, debtorAccount: record, debtorAddress?: any, debtorName?: string, endToEndIdentification: string, instructedAmount: record, instructionIdentification?: string, instructionPriority: "Normal"|"Urgent", localInstrument: "Swift", remittanceInformationReference?: string, remittanceInformationUnstructured?: string, requestedExecutionDate?: string, transferCharges?: "SEN"|"SHA"|"BEN"}
 # --requestInfo shape: {aspspId: string, flags?: list<string>, merchant?: record, tppRedirectURI: string, xRequestId: string}
-export def "payments-cross-border-credit-transfers-consents create" [
+export def "post-payments-cross-border-credit-transfers-consents" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -285,7 +285,7 @@ export def "payments-cross-border-credit-transfers-consents create" [
 #
 # POST /payments/cross-border-credit-transfers/payment-status
 # --requestInfo shape: {aspspId: string, consentId: string, merchant?: record, xRequestId: string}
-export def "payments-cross-border-credit-transfers-payment-status create" [
+export def "post-payments-cross-border-credit-transfers-payment-status" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -324,7 +324,7 @@ export def "payments-cross-border-credit-transfers-payment-status create" [
 #
 # POST /payments/domestic-credit-transfers
 # --requestInfo shape: {aspspId: string, authorization: string, merchant?: record, xRequestId: string}
-export def "payments-domestic-credit-transfers create" [
+export def "post-payments-domestic-credit-transfers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -363,7 +363,7 @@ export def "payments-domestic-credit-transfers create" [
 # POST /payments/domestic-credit-transfers/consents
 # --payments shape: {creditorAccount: record, creditorAddress?: record, creditorAgent?: record, creditorName: string, debtorAccount?: any, debtorAgent?: any, endToEndIdentification: string, instructedAmount: record, instructionIdentification?: string, instructionPriority?: "Normal"|"Urgent", localInstrument: "UK.FasterPayments"|"PL.Elixir", remittanceInformationReference?: string, remittanceInformationUnstructured?: string, requestedExecutionDate?: string, schedule?: record}
 # --requestInfo shape: {aspspId: string, flags?: list<string>, merchant?: record, tppRedirectURI: string, xRequestId: string}
-export def "payments-domestic-credit-transfers-consents create" [
+export def "post-payments-domestic-credit-transfers-consents" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -402,7 +402,7 @@ export def "payments-domestic-credit-transfers-consents create" [
 #
 # POST /payments/domestic-credit-transfers/payment-status
 # --requestInfo shape: {aspspId: string, consentId: string, merchant?: record, xRequestId: string}
-export def "payments-domestic-credit-transfers-payment-status create" [
+export def "post-payments-domestic-credit-transfers-payment-status" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -440,7 +440,7 @@ export def "payments-domestic-credit-transfers-payment-status create" [
 # Returns the status of each connectivity provider
 #
 # GET /payments/health
-export def "payments-health get" [
+export def "get-payments-health" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -474,7 +474,7 @@ export def "payments-health get" [
 #
 # POST /payments/sepa-credit-transfers
 # --requestInfo shape: {aspspId: string, authorization: string, merchant?: record, xRequestId: string}
-export def "payments-sepa-credit-transfers create" [
+export def "post-payments-sepa-credit-transfers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -513,7 +513,7 @@ export def "payments-sepa-credit-transfers create" [
 # POST /payments/sepa-credit-transfers/consents
 # --payments shape: {categoryPurpose?: "CASH"|"CORT"|"DVPM"|"INTC"|"TREA", creditorAccount: record, creditorAddress: record, creditorAgent: any, creditorName: string, debtorAccount?: record, debtorAddress?: record, debtorAgent?: any, debtorName: string, endToEndIdentification: string, instructedAmount: record, instructionPriority: "Normal"|"Urgent", localInstrument: "SEPA", remittanceInformationReference?: string, remittanceInformationStructured?: string, remittanceInformationUnstructured?: string, ... (2 more fields)}
 # --requestInfo shape: {aspspId: string, flags?: list<string>, merchant?: record, tppRedirectURI: string, xRequestId: string}
-export def "payments-sepa-credit-transfers-consents create" [
+export def "post-payments-sepa-credit-transfers-consents" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -552,7 +552,7 @@ export def "payments-sepa-credit-transfers-consents create" [
 #
 # POST /payments/sepa-credit-transfers/payment-status
 # --requestInfo shape: {aspspId: string, consentId: string, merchant?: record, xRequestId: string}
-export def "payments-sepa-credit-transfers-payment-status create" [
+export def "post-payments-sepa-credit-transfers-payment-status" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

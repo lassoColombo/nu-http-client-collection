@@ -120,7 +120,7 @@ def server-reported-monitoring-level-completer [] { ["Full" "Off" "Partial"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-ad-hybrid-health-service-addsservices list-adds" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "adds-services-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -144,7 +144,7 @@ export def commands []: nothing -> table {
 #
 # GET /providers/Microsoft.ADHybridHealthService/addsservices
 # operationId: addsServices_list
-export def "providers-microsoft-ad-hybrid-health-service-addsservices list-adds" [
+export def "adds-services-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -184,7 +184,7 @@ export def "providers-microsoft-ad-hybrid-health-service-addsservices list-adds"
 #
 # POST /providers/Microsoft.ADHybridHealthService/addsservices
 # operationId: addsServices_add
-export def "providers-microsoft-ad-hybrid-health-service-addsservices create-adds" [
+export def "adds-services-add" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -247,7 +247,7 @@ export def "providers-microsoft-ad-hybrid-health-service-addsservices create-add
 #
 # GET /providers/Microsoft.ADHybridHealthService/addsservices/premiumCheck
 # operationId: addsServices_listPremiumServices
-export def "providers-microsoft-ad-hybrid-health-service-addsservices-premium-check list-adds" [
+export def "adds-services-list-premium-services" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -287,7 +287,7 @@ export def "providers-microsoft-ad-hybrid-health-service-addsservices-premium-ch
 #
 # DELETE /providers/Microsoft.ADHybridHealthService/addsservices/{serviceName}
 # operationId: addsServices_delete
-export def "providers-microsoft-ad-hybrid-health-service-addsservices delete-adds" [
+export def "adds-services-delete" [
   service_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -326,7 +326,7 @@ export def "providers-microsoft-ad-hybrid-health-service-addsservices delete-add
 #
 # GET /providers/Microsoft.ADHybridHealthService/addsservices/{serviceName}
 # operationId: addsServices_get
-export def "providers-microsoft-ad-hybrid-health-service-addsservices get-adds" [
+export def "adds-services-get" [
   service_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -364,7 +364,7 @@ export def "providers-microsoft-ad-hybrid-health-service-addsservices get-adds" 
 #
 # PATCH /providers/Microsoft.ADHybridHealthService/addsservices/{serviceName}
 # operationId: addsServices_update
-export def "providers-microsoft-ad-hybrid-health-service-addsservices update-adds" [
+export def "adds-services-update" [
   service_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -429,7 +429,7 @@ export def "providers-microsoft-ad-hybrid-health-service-addsservices update-add
 #
 # GET /providers/Microsoft.ADHybridHealthService/addsservices/{serviceName}/addomainservicemembers
 # operationId: adDomainServiceMembers_list
-export def "providers-microsoft-ad-hybrid-health-service-addsservices-addomainservicemembers list-domain-members" [
+export def "ad-domain-service-members-list" [
   service_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -473,7 +473,7 @@ export def "providers-microsoft-ad-hybrid-health-service-addsservices-addomainse
 #
 # GET /providers/Microsoft.ADHybridHealthService/addsservices/{serviceName}/addsservicemembers
 # operationId: addsServiceMembers_list
-export def "providers-microsoft-ad-hybrid-health-service-addsservices-addsservicemembers list-adds-members" [
+export def "adds-service-members-list" [
   service_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -512,7 +512,7 @@ export def "providers-microsoft-ad-hybrid-health-service-addsservices-addsservic
 #
 # GET /providers/Microsoft.ADHybridHealthService/addsservices/{serviceName}/alerts
 # operationId: alerts_listAddsAlerts
-export def "providers-microsoft-ad-hybrid-health-service-addsservices-alerts list-adds" [
+export def "alerts-list-adds-alerts" [
   service_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -554,7 +554,7 @@ export def "providers-microsoft-ad-hybrid-health-service-addsservices-alerts lis
 #
 # GET /providers/Microsoft.ADHybridHealthService/addsservices/{serviceName}/configuration
 # operationId: configuration_listAddsConfigurations
-export def "providers-microsoft-ad-hybrid-health-service-addsservices-configuration list-adds" [
+export def "configuration-list-adds-configurations" [
   service_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -592,7 +592,7 @@ export def "providers-microsoft-ad-hybrid-health-service-addsservices-configurat
 #
 # GET /providers/Microsoft.ADHybridHealthService/addsservices/{serviceName}/dimensions/{dimension}
 # operationId: dimensions_listAddsDimensions
-export def "providers-microsoft-ad-hybrid-health-service-addsservices-dimensions list-adds" [
+export def "dimensions-list-adds-dimensions" [
   service_name: string
   dimension: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -632,7 +632,7 @@ export def "providers-microsoft-ad-hybrid-health-service-addsservices-dimensions
 #
 # DELETE /providers/Microsoft.ADHybridHealthService/addsservices/{serviceName}/features/{featureName}/userpreference
 # operationId: addsServicesUserPreference_delete
-export def "providers-microsoft-ad-hybrid-health-service-addsservices-features-userpreference delete-adds-user-preference" [
+export def "adds-services-user-preference-delete" [
   service_name: string
   feature_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -672,7 +672,7 @@ export def "providers-microsoft-ad-hybrid-health-service-addsservices-features-u
 #
 # GET /providers/Microsoft.ADHybridHealthService/addsservices/{serviceName}/features/{featureName}/userpreference
 # operationId: addsServicesUserPreference_get
-export def "providers-microsoft-ad-hybrid-health-service-addsservices-features-userpreference get-adds-user-preference" [
+export def "adds-services-user-preference-get" [
   service_name: string
   feature_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -712,7 +712,7 @@ export def "providers-microsoft-ad-hybrid-health-service-addsservices-features-u
 #
 # POST /providers/Microsoft.ADHybridHealthService/addsservices/{serviceName}/features/{featureName}/userpreference
 # operationId: addsServicesUserPreference_add
-export def "providers-microsoft-ad-hybrid-health-service-addsservices-features-userpreference create-adds-user-preference" [
+export def "adds-services-user-preference-add" [
   service_name: string
   feature_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -756,7 +756,7 @@ export def "providers-microsoft-ad-hybrid-health-service-addsservices-features-u
 #
 # GET /providers/Microsoft.ADHybridHealthService/addsservices/{serviceName}/forestsummary
 # operationId: addsServices_getForestSummary
-export def "providers-microsoft-ad-hybrid-health-service-addsservices-forestsummary get-adds-forest-summary" [
+export def "adds-services-get-forest-summary" [
   service_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -794,7 +794,7 @@ export def "providers-microsoft-ad-hybrid-health-service-addsservices-forestsumm
 #
 # GET /providers/Microsoft.ADHybridHealthService/addsservices/{serviceName}/metricmetadata
 # operationId: addsServices_listMetricMetadata
-export def "providers-microsoft-ad-hybrid-health-service-addsservices-metricmetadata list-adds-metric-metadata" [
+export def "adds-services-list-metric-metadata" [
   service_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -834,7 +834,7 @@ export def "providers-microsoft-ad-hybrid-health-service-addsservices-metricmeta
 #
 # GET /providers/Microsoft.ADHybridHealthService/addsservices/{serviceName}/metricmetadata/{metricName}
 # operationId: addsServices_getMetricMetadata
-export def "providers-microsoft-ad-hybrid-health-service-addsservices-metricmetadata get-adds-metric-metadata" [
+export def "adds-services-get-metric-metadata" [
   service_name: string
   metric_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -874,7 +874,7 @@ export def "providers-microsoft-ad-hybrid-health-service-addsservices-metricmeta
 #
 # GET /providers/Microsoft.ADHybridHealthService/addsservices/{serviceName}/metricmetadata/{metricName}/groups/{groupName}
 # operationId: addsServices_getMetricMetadataForGroup
-export def "providers-microsoft-ad-hybrid-health-service-addsservices-metricmetadata-groups get-adds-metric-metadata" [
+export def "adds-services-get-metric-metadata-for-group" [
   service_name: string
   metric_name: string
   group_name: string
@@ -919,7 +919,7 @@ export def "providers-microsoft-ad-hybrid-health-service-addsservices-metricmeta
 #
 # GET /providers/Microsoft.ADHybridHealthService/addsservices/{serviceName}/metrics/{metricName}/groups/{groupName}
 # operationId: addsService_getMetrics
-export def "providers-microsoft-ad-hybrid-health-service-addsservices-metrics-groups get-adds" [
+export def "adds-service-get-metrics" [
   service_name: string
   metric_name: string
   group_name: string
@@ -964,7 +964,7 @@ export def "providers-microsoft-ad-hybrid-health-service-addsservices-metrics-gr
 #
 # GET /providers/Microsoft.ADHybridHealthService/addsservices/{serviceName}/metrics/{metricName}/groups/{groupName}/average
 # operationId: addsServices_listMetricsAverage
-export def "providers-microsoft-ad-hybrid-health-service-addsservices-metrics-groups-average list-adds" [
+export def "adds-services-list-metrics-average" [
   service_name: string
   metric_name: string
   group_name: string
@@ -1006,7 +1006,7 @@ export def "providers-microsoft-ad-hybrid-health-service-addsservices-metrics-gr
 #
 # GET /providers/Microsoft.ADHybridHealthService/addsservices/{serviceName}/metrics/{metricName}/groups/{groupName}/sum
 # operationId: addsServices_listMetricsSum
-export def "providers-microsoft-ad-hybrid-health-service-addsservices-metrics-groups-sum list-adds" [
+export def "adds-services-list-metrics-sum" [
   service_name: string
   metric_name: string
   group_name: string
@@ -1048,7 +1048,7 @@ export def "providers-microsoft-ad-hybrid-health-service-addsservices-metrics-gr
 #
 # GET /providers/Microsoft.ADHybridHealthService/addsservices/{serviceName}/replicationdetails
 # operationId: addsServices_listReplicationDetails
-export def "providers-microsoft-ad-hybrid-health-service-addsservices-replicationdetails list-adds-replication-details" [
+export def "adds-services-list-replication-details" [
   service_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1088,7 +1088,7 @@ export def "providers-microsoft-ad-hybrid-health-service-addsservices-replicatio
 #
 # GET /providers/Microsoft.ADHybridHealthService/addsservices/{serviceName}/replicationstatus
 # operationId: addsServicesReplicationStatus_get
-export def "providers-microsoft-ad-hybrid-health-service-addsservices-replicationstatus get-adds-replication-status" [
+export def "adds-services-replication-status-get" [
   service_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1126,7 +1126,7 @@ export def "providers-microsoft-ad-hybrid-health-service-addsservices-replicatio
 #
 # GET /providers/Microsoft.ADHybridHealthService/addsservices/{serviceName}/replicationsummary
 # operationId: addsServices_listReplicationSummary
-export def "providers-microsoft-ad-hybrid-health-service-addsservices-replicationsummary list-adds-replication-summary" [
+export def "adds-services-list-replication-summary" [
   service_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1170,7 +1170,7 @@ export def "providers-microsoft-ad-hybrid-health-service-addsservices-replicatio
 #
 # GET /providers/Microsoft.ADHybridHealthService/addsservices/{serviceName}/servicemembers
 # operationId: addsServicesServiceMembers_list
-export def "providers-microsoft-ad-hybrid-health-service-addsservices-servicemembers list-adds-members" [
+export def "adds-services-service-members-list" [
   service_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1211,7 +1211,7 @@ export def "providers-microsoft-ad-hybrid-health-service-addsservices-servicemem
 #
 # POST /providers/Microsoft.ADHybridHealthService/addsservices/{serviceName}/servicemembers
 # operationId: addsServicesServiceMembers_add
-export def "providers-microsoft-ad-hybrid-health-service-addsservices-servicemembers create-adds-members" [
+export def "adds-services-service-members-add" [
   service_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1278,7 +1278,7 @@ export def "providers-microsoft-ad-hybrid-health-service-addsservices-servicemem
 #
 # DELETE /providers/Microsoft.ADHybridHealthService/addsservices/{serviceName}/servicemembers/{serviceMemberId}
 # operationId: addsServiceMembers_delete
-export def "providers-microsoft-ad-hybrid-health-service-addsservices-servicemembers delete-adds-members" [
+export def "adds-service-members-delete" [
   service_name: string
   service_member_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1319,7 +1319,7 @@ export def "providers-microsoft-ad-hybrid-health-service-addsservices-servicemem
 #
 # GET /providers/Microsoft.ADHybridHealthService/addsservices/{serviceName}/servicemembers/{serviceMemberId}
 # operationId: addsServiceMembers_get
-export def "providers-microsoft-ad-hybrid-health-service-addsservices-servicemembers get-adds-members" [
+export def "adds-service-members-get" [
   service_name: string
   service_member_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1359,7 +1359,7 @@ export def "providers-microsoft-ad-hybrid-health-service-addsservices-servicemem
 #
 # GET /providers/Microsoft.ADHybridHealthService/addsservices/{serviceName}/servicemembers/{serviceMemberId}/alerts
 # operationId: addsServices_listServerAlerts
-export def "providers-microsoft-ad-hybrid-health-service-addsservices-servicemembers-alerts list-adds-server" [
+export def "adds-services-list-server-alerts" [
   service_name: string
   service_member_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1403,7 +1403,7 @@ export def "providers-microsoft-ad-hybrid-health-service-addsservices-servicemem
 #
 # GET /providers/Microsoft.ADHybridHealthService/addsservices/{serviceName}/servicemembers/{serviceMemberId}/credentials
 # operationId: addsServiceMembers_listCredentials
-export def "providers-microsoft-ad-hybrid-health-service-addsservices-servicemembers-credentials list-adds-members" [
+export def "adds-service-members-list-credentials" [
   service_name: string
   service_member_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1444,7 +1444,7 @@ export def "providers-microsoft-ad-hybrid-health-service-addsservices-servicemem
 #
 # GET /providers/Microsoft.ADHybridHealthService/configuration
 # operationId: configuration_get
-export def "providers-microsoft-ad-hybrid-health-service-configuration get" [
+export def "configuration-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1480,7 +1480,7 @@ export def "providers-microsoft-ad-hybrid-health-service-configuration get" [
 #
 # PATCH /providers/Microsoft.ADHybridHealthService/configuration
 # operationId: configuration_update
-export def "providers-microsoft-ad-hybrid-health-service-configuration update" [
+export def "configuration-update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1540,7 +1540,7 @@ export def "providers-microsoft-ad-hybrid-health-service-configuration update" [
 #
 # POST /providers/Microsoft.ADHybridHealthService/configuration
 # operationId: configuration_add
-export def "providers-microsoft-ad-hybrid-health-service-configuration create" [
+export def "configuration-add" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1576,7 +1576,7 @@ export def "providers-microsoft-ad-hybrid-health-service-configuration create" [
 #
 # GET /providers/Microsoft.ADHybridHealthService/operations
 # operationId: operations_list
-export def "providers-microsoft-ad-hybrid-health-service-operations list" [
+export def "operations-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1612,7 +1612,7 @@ export def "providers-microsoft-ad-hybrid-health-service-operations list" [
 #
 # GET /providers/Microsoft.ADHybridHealthService/reports/DevOps/IsDevOps
 # operationId: reports_getDevOps
-export def "providers-microsoft-ad-hybrid-health-service-reports-dev-ops-is-dev-ops get" [
+export def "reports-get-dev-ops" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1648,7 +1648,7 @@ export def "providers-microsoft-ad-hybrid-health-service-reports-dev-ops-is-dev-
 #
 # GET /providers/Microsoft.ADHybridHealthService/service/{serviceName}/servicemembers/{serviceMemberId}/connectors
 # operationId: serviceMembers_listConnectors
-export def "providers-microsoft-ad-hybrid-health-service-service-servicemembers-connectors list-members" [
+export def "service-members-list-connectors" [
   service_name: string
   service_member_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1688,7 +1688,7 @@ export def "providers-microsoft-ad-hybrid-health-service-service-servicemembers-
 #
 # GET /providers/Microsoft.ADHybridHealthService/services
 # operationId: services_list
-export def "providers-microsoft-ad-hybrid-health-service-services list" [
+export def "services-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1728,7 +1728,7 @@ export def "providers-microsoft-ad-hybrid-health-service-services list" [
 #
 # POST /providers/Microsoft.ADHybridHealthService/services
 # operationId: services_add
-export def "providers-microsoft-ad-hybrid-health-service-services create" [
+export def "services-add" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1791,7 +1791,7 @@ export def "providers-microsoft-ad-hybrid-health-service-services create" [
 #
 # GET /providers/Microsoft.ADHybridHealthService/services/premiumCheck
 # operationId: services_listPremium
-export def "providers-microsoft-ad-hybrid-health-service-services-premium-check list" [
+export def "services-list-premium" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1831,7 +1831,7 @@ export def "providers-microsoft-ad-hybrid-health-service-services-premium-check 
 #
 # DELETE /providers/Microsoft.ADHybridHealthService/services/{serviceName}
 # operationId: services_delete
-export def "providers-microsoft-ad-hybrid-health-service-services delete" [
+export def "services-delete" [
   service_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1870,7 +1870,7 @@ export def "providers-microsoft-ad-hybrid-health-service-services delete" [
 #
 # GET /providers/Microsoft.ADHybridHealthService/services/{serviceName}
 # operationId: services_get
-export def "providers-microsoft-ad-hybrid-health-service-services get" [
+export def "services-get" [
   service_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1908,7 +1908,7 @@ export def "providers-microsoft-ad-hybrid-health-service-services get" [
 #
 # PATCH /providers/Microsoft.ADHybridHealthService/services/{serviceName}
 # operationId: services_update
-export def "providers-microsoft-ad-hybrid-health-service-services update" [
+export def "services-update" [
   service_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1973,7 +1973,7 @@ export def "providers-microsoft-ad-hybrid-health-service-services update" [
 #
 # GET /providers/Microsoft.ADHybridHealthService/services/{serviceName}/TenantWhitelisting/{featureName}
 # operationId: services_getTenantWhitelisting
-export def "providers-microsoft-ad-hybrid-health-service-services-tenant-whitelisting get" [
+export def "services-get-tenant-whitelisting" [
   service_name: string
   feature_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2013,7 +2013,7 @@ export def "providers-microsoft-ad-hybrid-health-service-services-tenant-whiteli
 #
 # GET /providers/Microsoft.ADHybridHealthService/services/{serviceName}/alerts
 # operationId: services_listAlerts
-export def "providers-microsoft-ad-hybrid-health-service-services-alerts list" [
+export def "services-list-alerts" [
   service_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2055,7 +2055,7 @@ export def "providers-microsoft-ad-hybrid-health-service-services-alerts list" [
 #
 # GET /providers/Microsoft.ADHybridHealthService/services/{serviceName}/checkServiceFeatureAvailibility/{featureName}
 # operationId: services_getFeatureAvailibility
-export def "providers-microsoft-ad-hybrid-health-service-services-check-service-feature-availibility get" [
+export def "services-get-feature-availibility" [
   service_name: string
   feature_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2095,7 +2095,7 @@ export def "providers-microsoft-ad-hybrid-health-service-services-check-service-
 #
 # GET /providers/Microsoft.ADHybridHealthService/services/{serviceName}/exporterrors/counts
 # operationId: services_listExportErrors
-export def "providers-microsoft-ad-hybrid-health-service-services-exporterrors-counts list-export-errors" [
+export def "services-list-export-errors" [
   service_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2133,7 +2133,7 @@ export def "providers-microsoft-ad-hybrid-health-service-services-exporterrors-c
 #
 # GET /providers/Microsoft.ADHybridHealthService/services/{serviceName}/exporterrors/listV2
 # operationId: services_listExportErrorsV2
-export def "providers-microsoft-ad-hybrid-health-service-services-exporterrors-list-v2 export-errors" [
+export def "services-list-export-errors-v2" [
   service_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2172,7 +2172,7 @@ export def "providers-microsoft-ad-hybrid-health-service-services-exporterrors-l
 #
 # GET /providers/Microsoft.ADHybridHealthService/services/{serviceName}/exportstatus
 # operationId: services_listExportStatus
-export def "providers-microsoft-ad-hybrid-health-service-services-exportstatus list-export-status" [
+export def "services-list-export-status" [
   service_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2210,7 +2210,7 @@ export def "providers-microsoft-ad-hybrid-health-service-services-exportstatus l
 #
 # POST /providers/Microsoft.ADHybridHealthService/services/{serviceName}/feedbacktype/alerts/feedback
 # operationId: services_addAlertFeedback
-export def "providers-microsoft-ad-hybrid-health-service-services-feedbacktype-alerts-feedback create" [
+export def "services-add-alert-feedback" [
   service_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2259,7 +2259,7 @@ export def "providers-microsoft-ad-hybrid-health-service-services-feedbacktype-a
 #
 # GET /providers/Microsoft.ADHybridHealthService/services/{serviceName}/feedbacktype/alerts/{shortName}/alertfeedback
 # operationId: services_listAlertFeedback
-export def "providers-microsoft-ad-hybrid-health-service-services-feedbacktype-alerts-alertfeedback list-feedback" [
+export def "services-list-alert-feedback" [
   service_name: string
   short_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2299,7 +2299,7 @@ export def "providers-microsoft-ad-hybrid-health-service-services-feedbacktype-a
 #
 # GET /providers/Microsoft.ADHybridHealthService/services/{serviceName}/metricmetadata
 # operationId: services_listMetricMetadata
-export def "providers-microsoft-ad-hybrid-health-service-services-metricmetadata list-metric-metadata" [
+export def "services-list-metric-metadata" [
   service_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2339,7 +2339,7 @@ export def "providers-microsoft-ad-hybrid-health-service-services-metricmetadata
 #
 # GET /providers/Microsoft.ADHybridHealthService/services/{serviceName}/metricmetadata/{metricName}
 # operationId: services_getMetricMetadata
-export def "providers-microsoft-ad-hybrid-health-service-services-metricmetadata get-metric-metadata" [
+export def "services-get-metric-metadata" [
   service_name: string
   metric_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2379,7 +2379,7 @@ export def "providers-microsoft-ad-hybrid-health-service-services-metricmetadata
 #
 # GET /providers/Microsoft.ADHybridHealthService/services/{serviceName}/metricmetadata/{metricName}/groups/{groupName}
 # operationId: services_getMetricMetadataForGroup
-export def "providers-microsoft-ad-hybrid-health-service-services-metricmetadata-groups get-metric-metadata" [
+export def "services-get-metric-metadata-for-group" [
   service_name: string
   metric_name: string
   group_name: string
@@ -2424,7 +2424,7 @@ export def "providers-microsoft-ad-hybrid-health-service-services-metricmetadata
 #
 # GET /providers/Microsoft.ADHybridHealthService/services/{serviceName}/metrics/{metricName}/groups/{groupName}
 # operationId: service_getMetrics
-export def "providers-microsoft-ad-hybrid-health-service-services-metrics-groups get" [
+export def "service-get-metrics" [
   service_name: string
   metric_name: string
   group_name: string
@@ -2469,7 +2469,7 @@ export def "providers-microsoft-ad-hybrid-health-service-services-metrics-groups
 #
 # GET /providers/Microsoft.ADHybridHealthService/services/{serviceName}/metrics/{metricName}/groups/{groupName}/average
 # operationId: services_listMetricsAverage
-export def "providers-microsoft-ad-hybrid-health-service-services-metrics-groups-average list" [
+export def "services-list-metrics-average" [
   service_name: string
   metric_name: string
   group_name: string
@@ -2511,7 +2511,7 @@ export def "providers-microsoft-ad-hybrid-health-service-services-metrics-groups
 #
 # GET /providers/Microsoft.ADHybridHealthService/services/{serviceName}/metrics/{metricName}/groups/{groupName}/sum
 # operationId: services_listMetricsSum
-export def "providers-microsoft-ad-hybrid-health-service-services-metrics-groups-sum list" [
+export def "services-list-metrics-sum" [
   service_name: string
   metric_name: string
   group_name: string
@@ -2553,7 +2553,7 @@ export def "providers-microsoft-ad-hybrid-health-service-services-metrics-groups
 #
 # PATCH /providers/Microsoft.ADHybridHealthService/services/{serviceName}/monitoringconfiguration
 # operationId: services_updateMonitoringConfiguration
-export def "providers-microsoft-ad-hybrid-health-service-services-monitoringconfiguration update-monitoring-configuration" [
+export def "services-update-monitoring-configuration" [
   service_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2596,7 +2596,7 @@ export def "providers-microsoft-ad-hybrid-health-service-services-monitoringconf
 #
 # GET /providers/Microsoft.ADHybridHealthService/services/{serviceName}/monitoringconfigurations
 # operationId: services_listMonitoringConfigurations
-export def "providers-microsoft-ad-hybrid-health-service-services-monitoringconfigurations list-monitoring-configurations" [
+export def "services-list-monitoring-configurations" [
   service_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2634,7 +2634,7 @@ export def "providers-microsoft-ad-hybrid-health-service-services-monitoringconf
 #
 # GET /providers/Microsoft.ADHybridHealthService/services/{serviceName}/reports/badpassword/details/user
 # operationId: services_listUserBadPasswordReport
-export def "providers-microsoft-ad-hybrid-health-service-services-reports-badpassword-details-user list-bad-password" [
+export def "services-list-user-bad-password-report" [
   service_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2673,7 +2673,7 @@ export def "providers-microsoft-ad-hybrid-health-service-services-reports-badpas
 #
 # GET /providers/Microsoft.ADHybridHealthService/services/{serviceName}/reports/riskyIp/blobUris
 # operationId: services_listAllRiskyIpDownloadReport
-export def "providers-microsoft-ad-hybrid-health-service-services-reports-risky-ip-blob-uris list-download" [
+export def "services-list-all-risky-ip-download-report" [
   service_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2711,7 +2711,7 @@ export def "providers-microsoft-ad-hybrid-health-service-services-reports-risky-
 #
 # POST /providers/Microsoft.ADHybridHealthService/services/{serviceName}/reports/riskyIp/generateBlobUri
 # operationId: services_listCurrentRiskyIpDownloadReport
-export def "providers-microsoft-ad-hybrid-health-service-services-reports-risky-ip-generate-blob-uri list-get-download" [
+export def "services-list-current-risky-ip-download-report" [
   service_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2749,7 +2749,7 @@ export def "providers-microsoft-ad-hybrid-health-service-services-reports-risky-
 #
 # GET /providers/Microsoft.ADHybridHealthService/services/{serviceName}/servicemembers
 # operationId: serviceMembers_list
-export def "providers-microsoft-ad-hybrid-health-service-services-servicemembers list-members" [
+export def "service-members-list" [
   service_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2790,7 +2790,7 @@ export def "providers-microsoft-ad-hybrid-health-service-services-servicemembers
 #
 # POST /providers/Microsoft.ADHybridHealthService/services/{serviceName}/servicemembers
 # operationId: serviceMembers_add
-export def "providers-microsoft-ad-hybrid-health-service-services-servicemembers create-members" [
+export def "service-members-add" [
   service_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2857,7 +2857,7 @@ export def "providers-microsoft-ad-hybrid-health-service-services-servicemembers
 #
 # DELETE /providers/Microsoft.ADHybridHealthService/services/{serviceName}/servicemembers/{serviceMemberId}
 # operationId: serviceMembers_delete
-export def "providers-microsoft-ad-hybrid-health-service-services-servicemembers delete-members" [
+export def "service-members-delete" [
   service_name: string
   service_member_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2898,7 +2898,7 @@ export def "providers-microsoft-ad-hybrid-health-service-services-servicemembers
 #
 # GET /providers/Microsoft.ADHybridHealthService/services/{serviceName}/servicemembers/{serviceMemberId}
 # operationId: serviceMembers_get
-export def "providers-microsoft-ad-hybrid-health-service-services-servicemembers get-members" [
+export def "service-members-get" [
   service_name: string
   service_member_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2938,7 +2938,7 @@ export def "providers-microsoft-ad-hybrid-health-service-services-servicemembers
 #
 # GET /providers/Microsoft.ADHybridHealthService/services/{serviceName}/servicemembers/{serviceMemberId}/alerts
 # operationId: serviceMembers_listAlerts
-export def "providers-microsoft-ad-hybrid-health-service-services-servicemembers-alerts list-members" [
+export def "service-members-list-alerts" [
   service_name: string
   service_member_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2982,7 +2982,7 @@ export def "providers-microsoft-ad-hybrid-health-service-services-servicemembers
 #
 # GET /providers/Microsoft.ADHybridHealthService/services/{serviceName}/servicemembers/{serviceMemberId}/credentials
 # operationId: serviceMembers_listCredentials
-export def "providers-microsoft-ad-hybrid-health-service-services-servicemembers-credentials list-members" [
+export def "service-members-list-credentials" [
   service_name: string
   service_member_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3023,7 +3023,7 @@ export def "providers-microsoft-ad-hybrid-health-service-services-servicemembers
 #
 # DELETE /providers/Microsoft.ADHybridHealthService/services/{serviceName}/servicemembers/{serviceMemberId}/data
 # operationId: serviceMembers_deleteData
-export def "providers-microsoft-ad-hybrid-health-service-services-servicemembers-data delete-members" [
+export def "service-members-delete-data" [
   service_name: string
   service_member_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3063,7 +3063,7 @@ export def "providers-microsoft-ad-hybrid-health-service-services-servicemembers
 #
 # GET /providers/Microsoft.ADHybridHealthService/services/{serviceName}/servicemembers/{serviceMemberId}/datafreshness
 # operationId: serviceMembers_listDataFreshness
-export def "providers-microsoft-ad-hybrid-health-service-services-servicemembers-datafreshness list-members-data-freshness" [
+export def "service-members-list-data-freshness" [
   service_name: string
   service_member_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3103,7 +3103,7 @@ export def "providers-microsoft-ad-hybrid-health-service-services-servicemembers
 #
 # GET /providers/Microsoft.ADHybridHealthService/services/{serviceName}/servicemembers/{serviceMemberId}/exportstatus
 # operationId: serviceMembers_listExportStatus
-export def "providers-microsoft-ad-hybrid-health-service-services-servicemembers-exportstatus list-members-export-status" [
+export def "service-members-list-export-status" [
   service_name: string
   service_member_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3143,7 +3143,7 @@ export def "providers-microsoft-ad-hybrid-health-service-services-servicemembers
 #
 # GET /providers/Microsoft.ADHybridHealthService/services/{serviceName}/servicemembers/{serviceMemberId}/globalconfiguration
 # operationId: serviceMembers_listGlobalConfiguration
-export def "providers-microsoft-ad-hybrid-health-service-services-servicemembers-globalconfiguration list-members-global-configuration" [
+export def "service-members-list-global-configuration" [
   service_name: string
   service_member_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3183,7 +3183,7 @@ export def "providers-microsoft-ad-hybrid-health-service-services-servicemembers
 #
 # GET /providers/Microsoft.ADHybridHealthService/services/{serviceName}/servicemembers/{serviceMemberId}/metrics/{metricName}
 # operationId: serviceMembers_getConnectorMetadata
-export def "providers-microsoft-ad-hybrid-health-service-services-servicemembers-metrics get-members-connector-metadata" [
+export def "service-members-get-connector-metadata" [
   service_name: string
   service_member_id: string
   metric_name: string
@@ -3225,7 +3225,7 @@ export def "providers-microsoft-ad-hybrid-health-service-services-servicemembers
 #
 # GET /providers/Microsoft.ADHybridHealthService/services/{serviceName}/servicemembers/{serviceMemberId}/metrics/{metricName}/groups/{groupName}
 # operationId: serviceMembers_getMetrics
-export def "providers-microsoft-ad-hybrid-health-service-services-servicemembers-metrics-groups get-members" [
+export def "service-members-get-metrics" [
   service_name: string
   service_member_id: string
   metric_name: string
@@ -3272,7 +3272,7 @@ export def "providers-microsoft-ad-hybrid-health-service-services-servicemembers
 #
 # GET /providers/Microsoft.ADHybridHealthService/services/{serviceName}/servicemembers/{serviceMemberId}/serviceconfiguration
 # operationId: serviceMembers_getServiceConfiguration
-export def "providers-microsoft-ad-hybrid-health-service-services-servicemembers-serviceconfiguration get-members-configuration" [
+export def "service-members-get-service-configuration" [
   service_name: string
   service_member_id: string
   --base-url(-b): string@base-url-completer # API base URL

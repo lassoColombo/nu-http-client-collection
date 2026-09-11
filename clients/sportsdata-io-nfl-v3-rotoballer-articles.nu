@@ -99,7 +99,7 @@ def auth-scheme-completer [] { ["ocp-apim-subscription-key" "query-key"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "roto-baller-articles get-rotoballer" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "rotoballer-articles" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -123,7 +123,7 @@ export def commands []: nothing -> table {
 #
 # GET /{format}/RotoBallerArticles
 # operationId: RotoballerArticles
-export def "roto-baller-articles get-rotoballer" [
+export def "rotoballer-articles" [
   format: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -159,7 +159,7 @@ export def "roto-baller-articles get-rotoballer" [
 #
 # GET /{format}/RotoBallerArticlesByDate/{date}
 # operationId: RotoballerArticlesByDate
-export def "roto-baller-articles-by-date get-rotoballer" [
+export def "rotoballer-articles-by-date" [
   format: string
   date: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -197,7 +197,7 @@ export def "roto-baller-articles-by-date get-rotoballer" [
 #
 # GET /{format}/RotoBallerArticlesByPlayerID/{playerid}
 # operationId: RotoballerArticlesByPlayer
-export def "roto-baller-articles-by-player-id get-rotoballer" [
+export def "rotoballer-articles-by-player" [
   format: string
   playerid: string
   --base-url(-b): string@base-url-completer # API base URL

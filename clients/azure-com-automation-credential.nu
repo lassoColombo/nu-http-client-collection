@@ -116,7 +116,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resource-groups-providers-microsoft-automation-automation-accounts-credentials list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "credential-list-by-automation-account" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -141,7 +141,7 @@ export def commands []: nothing -> table {
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Automation/automationAccounts/{automationAccountName}/credentials
 # Docs: http://aka.ms/azureautomationsdk/credentialoperations
 # operationId: Credential_ListByAutomationAccount
-export def "subscriptions-resource-groups-providers-microsoft-automation-automation-accounts-credentials list" [
+export def "credential-list-by-automation-account" [
   subscription_id: string
   resource_group_name: string
   automation_account_name: string
@@ -184,7 +184,7 @@ export def "subscriptions-resource-groups-providers-microsoft-automation-automat
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Automation/automationAccounts/{automationAccountName}/credentials/{credentialName}
 # Docs: http://aka.ms/azureautomationsdk/credentialoperations
 # operationId: Credential_Delete
-export def "subscriptions-resource-groups-providers-microsoft-automation-automation-accounts-credentials delete" [
+export def "credential-delete" [
   subscription_id: string
   resource_group_name: string
   automation_account_name: string
@@ -229,7 +229,7 @@ export def "subscriptions-resource-groups-providers-microsoft-automation-automat
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Automation/automationAccounts/{automationAccountName}/credentials/{credentialName}
 # Docs: http://aka.ms/azureautomationsdk/credentialoperations
 # operationId: Credential_Get
-export def "subscriptions-resource-groups-providers-microsoft-automation-automation-accounts-credentials get" [
+export def "credential-get" [
   subscription_id: string
   resource_group_name: string
   automation_account_name: string
@@ -275,7 +275,7 @@ export def "subscriptions-resource-groups-providers-microsoft-automation-automat
 # Docs: http://aka.ms/azureautomationsdk/credentialoperations
 # operationId: Credential_Update
 # --properties shape: {description?: string, password?: string, userName?: string}
-export def "subscriptions-resource-groups-providers-microsoft-automation-automation-accounts-credentials update" [
+export def "credential-update" [
   subscription_id: string
   resource_group_name: string
   automation_account_name: string
@@ -326,7 +326,7 @@ export def "subscriptions-resource-groups-providers-microsoft-automation-automat
 # Docs: http://aka.ms/azureautomationsdk/credentialoperations
 # operationId: Credential_CreateOrUpdate
 # --properties shape: {description?: string, password: string, userName: string}
-export def "subscriptions-resource-groups-providers-microsoft-automation-automation-accounts-credentials create-or-update" [
+export def "credential-create-or-update" [
   subscription_id: string
   resource_group_name: string
   automation_account_name: string

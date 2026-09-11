@@ -125,7 +125,7 @@ def accept-completer-1 [] { ["application/json" "application/octet-stream"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "apps list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "apps-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -149,7 +149,7 @@ export def commands []: nothing -> table {
 #
 # GET /apps/
 # operationId: Apps_List
-export def "apps list" [
+export def "apps-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -186,7 +186,7 @@ export def "apps list" [
 #
 # POST /apps/
 # operationId: Apps_Add
-export def "apps create" [
+export def "apps-add" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -229,7 +229,7 @@ export def "apps create" [
 #
 # GET /apps/assistants
 # operationId: Apps_ListCortanaEndpoints
-export def "apps-assistants list-cortana-endpoints" [
+export def "apps-list-cortana-endpoints" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -263,7 +263,7 @@ export def "apps-assistants list-cortana-endpoints" [
 #
 # GET /apps/cultures
 # operationId: Apps_ListSupportedCultures
-export def "apps-cultures list-supported" [
+export def "apps-list-supported-cultures" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -297,7 +297,7 @@ export def "apps-cultures list-supported" [
 #
 # GET /apps/customprebuiltdomains
 # operationId: Apps_ListAvailableCustomPrebuiltDomains
-export def "apps-customprebuiltdomains list" [
+export def "apps-list-available-custom-prebuilt-domains" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -331,7 +331,7 @@ export def "apps-customprebuiltdomains list" [
 #
 # POST /apps/customprebuiltdomains
 # operationId: Apps_AddCustomPrebuiltDomain
-export def "apps-customprebuiltdomains create-custom-prebuilt-domain" [
+export def "apps-add-custom-prebuilt-domain" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -370,7 +370,7 @@ export def "apps-customprebuiltdomains create-custom-prebuilt-domain" [
 #
 # GET /apps/customprebuiltdomains/{culture}
 # operationId: Apps_ListAvailableCustomPrebuiltDomainsForCulture
-export def "apps-customprebuiltdomains list-available-custom-prebuilt-domains" [
+export def "apps-list-available-custom-prebuilt-domains-for-culture" [
   culture: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -406,7 +406,7 @@ export def "apps-customprebuiltdomains list-available-custom-prebuilt-domains" [
 #
 # GET /apps/domains
 # operationId: Apps_ListDomains
-export def "apps-domains list" [
+export def "apps-list-domains" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -452,7 +452,7 @@ export def "apps-domains list" [
 # --regex_entities item shape: {name?: string, regexPattern?: string, roles?: list<string>}
 # --regex_features item shape: {activated?: bool, name?: string, pattern?: string}
 # --utterances item shape: {entities?: list, intent?: string, text?: string}
-export def "apps-import import" [
+export def "apps-import" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -507,7 +507,7 @@ export def "apps-import import" [
 #
 # GET /apps/usagescenarios
 # operationId: Apps_ListUsageScenarios
-export def "apps-usagescenarios list-usage-scenarios" [
+export def "apps-list-usage-scenarios" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -541,7 +541,7 @@ export def "apps-usagescenarios list-usage-scenarios" [
 #
 # DELETE /apps/{appId}
 # operationId: Apps_Delete
-export def "apps delete" [
+export def "apps-delete" [
   app_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -579,7 +579,7 @@ export def "apps delete" [
 #
 # GET /apps/{appId}
 # operationId: Apps_Get
-export def "apps get" [
+export def "apps-get" [
   app_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -615,7 +615,7 @@ export def "apps get" [
 #
 # PUT /apps/{appId}
 # operationId: Apps_Update
-export def "apps update" [
+export def "apps-update" [
   app_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -656,7 +656,7 @@ export def "apps update" [
 #
 # DELETE /apps/{appId}/azureaccounts
 # operationId: AzureAccounts_RemoveFromApp
-export def "apps-azureaccounts delete-azure-accounts" [
+export def "azure-accounts-remove-from-app" [
   app_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -701,7 +701,7 @@ export def "apps-azureaccounts delete-azure-accounts" [
 #
 # GET /apps/{appId}/azureaccounts
 # operationId: AzureAccounts_GetAssigned
-export def "apps-azureaccounts get-azure-accounts-assigned" [
+export def "azure-accounts-get-assigned" [
   app_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -740,7 +740,7 @@ export def "apps-azureaccounts get-azure-accounts-assigned" [
 #
 # POST /apps/{appId}/azureaccounts
 # operationId: AzureAccounts_AssignToApp
-export def "apps-azureaccounts assign-azure-accounts" [
+export def "azure-accounts-assign-to-app" [
   app_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -785,7 +785,7 @@ export def "apps-azureaccounts assign-azure-accounts" [
 #
 # GET /apps/{appId}/endpoints
 # operationId: Apps_ListEndpoints
-export def "apps-endpoints list" [
+export def "apps-list-endpoints" [
   app_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -821,7 +821,7 @@ export def "apps-endpoints list" [
 #
 # DELETE /apps/{appId}/permissions
 # operationId: Permissions_Delete
-export def "apps-permissions delete" [
+export def "permissions-delete" [
   app_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -861,7 +861,7 @@ export def "apps-permissions delete" [
 #
 # GET /apps/{appId}/permissions
 # operationId: Permissions_List
-export def "apps-permissions list" [
+export def "permissions-list" [
   app_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -897,7 +897,7 @@ export def "apps-permissions list" [
 #
 # POST /apps/{appId}/permissions
 # operationId: Permissions_Add
-export def "apps-permissions create" [
+export def "permissions-add" [
   app_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -937,7 +937,7 @@ export def "apps-permissions create" [
 #
 # PUT /apps/{appId}/permissions
 # operationId: Permissions_Update
-export def "apps-permissions update" [
+export def "permissions-update" [
   app_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -977,7 +977,7 @@ export def "apps-permissions update" [
 #
 # POST /apps/{appId}/publish
 # operationId: Apps_Publish
-export def "apps-publish publish" [
+export def "apps-publish" [
   app_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1018,7 +1018,7 @@ export def "apps-publish publish" [
 #
 # GET /apps/{appId}/publishsettings
 # operationId: Apps_GetPublishSettings
-export def "apps-publishsettings get-publish-settings" [
+export def "apps-get-publish-settings" [
   app_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1054,7 +1054,7 @@ export def "apps-publishsettings get-publish-settings" [
 #
 # PUT /apps/{appId}/publishsettings
 # operationId: Apps_UpdatePublishSettings
-export def "apps-publishsettings update-publish-settings" [
+export def "apps-update-publish-settings" [
   app_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1096,7 +1096,7 @@ export def "apps-publishsettings update-publish-settings" [
 #
 # GET /apps/{appId}/querylogs
 # operationId: Apps_DownloadQueryLogs
-export def "apps-querylogs download-list-logs" [
+export def "apps-download-query-logs" [
   app_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1132,7 +1132,7 @@ export def "apps-querylogs download-list-logs" [
 #
 # GET /apps/{appId}/settings
 # operationId: Apps_GetSettings
-export def "apps-settings get" [
+export def "apps-get-settings" [
   app_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1168,7 +1168,7 @@ export def "apps-settings get" [
 #
 # PUT /apps/{appId}/settings
 # operationId: Apps_UpdateSettings
-export def "apps-settings update" [
+export def "apps-update-settings" [
   app_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1208,7 +1208,7 @@ export def "apps-settings update" [
 #
 # GET /apps/{appId}/versions
 # operationId: Versions_List
-export def "apps-versions list" [
+export def "versions-list" [
   app_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1259,7 +1259,7 @@ export def "apps-versions list" [
 # --regex_entities item shape: {name?: string, regexPattern?: string, roles?: list<string>}
 # --regex_features item shape: {activated?: bool, name?: string, pattern?: string}
 # --utterances item shape: {entities?: list, intent?: string, text?: string}
-export def "apps-versions-import import" [
+export def "versions-import" [
   app_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1316,7 +1316,7 @@ export def "apps-versions-import import" [
 #
 # DELETE /apps/{appId}/versions/{versionId}/
 # operationId: Versions_Delete
-export def "apps-versions delete" [
+export def "versions-delete" [
   app_id: string
   version_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1354,7 +1354,7 @@ export def "apps-versions delete" [
 #
 # GET /apps/{appId}/versions/{versionId}/
 # operationId: Versions_Get
-export def "apps-versions get" [
+export def "versions-get" [
   app_id: string
   version_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1392,7 +1392,7 @@ export def "apps-versions get" [
 #
 # PUT /apps/{appId}/versions/{versionId}/
 # operationId: Versions_Update
-export def "apps-versions update" [
+export def "versions-update" [
   app_id: string
   version_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1434,7 +1434,7 @@ export def "apps-versions update" [
 #
 # POST /apps/{appId}/versions/{versionId}/clone
 # operationId: Versions_Clone
-export def "apps-versions-clone clone" [
+export def "versions-clone" [
   app_id: string
   version_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1476,7 +1476,7 @@ export def "apps-versions-clone clone" [
 #
 # GET /apps/{appId}/versions/{versionId}/closedlists
 # operationId: Model_ListClosedLists
-export def "apps-versions-closedlists list-model-closed-lists" [
+export def "model-list-closed-lists" [
   app_id: string
   version_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1518,7 +1518,7 @@ export def "apps-versions-closedlists list-model-closed-lists" [
 # POST /apps/{appId}/versions/{versionId}/closedlists
 # operationId: Model_AddClosedList
 # --subLists item shape: {canonicalForm?: string, list?: list<string>}
-export def "apps-versions-closedlists create-model-closed-list" [
+export def "model-add-closed-list" [
   app_id: string
   version_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1561,7 +1561,7 @@ export def "apps-versions-closedlists create-model-closed-list" [
 #
 # DELETE /apps/{appId}/versions/{versionId}/closedlists/{clEntityId}
 # operationId: Model_DeleteClosedList
-export def "apps-versions-closedlists delete-model-closed-list" [
+export def "model-delete-closed-list" [
   app_id: string
   version_id: string
   cl_entity_id: string
@@ -1601,7 +1601,7 @@ export def "apps-versions-closedlists delete-model-closed-list" [
 #
 # GET /apps/{appId}/versions/{versionId}/closedlists/{clEntityId}
 # operationId: Model_GetClosedList
-export def "apps-versions-closedlists get-model-closed-list" [
+export def "model-get-closed-list" [
   app_id: string
   version_id: string
   cl_entity_id: string
@@ -1642,7 +1642,7 @@ export def "apps-versions-closedlists get-model-closed-list" [
 # PATCH /apps/{appId}/versions/{versionId}/closedlists/{clEntityId}
 # operationId: Model_PatchClosedList
 # --subLists item shape: {canonicalForm?: string, list?: list<string>}
-export def "apps-versions-closedlists update-model-closed-list-by-app-id-version-id-cl-entity-id" [
+export def "model-patch-closed-list" [
   app_id: string
   version_id: string
   cl_entity_id: string
@@ -1687,7 +1687,7 @@ export def "apps-versions-closedlists update-model-closed-list-by-app-id-version
 # PUT /apps/{appId}/versions/{versionId}/closedlists/{clEntityId}
 # operationId: Model_UpdateClosedList
 # --subLists item shape: {canonicalForm?: string, list?: list<string>}
-export def "apps-versions-closedlists update-model-closed-list-by-app-id-version-id-cl-entity-id-1" [
+export def "model-update-closed-list" [
   app_id: string
   version_id: string
   cl_entity_id: string
@@ -1732,7 +1732,7 @@ export def "apps-versions-closedlists update-model-closed-list-by-app-id-version
 #
 # POST /apps/{appId}/versions/{versionId}/closedlists/{clEntityId}/sublists
 # operationId: Model_AddSubList
-export def "apps-versions-closedlists-sublists create-model-sub-list" [
+export def "model-add-sub-list" [
   app_id: string
   version_id: string
   cl_entity_id: string
@@ -1777,7 +1777,7 @@ export def "apps-versions-closedlists-sublists create-model-sub-list" [
 #
 # DELETE /apps/{appId}/versions/{versionId}/closedlists/{clEntityId}/sublists/{subListId}
 # operationId: Model_DeleteSubList
-export def "apps-versions-closedlists-sublists delete-model-sub-list" [
+export def "model-delete-sub-list" [
   app_id: string
   version_id: string
   cl_entity_id: string
@@ -1819,7 +1819,7 @@ export def "apps-versions-closedlists-sublists delete-model-sub-list" [
 #
 # PUT /apps/{appId}/versions/{versionId}/closedlists/{clEntityId}/sublists/{subListId}
 # operationId: Model_UpdateSubList
-export def "apps-versions-closedlists-sublists update-model-sub-list" [
+export def "model-update-sub-list" [
   app_id: string
   version_id: string
   cl_entity_id: string
@@ -1866,7 +1866,7 @@ export def "apps-versions-closedlists-sublists update-model-sub-list" [
 #
 # GET /apps/{appId}/versions/{versionId}/closedlists/{entityId}/roles
 # operationId: Model_ListClosedListEntityRoles
-export def "apps-versions-closedlists-roles list-model-closed-entity" [
+export def "model-list-closed-list-entity-roles" [
   app_id: string
   version_id: string
   entity_id: string
@@ -1906,7 +1906,7 @@ export def "apps-versions-closedlists-roles list-model-closed-entity" [
 #
 # POST /apps/{appId}/versions/{versionId}/closedlists/{entityId}/roles
 # operationId: Model_CreateClosedListEntityRole
-export def "apps-versions-closedlists-roles create-model-closed-list-entity" [
+export def "model-create-closed-list-entity-role" [
   app_id: string
   version_id: string
   entity_id: string
@@ -1950,7 +1950,7 @@ export def "apps-versions-closedlists-roles create-model-closed-list-entity" [
 #
 # DELETE /apps/{appId}/versions/{versionId}/closedlists/{entityId}/roles/{roleId}
 # operationId: Model_DeleteClosedListEntityRole
-export def "apps-versions-closedlists-roles delete-model-closed-list-entity" [
+export def "model-delete-closed-list-entity-role" [
   app_id: string
   version_id: string
   entity_id: string
@@ -1992,7 +1992,7 @@ export def "apps-versions-closedlists-roles delete-model-closed-list-entity" [
 #
 # GET /apps/{appId}/versions/{versionId}/closedlists/{entityId}/roles/{roleId}
 # operationId: Model_GetClosedListEntityRole
-export def "apps-versions-closedlists-roles get-model-closed-list-entity" [
+export def "model-get-closed-list-entity-role" [
   app_id: string
   version_id: string
   entity_id: string
@@ -2034,7 +2034,7 @@ export def "apps-versions-closedlists-roles get-model-closed-list-entity" [
 #
 # PUT /apps/{appId}/versions/{versionId}/closedlists/{entityId}/roles/{roleId}
 # operationId: Model_UpdateClosedListEntityRole
-export def "apps-versions-closedlists-roles update-model-closed-list-entity" [
+export def "model-update-closed-list-entity-role" [
   app_id: string
   version_id: string
   entity_id: string
@@ -2080,7 +2080,7 @@ export def "apps-versions-closedlists-roles update-model-closed-list-entity" [
 #
 # GET /apps/{appId}/versions/{versionId}/compositeentities
 # operationId: Model_ListCompositeEntities
-export def "apps-versions-compositeentities list-model-composite-entities" [
+export def "model-list-composite-entities" [
   app_id: string
   version_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2121,7 +2121,7 @@ export def "apps-versions-compositeentities list-model-composite-entities" [
 #
 # DELETE /apps/{appId}/versions/{versionId}/compositeentities/{cEntityId}
 # operationId: Model_DeleteCompositeEntity
-export def "apps-versions-compositeentities delete-model-composite-entity" [
+export def "model-delete-composite-entity" [
   app_id: string
   version_id: string
   c_entity_id: string
@@ -2161,7 +2161,7 @@ export def "apps-versions-compositeentities delete-model-composite-entity" [
 #
 # GET /apps/{appId}/versions/{versionId}/compositeentities/{cEntityId}
 # operationId: Model_GetCompositeEntity
-export def "apps-versions-compositeentities get-model-composite-entity" [
+export def "model-get-composite-entity" [
   app_id: string
   version_id: string
   c_entity_id: string
@@ -2201,7 +2201,7 @@ export def "apps-versions-compositeentities get-model-composite-entity" [
 #
 # PUT /apps/{appId}/versions/{versionId}/compositeentities/{cEntityId}
 # operationId: Model_UpdateCompositeEntity
-export def "apps-versions-compositeentities update-model-composite-entity" [
+export def "model-update-composite-entity" [
   app_id: string
   version_id: string
   c_entity_id: string
@@ -2246,7 +2246,7 @@ export def "apps-versions-compositeentities update-model-composite-entity" [
 #
 # POST /apps/{appId}/versions/{versionId}/compositeentities/{cEntityId}/children
 # operationId: Model_AddCompositeEntityChild
-export def "apps-versions-compositeentities-children create-model-composite-entity-child" [
+export def "model-add-composite-entity-child" [
   app_id: string
   version_id: string
   c_entity_id: string
@@ -2290,7 +2290,7 @@ export def "apps-versions-compositeentities-children create-model-composite-enti
 #
 # DELETE /apps/{appId}/versions/{versionId}/compositeentities/{cEntityId}/children/{cChildId}
 # operationId: Model_DeleteCompositeEntityChild
-export def "apps-versions-compositeentities-children delete-model-composite-entity-child" [
+export def "model-delete-composite-entity-child" [
   app_id: string
   version_id: string
   c_entity_id: string
@@ -2332,7 +2332,7 @@ export def "apps-versions-compositeentities-children delete-model-composite-enti
 #
 # GET /apps/{appId}/versions/{versionId}/compositeentities/{cEntityId}/roles
 # operationId: Model_ListCompositeEntityRoles
-export def "apps-versions-compositeentities-roles list-model-composite-entity" [
+export def "model-list-composite-entity-roles" [
   app_id: string
   version_id: string
   c_entity_id: string
@@ -2372,7 +2372,7 @@ export def "apps-versions-compositeentities-roles list-model-composite-entity" [
 #
 # POST /apps/{appId}/versions/{versionId}/compositeentities/{cEntityId}/roles
 # operationId: Model_CreateCompositeEntityRole
-export def "apps-versions-compositeentities-roles create-model-composite-entity" [
+export def "model-create-composite-entity-role" [
   app_id: string
   version_id: string
   c_entity_id: string
@@ -2416,7 +2416,7 @@ export def "apps-versions-compositeentities-roles create-model-composite-entity"
 #
 # DELETE /apps/{appId}/versions/{versionId}/compositeentities/{cEntityId}/roles/{roleId}
 # operationId: Model_DeleteCompositeEntityRole
-export def "apps-versions-compositeentities-roles delete-model-composite-entity" [
+export def "model-delete-composite-entity-role" [
   app_id: string
   version_id: string
   c_entity_id: string
@@ -2458,7 +2458,7 @@ export def "apps-versions-compositeentities-roles delete-model-composite-entity"
 #
 # GET /apps/{appId}/versions/{versionId}/compositeentities/{cEntityId}/roles/{roleId}
 # operationId: Model_GetCompositeEntityRole
-export def "apps-versions-compositeentities-roles get-model-composite-entity" [
+export def "model-get-composite-entity-role" [
   app_id: string
   version_id: string
   c_entity_id: string
@@ -2500,7 +2500,7 @@ export def "apps-versions-compositeentities-roles get-model-composite-entity" [
 #
 # PUT /apps/{appId}/versions/{versionId}/compositeentities/{cEntityId}/roles/{roleId}
 # operationId: Model_UpdateCompositeEntityRole
-export def "apps-versions-compositeentities-roles update-model-composite-entity" [
+export def "model-update-composite-entity-role" [
   app_id: string
   version_id: string
   c_entity_id: string
@@ -2546,7 +2546,7 @@ export def "apps-versions-compositeentities-roles update-model-composite-entity"
 #
 # POST /apps/{appId}/versions/{versionId}/customprebuiltdomains
 # operationId: Model_AddCustomPrebuiltDomain
-export def "apps-versions-customprebuiltdomains create-model-custom-prebuilt-domain" [
+export def "model-add-custom-prebuilt-domain" [
   app_id: string
   version_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2588,7 +2588,7 @@ export def "apps-versions-customprebuiltdomains create-model-custom-prebuilt-dom
 #
 # DELETE /apps/{appId}/versions/{versionId}/customprebuiltdomains/{domainName}
 # operationId: Model_DeleteCustomPrebuiltDomain
-export def "apps-versions-customprebuiltdomains delete-model-custom-prebuilt-domain" [
+export def "model-delete-custom-prebuilt-domain" [
   app_id: string
   version_id: string
   domain_name: string
@@ -2628,7 +2628,7 @@ export def "apps-versions-customprebuiltdomains delete-model-custom-prebuilt-dom
 #
 # GET /apps/{appId}/versions/{versionId}/customprebuiltentities
 # operationId: Model_ListCustomPrebuiltEntities
-export def "apps-versions-customprebuiltentities list-model-custom-prebuilt-entities" [
+export def "model-list-custom-prebuilt-entities" [
   app_id: string
   version_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2666,7 +2666,7 @@ export def "apps-versions-customprebuiltentities list-model-custom-prebuilt-enti
 #
 # POST /apps/{appId}/versions/{versionId}/customprebuiltentities
 # operationId: Model_AddCustomPrebuiltEntity
-export def "apps-versions-customprebuiltentities create-model-custom-prebuilt-entity" [
+export def "model-add-custom-prebuilt-entity" [
   app_id: string
   version_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2709,7 +2709,7 @@ export def "apps-versions-customprebuiltentities create-model-custom-prebuilt-en
 #
 # GET /apps/{appId}/versions/{versionId}/customprebuiltentities/{entityId}/roles
 # operationId: Model_ListCustomPrebuiltEntityRoles
-export def "apps-versions-customprebuiltentities-roles list-model-custom-prebuilt-entity" [
+export def "model-list-custom-prebuilt-entity-roles" [
   app_id: string
   version_id: string
   entity_id: string
@@ -2749,7 +2749,7 @@ export def "apps-versions-customprebuiltentities-roles list-model-custom-prebuil
 #
 # POST /apps/{appId}/versions/{versionId}/customprebuiltentities/{entityId}/roles
 # operationId: Model_CreateCustomPrebuiltEntityRole
-export def "apps-versions-customprebuiltentities-roles create-model-custom-prebuilt-entity" [
+export def "model-create-custom-prebuilt-entity-role" [
   app_id: string
   version_id: string
   entity_id: string
@@ -2793,7 +2793,7 @@ export def "apps-versions-customprebuiltentities-roles create-model-custom-prebu
 #
 # DELETE /apps/{appId}/versions/{versionId}/customprebuiltentities/{entityId}/roles/{roleId}
 # operationId: Model_DeleteCustomEntityRole
-export def "apps-versions-customprebuiltentities-roles delete-model-custom-entity" [
+export def "model-delete-custom-entity-role" [
   app_id: string
   version_id: string
   entity_id: string
@@ -2835,7 +2835,7 @@ export def "apps-versions-customprebuiltentities-roles delete-model-custom-entit
 #
 # GET /apps/{appId}/versions/{versionId}/customprebuiltentities/{entityId}/roles/{roleId}
 # operationId: Model_GetCustomEntityRole
-export def "apps-versions-customprebuiltentities-roles get-model-custom-entity" [
+export def "model-get-custom-entity-role" [
   app_id: string
   version_id: string
   entity_id: string
@@ -2877,7 +2877,7 @@ export def "apps-versions-customprebuiltentities-roles get-model-custom-entity" 
 #
 # PUT /apps/{appId}/versions/{versionId}/customprebuiltentities/{entityId}/roles/{roleId}
 # operationId: Model_UpdateCustomPrebuiltEntityRole
-export def "apps-versions-customprebuiltentities-roles update-model-custom-prebuilt-entity" [
+export def "model-update-custom-prebuilt-entity-role" [
   app_id: string
   version_id: string
   entity_id: string
@@ -2923,7 +2923,7 @@ export def "apps-versions-customprebuiltentities-roles update-model-custom-prebu
 #
 # GET /apps/{appId}/versions/{versionId}/customprebuiltintents
 # operationId: Model_ListCustomPrebuiltIntents
-export def "apps-versions-customprebuiltintents list-model-custom-prebuilt-intents" [
+export def "model-list-custom-prebuilt-intents" [
   app_id: string
   version_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2961,7 +2961,7 @@ export def "apps-versions-customprebuiltintents list-model-custom-prebuilt-inten
 #
 # POST /apps/{appId}/versions/{versionId}/customprebuiltintents
 # operationId: Model_AddCustomPrebuiltIntent
-export def "apps-versions-customprebuiltintents create-model-custom-prebuilt-intent" [
+export def "model-add-custom-prebuilt-intent" [
   app_id: string
   version_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3004,7 +3004,7 @@ export def "apps-versions-customprebuiltintents create-model-custom-prebuilt-int
 #
 # GET /apps/{appId}/versions/{versionId}/customprebuiltmodels
 # operationId: Model_ListCustomPrebuiltModels
-export def "apps-versions-customprebuiltmodels list-model-custom-prebuilt-models" [
+export def "model-list-custom-prebuilt-models" [
   app_id: string
   version_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3042,7 +3042,7 @@ export def "apps-versions-customprebuiltmodels list-model-custom-prebuilt-models
 #
 # GET /apps/{appId}/versions/{versionId}/entities
 # operationId: Model_ListEntities
-export def "apps-versions-entities list-model" [
+export def "model-list-entities" [
   app_id: string
   version_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3084,7 +3084,7 @@ export def "apps-versions-entities list-model" [
 # POST /apps/{appId}/versions/{versionId}/entities
 # operationId: Model_AddEntity
 # --children item shape: {children?: list, instanceOf?: string, name?: string}
-export def "apps-versions-entities create-model-entity" [
+export def "model-add-entity" [
   app_id: string
   version_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3127,7 +3127,7 @@ export def "apps-versions-entities create-model-entity" [
 #
 # DELETE /apps/{appId}/versions/{versionId}/entities/{entityId}
 # operationId: Model_DeleteEntity
-export def "apps-versions-entities delete-model-entity" [
+export def "model-delete-entity" [
   app_id: string
   version_id: string
   entity_id: string
@@ -3167,7 +3167,7 @@ export def "apps-versions-entities delete-model-entity" [
 #
 # GET /apps/{appId}/versions/{versionId}/entities/{entityId}
 # operationId: Model_GetEntity
-export def "apps-versions-entities get-model-entity" [
+export def "model-get-entity" [
   app_id: string
   version_id: string
   entity_id: string
@@ -3207,7 +3207,7 @@ export def "apps-versions-entities get-model-entity" [
 #
 # PATCH /apps/{appId}/versions/{versionId}/entities/{entityId}
 # operationId: Model_UpdateEntityChild
-export def "apps-versions-entities update-model-entity-child" [
+export def "model-update-entity-child" [
   app_id: string
   version_id: string
   entity_id: string
@@ -3253,7 +3253,7 @@ export def "apps-versions-entities update-model-entity-child" [
 # POST /apps/{appId}/versions/{versionId}/entities/{entityId}/children
 # operationId: Model_AddEntityChild
 # --children item shape: {children?: list, instanceOf?: string, name?: string}
-export def "apps-versions-entities-children create-model-entity-child" [
+export def "model-add-entity-child" [
   app_id: string
   version_id: string
   entity_id: string
@@ -3299,7 +3299,7 @@ export def "apps-versions-entities-children create-model-entity-child" [
 #
 # DELETE /apps/{appId}/versions/{versionId}/entities/{entityId}/features
 # operationId: Model_DeleteEntityFeature
-export def "apps-versions-entities-features delete-model-entity" [
+export def "model-delete-entity-feature" [
   app_id: string
   version_id: string
   entity_id: string
@@ -3344,7 +3344,7 @@ export def "apps-versions-entities-features delete-model-entity" [
 #
 # GET /apps/{appId}/versions/{versionId}/entities/{entityId}/features
 # operationId: Model_GetEntityFeatures
-export def "apps-versions-entities-features get-model-entity" [
+export def "model-get-entity-features" [
   app_id: string
   version_id: string
   entity_id: string
@@ -3384,7 +3384,7 @@ export def "apps-versions-entities-features get-model-entity" [
 #
 # POST /apps/{appId}/versions/{versionId}/entities/{entityId}/features
 # operationId: Features_AddEntityFeature
-export def "apps-versions-entities-features create-entity" [
+export def "features-add-entity-feature" [
   app_id: string
   version_id: string
   entity_id: string
@@ -3429,7 +3429,7 @@ export def "apps-versions-entities-features create-entity" [
 #
 # PUT /apps/{appId}/versions/{versionId}/entities/{entityId}/features
 # operationId: Model_ReplaceEntityFeatures
-export def "apps-versions-entities-features update-model-entity" [
+export def "model-replace-entity-features" [
   app_id: string
   version_id: string
   entity_id: string
@@ -3473,7 +3473,7 @@ export def "apps-versions-entities-features update-model-entity" [
 #
 # GET /apps/{appId}/versions/{versionId}/entities/{entityId}/roles
 # operationId: Model_ListEntityRoles
-export def "apps-versions-entities-roles list-model-entity" [
+export def "model-list-entity-roles" [
   app_id: string
   version_id: string
   entity_id: string
@@ -3513,7 +3513,7 @@ export def "apps-versions-entities-roles list-model-entity" [
 #
 # POST /apps/{appId}/versions/{versionId}/entities/{entityId}/roles
 # operationId: Model_CreateEntityRole
-export def "apps-versions-entities-roles create-model-entity" [
+export def "model-create-entity-role" [
   app_id: string
   version_id: string
   entity_id: string
@@ -3557,7 +3557,7 @@ export def "apps-versions-entities-roles create-model-entity" [
 #
 # DELETE /apps/{appId}/versions/{versionId}/entities/{entityId}/roles/{roleId}
 # operationId: Model_DeleteEntityRole
-export def "apps-versions-entities-roles delete-model-entity" [
+export def "model-delete-entity-role" [
   app_id: string
   version_id: string
   entity_id: string
@@ -3599,7 +3599,7 @@ export def "apps-versions-entities-roles delete-model-entity" [
 #
 # GET /apps/{appId}/versions/{versionId}/entities/{entityId}/roles/{roleId}
 # operationId: Model_GetEntityRole
-export def "apps-versions-entities-roles get-model-entity" [
+export def "model-get-entity-role" [
   app_id: string
   version_id: string
   entity_id: string
@@ -3641,7 +3641,7 @@ export def "apps-versions-entities-roles get-model-entity" [
 #
 # PUT /apps/{appId}/versions/{versionId}/entities/{entityId}/roles/{roleId}
 # operationId: Model_UpdateEntityRole
-export def "apps-versions-entities-roles update-model-entity" [
+export def "model-update-entity-role" [
   app_id: string
   version_id: string
   entity_id: string
@@ -3687,7 +3687,7 @@ export def "apps-versions-entities-roles update-model-entity" [
 #
 # GET /apps/{appId}/versions/{versionId}/entities/{entityId}/suggest
 # operationId: Model_ListEntitySuggestions
-export def "apps-versions-entities-suggest list-model-entity-suggestions" [
+export def "model-list-entity-suggestions" [
   app_id: string
   version_id: string
   entity_id: string
@@ -3730,7 +3730,7 @@ export def "apps-versions-entities-suggest list-model-entity-suggestions" [
 # POST /apps/{appId}/versions/{versionId}/example
 # operationId: Examples_Add
 # --entityLabels item shape: {endCharIndex: int, entityName: string, role?: string, startCharIndex: int}
-export def "apps-versions-example create" [
+export def "examples-add" [
   app_id: string
   version_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3774,7 +3774,7 @@ export def "apps-versions-example create" [
 #
 # GET /apps/{appId}/versions/{versionId}/examples
 # operationId: Examples_List
-export def "apps-versions-examples list" [
+export def "examples-list" [
   app_id: string
   version_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3815,7 +3815,7 @@ export def "apps-versions-examples list" [
 #
 # POST /apps/{appId}/versions/{versionId}/examples
 # operationId: Examples_Batch
-export def "apps-versions-examples create-batch" [
+export def "examples-batch" [
   app_id: string
   version_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3857,7 +3857,7 @@ export def "apps-versions-examples create-batch" [
 #
 # DELETE /apps/{appId}/versions/{versionId}/examples/{exampleId}
 # operationId: Examples_Delete
-export def "apps-versions-examples delete" [
+export def "examples-delete" [
   app_id: string
   version_id: string
   example_id: int
@@ -3897,7 +3897,7 @@ export def "apps-versions-examples delete" [
 #
 # GET /apps/{appId}/versions/{versionId}/export
 # operationId: Versions_Export
-export def "apps-versions-export export" [
+export def "versions-export" [
   app_id: string
   version_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3935,7 +3935,7 @@ export def "apps-versions-export export" [
 #
 # GET /apps/{appId}/versions/{versionId}/features
 # operationId: Features_List
-export def "apps-versions-features list" [
+export def "features-list" [
   app_id: string
   version_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3976,7 +3976,7 @@ export def "apps-versions-features list" [
 #
 # GET /apps/{appId}/versions/{versionId}/hierarchicalentities
 # operationId: Model_ListHierarchicalEntities
-export def "apps-versions-hierarchicalentities list-model-hierarchical-entities" [
+export def "model-list-hierarchical-entities" [
   app_id: string
   version_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4017,7 +4017,7 @@ export def "apps-versions-hierarchicalentities list-model-hierarchical-entities"
 #
 # DELETE /apps/{appId}/versions/{versionId}/hierarchicalentities/{hEntityId}
 # operationId: Model_DeleteHierarchicalEntity
-export def "apps-versions-hierarchicalentities delete-model-hierarchical-entity" [
+export def "model-delete-hierarchical-entity" [
   app_id: string
   version_id: string
   h_entity_id: string
@@ -4057,7 +4057,7 @@ export def "apps-versions-hierarchicalentities delete-model-hierarchical-entity"
 #
 # GET /apps/{appId}/versions/{versionId}/hierarchicalentities/{hEntityId}
 # operationId: Model_GetHierarchicalEntity
-export def "apps-versions-hierarchicalentities get-model-hierarchical-entity" [
+export def "model-get-hierarchical-entity" [
   app_id: string
   version_id: string
   h_entity_id: string
@@ -4097,7 +4097,7 @@ export def "apps-versions-hierarchicalentities get-model-hierarchical-entity" [
 #
 # PATCH /apps/{appId}/versions/{versionId}/hierarchicalentities/{hEntityId}
 # operationId: Model_UpdateHierarchicalEntity
-export def "apps-versions-hierarchicalentities update-model-hierarchical-entity" [
+export def "model-update-hierarchical-entity" [
   app_id: string
   version_id: string
   h_entity_id: string
@@ -4141,7 +4141,7 @@ export def "apps-versions-hierarchicalentities update-model-hierarchical-entity"
 #
 # DELETE /apps/{appId}/versions/{versionId}/hierarchicalentities/{hEntityId}/children/{hChildId}
 # operationId: Model_DeleteHierarchicalEntityChild
-export def "apps-versions-hierarchicalentities-children delete-model-hierarchical-entity-child" [
+export def "model-delete-hierarchical-entity-child" [
   app_id: string
   version_id: string
   h_entity_id: string
@@ -4183,7 +4183,7 @@ export def "apps-versions-hierarchicalentities-children delete-model-hierarchica
 #
 # GET /apps/{appId}/versions/{versionId}/hierarchicalentities/{hEntityId}/children/{hChildId}
 # operationId: Model_GetHierarchicalEntityChild
-export def "apps-versions-hierarchicalentities-children get-model-hierarchical-entity-child" [
+export def "model-get-hierarchical-entity-child" [
   app_id: string
   version_id: string
   h_entity_id: string
@@ -4225,7 +4225,7 @@ export def "apps-versions-hierarchicalentities-children get-model-hierarchical-e
 #
 # PATCH /apps/{appId}/versions/{versionId}/hierarchicalentities/{hEntityId}/children/{hChildId}
 # operationId: Model_UpdateHierarchicalEntityChild
-export def "apps-versions-hierarchicalentities-children update-model-hierarchical-entity-child" [
+export def "model-update-hierarchical-entity-child" [
   app_id: string
   version_id: string
   h_entity_id: string
@@ -4271,7 +4271,7 @@ export def "apps-versions-hierarchicalentities-children update-model-hierarchica
 #
 # GET /apps/{appId}/versions/{versionId}/hierarchicalentities/{hEntityId}/roles
 # operationId: Model_ListHierarchicalEntityRoles
-export def "apps-versions-hierarchicalentities-roles list-model-hierarchical-entity" [
+export def "model-list-hierarchical-entity-roles" [
   app_id: string
   version_id: string
   h_entity_id: string
@@ -4311,7 +4311,7 @@ export def "apps-versions-hierarchicalentities-roles list-model-hierarchical-ent
 #
 # POST /apps/{appId}/versions/{versionId}/hierarchicalentities/{hEntityId}/roles
 # operationId: Model_CreateHierarchicalEntityRole
-export def "apps-versions-hierarchicalentities-roles create-model-hierarchical-entity" [
+export def "model-create-hierarchical-entity-role" [
   app_id: string
   version_id: string
   h_entity_id: string
@@ -4355,7 +4355,7 @@ export def "apps-versions-hierarchicalentities-roles create-model-hierarchical-e
 #
 # DELETE /apps/{appId}/versions/{versionId}/hierarchicalentities/{hEntityId}/roles/{roleId}
 # operationId: Model_DeleteHierarchicalEntityRole
-export def "apps-versions-hierarchicalentities-roles delete-model-hierarchical-entity" [
+export def "model-delete-hierarchical-entity-role" [
   app_id: string
   version_id: string
   h_entity_id: string
@@ -4397,7 +4397,7 @@ export def "apps-versions-hierarchicalentities-roles delete-model-hierarchical-e
 #
 # GET /apps/{appId}/versions/{versionId}/hierarchicalentities/{hEntityId}/roles/{roleId}
 # operationId: Model_GetHierarchicalEntityRole
-export def "apps-versions-hierarchicalentities-roles get-model-hierarchical-entity" [
+export def "model-get-hierarchical-entity-role" [
   app_id: string
   version_id: string
   h_entity_id: string
@@ -4439,7 +4439,7 @@ export def "apps-versions-hierarchicalentities-roles get-model-hierarchical-enti
 #
 # PUT /apps/{appId}/versions/{versionId}/hierarchicalentities/{hEntityId}/roles/{roleId}
 # operationId: Model_UpdateHierarchicalEntityRole
-export def "apps-versions-hierarchicalentities-roles update-model-hierarchical-entity" [
+export def "model-update-hierarchical-entity-role" [
   app_id: string
   version_id: string
   h_entity_id: string
@@ -4485,7 +4485,7 @@ export def "apps-versions-hierarchicalentities-roles update-model-hierarchical-e
 #
 # GET /apps/{appId}/versions/{versionId}/intents
 # operationId: Model_ListIntents
-export def "apps-versions-intents list-model" [
+export def "model-list-intents" [
   app_id: string
   version_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4526,7 +4526,7 @@ export def "apps-versions-intents list-model" [
 #
 # POST /apps/{appId}/versions/{versionId}/intents
 # operationId: Model_AddIntent
-export def "apps-versions-intents create-model" [
+export def "model-add-intent" [
   app_id: string
   version_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4568,7 +4568,7 @@ export def "apps-versions-intents create-model" [
 #
 # DELETE /apps/{appId}/versions/{versionId}/intents/{intentId}
 # operationId: Model_DeleteIntent
-export def "apps-versions-intents delete-model" [
+export def "model-delete-intent" [
   app_id: string
   version_id: string
   intent_id: string
@@ -4610,7 +4610,7 @@ export def "apps-versions-intents delete-model" [
 #
 # GET /apps/{appId}/versions/{versionId}/intents/{intentId}
 # operationId: Model_GetIntent
-export def "apps-versions-intents get-model" [
+export def "model-get-intent" [
   app_id: string
   version_id: string
   intent_id: string
@@ -4650,7 +4650,7 @@ export def "apps-versions-intents get-model" [
 #
 # PUT /apps/{appId}/versions/{versionId}/intents/{intentId}
 # operationId: Model_UpdateIntent
-export def "apps-versions-intents update-model" [
+export def "model-update-intent" [
   app_id: string
   version_id: string
   intent_id: string
@@ -4694,7 +4694,7 @@ export def "apps-versions-intents update-model" [
 #
 # DELETE /apps/{appId}/versions/{versionId}/intents/{intentId}/features
 # operationId: Model_DeleteIntentFeature
-export def "apps-versions-intents-features delete-model" [
+export def "model-delete-intent-feature" [
   app_id: string
   version_id: string
   intent_id: string
@@ -4739,7 +4739,7 @@ export def "apps-versions-intents-features delete-model" [
 #
 # GET /apps/{appId}/versions/{versionId}/intents/{intentId}/features
 # operationId: Model_GetIntentFeatures
-export def "apps-versions-intents-features get-model" [
+export def "model-get-intent-features" [
   app_id: string
   version_id: string
   intent_id: string
@@ -4779,7 +4779,7 @@ export def "apps-versions-intents-features get-model" [
 #
 # POST /apps/{appId}/versions/{versionId}/intents/{intentId}/features
 # operationId: Features_AddIntentFeature
-export def "apps-versions-intents-features create" [
+export def "features-add-intent-feature" [
   app_id: string
   version_id: string
   intent_id: string
@@ -4824,7 +4824,7 @@ export def "apps-versions-intents-features create" [
 #
 # PUT /apps/{appId}/versions/{versionId}/intents/{intentId}/features
 # operationId: Model_ReplaceIntentFeatures
-export def "apps-versions-intents-features update-model" [
+export def "model-replace-intent-features" [
   app_id: string
   version_id: string
   intent_id: string
@@ -4868,7 +4868,7 @@ export def "apps-versions-intents-features update-model" [
 #
 # GET /apps/{appId}/versions/{versionId}/intents/{intentId}/patternrules
 # operationId: Pattern_ListIntentPatterns
-export def "apps-versions-intents-patternrules list-pattern-patterns" [
+export def "pattern-list-intent-patterns" [
   app_id: string
   version_id: string
   intent_id: string
@@ -4911,7 +4911,7 @@ export def "apps-versions-intents-patternrules list-pattern-patterns" [
 #
 # GET /apps/{appId}/versions/{versionId}/intents/{intentId}/suggest
 # operationId: Model_ListIntentSuggestions
-export def "apps-versions-intents-suggest list-model-suggestions" [
+export def "model-list-intent-suggestions" [
   app_id: string
   version_id: string
   intent_id: string
@@ -4953,7 +4953,7 @@ export def "apps-versions-intents-suggest list-model-suggestions" [
 #
 # GET /apps/{appId}/versions/{versionId}/listprebuilts
 # operationId: Model_ListPrebuiltEntities
-export def "apps-versions-list-prebuilts list-model-entities" [
+export def "model-list-prebuilt-entities" [
   app_id: string
   version_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4991,7 +4991,7 @@ export def "apps-versions-list-prebuilts list-model-entities" [
 #
 # GET /apps/{appId}/versions/{versionId}/models
 # operationId: Model_ListModels
-export def "apps-versions-models list" [
+export def "model-list-models" [
   app_id: string
   version_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5032,7 +5032,7 @@ export def "apps-versions-models list" [
 #
 # GET /apps/{appId}/versions/{versionId}/models/{modelId}/examples
 # operationId: Model_Examples
-export def "apps-versions-models-examples get" [
+export def "model-examples" [
   app_id: string
   version_id: string
   model_id: string
@@ -5075,7 +5075,7 @@ export def "apps-versions-models-examples get" [
 #
 # GET /apps/{appId}/versions/{versionId}/patternanyentities
 # operationId: Model_ListPatternAnyEntityInfos
-export def "apps-versions-patternanyentities list-model-pattern-any-entity-infos" [
+export def "model-list-pattern-any-entity-infos" [
   app_id: string
   version_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5116,7 +5116,7 @@ export def "apps-versions-patternanyentities list-model-pattern-any-entity-infos
 #
 # POST /apps/{appId}/versions/{versionId}/patternanyentities
 # operationId: Model_CreatePatternAnyEntityModel
-export def "apps-versions-patternanyentities create-model-pattern-any-entity-model" [
+export def "model-create-pattern-any-entity-model" [
   app_id: string
   version_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5159,7 +5159,7 @@ export def "apps-versions-patternanyentities create-model-pattern-any-entity-mod
 #
 # DELETE /apps/{appId}/versions/{versionId}/patternanyentities/{entityId}
 # operationId: Model_DeletePatternAnyEntityModel
-export def "apps-versions-patternanyentities delete-model-pattern-any-entity-model" [
+export def "model-delete-pattern-any-entity-model" [
   app_id: string
   version_id: string
   entity_id: string
@@ -5199,7 +5199,7 @@ export def "apps-versions-patternanyentities delete-model-pattern-any-entity-mod
 #
 # GET /apps/{appId}/versions/{versionId}/patternanyentities/{entityId}
 # operationId: Model_GetPatternAnyEntityInfo
-export def "apps-versions-patternanyentities get-model-pattern-any-entity" [
+export def "model-get-pattern-any-entity-info" [
   app_id: string
   version_id: string
   entity_id: string
@@ -5239,7 +5239,7 @@ export def "apps-versions-patternanyentities get-model-pattern-any-entity" [
 #
 # PUT /apps/{appId}/versions/{versionId}/patternanyentities/{entityId}
 # operationId: Model_UpdatePatternAnyEntityModel
-export def "apps-versions-patternanyentities update-model-pattern-any-entity-model" [
+export def "model-update-pattern-any-entity-model" [
   app_id: string
   version_id: string
   entity_id: string
@@ -5284,7 +5284,7 @@ export def "apps-versions-patternanyentities update-model-pattern-any-entity-mod
 #
 # GET /apps/{appId}/versions/{versionId}/patternanyentities/{entityId}/explicitlist
 # operationId: Model_GetExplicitList
-export def "apps-versions-patternanyentities-explicitlist get-model-explicit-list" [
+export def "model-get-explicit-list" [
   app_id: string
   version_id: string
   entity_id: string
@@ -5324,7 +5324,7 @@ export def "apps-versions-patternanyentities-explicitlist get-model-explicit-lis
 #
 # POST /apps/{appId}/versions/{versionId}/patternanyentities/{entityId}/explicitlist
 # operationId: Model_AddExplicitListItem
-export def "apps-versions-patternanyentities-explicitlist create-model-explicit-list-item" [
+export def "model-add-explicit-list-item" [
   app_id: string
   version_id: string
   entity_id: string
@@ -5368,7 +5368,7 @@ export def "apps-versions-patternanyentities-explicitlist create-model-explicit-
 #
 # DELETE /apps/{appId}/versions/{versionId}/patternanyentities/{entityId}/explicitlist/{itemId}
 # operationId: Model_DeleteExplicitListItem
-export def "apps-versions-patternanyentities-explicitlist delete-model-explicit-list-item" [
+export def "model-delete-explicit-list-item" [
   app_id: string
   version_id: string
   entity_id: string
@@ -5410,7 +5410,7 @@ export def "apps-versions-patternanyentities-explicitlist delete-model-explicit-
 #
 # GET /apps/{appId}/versions/{versionId}/patternanyentities/{entityId}/explicitlist/{itemId}
 # operationId: Model_GetExplicitListItem
-export def "apps-versions-patternanyentities-explicitlist get-model-explicit-list-item" [
+export def "model-get-explicit-list-item" [
   app_id: string
   version_id: string
   entity_id: string
@@ -5452,7 +5452,7 @@ export def "apps-versions-patternanyentities-explicitlist get-model-explicit-lis
 #
 # PUT /apps/{appId}/versions/{versionId}/patternanyentities/{entityId}/explicitlist/{itemId}
 # operationId: Model_UpdateExplicitListItem
-export def "apps-versions-patternanyentities-explicitlist update-model-explicit-list-item" [
+export def "model-update-explicit-list-item" [
   app_id: string
   version_id: string
   entity_id: string
@@ -5498,7 +5498,7 @@ export def "apps-versions-patternanyentities-explicitlist update-model-explicit-
 #
 # GET /apps/{appId}/versions/{versionId}/patternanyentities/{entityId}/roles
 # operationId: Model_ListPatternAnyEntityRoles
-export def "apps-versions-patternanyentities-roles list-model-pattern-any-entity" [
+export def "model-list-pattern-any-entity-roles" [
   app_id: string
   version_id: string
   entity_id: string
@@ -5538,7 +5538,7 @@ export def "apps-versions-patternanyentities-roles list-model-pattern-any-entity
 #
 # POST /apps/{appId}/versions/{versionId}/patternanyentities/{entityId}/roles
 # operationId: Model_CreatePatternAnyEntityRole
-export def "apps-versions-patternanyentities-roles create-model-pattern-any-entity" [
+export def "model-create-pattern-any-entity-role" [
   app_id: string
   version_id: string
   entity_id: string
@@ -5582,7 +5582,7 @@ export def "apps-versions-patternanyentities-roles create-model-pattern-any-enti
 #
 # DELETE /apps/{appId}/versions/{versionId}/patternanyentities/{entityId}/roles/{roleId}
 # operationId: Model_DeletePatternAnyEntityRole
-export def "apps-versions-patternanyentities-roles delete-model-pattern-any-entity" [
+export def "model-delete-pattern-any-entity-role" [
   app_id: string
   version_id: string
   entity_id: string
@@ -5624,7 +5624,7 @@ export def "apps-versions-patternanyentities-roles delete-model-pattern-any-enti
 #
 # GET /apps/{appId}/versions/{versionId}/patternanyentities/{entityId}/roles/{roleId}
 # operationId: Model_GetPatternAnyEntityRole
-export def "apps-versions-patternanyentities-roles get-model-pattern-any-entity" [
+export def "model-get-pattern-any-entity-role" [
   app_id: string
   version_id: string
   entity_id: string
@@ -5666,7 +5666,7 @@ export def "apps-versions-patternanyentities-roles get-model-pattern-any-entity"
 #
 # PUT /apps/{appId}/versions/{versionId}/patternanyentities/{entityId}/roles/{roleId}
 # operationId: Model_UpdatePatternAnyEntityRole
-export def "apps-versions-patternanyentities-roles update-model-pattern-any-entity" [
+export def "model-update-pattern-any-entity-role" [
   app_id: string
   version_id: string
   entity_id: string
@@ -5712,7 +5712,7 @@ export def "apps-versions-patternanyentities-roles update-model-pattern-any-enti
 #
 # POST /apps/{appId}/versions/{versionId}/patternrule
 # operationId: Pattern_AddPattern
-export def "apps-versions-patternrule create-pattern-pattern" [
+export def "pattern-add-pattern" [
   app_id: string
   version_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5755,7 +5755,7 @@ export def "apps-versions-patternrule create-pattern-pattern" [
 #
 # DELETE /apps/{appId}/versions/{versionId}/patternrules
 # operationId: Pattern_DeletePatterns
-export def "apps-versions-patternrules delete-pattern-patterns" [
+export def "pattern-delete-patterns" [
   app_id: string
   version_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5797,7 +5797,7 @@ export def "apps-versions-patternrules delete-pattern-patterns" [
 #
 # GET /apps/{appId}/versions/{versionId}/patternrules
 # operationId: Pattern_ListPatterns
-export def "apps-versions-patternrules list-pattern-patterns" [
+export def "pattern-list-patterns" [
   app_id: string
   version_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5838,7 +5838,7 @@ export def "apps-versions-patternrules list-pattern-patterns" [
 #
 # POST /apps/{appId}/versions/{versionId}/patternrules
 # operationId: Pattern_BatchAddPatterns
-export def "apps-versions-patternrules create-pattern-batch-patterns" [
+export def "pattern-batch-add-patterns" [
   app_id: string
   version_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5880,7 +5880,7 @@ export def "apps-versions-patternrules create-pattern-batch-patterns" [
 #
 # PUT /apps/{appId}/versions/{versionId}/patternrules
 # operationId: Pattern_UpdatePatterns
-export def "apps-versions-patternrules update-pattern-patterns" [
+export def "pattern-update-patterns" [
   app_id: string
   version_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5922,7 +5922,7 @@ export def "apps-versions-patternrules update-pattern-patterns" [
 #
 # DELETE /apps/{appId}/versions/{versionId}/patternrules/{patternId}
 # operationId: Pattern_DeletePattern
-export def "apps-versions-patternrules delete-pattern-pattern" [
+export def "pattern-delete-pattern" [
   app_id: string
   version_id: string
   pattern_id: string
@@ -5962,7 +5962,7 @@ export def "apps-versions-patternrules delete-pattern-pattern" [
 #
 # PUT /apps/{appId}/versions/{versionId}/patternrules/{patternId}
 # operationId: Pattern_UpdatePattern
-export def "apps-versions-patternrules update-pattern-pattern" [
+export def "pattern-update-pattern" [
   app_id: string
   version_id: string
   pattern_id: string
@@ -6008,7 +6008,7 @@ export def "apps-versions-patternrules update-pattern-pattern" [
 #
 # GET /apps/{appId}/versions/{versionId}/phraselists
 # operationId: Features_ListPhraseLists
-export def "apps-versions-phraselists list-features-phrase-lists" [
+export def "features-list-phrase-lists" [
   app_id: string
   version_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6049,7 +6049,7 @@ export def "apps-versions-phraselists list-features-phrase-lists" [
 #
 # POST /apps/{appId}/versions/{versionId}/phraselists
 # operationId: Features_AddPhraseList
-export def "apps-versions-phraselists create-features-phrase-list" [
+export def "features-add-phrase-list" [
   app_id: string
   version_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6094,7 +6094,7 @@ export def "apps-versions-phraselists create-features-phrase-list" [
 #
 # DELETE /apps/{appId}/versions/{versionId}/phraselists/{phraselistId}
 # operationId: Features_DeletePhraseList
-export def "apps-versions-phraselists delete-features-phrase-list" [
+export def "features-delete-phrase-list" [
   app_id: string
   version_id: string
   phraselist_id: int
@@ -6134,7 +6134,7 @@ export def "apps-versions-phraselists delete-features-phrase-list" [
 #
 # GET /apps/{appId}/versions/{versionId}/phraselists/{phraselistId}
 # operationId: Features_GetPhraseList
-export def "apps-versions-phraselists get-features-phrase-list" [
+export def "features-get-phrase-list" [
   app_id: string
   version_id: string
   phraselist_id: int
@@ -6174,7 +6174,7 @@ export def "apps-versions-phraselists get-features-phrase-list" [
 #
 # PUT /apps/{appId}/versions/{versionId}/phraselists/{phraselistId}
 # operationId: Features_UpdatePhraseList
-export def "apps-versions-phraselists update-features-phrase-list" [
+export def "features-update-phrase-list" [
   app_id: string
   version_id: string
   phraselist_id: int
@@ -6222,7 +6222,7 @@ export def "apps-versions-phraselists update-features-phrase-list" [
 #
 # GET /apps/{appId}/versions/{versionId}/prebuilts
 # operationId: Model_ListPrebuilts
-export def "apps-versions-prebuilts list-model" [
+export def "model-list-prebuilts" [
   app_id: string
   version_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6263,7 +6263,7 @@ export def "apps-versions-prebuilts list-model" [
 #
 # POST /apps/{appId}/versions/{versionId}/prebuilts
 # operationId: Model_AddPrebuilt
-export def "apps-versions-prebuilts create-model" [
+export def "model-add-prebuilt" [
   app_id: string
   version_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6305,7 +6305,7 @@ export def "apps-versions-prebuilts create-model" [
 #
 # GET /apps/{appId}/versions/{versionId}/prebuilts/{entityId}/roles
 # operationId: Model_ListPrebuiltEntityRoles
-export def "apps-versions-prebuilts-roles list-model-entity" [
+export def "model-list-prebuilt-entity-roles" [
   app_id: string
   version_id: string
   entity_id: string
@@ -6345,7 +6345,7 @@ export def "apps-versions-prebuilts-roles list-model-entity" [
 #
 # POST /apps/{appId}/versions/{versionId}/prebuilts/{entityId}/roles
 # operationId: Model_CreatePrebuiltEntityRole
-export def "apps-versions-prebuilts-roles create-model-entity" [
+export def "model-create-prebuilt-entity-role" [
   app_id: string
   version_id: string
   entity_id: string
@@ -6389,7 +6389,7 @@ export def "apps-versions-prebuilts-roles create-model-entity" [
 #
 # DELETE /apps/{appId}/versions/{versionId}/prebuilts/{entityId}/roles/{roleId}
 # operationId: Model_DeletePrebuiltEntityRole
-export def "apps-versions-prebuilts-roles delete-model-entity" [
+export def "model-delete-prebuilt-entity-role" [
   app_id: string
   version_id: string
   entity_id: string
@@ -6431,7 +6431,7 @@ export def "apps-versions-prebuilts-roles delete-model-entity" [
 #
 # GET /apps/{appId}/versions/{versionId}/prebuilts/{entityId}/roles/{roleId}
 # operationId: Model_GetPrebuiltEntityRole
-export def "apps-versions-prebuilts-roles get-model-entity" [
+export def "model-get-prebuilt-entity-role" [
   app_id: string
   version_id: string
   entity_id: string
@@ -6473,7 +6473,7 @@ export def "apps-versions-prebuilts-roles get-model-entity" [
 #
 # PUT /apps/{appId}/versions/{versionId}/prebuilts/{entityId}/roles/{roleId}
 # operationId: Model_UpdatePrebuiltEntityRole
-export def "apps-versions-prebuilts-roles update-model-entity" [
+export def "model-update-prebuilt-entity-role" [
   app_id: string
   version_id: string
   entity_id: string
@@ -6519,7 +6519,7 @@ export def "apps-versions-prebuilts-roles update-model-entity" [
 #
 # DELETE /apps/{appId}/versions/{versionId}/prebuilts/{prebuiltId}
 # operationId: Model_DeletePrebuilt
-export def "apps-versions-prebuilts delete-model" [
+export def "model-delete-prebuilt" [
   app_id: string
   version_id: string
   prebuilt_id: string
@@ -6559,7 +6559,7 @@ export def "apps-versions-prebuilts delete-model" [
 #
 # GET /apps/{appId}/versions/{versionId}/prebuilts/{prebuiltId}
 # operationId: Model_GetPrebuilt
-export def "apps-versions-prebuilts get-model" [
+export def "model-get-prebuilt" [
   app_id: string
   version_id: string
   prebuilt_id: string
@@ -6599,7 +6599,7 @@ export def "apps-versions-prebuilts get-model" [
 #
 # GET /apps/{appId}/versions/{versionId}/regexentities
 # operationId: Model_ListRegexEntityInfos
-export def "apps-versions-regexentities list-model-regex-entity-infos" [
+export def "model-list-regex-entity-infos" [
   app_id: string
   version_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6640,7 +6640,7 @@ export def "apps-versions-regexentities list-model-regex-entity-infos" [
 #
 # POST /apps/{appId}/versions/{versionId}/regexentities
 # operationId: Model_CreateRegexEntityModel
-export def "apps-versions-regexentities create-model-regex-entity-model" [
+export def "model-create-regex-entity-model" [
   app_id: string
   version_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6683,7 +6683,7 @@ export def "apps-versions-regexentities create-model-regex-entity-model" [
 #
 # GET /apps/{appId}/versions/{versionId}/regexentities/{entityId}/roles
 # operationId: Model_ListRegexEntityRoles
-export def "apps-versions-regexentities-roles list-model-regex-entity" [
+export def "model-list-regex-entity-roles" [
   app_id: string
   version_id: string
   entity_id: string
@@ -6723,7 +6723,7 @@ export def "apps-versions-regexentities-roles list-model-regex-entity" [
 #
 # POST /apps/{appId}/versions/{versionId}/regexentities/{entityId}/roles
 # operationId: Model_CreateRegexEntityRole
-export def "apps-versions-regexentities-roles create-model-regex-entity" [
+export def "model-create-regex-entity-role" [
   app_id: string
   version_id: string
   entity_id: string
@@ -6767,7 +6767,7 @@ export def "apps-versions-regexentities-roles create-model-regex-entity" [
 #
 # DELETE /apps/{appId}/versions/{versionId}/regexentities/{entityId}/roles/{roleId}
 # operationId: Model_DeleteRegexEntityRole
-export def "apps-versions-regexentities-roles delete-model-regex-entity" [
+export def "model-delete-regex-entity-role" [
   app_id: string
   version_id: string
   entity_id: string
@@ -6809,7 +6809,7 @@ export def "apps-versions-regexentities-roles delete-model-regex-entity" [
 #
 # GET /apps/{appId}/versions/{versionId}/regexentities/{entityId}/roles/{roleId}
 # operationId: Model_GetRegexEntityRole
-export def "apps-versions-regexentities-roles get-model-regex-entity" [
+export def "model-get-regex-entity-role" [
   app_id: string
   version_id: string
   entity_id: string
@@ -6851,7 +6851,7 @@ export def "apps-versions-regexentities-roles get-model-regex-entity" [
 #
 # PUT /apps/{appId}/versions/{versionId}/regexentities/{entityId}/roles/{roleId}
 # operationId: Model_UpdateRegexEntityRole
-export def "apps-versions-regexentities-roles update-model-regex-entity" [
+export def "model-update-regex-entity-role" [
   app_id: string
   version_id: string
   entity_id: string
@@ -6897,7 +6897,7 @@ export def "apps-versions-regexentities-roles update-model-regex-entity" [
 #
 # DELETE /apps/{appId}/versions/{versionId}/regexentities/{regexEntityId}
 # operationId: Model_DeleteRegexEntityModel
-export def "apps-versions-regexentities delete-model-regex-entity-model" [
+export def "model-delete-regex-entity-model" [
   app_id: string
   version_id: string
   regex_entity_id: string
@@ -6937,7 +6937,7 @@ export def "apps-versions-regexentities delete-model-regex-entity-model" [
 #
 # GET /apps/{appId}/versions/{versionId}/regexentities/{regexEntityId}
 # operationId: Model_GetRegexEntityEntityInfo
-export def "apps-versions-regexentities get-model-regex-entity-entity" [
+export def "model-get-regex-entity-entity-info" [
   app_id: string
   version_id: string
   regex_entity_id: string
@@ -6977,7 +6977,7 @@ export def "apps-versions-regexentities get-model-regex-entity-entity" [
 #
 # PUT /apps/{appId}/versions/{versionId}/regexentities/{regexEntityId}
 # operationId: Model_UpdateRegexEntityModel
-export def "apps-versions-regexentities update-model-regex-entity-model" [
+export def "model-update-regex-entity-model" [
   app_id: string
   version_id: string
   regex_entity_id: string
@@ -7022,7 +7022,7 @@ export def "apps-versions-regexentities update-model-regex-entity-model" [
 #
 # GET /apps/{appId}/versions/{versionId}/settings
 # operationId: Settings_List
-export def "apps-versions-settings list" [
+export def "settings-list" [
   app_id: string
   version_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7060,7 +7060,7 @@ export def "apps-versions-settings list" [
 #
 # PUT /apps/{appId}/versions/{versionId}/settings
 # operationId: Settings_Update
-export def "apps-versions-settings update" [
+export def "settings-update" [
   app_id: string
   version_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7102,7 +7102,7 @@ export def "apps-versions-settings update" [
 #
 # DELETE /apps/{appId}/versions/{versionId}/suggest
 # operationId: Versions_DeleteUnlabelledUtterance
-export def "apps-versions-suggest delete-unlabelled-utterance" [
+export def "versions-delete-unlabelled-utterance" [
   app_id: string
   version_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7144,7 +7144,7 @@ export def "apps-versions-suggest delete-unlabelled-utterance" [
 #
 # GET /apps/{appId}/versions/{versionId}/train
 # operationId: Train_GetStatus
-export def "apps-versions-train get-status" [
+export def "train-get-status" [
   app_id: string
   version_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7183,7 +7183,7 @@ export def "apps-versions-train get-status" [
 #
 # POST /apps/{appId}/versions/{versionId}/train
 # operationId: Train_TrainVersion
-export def "apps-versions-train version" [
+export def "train-train-version" [
   app_id: string
   version_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7221,7 +7221,7 @@ export def "apps-versions-train version" [
 #
 # GET /azureaccounts
 # operationId: AzureAccounts_ListUserLUISAccounts
-export def "azureaccounts list-azure-accounts-user-luis-accounts" [
+export def "azure-accounts-list-user-luis-accounts" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7258,7 +7258,7 @@ export def "azureaccounts list-azure-accounts-user-luis-accounts" [
 #
 # GET /package/{appId}/slot/{slotName}/gzip
 # operationId: Apps_PackagePublishedApplicationAsGzip
-export def "package-slot-gzip get-apps-published-application" [
+export def "apps-package-published-application-as-gzip" [
   app_id: string
   slot_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7297,7 +7297,7 @@ export def "package-slot-gzip get-apps-published-application" [
 #
 # GET /package/{appId}/versions/{versionId}/gzip
 # operationId: Apps_PackageTrainedApplicationAsGzip
-export def "package-versions-gzip get-apps-trained-application" [
+export def "apps-package-trained-application-as-gzip" [
   app_id: string
   version_id: string
   --base-url(-b): string@base-url-completer # API base URL

@@ -134,7 +134,7 @@ def title-completer [] { ["ceo" "cso" "cto" "dev" "devop" "manager" "other" "sec
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "account get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-account" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -157,7 +157,7 @@ export def commands []: nothing -> table {
 # Retrieve account information
 #
 # GET /account/
-export def "account get" [
+export def "get-account" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -190,7 +190,7 @@ export def "account get" [
 # Authenticate user
 #
 # POST /auth/obtain/
-export def "auth-obtain create" [
+export def "post-auth-obtain" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -228,7 +228,7 @@ export def "auth-obtain create" [
 # Replace token with a new one
 #
 # POST /auth/refresh/
-export def "auth-refresh create" [
+export def "post-auth-refresh" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -265,7 +265,7 @@ export def "auth-refresh create" [
 # Revoke a token
 #
 # POST /auth/revoke/
-export def "auth-revoke create" [
+export def "post-auth-revoke" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -302,7 +302,7 @@ export def "auth-revoke create" [
 # Verify a token
 #
 # POST /auth/verify/
-export def "auth-verify create" [
+export def "post-auth-verify" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -339,7 +339,7 @@ export def "auth-verify create" [
 # Retrieve billing information
 #
 # GET /billing/
-export def "billing get" [
+export def "get-billing" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -372,7 +372,7 @@ export def "billing get" [
 # Partial update billing information
 #
 # PATCH /billing/
-export def "billing update" [
+export def "patch-billing" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -418,7 +418,7 @@ export def "billing update" [
 # Update billing information
 #
 # PUT /billing/
-export def "billing update-1" [
+export def "put-billing" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -464,7 +464,7 @@ export def "billing update-1" [
 # Action that should be taken to enable the selected targets
 #
 # POST /billing/actions/
-export def "billing-actions create" [
+export def "post-billing-actions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -501,7 +501,7 @@ export def "billing-actions create" [
 # Estimate costs of updating a subscription
 #
 # POST /billing/estimate/
-export def "billing-estimate create" [
+export def "post-billing-estimate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -539,7 +539,7 @@ export def "billing-estimate create" [
 # Update a subscription
 #
 # POST /billing/subscribe/
-export def "billing-subscribe create" [
+export def "post-billing-subscribe" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -577,7 +577,7 @@ export def "billing-subscribe create" [
 # Check validity of password reset token
 #
 # POST /check/
-export def "check create" [
+export def "post-check" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -614,7 +614,7 @@ export def "check create" [
 # Enterprise user authentication
 #
 # POST /enterprise/auth/obtain/
-export def "enterprise-auth-obtain create" [
+export def "post-enterprise-auth-obtain" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -652,7 +652,7 @@ export def "enterprise-auth-obtain create" [
 # Enterprise token refresh
 #
 # POST /enterprise/auth/refresh/
-export def "enterprise-auth-refresh create" [
+export def "post-enterprise-auth-refresh" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -689,7 +689,7 @@ export def "enterprise-auth-refresh create" [
 # Enterprise token revokation
 #
 # POST /enterprise/auth/revoke/
-export def "enterprise-auth-revoke create" [
+export def "post-enterprise-auth-revoke" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -726,7 +726,7 @@ export def "enterprise-auth-revoke create" [
 # Enterprise token verification
 #
 # POST /enterprise/auth/verify/
-export def "enterprise-auth-verify create" [
+export def "post-enterprise-auth-verify" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -763,7 +763,7 @@ export def "enterprise-auth-verify create" [
 # List account events
 #
 # GET /events/
-export def "events list" [
+export def "get-events" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -796,7 +796,7 @@ export def "events list" [
 # Retrieve account event
 #
 # GET /events/{id}/
-export def "events get" [
+export def "get-events-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -831,7 +831,7 @@ export def "events get" [
 # List frameworks
 #
 # GET /frameworks/
-export def "frameworks list" [
+export def "get-frameworks" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -869,7 +869,7 @@ export def "frameworks list" [
 # Retrieve framework
 #
 # GET /frameworks/{id}/
-export def "frameworks get" [
+export def "get-frameworks-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -904,7 +904,7 @@ export def "frameworks get" [
 # Integrations available and installed in the account
 #
 # GET /integrations/
-export def "integrations get" [
+export def "get-integrations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -937,7 +937,7 @@ export def "integrations get" [
 # List Jira Projects
 #
 # GET /integrations/jira-cloud/projects/
-export def "integrations-jira-cloud-projects get" [
+export def "get-integrations-jira-cloud-projects" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -970,7 +970,7 @@ export def "integrations-jira-cloud-projects get" [
 # Retrieve project issue types
 #
 # GET /integrations/jira-cloud/projects/{project_id}/issue_types/
-export def "integrations-jira-cloud-projects-issue-types get" [
+export def "get-integrations-jira-cloud-projects-project-id-issue-types" [
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1005,7 +1005,7 @@ export def "integrations-jira-cloud-projects-issue-types get" [
 # Retrieve issue priorities
 #
 # GET /integrations/jira-cloud/projects/{project_id}/issue_types/{issue_type_id}/priorities/
-export def "integrations-jira-cloud-projects-issue-types-priorities get" [
+export def "get-integrations-jira-cloud-projects-project-id-issue-types-issue-type-id-priorities" [
   project_id: string
   issue_type_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1042,7 +1042,7 @@ export def "integrations-jira-cloud-projects-issue-types-priorities get" [
 # Retrieve issue statuses
 #
 # GET /integrations/jira-cloud/projects/{project_id}/issue_types/{issue_type_id}/status/
-export def "integrations-jira-cloud-projects-issue-types-status get" [
+export def "get-integrations-jira-cloud-projects-project-id-issue-types-issue-type-id-status" [
   project_id: string
   issue_type_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1079,7 +1079,7 @@ export def "integrations-jira-cloud-projects-issue-types-status get" [
 # List Jira Projects
 #
 # GET /integrations/jira-server/projects/
-export def "integrations-jira-server-projects get" [
+export def "get-integrations-jira-server-projects" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1112,7 +1112,7 @@ export def "integrations-jira-server-projects get" [
 # Retrieve project issue types
 #
 # GET /integrations/jira-server/projects/{project_id}/issue_types/
-export def "integrations-jira-server-projects-issue-types get" [
+export def "get-integrations-jira-server-projects-project-id-issue-types" [
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1147,7 +1147,7 @@ export def "integrations-jira-server-projects-issue-types get" [
 # Retrieve issue priorities
 #
 # GET /integrations/jira-server/projects/{project_id}/issue_types/{issue_type_id}/priorities/
-export def "integrations-jira-server-projects-issue-types-priorities get" [
+export def "get-integrations-jira-server-projects-project-id-issue-types-issue-type-id-priorities" [
   project_id: string
   issue_type_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1184,7 +1184,7 @@ export def "integrations-jira-server-projects-issue-types-priorities get" [
 # Retrieve issue statuses
 #
 # GET /integrations/jira-server/projects/{project_id}/issue_types/{issue_type_id}/status/
-export def "integrations-jira-server-projects-issue-types-status get" [
+export def "get-integrations-jira-server-projects-project-id-issue-types-issue-type-id-status" [
   project_id: string
   issue_type_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1221,7 +1221,7 @@ export def "integrations-jira-server-projects-issue-types-status get" [
 # List API keys allowed to operate on account
 #
 # GET /keys/
-export def "keys list" [
+export def "get-keys" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1259,7 +1259,7 @@ export def "keys list" [
 # Create account API key
 #
 # POST /keys/
-export def "keys create" [
+export def "post-keys" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1296,7 +1296,7 @@ export def "keys create" [
 # Delete account API key
 #
 # DELETE /keys/{id}/
-export def "keys delete" [
+export def "delete-keys-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1331,7 +1331,7 @@ export def "keys delete" [
 # Retrieve account API key
 #
 # GET /keys/{id}/
-export def "keys get" [
+export def "get-keys-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1366,7 +1366,7 @@ export def "keys get" [
 # List labels
 #
 # GET /labels/
-export def "labels list" [
+export def "get-labels" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1404,7 +1404,7 @@ export def "labels list" [
 # Create label
 #
 # POST /labels/
-export def "labels create" [
+export def "post-labels" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1441,7 +1441,7 @@ export def "labels create" [
 # Delete label
 #
 # DELETE /labels/{id}/
-export def "labels delete" [
+export def "delete-labels-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1476,7 +1476,7 @@ export def "labels delete" [
 # Retrieve framework
 #
 # GET /labels/{id}/
-export def "labels get" [
+export def "get-labels-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1511,7 +1511,7 @@ export def "labels get" [
 # Partial update
 #
 # PATCH /labels/{id}/
-export def "labels update-by-id" [
+export def "patch-labels-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1550,7 +1550,7 @@ export def "labels update-by-id" [
 # Update label
 #
 # PUT /labels/{id}/
-export def "labels update-by-id-1" [
+export def "put-labels-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1589,7 +1589,7 @@ export def "labels update-by-id-1" [
 # Subscription plans
 #
 # GET /plans/
-export def "plans get" [
+export def "get-plans" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1622,7 +1622,7 @@ export def "plans get" [
 # User data
 #
 # GET /profile/
-export def "profile get" [
+export def "get-profile" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1660,7 +1660,7 @@ export def "profile get" [
 # Change user password
 #
 # POST /profile/change_password/
-export def "profile-change-password create" [
+export def "post-profile-change-password" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1699,7 +1699,7 @@ export def "profile-change-password create" [
 # Send reset password email
 #
 # POST /reset/
-export def "reset create" [
+export def "post-reset" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1736,7 +1736,7 @@ export def "reset create" [
 # Reset password after asking for a reset (with the token sent by email).
 #
 # POST /setpassword/
-export def "setpassword create" [
+export def "post-setpassword" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1775,7 +1775,7 @@ export def "setpassword create" [
 # Available actions for the selected targets
 #
 # POST /target-actions/
-export def "target-actions create" [
+export def "post-target-actions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1812,7 +1812,7 @@ export def "target-actions create" [
 # List targets
 #
 # GET /targets/
-export def "targets list" [
+export def "get-targets" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1854,7 +1854,7 @@ export def "targets list" [
 # --assets item shape: {cookies?: list, desc?: string, headers?: list, host?: string, include?: bool, name?: string}
 # --changed_by shape: {email?: string, id?: string, name?: string}
 # --site shape: {basic_auth?: record, cookies?: list, desc?: string, form_login?: list, form_login_check_pattern?: string, form_login_url?: string, has_basic_auth?: bool, has_form_login?: bool, headers?: list, name?: string, url?: string, whitelist?: list<string>}
-export def "targets create" [
+export def "post-targets" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1898,7 +1898,7 @@ export def "targets create" [
 # Activate targets
 #
 # POST /targets/activate/
-export def "targets-activate create" [
+export def "post-targets-activate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1935,7 +1935,7 @@ export def "targets-activate create" [
 # Average fix time graph data (all targets)
 #
 # GET /targets/all/average_fix_time/
-export def "targets-all-average-fix-time get" [
+export def "get-targets-all-average-fix-time" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1968,7 +1968,7 @@ export def "targets-all-average-fix-time get" [
 # Targets with open vulnerabilities pie chart data
 #
 # GET /targets/all/needs_attention_pie/
-export def "targets-all-needs-attention-pie get" [
+export def "get-targets-all-needs-attention-pie" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2001,7 +2001,7 @@ export def "targets-all-needs-attention-pie get" [
 # Targets with open vulnerabilities
 #
 # GET /targets/all/needs_attention_top/
-export def "targets-all-needs-attention-top get" [
+export def "get-targets-all-needs-attention-top" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2034,7 +2034,7 @@ export def "targets-all-needs-attention-top get" [
 # Risk trend graph data (all targets)
 #
 # GET /targets/all/risk_trend/
-export def "targets-all-risk-trend get" [
+export def "get-targets-all-risk-trend" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2067,7 +2067,7 @@ export def "targets-all-risk-trend get" [
 # List scans for all targets
 #
 # GET /targets/all/scans/
-export def "targets-all-scans get" [
+export def "get-targets-all-scans" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2107,7 +2107,7 @@ export def "targets-all-scans get" [
 # List scheduled scans for all targets expanding recurrence
 #
 # GET /targets/all/scheduledscans/expanded/
-export def "targets-all-scheduledscans-expanded get" [
+export def "get-targets-all-scheduledscans-expanded" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2142,7 +2142,7 @@ export def "targets-all-scheduledscans-expanded get" [
 # Severity trend graph data (all targets)
 #
 # GET /targets/all/severity_trend/
-export def "targets-all-severity-trend get" [
+export def "get-targets-all-severity-trend" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2175,7 +2175,7 @@ export def "targets-all-severity-trend get" [
 # Top 5 vulnerabilities (all targets).
 #
 # GET /targets/all/top_vulns/
-export def "targets-all-top-vulns get" [
+export def "get-targets-all-top-vulns" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2208,7 +2208,7 @@ export def "targets-all-top-vulns get" [
 # Archive targets
 #
 # POST /targets/archive/
-export def "targets-archive create" [
+export def "post-targets-archive" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2245,7 +2245,7 @@ export def "targets-archive create" [
 # List archived targets
 #
 # POST /targets/archived/
-export def "targets-archived create" [
+export def "post-targets-archived" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2282,7 +2282,7 @@ export def "targets-archived create" [
 # Delete target
 #
 # DELETE /targets/{id}/
-export def "targets delete" [
+export def "delete-targets-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2317,7 +2317,7 @@ export def "targets delete" [
 # Retrieve target
 #
 # GET /targets/{id}/
-export def "targets get" [
+export def "get-targets-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2356,7 +2356,7 @@ export def "targets get" [
 # --assets item shape: {cookies?: list, desc?: string, headers?: list, host?: string, include?: bool, name?: string}
 # --changed_by shape: {email?: string, id?: string, name?: string}
 # --site shape: {basic_auth?: record, cookies?: list, desc?: string, form_login?: list, form_login_check_pattern?: string, form_login_url?: string, has_basic_auth?: bool, has_form_login?: bool, headers?: list, name?: string, url?: string, whitelist?: list<string>}
-export def "targets update-by-id" [
+export def "patch-targets-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2406,7 +2406,7 @@ export def "targets update-by-id" [
 # --assets item shape: {cookies?: list, desc?: string, headers?: list, host?: string, include?: bool, name?: string}
 # --changed_by shape: {email?: string, id?: string, name?: string}
 # --site shape: {basic_auth?: record, cookies?: list, desc?: string, form_login?: list, form_login_check_pattern?: string, form_login_url?: string, has_basic_auth?: bool, has_form_login?: bool, headers?: list, name?: string, url?: string, whitelist?: list<string>}
-export def "targets update-by-id-1" [
+export def "put-targets-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2452,7 +2452,7 @@ export def "targets update-by-id-1" [
 # List target's assets
 #
 # GET /targets/{target_id}/assets/
-export def "targets-assets list" [
+export def "get-targets-target-id-assets" [
   target_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2495,7 +2495,7 @@ export def "targets-assets list" [
 # --changed_by shape: {email?: string, id?: string, name?: string}
 # --cookies item shape: {name?: string, value?: string}
 # --headers item shape: {name?: string, value?: string}
-export def "targets-assets create" [
+export def "post-targets-target-id-assets" [
   target_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2539,7 +2539,7 @@ export def "targets-assets create" [
 # Delete asset
 #
 # DELETE /targets/{target_id}/assets/{id}/
-export def "targets-assets delete" [
+export def "delete-targets-target-id-assets-id" [
   target_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2576,7 +2576,7 @@ export def "targets-assets delete" [
 # Retrieve asset
 #
 # GET /targets/{target_id}/assets/{id}/
-export def "targets-assets get" [
+export def "get-targets-target-id-assets-id" [
   target_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2616,7 +2616,7 @@ export def "targets-assets get" [
 # --changed_by shape: {email?: string, id?: string, name?: string}
 # --cookies item shape: {name?: string, value?: string}
 # --headers item shape: {name?: string, value?: string}
-export def "targets-assets update-by-target-id" [
+export def "patch-targets-target-id-assets-id" [
   target_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2665,7 +2665,7 @@ export def "targets-assets update-by-target-id" [
 # --changed_by shape: {email?: string, id?: string, name?: string}
 # --cookies item shape: {name?: string, value?: string}
 # --headers item shape: {name?: string, value?: string}
-export def "targets-assets update-by-target-id-1" [
+export def "put-targets-target-id-assets-id" [
   target_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2711,7 +2711,7 @@ export def "targets-assets update-by-target-id-1" [
 # Verify asset ownership
 #
 # POST /targets/{target_id}/assets/{id}/verify/
-export def "targets-assets-verify create" [
+export def "post-targets-target-id-assets-id-verify" [
   target_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2752,7 +2752,7 @@ export def "targets-assets-verify create" [
 # Average vulnerability trend graph data
 #
 # GET /targets/{target_id}/average_fix_time/
-export def "targets-average-fix-time get" [
+export def "get-targets-target-id-average-fix-time" [
   target_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2787,7 +2787,7 @@ export def "targets-average-fix-time get" [
 # List target events
 #
 # GET /targets/{target_id}/events/
-export def "targets-events list" [
+export def "get-targets-target-id-events" [
   target_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2822,7 +2822,7 @@ export def "targets-events list" [
 # Retrieve target event
 #
 # GET /targets/{target_id}/events/{id}/
-export def "targets-events get" [
+export def "get-targets-target-id-events-id" [
   target_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2859,7 +2859,7 @@ export def "targets-events get" [
 # List target findings
 #
 # GET /targets/{target_id}/findings/
-export def "targets-findings list" [
+export def "get-targets-target-id-findings" [
   target_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2904,7 +2904,7 @@ export def "targets-findings list" [
 # Finding report
 #
 # POST /targets/{target_id}/findings/bulk/report/
-export def "targets-findings-bulk-report create" [
+export def "post-targets-target-id-findings-bulk-report" [
   target_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2943,7 +2943,7 @@ export def "targets-findings-bulk-report create" [
 # Bulk retest findings
 #
 # POST /targets/{target_id}/findings/bulk/retest/
-export def "targets-findings-bulk-retest create" [
+export def "post-targets-target-id-findings-bulk-retest" [
   target_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2989,7 +2989,7 @@ export def "targets-findings-bulk-retest create" [
 # --reporter shape: {email?: string, id?: string, name?: string}
 # --requests item shape: {request?: string, response?: string}
 # --target shape: {desc?: string, name?: string, url?: string}
-export def "targets-findings-bulk-update update" [
+export def "patch-targets-target-id-findings-bulk-update" [
   target_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3033,7 +3033,7 @@ export def "targets-findings-bulk-update update" [
 # Retrieve finding report PDF format
 #
 # GET /targets/{target_id}/findings/report/
-export def "targets-findings-report get" [
+export def "get-targets-target-id-findings-report" [
   target_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3070,7 +3070,7 @@ export def "targets-findings-report get" [
 # Retrieve finding
 #
 # GET /targets/{target_id}/findings/{id}/
-export def "targets-findings get" [
+export def "get-targets-target-id-findings-id" [
   target_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3113,7 +3113,7 @@ export def "targets-findings get" [
 # --reporter shape: {email?: string, id?: string, name?: string}
 # --requests item shape: {request?: string, response?: string}
 # --target shape: {desc?: string, name?: string, url?: string}
-export def "targets-findings update-by-target-id" [
+export def "patch-targets-target-id-findings-id" [
   target_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3164,7 +3164,7 @@ export def "targets-findings update-by-target-id" [
 # --reporter shape: {email?: string, id?: string, name?: string}
 # --requests item shape: {request?: string, response?: string}
 # --target shape: {desc?: string, name?: string, url?: string}
-export def "targets-findings update-by-target-id-1" [
+export def "put-targets-target-id-findings-id" [
   target_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3209,7 +3209,7 @@ export def "targets-findings update-by-target-id-1" [
 # Retrieve Jira Cloud finding configuration
 #
 # GET /targets/{target_id}/findings/{id}/integrations/jira-cloud/
-export def "targets-findings-integrations-jira-cloud get" [
+export def "get-targets-target-id-findings-id-integrations-jira-cloud" [
   target_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3246,7 +3246,7 @@ export def "targets-findings-integrations-jira-cloud get" [
 # Update Jira Cloud finding configuration
 #
 # PATCH /targets/{target_id}/findings/{id}/integrations/jira-cloud/
-export def "targets-findings-integrations-jira-cloud update-by-target-id" [
+export def "patch-targets-target-id-findings-id-integrations-jira-cloud" [
   target_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3288,7 +3288,7 @@ export def "targets-findings-integrations-jira-cloud update-by-target-id" [
 # Update Jira Cloud finding configuration
 #
 # PUT /targets/{target_id}/findings/{id}/integrations/jira-cloud/
-export def "targets-findings-integrations-jira-cloud update-by-target-id-1" [
+export def "put-targets-target-id-findings-id-integrations-jira-cloud" [
   target_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3330,7 +3330,7 @@ export def "targets-findings-integrations-jira-cloud update-by-target-id-1" [
 # Retrieve Jira Server finding configuration
 #
 # GET /targets/{target_id}/findings/{id}/integrations/jira-server/
-export def "targets-findings-integrations-jira-server get" [
+export def "get-targets-target-id-findings-id-integrations-jira-server" [
   target_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3367,7 +3367,7 @@ export def "targets-findings-integrations-jira-server get" [
 # Update Jira Server finding configuration
 #
 # PATCH /targets/{target_id}/findings/{id}/integrations/jira-server/
-export def "targets-findings-integrations-jira-server update-by-target-id" [
+export def "patch-targets-target-id-findings-id-integrations-jira-server" [
   target_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3409,7 +3409,7 @@ export def "targets-findings-integrations-jira-server update-by-target-id" [
 # Update Jira Server finding configuration
 #
 # PUT /targets/{target_id}/findings/{id}/integrations/jira-server/
-export def "targets-findings-integrations-jira-server update-by-target-id-1" [
+export def "put-targets-target-id-findings-id-integrations-jira-server" [
   target_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3451,7 +3451,7 @@ export def "targets-findings-integrations-jira-server update-by-target-id-1" [
 # Finding activity log.
 #
 # GET /targets/{target_id}/findings/{id}/log/
-export def "targets-findings-log get" [
+export def "get-targets-target-id-findings-id-log" [
   target_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3488,7 +3488,7 @@ export def "targets-findings-log get" [
 # Retest finding
 #
 # POST /targets/{target_id}/findings/{id}/retest/
-export def "targets-findings-retest create" [
+export def "post-targets-target-id-findings-id-retest" [
   target_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3525,7 +3525,7 @@ export def "targets-findings-retest create" [
 # Integrations available and installed for the target
 #
 # GET /targets/{target_id}/integrations/
-export def "targets-integrations get" [
+export def "get-targets-target-id-integrations" [
   target_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3560,7 +3560,7 @@ export def "targets-integrations get" [
 # Retrieve Jira Cloud Target configuration
 #
 # GET /targets/{target_id}/integrations/jira-cloud/
-export def "targets-integrations-jira-cloud get" [
+export def "get-targets-target-id-integrations-jira-cloud" [
   target_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3597,7 +3597,7 @@ export def "targets-integrations-jira-cloud get" [
 # PATCH /targets/{target_id}/integrations/jira-cloud/
 # --priority_mapping shape: {10?: string, 20?: string, 30?: string}
 # --status_mapping shape: {accepted?: string, fixed?: string, invalid?: string, notfixed?: string}
-export def "targets-integrations-jira-cloud update-by-target-id" [
+export def "patch-targets-target-id-integrations-jira-cloud" [
   target_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3643,7 +3643,7 @@ export def "targets-integrations-jira-cloud update-by-target-id" [
 # PUT /targets/{target_id}/integrations/jira-cloud/
 # --priority_mapping shape: {10?: string, 20?: string, 30?: string}
 # --status_mapping shape: {accepted?: string, fixed?: string, invalid?: string, notfixed?: string}
-export def "targets-integrations-jira-cloud update-by-target-id-1" [
+export def "put-targets-target-id-integrations-jira-cloud" [
   target_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3687,7 +3687,7 @@ export def "targets-integrations-jira-cloud update-by-target-id-1" [
 # Retrieve Jira Server Target configuration
 #
 # GET /targets/{target_id}/integrations/jira-server/
-export def "targets-integrations-jira-server get" [
+export def "get-targets-target-id-integrations-jira-server" [
   target_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3724,7 +3724,7 @@ export def "targets-integrations-jira-server get" [
 # PATCH /targets/{target_id}/integrations/jira-server/
 # --priority_mapping shape: {10?: string, 20?: string, 30?: string}
 # --status_mapping shape: {accepted?: string, fixed?: string, invalid?: string, notfixed?: string}
-export def "targets-integrations-jira-server update-by-target-id" [
+export def "patch-targets-target-id-integrations-jira-server" [
   target_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3770,7 +3770,7 @@ export def "targets-integrations-jira-server update-by-target-id" [
 # PUT /targets/{target_id}/integrations/jira-server/
 # --priority_mapping shape: {10?: string, 20?: string, 30?: string}
 # --status_mapping shape: {accepted?: string, fixed?: string, invalid?: string, notfixed?: string}
-export def "targets-integrations-jira-server update-by-target-id-1" [
+export def "put-targets-target-id-integrations-jira-server" [
   target_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3814,7 +3814,7 @@ export def "targets-integrations-jira-server update-by-target-id-1" [
 # Retrieve slack integration data
 #
 # GET /targets/{target_id}/integrations/slack/
-export def "targets-integrations-slack get" [
+export def "get-targets-target-id-integrations-slack" [
   target_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3849,7 +3849,7 @@ export def "targets-integrations-slack get" [
 # Update slack integration data
 #
 # PATCH /targets/{target_id}/integrations/slack/
-export def "targets-integrations-slack update-by-target-id" [
+export def "patch-targets-target-id-integrations-slack" [
   target_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3894,7 +3894,7 @@ export def "targets-integrations-slack update-by-target-id" [
 # Update slack integration data
 #
 # PUT /targets/{target_id}/integrations/slack/
-export def "targets-integrations-slack update-by-target-id-1" [
+export def "put-targets-target-id-integrations-slack" [
   target_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3939,7 +3939,7 @@ export def "targets-integrations-slack update-by-target-id-1" [
 # List target specific API keys
 #
 # GET /targets/{target_id}/keys/
-export def "targets-keys list" [
+export def "get-targets-target-id-keys" [
   target_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3979,7 +3979,7 @@ export def "targets-keys list" [
 # Create target API key
 #
 # POST /targets/{target_id}/keys/
-export def "targets-keys create" [
+export def "post-targets-target-id-keys" [
   target_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4018,7 +4018,7 @@ export def "targets-keys create" [
 # Delete target API key
 #
 # DELETE /targets/{target_id}/keys/{id}/
-export def "targets-keys delete" [
+export def "delete-targets-target-id-keys-id" [
   target_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4055,7 +4055,7 @@ export def "targets-keys delete" [
 # Retrieve target API key
 #
 # GET /targets/{target_id}/keys/{id}/
-export def "targets-keys get" [
+export def "get-targets-target-id-keys-id" [
   target_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4092,7 +4092,7 @@ export def "targets-keys get" [
 # Risk trend graph data
 #
 # GET /targets/{target_id}/risk_trend/
-export def "targets-risk-trend get" [
+export def "get-targets-target-id-risk-trend" [
   target_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4127,7 +4127,7 @@ export def "targets-risk-trend get" [
 # Start a scan on the target
 #
 # POST /targets/{target_id}/scan_now/
-export def "targets-scan-now create" [
+export def "post-targets-target-id-scan-now" [
   target_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4166,7 +4166,7 @@ export def "targets-scan-now create" [
 # List scans
 #
 # GET /targets/{target_id}/scans/
-export def "targets-scans list" [
+export def "get-targets-target-id-scans" [
   target_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4208,7 +4208,7 @@ export def "targets-scans list" [
 # Dates where scans have ocurred
 #
 # GET /targets/{target_id}/scans/dates/
-export def "targets-scans-dates get" [
+export def "get-targets-target-id-scans-dates" [
   target_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4243,7 +4243,7 @@ export def "targets-scans-dates get" [
 # Scan page
 #
 # GET /targets/{target_id}/scans/retrieve_page/
-export def "targets-scans-retrieve-page get" [
+export def "get-targets-target-id-scans-retrieve-page" [
   target_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4281,7 +4281,7 @@ export def "targets-scans-retrieve-page get" [
 # Retrieve scan
 #
 # GET /targets/{target_id}/scans/{id}/
-export def "targets-scans get" [
+export def "get-targets-target-id-scans-id" [
   target_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4318,7 +4318,7 @@ export def "targets-scans get" [
 # Cancel running scan
 #
 # POST /targets/{target_id}/scans/{id}/cancel/
-export def "targets-scans-cancel create" [
+export def "post-targets-target-id-scans-id-cancel" [
   target_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4355,7 +4355,7 @@ export def "targets-scans-cancel create" [
 # Scan endpoints file
 #
 # GET /targets/{target_id}/scans/{id}/endpoints/
-export def "targets-scans-endpoints get" [
+export def "get-targets-target-id-scans-id-endpoints" [
   target_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4392,7 +4392,7 @@ export def "targets-scans-endpoints get" [
 # Scan report PDF, using the report type specified for the target
 #
 # GET /targets/{target_id}/scans/{id}/report/
-export def "targets-scans-report get" [
+export def "get-targets-target-id-scans-id-report" [
   target_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4429,7 +4429,7 @@ export def "targets-scans-report get" [
 # Scan report PDF, using the default report type
 #
 # GET /targets/{target_id}/scans/{id}/report/default/
-export def "targets-scans-report-default get" [
+export def "get-targets-target-id-scans-id-report-default" [
   target_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4466,7 +4466,7 @@ export def "targets-scans-report-default get" [
 # Scan report PDF, using the OWASP report type
 #
 # GET /targets/{target_id}/scans/{id}/report/owasp/
-export def "targets-scans-report-owasp get" [
+export def "get-targets-target-id-scans-id-report-owasp" [
   target_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4503,7 +4503,7 @@ export def "targets-scans-report-owasp get" [
 # Scan report PDF, using the PCI report type
 #
 # GET /targets/{target_id}/scans/{id}/report/pci/
-export def "targets-scans-report-pci get" [
+export def "get-targets-target-id-scans-id-report-pci" [
   target_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4540,7 +4540,7 @@ export def "targets-scans-report-pci get" [
 # List scheduled scans
 #
 # GET /targets/{target_id}/scheduledscans/
-export def "targets-scheduledscans list" [
+export def "get-targets-target-id-scheduledscans" [
   target_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4580,7 +4580,7 @@ export def "targets-scheduledscans list" [
 # Create new scheduled scan
 #
 # POST /targets/{target_id}/scheduledscans/
-export def "targets-scheduledscans create" [
+export def "post-targets-target-id-scheduledscans" [
   target_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4620,7 +4620,7 @@ export def "targets-scheduledscans create" [
 # List scheduled scans expanding recurrence
 #
 # GET /targets/{target_id}/scheduledscans/expanded/
-export def "targets-scheduledscans-expanded get" [
+export def "get-targets-target-id-scheduledscans-expanded" [
   target_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4657,7 +4657,7 @@ export def "targets-scheduledscans-expanded get" [
 # Delete
 #
 # DELETE /targets/{target_id}/scheduledscans/{id}/
-export def "targets-scheduledscans delete" [
+export def "delete-targets-target-id-scheduledscans-id" [
   target_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4694,7 +4694,7 @@ export def "targets-scheduledscans delete" [
 # Retrieve a scheduled scan
 #
 # GET /targets/{target_id}/scheduledscans/{id}/
-export def "targets-scheduledscans get" [
+export def "get-targets-target-id-scheduledscans-id" [
   target_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4731,7 +4731,7 @@ export def "targets-scheduledscans get" [
 # Partial update
 #
 # PATCH /targets/{target_id}/scheduledscans/{id}/
-export def "targets-scheduledscans update-by-target-id" [
+export def "patch-targets-target-id-scheduledscans-id" [
   target_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4773,7 +4773,7 @@ export def "targets-scheduledscans update-by-target-id" [
 # Update a scheduled scan
 #
 # PUT /targets/{target_id}/scheduledscans/{id}/
-export def "targets-scheduledscans update-by-target-id-1" [
+export def "put-targets-target-id-scheduledscans-id" [
   target_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4815,7 +4815,7 @@ export def "targets-scheduledscans update-by-target-id-1" [
 # Severity trend graph data.
 #
 # GET /targets/{target_id}/severity_trend/
-export def "targets-severity-trend get" [
+export def "get-targets-target-id-severity-trend" [
   target_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4852,7 +4852,7 @@ export def "targets-severity-trend get" [
 # GET /targets/{target_id}/site/
 # DEPRECATED
 @deprecated
-export def "targets-site get" [
+export def "get-targets-target-id-site" [
   target_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4894,7 +4894,7 @@ export def "targets-site get" [
 # --form_login item shape: {name?: string, value?: string}
 # --headers item shape: {name?: string, value?: string}
 @deprecated
-export def "targets-site update-by-target-id" [
+export def "patch-targets-target-id-site" [
   target_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4951,7 +4951,7 @@ export def "targets-site update-by-target-id" [
 # --form_login item shape: {name?: string, value?: string}
 # --headers item shape: {name?: string, value?: string}
 @deprecated
-export def "targets-site update-by-target-id-1" [
+export def "put-targets-target-id-site" [
   target_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5003,7 +5003,7 @@ export def "targets-site update-by-target-id-1" [
 # POST /targets/{target_id}/site/verify/
 # DEPRECATED
 @deprecated
-export def "targets-site-verify create" [
+export def "post-targets-target-id-site-verify" [
   target_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5042,7 +5042,7 @@ export def "targets-site-verify create" [
 # Top 5 vulnerabilities
 #
 # GET /targets/{target_id}/top_vulns/
-export def "targets-top-vulns get" [
+export def "get-targets-target-id-top-vulns" [
   target_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5077,7 +5077,7 @@ export def "targets-top-vulns get" [
 # List target webhooks
 #
 # GET /targets/{target_id}/webhooks/
-export def "targets-webhooks list" [
+export def "get-targets-target-id-webhooks" [
   target_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5114,7 +5114,7 @@ export def "targets-webhooks list" [
 # POST /targets/{target_id}/webhooks/
 # --changed_by shape: {email?: string, id?: string, name?: string}
 # --created_by shape: {email?: string, id?: string, name?: string}
-export def "targets-webhooks create" [
+export def "post-targets-target-id-webhooks" [
   target_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5156,7 +5156,7 @@ export def "targets-webhooks create" [
 # Delete target webhook
 #
 # DELETE /targets/{target_id}/webhooks/{id}/
-export def "targets-webhooks delete" [
+export def "delete-targets-target-id-webhooks-id" [
   target_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5193,7 +5193,7 @@ export def "targets-webhooks delete" [
 # Retrieve target webhook
 #
 # GET /targets/{target_id}/webhooks/{id}/
-export def "targets-webhooks get" [
+export def "get-targets-target-id-webhooks-id" [
   target_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5232,7 +5232,7 @@ export def "targets-webhooks get" [
 # PATCH /targets/{target_id}/webhooks/{id}/
 # --changed_by shape: {email?: string, id?: string, name?: string}
 # --created_by shape: {email?: string, id?: string, name?: string}
-export def "targets-webhooks update-by-target-id" [
+export def "patch-targets-target-id-webhooks-id" [
   target_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5278,7 +5278,7 @@ export def "targets-webhooks update-by-target-id" [
 # PUT /targets/{target_id}/webhooks/{id}/
 # --changed_by shape: {email?: string, id?: string, name?: string}
 # --created_by shape: {email?: string, id?: string, name?: string}
-export def "targets-webhooks update-by-target-id-1" [
+export def "put-targets-target-id-webhooks-id" [
   target_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5322,7 +5322,7 @@ export def "targets-webhooks update-by-target-id-1" [
 # List users
 #
 # GET /users/
-export def "users list" [
+export def "get-users" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5360,7 +5360,7 @@ export def "users list" [
 # Create/Reactivate a user.
 #
 # POST /users/
-export def "users create" [
+export def "post-users" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5399,7 +5399,7 @@ export def "users create" [
 # Deactivate a user
 #
 # DELETE /users/{id}/
-export def "users delete" [
+export def "delete-users-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5434,7 +5434,7 @@ export def "users delete" [
 # Retrieve user
 #
 # GET /users/{id}/
-export def "users get" [
+export def "get-users-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5469,7 +5469,7 @@ export def "users get" [
 # Partial update user
 #
 # PATCH /users/{id}/
-export def "users update-by-id" [
+export def "patch-users-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5510,7 +5510,7 @@ export def "users update-by-id" [
 # Update user
 #
 # PUT /users/{id}/
-export def "users update-by-id-1" [
+export def "put-users-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5551,7 +5551,7 @@ export def "users update-by-id-1" [
 # List vulnerability definitions
 #
 # GET /vulnerability_definitions/
-export def "vulnerability-definitions list" [
+export def "get-vulnerability-definitions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5589,7 +5589,7 @@ export def "vulnerability-definitions list" [
 # Retrieve vulnerability definition
 #
 # GET /vulnerability_definitions/{id}/
-export def "vulnerability-definitions get" [
+export def "get-vulnerability-definitions-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5624,7 +5624,7 @@ export def "vulnerability-definitions get" [
 # List account webhooks
 #
 # GET /webhooks/
-export def "webhooks list" [
+export def "get-webhooks" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5659,7 +5659,7 @@ export def "webhooks list" [
 # POST /webhooks/
 # --changed_by shape: {email?: string, id?: string, name?: string}
 # --created_by shape: {email?: string, id?: string, name?: string}
-export def "webhooks create" [
+export def "post-webhooks" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5699,7 +5699,7 @@ export def "webhooks create" [
 # Delete account webhook
 #
 # DELETE /webhooks/{id}/
-export def "webhooks delete" [
+export def "delete-webhooks-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5734,7 +5734,7 @@ export def "webhooks delete" [
 # Retrieve account webhook
 #
 # GET /webhooks/{id}/
-export def "webhooks get" [
+export def "get-webhooks-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5771,7 +5771,7 @@ export def "webhooks get" [
 # PATCH /webhooks/{id}/
 # --changed_by shape: {email?: string, id?: string, name?: string}
 # --created_by shape: {email?: string, id?: string, name?: string}
-export def "webhooks update-by-id" [
+export def "patch-webhooks-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5815,7 +5815,7 @@ export def "webhooks update-by-id" [
 # PUT /webhooks/{id}/
 # --changed_by shape: {email?: string, id?: string, name?: string}
 # --created_by shape: {email?: string, id?: string, name?: string}
-export def "webhooks update-by-id-1" [
+export def "put-webhooks-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

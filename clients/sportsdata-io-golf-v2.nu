@@ -99,7 +99,7 @@ def auth-scheme-completer [] { ["ocp-apim-subscription-key" "query-key"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "current-season get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "current-season" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -123,7 +123,7 @@ export def commands []: nothing -> table {
 #
 # GET /{format}/CurrentSeason
 # operationId: CurrentSeason
-export def "current-season get" [
+export def "current-season" [
   format: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -159,7 +159,7 @@ export def "current-season get" [
 #
 # GET /{format}/DfsSlatesByTournament/{tournamentid}
 # operationId: DfsSlates
-export def "dfs-slates-by-tournament get" [
+export def "dfs-slates" [
   format: string
   tournamentid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -197,7 +197,7 @@ export def "dfs-slates-by-tournament get" [
 #
 # GET /{format}/Injuries
 # operationId: Injuries
-export def "injuries get" [
+export def "injuries" [
   format: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -233,7 +233,7 @@ export def "injuries get" [
 #
 # GET /{format}/InjuriesByHistorical
 # operationId: InjuriesHistorical
-export def "injuries-by-historical get" [
+export def "injuries-historical" [
   format: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -269,7 +269,7 @@ export def "injuries-by-historical get" [
 #
 # GET /{format}/Leaderboard/{tournamentid}
 # operationId: Leaderboard
-export def "leaderboard get" [
+export def "leaderboard" [
   format: string
   tournamentid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -307,7 +307,7 @@ export def "leaderboard get" [
 #
 # GET /{format}/News
 # operationId: News
-export def "news get" [
+export def "news" [
   format: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -343,7 +343,7 @@ export def "news get" [
 #
 # GET /{format}/NewsByDate/{date}
 # operationId: NewsByDate
-export def "news-by-date get" [
+export def "news-by-date" [
   format: string
   date: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -381,7 +381,7 @@ export def "news-by-date get" [
 #
 # GET /{format}/NewsByPlayerID/{playerid}
 # operationId: NewsByPlayer
-export def "news-by-player-id get" [
+export def "news-by-player" [
   format: string
   playerid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -419,7 +419,7 @@ export def "news-by-player-id get" [
 #
 # GET /{format}/Player/{playerid}
 # operationId: Player
-export def "player get" [
+export def "player" [
   format: string
   playerid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -457,7 +457,7 @@ export def "player get" [
 #
 # GET /{format}/PlayerSeasonStats/{season}
 # operationId: PlayerSeasonStatsWWorldGolfRankings
-export def "player-season-stats stats-w-world-golf-rankings" [
+export def "player-season-stats-w-world-golf-rankings" [
   format: string
   season: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -495,7 +495,7 @@ export def "player-season-stats stats-w-world-golf-rankings" [
 #
 # GET /{format}/PlayerTournamentProjectionStats/{tournamentid}
 # operationId: PlayerTournamentProjectedStatsWDraftkingsSalaries
-export def "player-tournament-projection-stats stats-projected-w-draftkings-salaries" [
+export def "player-tournament-projected-stats-w-draftkings-salaries" [
   format: string
   tournamentid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -533,7 +533,7 @@ export def "player-tournament-projection-stats stats-projected-w-draftkings-sala
 #
 # GET /{format}/PlayerTournamentStatsByPlayer/{tournamentid}/{playerid}
 # operationId: PlayerTournamentStatsByPlayer
-export def "player-tournament-stats-by-player stats" [
+export def "player-tournament-stats-by-player" [
   format: string
   tournamentid: string
   playerid: string
@@ -573,7 +573,7 @@ export def "player-tournament-stats-by-player stats" [
 #
 # GET /{format}/Players
 # operationId: Players
-export def "players get" [
+export def "players" [
   format: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -609,7 +609,7 @@ export def "players get" [
 #
 # GET /{format}/Tournaments
 # operationId: Schedule
-export def "tournaments list" [
+export def "schedule" [
   format: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -645,7 +645,7 @@ export def "tournaments list" [
 #
 # GET /{format}/Tournaments/{season}
 # operationId: ScheduleBySeason
-export def "tournaments get-schedule" [
+export def "schedule-by-season" [
   format: string
   season: string
   --base-url(-b): string@base-url-completer # API base URL

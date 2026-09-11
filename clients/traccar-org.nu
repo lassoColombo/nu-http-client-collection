@@ -120,7 +120,7 @@ def accept-completer-1 [] { ["application/json" "application/vnd.openxmlformats-
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "attributes-computed get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-attributes-computed" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -143,7 +143,7 @@ export def commands []: nothing -> table {
 # Fetch a list of Attributes
 #
 # GET /attributes/computed
-export def "attributes-computed get" [
+export def "get-attributes-computed" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -182,7 +182,7 @@ export def "attributes-computed get" [
 # Create an Attribute
 #
 # POST /attributes/computed
-export def "attributes-computed create" [
+export def "post-attributes-computed" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -223,7 +223,7 @@ export def "attributes-computed create" [
 # Delete an Attribute
 #
 # DELETE /attributes/computed/{id}
-export def "attributes-computed delete" [
+export def "delete-attributes-computed-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -258,7 +258,7 @@ export def "attributes-computed delete" [
 # Update an Attribute
 #
 # PUT /attributes/computed/{id}
-export def "attributes-computed update" [
+export def "put-attributes-computed-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -301,7 +301,7 @@ export def "attributes-computed update" [
 # Fetch a list of Calendars
 #
 # GET /calendars
-export def "calendars get" [
+export def "get-calendars" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -337,7 +337,7 @@ export def "calendars get" [
 # Create a Calendar
 #
 # POST /calendars
-export def "calendars create" [
+export def "post-calendars" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -377,7 +377,7 @@ export def "calendars create" [
 # Delete a Calendar
 #
 # DELETE /calendars/{id}
-export def "calendars delete" [
+export def "delete-calendars-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -412,7 +412,7 @@ export def "calendars delete" [
 # Update a Calendar
 #
 # PUT /calendars/{id}
-export def "calendars update" [
+export def "put-calendars-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -454,7 +454,7 @@ export def "calendars update" [
 # Fetch a list of Saved Commands
 #
 # GET /commands
-export def "commands get" [
+export def "get-commands" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -493,7 +493,7 @@ export def "commands get" [
 # Create a Saved Command
 #
 # POST /commands
-export def "commands create" [
+export def "post-commands" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -534,7 +534,7 @@ export def "commands create" [
 # Fetch a list of Saved Commands supported by Device at the moment
 #
 # GET /commands/send
-export def "commands-send get" [
+export def "get-commands-send" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -569,7 +569,7 @@ export def "commands-send get" [
 # Dispatch commands to device
 #
 # POST /commands/send
-export def "commands-send create" [
+export def "post-commands-send" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -610,7 +610,7 @@ export def "commands-send create" [
 # Fetch a list of available Commands for the Device or all possible Commands if Device ommited
 #
 # GET /commands/types
-export def "commands-types get" [
+export def "get-commands-types" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -647,7 +647,7 @@ export def "commands-types get" [
 # Delete a Saved Command
 #
 # DELETE /commands/{id}
-export def "commands delete" [
+export def "delete-commands-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -682,7 +682,7 @@ export def "commands delete" [
 # Update a Saved Command
 #
 # PUT /commands/{id}
-export def "commands update" [
+export def "put-commands-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -725,7 +725,7 @@ export def "commands update" [
 # Fetch a list of Devices
 #
 # GET /devices
-export def "devices get" [
+export def "get-devices" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -763,7 +763,7 @@ export def "devices get" [
 # Create a Device
 #
 # POST /devices
-export def "devices create" [
+export def "post-devices" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -813,7 +813,7 @@ export def "devices create" [
 # Delete a Device
 #
 # DELETE /devices/{id}
-export def "devices delete" [
+export def "delete-devices-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -848,7 +848,7 @@ export def "devices delete" [
 # Update a Device
 #
 # PUT /devices/{id}
-export def "devices update" [
+export def "put-devices-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -900,7 +900,7 @@ export def "devices update" [
 # Update total distance and hours of the Device
 #
 # PUT /devices/{id}/accumulators
-export def "devices-accumulators update" [
+export def "put-devices-id-accumulators" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -941,7 +941,7 @@ export def "devices-accumulators update" [
 # Fetch a list of Drivers
 #
 # GET /drivers
-export def "drivers get" [
+export def "get-drivers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -980,7 +980,7 @@ export def "drivers get" [
 # Create a Driver
 #
 # POST /drivers
-export def "drivers create" [
+export def "post-drivers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1020,7 +1020,7 @@ export def "drivers create" [
 # Delete a Driver
 #
 # DELETE /drivers/{id}
-export def "drivers delete" [
+export def "delete-drivers-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1055,7 +1055,7 @@ export def "drivers delete" [
 # Update a Driver
 #
 # PUT /drivers/{id}
-export def "drivers update" [
+export def "put-drivers-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1095,7 +1095,7 @@ export def "drivers update" [
 }
 
 # GET /events/{id}
-export def "events get" [
+export def "get-events-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1130,7 +1130,7 @@ export def "events get" [
 # Fetch a list of Geofences
 #
 # GET /geofences
-export def "geofences get" [
+export def "get-geofences" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1169,7 +1169,7 @@ export def "geofences get" [
 # Create a Geofence
 #
 # POST /geofences
-export def "geofences create" [
+export def "post-geofences" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1211,7 +1211,7 @@ export def "geofences create" [
 # Delete a Geofence
 #
 # DELETE /geofences/{id}
-export def "geofences delete" [
+export def "delete-geofences-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1246,7 +1246,7 @@ export def "geofences delete" [
 # Update a Geofence
 #
 # PUT /geofences/{id}
-export def "geofences update" [
+export def "put-geofences-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1290,7 +1290,7 @@ export def "geofences update" [
 # Fetch a list of Groups
 #
 # GET /groups
-export def "groups get" [
+export def "get-groups" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1326,7 +1326,7 @@ export def "groups get" [
 # Create a Group
 #
 # POST /groups
-export def "groups create" [
+export def "post-groups" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1366,7 +1366,7 @@ export def "groups create" [
 # Delete a Group
 #
 # DELETE /groups/{id}
-export def "groups delete" [
+export def "delete-groups-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1401,7 +1401,7 @@ export def "groups delete" [
 # Update a Group
 #
 # PUT /groups/{id}
-export def "groups update" [
+export def "put-groups-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1443,7 +1443,7 @@ export def "groups update" [
 # Fetch a list of Maintenance
 #
 # GET /maintenance
-export def "maintenance get" [
+export def "get-maintenance" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1482,7 +1482,7 @@ export def "maintenance get" [
 # Create a Maintenance
 #
 # POST /maintenance
-export def "maintenance create" [
+export def "post-maintenance" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1524,7 +1524,7 @@ export def "maintenance create" [
 # Delete a Maintenance
 #
 # DELETE /maintenance/{id}
-export def "maintenance delete" [
+export def "delete-maintenance-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1559,7 +1559,7 @@ export def "maintenance delete" [
 # Update a Maintenance
 #
 # PUT /maintenance/{id}
-export def "maintenance update" [
+export def "put-maintenance-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1603,7 +1603,7 @@ export def "maintenance update" [
 # Fetch a list of Notifications
 #
 # GET /notifications
-export def "notifications get" [
+export def "get-notifications" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1642,7 +1642,7 @@ export def "notifications get" [
 # Create a Notification
 #
 # POST /notifications
-export def "notifications create" [
+export def "post-notifications" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1686,7 +1686,7 @@ export def "notifications create" [
 # Send test notification to current user via Email and SMS
 #
 # POST /notifications/test
-export def "notifications-test create" [
+export def "post-notifications-test" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1719,7 +1719,7 @@ export def "notifications-test create" [
 # Fetch a list of available Notification types
 #
 # GET /notifications/types
-export def "notifications-types get" [
+export def "get-notifications-types" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1752,7 +1752,7 @@ export def "notifications-types get" [
 # Delete a Notification
 #
 # DELETE /notifications/{id}
-export def "notifications delete" [
+export def "delete-notifications-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1787,7 +1787,7 @@ export def "notifications delete" [
 # Update a Notification
 #
 # PUT /notifications/{id}
-export def "notifications update" [
+export def "put-notifications-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1833,7 +1833,7 @@ export def "notifications update" [
 # Unlink an Object from another Object
 #
 # DELETE /permissions
-export def "permissions delete" [
+export def "delete-permissions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1878,7 +1878,7 @@ export def "permissions delete" [
 # Link an Object to another Object
 #
 # POST /permissions
-export def "permissions create" [
+export def "post-permissions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1923,7 +1923,7 @@ export def "permissions create" [
 # Fetches a list of Positions
 #
 # GET /positions
-export def "positions get" [
+export def "get-positions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1962,7 +1962,7 @@ export def "positions get" [
 # Fetch a list of Events within the time period for the Devices or Groups
 #
 # GET /reports/events
-export def "reports-events get" [
+export def "get-reports-events" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2002,7 +2002,7 @@ export def "reports-events get" [
 # Fetch a list of Positions within the time period for the Devices or Groups
 #
 # GET /reports/route
-export def "reports-route get" [
+export def "get-reports-route" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2041,7 +2041,7 @@ export def "reports-route get" [
 # Fetch a list of ReportStops within the time period for the Devices or Groups
 #
 # GET /reports/stops
-export def "reports-stops get" [
+export def "get-reports-stops" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2080,7 +2080,7 @@ export def "reports-stops get" [
 # Fetch a list of ReportSummary within the time period for the Devices or Groups
 #
 # GET /reports/summary
-export def "reports-summary get" [
+export def "get-reports-summary" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2119,7 +2119,7 @@ export def "reports-summary get" [
 # Fetch a list of ReportTrips within the time period for the Devices or Groups
 #
 # GET /reports/trips
-export def "reports-trips get" [
+export def "get-reports-trips" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2158,7 +2158,7 @@ export def "reports-trips get" [
 # Fetch Server information
 #
 # GET /server
-export def "server get" [
+export def "get-server" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2191,7 +2191,7 @@ export def "server get" [
 # Update Server information
 #
 # PUT /server
-export def "server update" [
+export def "put-server" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2244,7 +2244,7 @@ export def "server update" [
 # Close the Session
 #
 # DELETE /session
-export def "session delete" [
+export def "delete-session" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2277,7 +2277,7 @@ export def "session delete" [
 # Fetch Session information
 #
 # GET /session
-export def "session get" [
+export def "get-session" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2312,7 +2312,7 @@ export def "session get" [
 # Create a new Session
 #
 # POST /session
-export def "session create" [
+export def "post-session" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2351,7 +2351,7 @@ export def "session create" [
 # Fetch server Statistics
 #
 # GET /statistics
-export def "statistics get" [
+export def "get-statistics" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2387,7 +2387,7 @@ export def "statistics get" [
 # Fetch a list of Users
 #
 # GET /users
-export def "users get" [
+export def "get-users" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2422,7 +2422,7 @@ export def "users get" [
 # Create a User
 #
 # POST /users
-export def "users create" [
+export def "post-users" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2479,7 +2479,7 @@ export def "users create" [
 # Delete a User
 #
 # DELETE /users/{id}
-export def "users delete" [
+export def "delete-users-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2514,7 +2514,7 @@ export def "users delete" [
 # Update a User
 #
 # PUT /users/{id}
-export def "users update" [
+export def "put-users-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

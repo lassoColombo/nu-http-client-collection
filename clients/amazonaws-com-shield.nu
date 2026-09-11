@@ -136,7 +136,7 @@ def x-amz-target-completer-35 [] { ["AWSShield_20160616.UpdateSubscription"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "api create-associate-drt-log-bucket" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "associate-drt-log-bucket" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -160,7 +160,7 @@ export def commands []: nothing -> table {
 #
 # POST /
 # operationId: AssociateDRTLogBucket
-export def "api create-associate-drt-log-bucket" [
+export def "associate-drt-log-bucket" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -208,7 +208,7 @@ export def "api create-associate-drt-log-bucket" [
 #
 # POST /
 # operationId: AssociateDRTRole
-export def "api create-associate-drt-role" [
+export def "associate-drt-role" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -256,7 +256,7 @@ export def "api create-associate-drt-role" [
 #
 # POST /
 # operationId: AssociateHealthCheck
-export def "api check-associate-health" [
+export def "associate-health-check" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -305,7 +305,7 @@ export def "api check-associate-health" [
 #
 # POST /
 # operationId: AssociateProactiveEngagementDetails
-export def "api create-associate-proactive-engagement-details" [
+export def "associate-proactive-engagement-details" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -353,7 +353,7 @@ export def "api create-associate-proactive-engagement-details" [
 #
 # POST /
 # operationId: CreateProtection
-export def "api create-protection" [
+export def "create-protection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -403,7 +403,7 @@ export def "api create-protection" [
 #
 # POST /
 # operationId: CreateProtectionGroup
-export def "api create-protection-group" [
+export def "create-protection-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -456,7 +456,7 @@ export def "api create-protection-group" [
 #
 # POST /
 # operationId: CreateSubscription
-export def "api create-subscription" [
+export def "create-subscription" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -504,7 +504,7 @@ export def "api create-subscription" [
 #
 # POST /
 # operationId: DeleteProtection
-export def "api delete-protection" [
+export def "delete-protection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -552,7 +552,7 @@ export def "api delete-protection" [
 #
 # POST /
 # operationId: DeleteProtectionGroup
-export def "api delete-protection-group" [
+export def "delete-protection-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -602,7 +602,7 @@ export def "api delete-protection-group" [
 # DEPRECATED
 # operationId: DeleteSubscription
 @deprecated
-export def "api delete-subscription" [
+export def "delete-subscription" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -650,7 +650,7 @@ export def "api delete-subscription" [
 #
 # POST /
 # operationId: DescribeAttack
-export def "api get-attack" [
+export def "describe-attack" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -698,7 +698,7 @@ export def "api get-attack" [
 #
 # POST /
 # operationId: DescribeAttackStatistics
-export def "api get-attack-statistics" [
+export def "describe-attack-statistics" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -746,7 +746,7 @@ export def "api get-attack-statistics" [
 #
 # POST /
 # operationId: DescribeDRTAccess
-export def "api get-drt-access" [
+export def "describe-drt-access" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -794,7 +794,7 @@ export def "api get-drt-access" [
 #
 # POST /
 # operationId: DescribeEmergencyContactSettings
-export def "api get-emergency-contact-settings" [
+export def "describe-emergency-contact-settings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -842,7 +842,7 @@ export def "api get-emergency-contact-settings" [
 #
 # POST /
 # operationId: DescribeProtection
-export def "api get-protection" [
+export def "describe-protection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -891,7 +891,7 @@ export def "api get-protection" [
 #
 # POST /
 # operationId: DescribeProtectionGroup
-export def "api get-protection-group" [
+export def "describe-protection-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -939,7 +939,7 @@ export def "api get-protection-group" [
 #
 # POST /
 # operationId: DescribeSubscription
-export def "api get-subscription" [
+export def "describe-subscription" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -987,7 +987,7 @@ export def "api get-subscription" [
 #
 # POST /
 # operationId: DisableApplicationLayerAutomaticResponse
-export def "api disable-application-layer-automatic-response" [
+export def "disable-application-layer-automatic-response" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1035,7 +1035,7 @@ export def "api disable-application-layer-automatic-response" [
 #
 # POST /
 # operationId: DisableProactiveEngagement
-export def "api disable-proactive-engagement" [
+export def "disable-proactive-engagement" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1083,7 +1083,7 @@ export def "api disable-proactive-engagement" [
 #
 # POST /
 # operationId: DisassociateDRTLogBucket
-export def "api create-disassociate-drt-log-bucket" [
+export def "disassociate-drt-log-bucket" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1131,7 +1131,7 @@ export def "api create-disassociate-drt-log-bucket" [
 #
 # POST /
 # operationId: DisassociateDRTRole
-export def "api create-disassociate-drt-role" [
+export def "disassociate-drt-role" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1179,7 +1179,7 @@ export def "api create-disassociate-drt-role" [
 #
 # POST /
 # operationId: DisassociateHealthCheck
-export def "api check-disassociate-health" [
+export def "disassociate-health-check" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1228,7 +1228,7 @@ export def "api check-disassociate-health" [
 #
 # POST /
 # operationId: EnableApplicationLayerAutomaticResponse
-export def "api enable-application-layer-automatic-response" [
+export def "enable-application-layer-automatic-response" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1277,7 +1277,7 @@ export def "api enable-application-layer-automatic-response" [
 #
 # POST /
 # operationId: EnableProactiveEngagement
-export def "api enable-proactive-engagement" [
+export def "enable-proactive-engagement" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1325,7 +1325,7 @@ export def "api enable-proactive-engagement" [
 #
 # POST /
 # operationId: GetSubscriptionState
-export def "api get-subscription-state" [
+export def "get-subscription-state" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1373,7 +1373,7 @@ export def "api get-subscription-state" [
 #
 # POST /
 # operationId: ListAttacks
-export def "api list-attacks" [
+export def "list-attacks" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1428,7 +1428,7 @@ export def "api list-attacks" [
 #
 # POST /
 # operationId: ListProtectionGroups
-export def "api list-protection-groups" [
+export def "list-protection-groups" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1481,7 +1481,7 @@ export def "api list-protection-groups" [
 #
 # POST /
 # operationId: ListProtections
-export def "api list-protections" [
+export def "list-protections" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1534,7 +1534,7 @@ export def "api list-protections" [
 #
 # POST /
 # operationId: ListResourcesInProtectionGroup
-export def "api list-resources-in-protection-group" [
+export def "list-resources-in-protection-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1587,7 +1587,7 @@ export def "api list-resources-in-protection-group" [
 #
 # POST /
 # operationId: ListTagsForResource
-export def "api list-tags-for-resource" [
+export def "list-tags-for-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1635,7 +1635,7 @@ export def "api list-tags-for-resource" [
 #
 # POST /
 # operationId: TagResource
-export def "api tag-resource" [
+export def "tag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1684,7 +1684,7 @@ export def "api tag-resource" [
 #
 # POST /
 # operationId: UntagResource
-export def "api untag-resource" [
+export def "untag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1733,7 +1733,7 @@ export def "api untag-resource" [
 #
 # POST /
 # operationId: UpdateApplicationLayerAutomaticResponse
-export def "api update-application-layer-automatic-response" [
+export def "update-application-layer-automatic-response" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1782,7 +1782,7 @@ export def "api update-application-layer-automatic-response" [
 #
 # POST /
 # operationId: UpdateEmergencyContactSettings
-export def "api update-emergency-contact-settings" [
+export def "update-emergency-contact-settings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1830,7 +1830,7 @@ export def "api update-emergency-contact-settings" [
 #
 # POST /
 # operationId: UpdateProtectionGroup
-export def "api update-protection-group" [
+export def "update-protection-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1882,7 +1882,7 @@ export def "api update-protection-group" [
 #
 # POST /
 # operationId: UpdateSubscription
-export def "api update-subscription" [
+export def "update-subscription" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

@@ -99,7 +99,7 @@ def auth-scheme-completer [] { ["ocp-apim-subscription-key" "query-subscription-
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "h5-players-gamevariants get-58acde292109180bdcacc40d" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "58acde292109180bdcacc40d" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -123,7 +123,7 @@ export def commands []: nothing -> table {
 #
 # GET /h5/players/{player}/gamevariants
 # operationId: 58acde292109180bdcacc40d
-export def "h5-players-gamevariants get-58acde292109180bdcacc40d" [
+export def "58acde292109180bdcacc40d" [
   player: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -164,7 +164,7 @@ export def "h5-players-gamevariants get-58acde292109180bdcacc40d" [
 #
 # GET /h5/players/{player}/gamevariants/{variant}
 # operationId: 58acde292109180bdcacc40c
-export def "h5-players-gamevariants get-58acde292109180bdcacc40c" [
+export def "58acde292109180bdcacc40c" [
   player: string
   variant: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -202,7 +202,7 @@ export def "h5-players-gamevariants get-58acde292109180bdcacc40c" [
 #
 # GET /h5/players/{player}/mapvariants
 # operationId: 58acde292109180bdcacc40f
-export def "h5-players-mapvariants get-58acde292109180bdcacc40f" [
+export def "58acde292109180bdcacc40f" [
   player: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -243,7 +243,7 @@ export def "h5-players-mapvariants get-58acde292109180bdcacc40f" [
 #
 # GET /h5/players/{player}/mapvariants/{variant}
 # operationId: 58acde292109180bdcacc40e
-export def "h5-players-mapvariants get-58acde292109180bdcacc40e" [
+export def "58acde292109180bdcacc40e" [
   player: string
   variant: string
   --base-url(-b): string@base-url-completer # API base URL

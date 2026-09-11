@@ -115,7 +115,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "apis get-list-ap-is" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-all-ap-is" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -139,7 +139,7 @@ export def commands []: nothing -> table {
 #
 # GET /apis
 # operationId: getAllApIs
-export def "apis get-list-ap-is" [
+export def "get-all-ap-is" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -186,7 +186,7 @@ export def "apis get-list-ap-is" [
 # POST /apis
 # operationId: createApi
 # --api shape: {description?: string, name?: string, summary?: string}
-export def "apis create" [
+export def "create-api" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -226,7 +226,7 @@ export def "apis create" [
 #
 # DELETE /apis/{apiId}
 # operationId: deleteAnApi
-export def "apis delete" [
+export def "delete-an-api" [
   api_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -262,7 +262,7 @@ export def "apis delete" [
 #
 # GET /apis/{apiId}
 # operationId: singleApi
-export def "apis get-single" [
+export def "single-api" [
   api_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -299,7 +299,7 @@ export def "apis get-single" [
 # PUT /apis/{apiId}
 # operationId: updateAnApi
 # --api shape: {description?: string, name?: string}
-export def "apis update" [
+export def "update-an-api" [
   api_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -339,7 +339,7 @@ export def "apis update" [
 #
 # GET /apis/{apiId}/versions
 # operationId: getAllApiVersions
-export def "apis-versions get-list" [
+export def "get-all-api-versions" [
   api_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -376,7 +376,7 @@ export def "apis-versions get-list" [
 # POST /apis/{apiId}/versions
 # operationId: createApiVersion
 # --version shape: {name?: string, source?: record}
-export def "apis-versions create" [
+export def "create-api-version" [
   api_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -416,7 +416,7 @@ export def "apis-versions create" [
 #
 # DELETE /apis/{apiId}/versions/{apiVersionId}
 # operationId: deleteAnApiVersion
-export def "apis-versions delete" [
+export def "delete-an-api-version" [
   api_id: string
   api_version_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -454,7 +454,7 @@ export def "apis-versions delete" [
 #
 # GET /apis/{apiId}/versions/{apiVersionId}
 # operationId: getAnApiVersion
-export def "apis-versions get" [
+export def "get-an-api-version" [
   api_id: string
   api_version_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -493,7 +493,7 @@ export def "apis-versions get" [
 # PUT /apis/{apiId}/versions/{apiVersionId}
 # operationId: updateAnApiVersion
 # --version shape: {name?: string}
-export def "apis-versions update" [
+export def "update-an-api-version" [
   api_id: string
   api_version_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -535,7 +535,7 @@ export def "apis-versions update" [
 #
 # GET /apis/{apiId}/versions/{apiVersionId}/contracttest
 # operationId: getContractTestRelations
-export def "apis-versions-contracttest get-contract-test-relations" [
+export def "get-contract-test-relations" [
   api_id: string
   api_version_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -573,7 +573,7 @@ export def "apis-versions-contracttest get-contract-test-relations" [
 #
 # GET /apis/{apiId}/versions/{apiVersionId}/documentation
 # operationId: getDocumentationRelations
-export def "apis-versions-documentation get-relations" [
+export def "get-documentation-relations" [
   api_id: string
   api_version_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -611,7 +611,7 @@ export def "apis-versions-documentation get-relations" [
 #
 # GET /apis/{apiId}/versions/{apiVersionId}/environment
 # operationId: getEnvironmentRelations
-export def "apis-versions-environment get-relations" [
+export def "get-environment-relations" [
   api_id: string
   api_version_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -649,7 +649,7 @@ export def "apis-versions-environment get-relations" [
 #
 # GET /apis/{apiId}/versions/{apiVersionId}/integrationtest
 # operationId: getIntegrationTestRelations
-export def "apis-versions-integrationtest get-integration-test-relations" [
+export def "get-integration-test-relations" [
   api_id: string
   api_version_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -687,7 +687,7 @@ export def "apis-versions-integrationtest get-integration-test-relations" [
 #
 # GET /apis/{apiId}/versions/{apiVersionId}/monitor
 # operationId: getMonitorRelations
-export def "apis-versions-monitor get-relations" [
+export def "get-monitor-relations" [
   api_id: string
   api_version_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -725,7 +725,7 @@ export def "apis-versions-monitor get-relations" [
 #
 # GET /apis/{apiId}/versions/{apiVersionId}/relations
 # operationId: getLinkedRelations
-export def "apis-versions-relations get-linked" [
+export def "get-linked-relations" [
   api_id: string
   api_version_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -763,7 +763,7 @@ export def "apis-versions-relations get-linked" [
 #
 # POST /apis/{apiId}/versions/{apiVersionId}/relations
 # operationId: createRelations
-export def "apis-versions-relations create" [
+export def "create-relations" [
   api_id: string
   api_version_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -809,7 +809,7 @@ export def "apis-versions-relations create" [
 # POST /apis/{apiId}/versions/{apiVersionId}/schemas
 # operationId: createSchema
 # --schema shape: {language?: string, schema?: string, type?: string}
-export def "apis-versions-schemas create" [
+export def "create-schema" [
   api_id: string
   api_version_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -851,7 +851,7 @@ export def "apis-versions-schemas create" [
 #
 # GET /apis/{apiId}/versions/{apiVersionId}/schemas/{schemaId}
 # operationId: getSchema
-export def "apis-versions-schemas get" [
+export def "get-schema" [
   api_id: string
   api_version_id: string
   schema_id: string
@@ -892,7 +892,7 @@ export def "apis-versions-schemas get" [
 # PUT /apis/{apiId}/versions/{apiVersionId}/schemas/{schemaId}
 # operationId: updateSchema
 # --schema shape: {language?: string, schema?: string, type?: string}
-export def "apis-versions-schemas update" [
+export def "update-schema" [
   api_id: string
   api_version_id: string
   schema_id: string
@@ -937,7 +937,7 @@ export def "apis-versions-schemas update" [
 # POST /apis/{apiId}/versions/{apiVersionId}/schemas/{schemaId}/collections
 # operationId: createCollectionFromSchema
 # --relations item shape: {type?: string}
-export def "apis-versions-schemas-collections create" [
+export def "create-collection-from-schema" [
   api_id: string
   api_version_id: string
   schema_id: string
@@ -984,7 +984,7 @@ export def "apis-versions-schemas-collections create" [
 #
 # GET /apis/{apiId}/versions/{apiVersionId}/testsuite
 # operationId: getTestSuiteRelations
-export def "apis-versions-testsuite get-test-suite-relations" [
+export def "get-test-suite-relations" [
   api_id: string
   api_version_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1022,7 +1022,7 @@ export def "apis-versions-testsuite get-test-suite-relations" [
 #
 # PUT /apis/{apiId}/versions/{apiVersionId}/{entityType}/{entityId}/syncWithSchema
 # operationId: syncRelationsWithSchema
-export def "apis-versions-sync-with-schema sync-relations" [
+export def "sync-relations-with-schema" [
   api_id: string
   api_version_id: string
   entity_type: string
@@ -1064,7 +1064,7 @@ export def "apis-versions-sync-with-schema sync-relations" [
 #
 # GET /collections
 # operationId: allCollections
-export def "collections list" [
+export def "all-collections" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1099,7 +1099,7 @@ export def "collections list" [
 # POST /collections
 # operationId: createCollection
 # --collection shape: {info?: record, item?: list}
-export def "collections create" [
+export def "create-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1137,7 +1137,7 @@ export def "collections create" [
 #
 # POST /collections/fork/{collection_uid}
 # operationId: createAFork
-export def "collections-fork create" [
+export def "create-a-fork" [
   collection_uid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1179,7 +1179,7 @@ export def "collections-fork create" [
 #
 # POST /collections/merge
 # operationId: mergeAFork
-export def "collections-merge create-fork" [
+export def "merge-a-fork" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1219,7 +1219,7 @@ export def "collections-merge create-fork" [
 #
 # DELETE /collections/{collection_uid}
 # operationId: deleteCollection
-export def "collections delete" [
+export def "delete-collection" [
   collection_uid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1255,7 +1255,7 @@ export def "collections delete" [
 #
 # GET /collections/{collection_uid}
 # operationId: singleCollection
-export def "collections get-single" [
+export def "single-collection" [
   collection_uid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1292,7 +1292,7 @@ export def "collections get-single" [
 # PUT /collections/{collection_uid}
 # operationId: updateCollection
 # --collection shape: {info?: record, item?: list}
-export def "collections update" [
+export def "update-collection" [
   collection_uid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1332,7 +1332,7 @@ export def "collections update" [
 #
 # GET /environments
 # operationId: allEnvironments
-export def "environments list" [
+export def "all-environments" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1367,7 +1367,7 @@ export def "environments list" [
 # POST /environments
 # operationId: createEnvironment
 # --environment shape: {name?: string, values?: list}
-export def "environments create" [
+export def "create-environment" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1405,7 +1405,7 @@ export def "environments create" [
 #
 # DELETE /environments/{environment_uid}
 # operationId: deleteEnvironment
-export def "environments delete" [
+export def "delete-environment" [
   environment_uid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1441,7 +1441,7 @@ export def "environments delete" [
 #
 # GET /environments/{environment_uid}
 # operationId: singleEnvironment
-export def "environments get-single" [
+export def "single-environment" [
   environment_uid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1478,7 +1478,7 @@ export def "environments get-single" [
 # PUT /environments/{environment_uid}
 # operationId: updateEnvironment
 # --environment shape: {name?: string, values?: list}
-export def "environments update" [
+export def "update-environment" [
   environment_uid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1518,7 +1518,7 @@ export def "environments update" [
 #
 # POST /import/exported
 # operationId: importExportedData
-export def "import-exported import-data" [
+export def "import-exported-data" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1557,7 +1557,7 @@ export def "import-exported import-data" [
 # POST /import/openapi
 # operationId: importExternalApiSpecification
 # --input shape: {info?: record, openapi?: string, paths?: record, servers?: list}
-export def "import-openapi import-external-specification" [
+export def "import-external-api-specification" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1596,7 +1596,7 @@ export def "import-openapi import-external-specification" [
 #
 # GET /me
 # operationId: apiKeyOwner
-export def "me get-key-owner" [
+export def "api-key-owner" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1630,7 +1630,7 @@ export def "me get-key-owner" [
 #
 # GET /mocks
 # operationId: allMocks
-export def "mocks list" [
+export def "all-mocks" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1665,7 +1665,7 @@ export def "mocks list" [
 # POST /mocks
 # operationId: createMock
 # --mock shape: {collection?: string, environment?: string}
-export def "mocks create" [
+export def "create-mock" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1703,7 +1703,7 @@ export def "mocks create" [
 #
 # DELETE /mocks/{mock_uid}
 # operationId: deleteMock
-export def "mocks delete" [
+export def "delete-mock" [
   mock_uid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1739,7 +1739,7 @@ export def "mocks delete" [
 #
 # GET /mocks/{mock_uid}
 # operationId: singleMock
-export def "mocks get-single" [
+export def "single-mock" [
   mock_uid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1776,7 +1776,7 @@ export def "mocks get-single" [
 # PUT /mocks/{mock_uid}
 # operationId: updateMock
 # --mock shape: {description?: string, environment?: string, name?: string, private?: bool, versionTag?: string}
-export def "mocks update" [
+export def "update-mock" [
   mock_uid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1816,7 +1816,7 @@ export def "mocks update" [
 #
 # POST /mocks/{mock_uid}/publish
 # operationId: publishMock
-export def "mocks-publish publish" [
+export def "publish-mock" [
   mock_uid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1852,7 +1852,7 @@ export def "mocks-publish publish" [
 #
 # DELETE /mocks/{mock_uid}/unpublish
 # operationId: unpublishMock
-export def "mocks-unpublish delete" [
+export def "unpublish-mock" [
   mock_uid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1888,7 +1888,7 @@ export def "mocks-unpublish delete" [
 #
 # GET /monitors
 # operationId: allMonitors
-export def "monitors list" [
+export def "all-monitors" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1923,7 +1923,7 @@ export def "monitors list" [
 # POST /monitors
 # operationId: createMonitor
 # --monitor shape: {collection?: string, environment?: string, name?: string, schedule?: record}
-export def "monitors create" [
+export def "create-monitor" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1961,7 +1961,7 @@ export def "monitors create" [
 #
 # DELETE /monitors/{monitor_uid}
 # operationId: deleteMonitor
-export def "monitors delete" [
+export def "delete-monitor" [
   monitor_uid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1997,7 +1997,7 @@ export def "monitors delete" [
 #
 # GET /monitors/{monitor_uid}
 # operationId: singleMonitor
-export def "monitors get-single" [
+export def "single-monitor" [
   monitor_uid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2034,7 +2034,7 @@ export def "monitors get-single" [
 # PUT /monitors/{monitor_uid}
 # operationId: updateMonitor
 # --monitor shape: {name?: string, schedule?: record}
-export def "monitors update" [
+export def "update-monitor" [
   monitor_uid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2074,7 +2074,7 @@ export def "monitors update" [
 #
 # POST /monitors/{monitor_uid}/run
 # operationId: runAMonitor
-export def "monitors-run create" [
+export def "run-a-monitor" [
   monitor_uid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2111,7 +2111,7 @@ export def "monitors-run create" [
 # POST /webhooks
 # operationId: createWebhook
 # --webhook shape: {collection?: string, name?: string}
-export def "webhooks create" [
+export def "create-webhook" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2151,7 +2151,7 @@ export def "webhooks create" [
 #
 # GET /workspaces
 # operationId: allWorkspaces
-export def "workspaces list" [
+export def "all-workspaces" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2186,7 +2186,7 @@ export def "workspaces list" [
 # POST /workspaces
 # operationId: createWorkspace
 # --workspace shape: {collections?: list, description?: string, environments?: list, mocks?: list, monitors?: list, name?: string, type?: string}
-export def "workspaces create" [
+export def "create-workspace" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2224,7 +2224,7 @@ export def "workspaces create" [
 #
 # DELETE /workspaces/{workspace_id}
 # operationId: deleteWorkspace
-export def "workspaces delete" [
+export def "delete-workspace" [
   workspace_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2260,7 +2260,7 @@ export def "workspaces delete" [
 #
 # GET /workspaces/{workspace_id}
 # operationId: singleWorkspace
-export def "workspaces get-single" [
+export def "single-workspace" [
   workspace_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2297,7 +2297,7 @@ export def "workspaces get-single" [
 # PUT /workspaces/{workspace_id}
 # operationId: updateWorkspace
 # --workspace shape: {collections?: list, description?: string, environments?: list, mocks?: list, monitors?: list, name?: string}
-export def "workspaces update" [
+export def "update-workspace" [
   workspace_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

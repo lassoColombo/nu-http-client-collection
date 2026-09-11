@@ -103,7 +103,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-location get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-location" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -129,7 +129,7 @@ export def commands []: nothing -> table {
 # operationId: getLocation
 # --MiataruConfig shape: {RequestMiataruDeviceID: string}
 # --MiataruGetLocation item shape: {Device: string}
-export def "get-location get" [
+export def "get-location" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -168,7 +168,7 @@ export def "get-location get" [
 #
 # GET /GetLocationGeoJSON/{deviceID}
 # operationId: getLocationGeoJSON
-export def "get-location-geo-json get" [
+export def "get-location-geo-json" [
   device_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -206,7 +206,7 @@ export def "get-location-geo-json get" [
 # operationId: getLocationHistory
 # --MiataruConfig shape: {RequestMiataruDeviceID: string}
 # --MiataruGetLocationHistory shape: {Amount: string, Device: string}
-export def "get-location-history get" [
+export def "get-location-history" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -246,7 +246,7 @@ export def "get-location-history get" [
 # POST /GetVisitorHistory
 # operationId: getVisitorHistory
 # --MiataruGetVisitorHistory shape: {Amount: string, Device: string}
-export def "get-visitor-history get" [
+export def "get-visitor-history" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -286,7 +286,7 @@ export def "get-visitor-history get" [
 # operationId: updateLocation
 # --MiataruConfig shape: {EnableLocationHistory: string, LocationDataRetentionTime: string}
 # --MiataruLocation item shape: {Device: string, HorizontalAccuracy: string, Latitude: string, Longitude: string, Timestamp: string}
-export def "update-location update" [
+export def "update-location" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

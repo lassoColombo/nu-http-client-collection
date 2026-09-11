@@ -100,7 +100,7 @@ def accept-completer [] { ["application/js" "application/json" "application/xml"
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "translate-braille get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-translate-braille" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -123,7 +123,7 @@ export def commands []: nothing -> table {
 # Translate from English to Braille. This is what you use if you have a braille display. This API translates the English text into characters that a braille display understands and you can feed the translated text directly to the display.
 #
 # GET /translate/braille
-export def "translate-braille get" [
+export def "get-translate-braille" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -159,7 +159,7 @@ export def "translate-braille get" [
 # Use this to see which dots are enabled for each Braille letters. This is highly educational (to see which dots are enabled) and can potentially drive a non braille display which works on individual dots.
 #
 # GET /translate/braille/dots
-export def "translate-braille-dots get" [
+export def "get-translate-braille-dots" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -195,7 +195,7 @@ export def "translate-braille-dots get" [
 # Translate from English to Braille Image characters. This is probably what you want to use if you are displaying braille in a browser.
 #
 # GET /translate/braille/html
-export def "translate-braille-html get" [
+export def "get-translate-braille-html" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -231,7 +231,7 @@ export def "translate-braille-html get" [
 # Translate from English to Braille image characters. This is probably what you want to use if you are displaying braille in a browser.
 #
 # GET /translate/braille/image
-export def "translate-braille-image get" [
+export def "get-translate-braille-image" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -267,7 +267,7 @@ export def "translate-braille-image get" [
 # Translate from English to Braille Unicode characters.
 #
 # GET /translate/braille/unicode
-export def "translate-braille-unicode get" [
+export def "get-translate-braille-unicode" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

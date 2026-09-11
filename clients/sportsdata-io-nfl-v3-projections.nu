@@ -99,7 +99,7 @@ def auth-scheme-completer [] { ["ocp-apim-subscription-key" "query-key"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "dfs-slate-ownership-projections-by-slate-id get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "dfs-slate-ownership-projections-by-slateid" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -123,7 +123,7 @@ export def commands []: nothing -> table {
 #
 # GET /{format}/DfsSlateOwnershipProjectionsBySlateID/{slateId}
 # operationId: DfsSlateOwnershipProjectionsBySlateid
-export def "dfs-slate-ownership-projections-by-slate-id get" [
+export def "dfs-slate-ownership-projections-by-slateid" [
   format: string
   slate_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -161,7 +161,7 @@ export def "dfs-slate-ownership-projections-by-slate-id get" [
 #
 # GET /{format}/DfsSlatesByDate/{date}
 # operationId: DfsSlatesByDate
-export def "dfs-slates-by-date get" [
+export def "dfs-slates-by-date" [
   format: string
   date: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -199,7 +199,7 @@ export def "dfs-slates-by-date get" [
 #
 # GET /{format}/DfsSlatesByWeek/{season}/{week}
 # operationId: DfsSlatesByWeek
-export def "dfs-slates-by-week get" [
+export def "dfs-slates-by-week" [
   format: string
   season: string
   week: string
@@ -239,7 +239,7 @@ export def "dfs-slates-by-week get" [
 #
 # GET /{format}/FantasyDefenseProjectionsByGame/{season}/{week}
 # operationId: ProjectedFantasyDefenseGameStatsWDfsSalaries
-export def "fantasy-defense-projections-by-game stats-projected-w-dfs-salaries" [
+export def "projected-fantasy-defense-game-stats-w-dfs-salaries" [
   format: string
   season: string
   week: string
@@ -279,7 +279,7 @@ export def "fantasy-defense-projections-by-game stats-projected-w-dfs-salaries" 
 #
 # GET /{format}/FantasyDefenseProjectionsBySeason/{season}
 # operationId: ProjectedFantasyDefenseSeasonStatsWAdp
-export def "fantasy-defense-projections-by-season stats-projected-w-adp" [
+export def "projected-fantasy-defense-season-stats-w-adp" [
   format: string
   season: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -317,7 +317,7 @@ export def "fantasy-defense-projections-by-season stats-projected-w-adp" [
 #
 # GET /{format}/IdpPlayerGameProjectionStatsByPlayerID/{season}/{week}/{playerid}
 # operationId: IdpProjectedPlayerGameStatsByPlayerWInjuriesLineupsDfsSalaries
-export def "idp-player-game-projection-stats-by-player-id stats-projected-w-injuries-lineups-dfs-salaries" [
+export def "idp-projected-player-game-stats-by-player-w-injuries-lineups-dfs-salaries" [
   format: string
   season: string
   week: string
@@ -359,7 +359,7 @@ export def "idp-player-game-projection-stats-by-player-id stats-projected-w-inju
 #
 # GET /{format}/IdpPlayerGameProjectionStatsByTeam/{season}/{week}/{team}
 # operationId: IdpProjectedPlayerGameStatsByTeamWInjuriesLineupsDfsSalaries
-export def "idp-player-game-projection-stats-by-team stats-projected-w-injuries-lineups-dfs-salaries" [
+export def "idp-projected-player-game-stats-by-team-w-injuries-lineups-dfs-salaries" [
   format: string
   season: string
   week: string
@@ -401,7 +401,7 @@ export def "idp-player-game-projection-stats-by-team stats-projected-w-injuries-
 #
 # GET /{format}/IdpPlayerGameProjectionStatsByWeek/{season}/{week}
 # operationId: IdpProjectedPlayerGameStatsByWeekWInjuriesLineupsDfsSalaries
-export def "idp-player-game-projection-stats-by-week stats-projected-w-injuries-lineups-dfs-salaries" [
+export def "idp-projected-player-game-stats-by-week-w-injuries-lineups-dfs-salaries" [
   format: string
   season: string
   week: string
@@ -441,7 +441,7 @@ export def "idp-player-game-projection-stats-by-week stats-projected-w-injuries-
 #
 # GET /{format}/InjuredPlayers
 # operationId: InjuredPlayers
-export def "injured-players get" [
+export def "injured-players" [
   format: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -477,7 +477,7 @@ export def "injured-players get" [
 #
 # GET /{format}/PlayerGameProjectionStatsByPlayerID/{season}/{week}/{playerid}
 # operationId: ProjectedPlayerGameStatsByPlayerWInjuriesLineupsDfsSalaries
-export def "player-game-projection-stats-by-player-id stats-projected-w-injuries-lineups-dfs-salaries" [
+export def "projected-player-game-stats-by-player-w-injuries-lineups-dfs-salaries" [
   format: string
   season: string
   week: string
@@ -519,7 +519,7 @@ export def "player-game-projection-stats-by-player-id stats-projected-w-injuries
 #
 # GET /{format}/PlayerGameProjectionStatsByTeam/{season}/{week}/{team}
 # operationId: ProjectedPlayerGameStatsByTeamWInjuriesLineupsDfsSalaries
-export def "player-game-projection-stats-by-team stats-projected-w-injuries-lineups-dfs-salaries" [
+export def "projected-player-game-stats-by-team-w-injuries-lineups-dfs-salaries" [
   format: string
   season: string
   week: string
@@ -561,7 +561,7 @@ export def "player-game-projection-stats-by-team stats-projected-w-injuries-line
 #
 # GET /{format}/PlayerGameProjectionStatsByWeek/{season}/{week}
 # operationId: ProjectedPlayerGameStatsByWeekWInjuriesLineupsDfsSalaries
-export def "player-game-projection-stats-by-week stats-projected-w-injuries-lineups-dfs-salaries" [
+export def "projected-player-game-stats-by-week-w-injuries-lineups-dfs-salaries" [
   format: string
   season: string
   week: string
@@ -601,7 +601,7 @@ export def "player-game-projection-stats-by-week stats-projected-w-injuries-line
 #
 # GET /{format}/PlayerSeasonProjectionStats/{season}
 # operationId: ProjectedPlayerSeasonStatsWAdp
-export def "player-season-projection-stats stats-projected-w-adp" [
+export def "projected-player-season-stats-w-adp" [
   format: string
   season: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -639,7 +639,7 @@ export def "player-season-projection-stats stats-projected-w-adp" [
 #
 # GET /{format}/PlayerSeasonProjectionStatsByPlayerID/{season}/{playerid}
 # operationId: ProjectedPlayerSeasonStatsByPlayerWAdp
-export def "player-season-projection-stats-by-player-id stats-projected-w-adp" [
+export def "projected-player-season-stats-by-player-w-adp" [
   format: string
   season: string
   playerid: string
@@ -679,7 +679,7 @@ export def "player-season-projection-stats-by-player-id stats-projected-w-adp" [
 #
 # GET /{format}/PlayerSeasonProjectionStatsByTeam/{season}/{team}
 # operationId: ProjectedPlayerSeasonStatsByTeamWAdp
-export def "player-season-projection-stats-by-team stats-projected-w-adp" [
+export def "projected-player-season-stats-by-team-w-adp" [
   format: string
   season: string
   team: string
@@ -719,7 +719,7 @@ export def "player-season-projection-stats-by-team stats-projected-w-adp" [
 #
 # GET /{format}/UpcomingDfsSlateOwnershipProjections
 # operationId: UpcomingDfsSlateOwnershipProjections
-export def "upcoming-dfs-slate-ownership-projections get" [
+export def "upcoming-dfs-slate-ownership-projections" [
   format: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

@@ -116,7 +116,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "sms-voice-configuration-sets create" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "create-configuration-set" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -140,7 +140,7 @@ export def commands []: nothing -> table {
 #
 # POST /v1/sms-voice/configuration-sets
 # operationId: CreateConfigurationSet
-export def "sms-voice-configuration-sets create" [
+export def "create-configuration-set" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -187,7 +187,7 @@ export def "sms-voice-configuration-sets create" [
 #
 # GET /v1/sms-voice/configuration-sets
 # operationId: ListConfigurationSets
-export def "sms-voice-configuration-sets list" [
+export def "list-configuration-sets" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -234,7 +234,7 @@ export def "sms-voice-configuration-sets list" [
 # POST /v1/sms-voice/configuration-sets/{ConfigurationSetName}/event-destinations
 # operationId: CreateConfigurationSetEventDestination
 # --EventDestination shape: {CloudWatchLogsDestination?: record, Enabled?: any, KinesisFirehoseDestination?: record, MatchingEventTypes?: list<string>, SnsDestination?: record}
-export def "sms-voice-configuration-sets-event-destinations create" [
+export def "create-configuration-set-event-destination" [
   configuration_set_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -284,7 +284,7 @@ export def "sms-voice-configuration-sets-event-destinations create" [
 #
 # GET /v1/sms-voice/configuration-sets/{ConfigurationSetName}/event-destinations
 # operationId: GetConfigurationSetEventDestinations
-export def "sms-voice-configuration-sets-event-destinations get" [
+export def "get-configuration-set-event-destinations" [
   configuration_set_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -329,7 +329,7 @@ export def "sms-voice-configuration-sets-event-destinations get" [
 #
 # DELETE /v1/sms-voice/configuration-sets/{ConfigurationSetName}
 # operationId: DeleteConfigurationSet
-export def "sms-voice-configuration-sets delete" [
+export def "delete-configuration-set" [
   configuration_set_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -374,7 +374,7 @@ export def "sms-voice-configuration-sets delete" [
 #
 # DELETE /v1/sms-voice/configuration-sets/{ConfigurationSetName}/event-destinations/{EventDestinationName}
 # operationId: DeleteConfigurationSetEventDestination
-export def "sms-voice-configuration-sets-event-destinations delete" [
+export def "delete-configuration-set-event-destination" [
   configuration_set_name: string
   event_destination_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -422,7 +422,7 @@ export def "sms-voice-configuration-sets-event-destinations delete" [
 # PUT /v1/sms-voice/configuration-sets/{ConfigurationSetName}/event-destinations/{EventDestinationName}
 # operationId: UpdateConfigurationSetEventDestination
 # --EventDestination shape: {CloudWatchLogsDestination?: record, Enabled?: any, KinesisFirehoseDestination?: record, MatchingEventTypes?: list<string>, SnsDestination?: record}
-export def "sms-voice-configuration-sets-event-destinations update" [
+export def "update-configuration-set-event-destination" [
   configuration_set_name: string
   event_destination_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -474,7 +474,7 @@ export def "sms-voice-configuration-sets-event-destinations update" [
 # POST /v1/sms-voice/voice/message
 # operationId: SendVoiceMessage
 # --Content shape: {CallInstructionsMessage?: record, PlainTextMessage?: record, SSMLMessage?: record}
-export def "sms-voice-voice-message send" [
+export def "send-voice-message" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

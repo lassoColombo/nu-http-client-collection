@@ -125,7 +125,7 @@ def new-state-completer [] { ["failed" "success"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "config get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-config" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -149,7 +149,7 @@ export def commands []: nothing -> table {
 #
 # GET /config
 # operationId: get_config
-export def "config get" [
+export def "get-config" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -184,7 +184,7 @@ export def "config get" [
 #
 # GET /connections
 # operationId: get_connections
-export def "connections list" [
+export def "get-connections" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -222,7 +222,7 @@ export def "connections list" [
 #
 # POST /connections
 # operationId: post_connection
-export def "connections create" [
+export def "post-connection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -268,7 +268,7 @@ export def "connections create" [
 #
 # POST /connections/test
 # operationId: test_connection
-export def "connections-test test" [
+export def "test-connection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -314,7 +314,7 @@ export def "connections-test test" [
 #
 # DELETE /connections/{connection_id}
 # operationId: delete_connection
-export def "connections delete" [
+export def "delete-connection" [
   connection_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -350,7 +350,7 @@ export def "connections delete" [
 #
 # GET /connections/{connection_id}
 # operationId: get_connection
-export def "connections get" [
+export def "get-connection" [
   connection_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -386,7 +386,7 @@ export def "connections get" [
 #
 # PATCH /connections/{connection_id}
 # operationId: patch_connection
-export def "connections update" [
+export def "patch-connection" [
   connection_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -436,7 +436,7 @@ export def "connections update" [
 #
 # GET /dagSources/{file_token}
 # operationId: get_dag_source
-export def "dag-sources get" [
+export def "get-dag-source" [
   file_token: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -473,7 +473,7 @@ export def "dag-sources get" [
 #
 # GET /dagWarnings
 # operationId: get_dag_warnings
-export def "dag-warnings get" [
+export def "get-dag-warnings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -513,7 +513,7 @@ export def "dag-warnings get" [
 #
 # GET /dags
 # operationId: get_dags
-export def "dags list" [
+export def "get-dags" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -555,7 +555,7 @@ export def "dags list" [
 # PATCH /dags
 # operationId: patch_dags
 # --tags item shape: {name?: string}
-export def "dags update" [
+export def "patch-dags" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -600,7 +600,7 @@ export def "dags update" [
 #
 # DELETE /dags/{dag_id}
 # operationId: delete_dag
-export def "dags delete" [
+export def "delete-dag" [
   dag_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -636,7 +636,7 @@ export def "dags delete" [
 #
 # GET /dags/{dag_id}
 # operationId: get_dag
-export def "dags get" [
+export def "get-dag" [
   dag_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -673,7 +673,7 @@ export def "dags get" [
 # PATCH /dags/{dag_id}
 # operationId: patch_dag
 # --tags item shape: {name?: string}
-export def "dags update-by-dag-id" [
+export def "patch-dag" [
   dag_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -715,7 +715,7 @@ export def "dags update-by-dag-id" [
 #
 # POST /dags/{dag_id}/clearTaskInstances
 # operationId: post_clear_task_instances
-export def "dags-clear-task-instances create" [
+export def "post-clear-task-instances" [
   dag_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -768,7 +768,7 @@ export def "dags-clear-task-instances create" [
 #
 # GET /dags/{dag_id}/dagRuns
 # operationId: get_dag_runs
-export def "dags-dag-runs list" [
+export def "get-dag-runs" [
   dag_id: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -816,7 +816,7 @@ export def "dags-dag-runs list" [
 # POST /dags/{dag_id}/dagRuns
 # operationId: post_dag_run
 @deprecated --flag execution-date
-export def "dags-dag-runs create" [
+export def "post-dag-run" [
   dag_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -861,7 +861,7 @@ export def "dags-dag-runs create" [
 #
 # DELETE /dags/{dag_id}/dagRuns/{dag_run_id}
 # operationId: delete_dag_run
-export def "dags-dag-runs delete" [
+export def "delete-dag-run" [
   dag_id: string
   dag_run_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -899,7 +899,7 @@ export def "dags-dag-runs delete" [
 #
 # GET /dags/{dag_id}/dagRuns/{dag_run_id}
 # operationId: get_dag_run
-export def "dags-dag-runs get" [
+export def "get-dag-run" [
   dag_id: string
   dag_run_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -937,7 +937,7 @@ export def "dags-dag-runs get" [
 #
 # PATCH /dags/{dag_id}/dagRuns/{dag_run_id}
 # operationId: update_dag_run_state
-export def "dags-dag-runs update-state" [
+export def "update-dag-run-state" [
   dag_id: string
   dag_run_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -979,7 +979,7 @@ export def "dags-dag-runs update-state" [
 #
 # POST /dags/{dag_id}/dagRuns/{dag_run_id}/clear
 # operationId: clear_dag_run
-export def "dags-dag-runs-clear create" [
+export def "clear-dag-run" [
   dag_id: string
   dag_run_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1021,7 +1021,7 @@ export def "dags-dag-runs-clear create" [
 #
 # PATCH /dags/{dag_id}/dagRuns/{dag_run_id}/setNote
 # operationId: set_dag_run_note
-export def "dags-dag-runs-set-note update" [
+export def "set-dag-run-note" [
   dag_id: string
   dag_run_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1063,7 +1063,7 @@ export def "dags-dag-runs-set-note update" [
 #
 # GET /dags/{dag_id}/dagRuns/{dag_run_id}/taskInstances
 # operationId: get_task_instances
-export def "dags-dag-runs-task-instances list" [
+export def "get-task-instances" [
   dag_id: any
   dag_run_id: any
   --base-url(-b): string@base-url-completer # API base URL
@@ -1104,7 +1104,7 @@ export def "dags-dag-runs-task-instances list" [
 #
 # GET /dags/{dag_id}/dagRuns/{dag_run_id}/taskInstances/{task_id}
 # operationId: get_task_instance
-export def "dags-dag-runs-task-instances get" [
+export def "get-task-instance" [
   dag_id: string
   dag_run_id: string
   task_id: string
@@ -1144,7 +1144,7 @@ export def "dags-dag-runs-task-instances get" [
 #
 # PATCH /dags/{dag_id}/dagRuns/{dag_run_id}/taskInstances/{task_id}
 # operationId: patch_task_instance
-export def "dags-dag-runs-task-instances update" [
+export def "patch-task-instance" [
   dag_id: string
   dag_run_id: string
   task_id: string
@@ -1189,7 +1189,7 @@ export def "dags-dag-runs-task-instances update" [
 #
 # GET /dags/{dag_id}/dagRuns/{dag_run_id}/taskInstances/{task_id}/links
 # operationId: get_extra_links
-export def "dags-dag-runs-task-instances-links get-extra" [
+export def "get-extra-links" [
   dag_id: string
   dag_run_id: string
   task_id: string
@@ -1229,7 +1229,7 @@ export def "dags-dag-runs-task-instances-links get-extra" [
 #
 # GET /dags/{dag_id}/dagRuns/{dag_run_id}/taskInstances/{task_id}/listMapped
 # operationId: get_mapped_task_instances
-export def "dags-dag-runs-task-instances-list-mapped get" [
+export def "get-mapped-task-instances" [
   dag_id: any
   dag_run_id: any
   task_id: any
@@ -1284,7 +1284,7 @@ export def "dags-dag-runs-task-instances-list-mapped get" [
 #
 # GET /dags/{dag_id}/dagRuns/{dag_run_id}/taskInstances/{task_id}/logs/{task_try_number}
 # operationId: get_log
-export def "dags-dag-runs-task-instances-logs get" [
+export def "get-log" [
   dag_id: string
   dag_run_id: string
   task_id: string
@@ -1331,7 +1331,7 @@ export def "dags-dag-runs-task-instances-logs get" [
 #
 # PATCH /dags/{dag_id}/dagRuns/{dag_run_id}/taskInstances/{task_id}/setNote
 # operationId: set_task_instance_note
-export def "dags-dag-runs-task-instances-set-note update" [
+export def "set-task-instance-note" [
   dag_id: string
   dag_run_id: string
   task_id: string
@@ -1375,7 +1375,7 @@ export def "dags-dag-runs-task-instances-set-note update" [
 #
 # GET /dags/{dag_id}/dagRuns/{dag_run_id}/taskInstances/{task_id}/xcomEntries
 # operationId: get_xcom_entries
-export def "dags-dag-runs-task-instances-xcom-entries get" [
+export def "get-xcom-entries" [
   dag_id: any
   dag_run_id: any
   task_id: any
@@ -1418,7 +1418,7 @@ export def "dags-dag-runs-task-instances-xcom-entries get" [
 #
 # GET /dags/{dag_id}/dagRuns/{dag_run_id}/taskInstances/{task_id}/xcomEntries/{xcom_key}
 # operationId: get_xcom_entry
-export def "dags-dag-runs-task-instances-xcom-entries get-entry" [
+export def "get-xcom-entry" [
   dag_id: string
   dag_run_id: string
   task_id: string
@@ -1462,7 +1462,7 @@ export def "dags-dag-runs-task-instances-xcom-entries get-entry" [
 #
 # GET /dags/{dag_id}/dagRuns/{dag_run_id}/taskInstances/{task_id}/{map_index}
 # operationId: get_mapped_task_instance
-export def "dags-dag-runs-task-instances get-mapped" [
+export def "get-mapped-task-instance" [
   dag_id: string
   dag_run_id: string
   task_id: string
@@ -1504,7 +1504,7 @@ export def "dags-dag-runs-task-instances get-mapped" [
 #
 # PATCH /dags/{dag_id}/dagRuns/{dag_run_id}/taskInstances/{task_id}/{map_index}
 # operationId: patch_mapped_task_instance
-export def "dags-dag-runs-task-instances update-mapped" [
+export def "patch-mapped-task-instance" [
   dag_id: string
   dag_run_id: string
   task_id: string
@@ -1551,7 +1551,7 @@ export def "dags-dag-runs-task-instances update-mapped" [
 #
 # PATCH /dags/{dag_id}/dagRuns/{dag_run_id}/taskInstances/{task_id}/{map_index}/setNote
 # operationId: set_mapped_task_instance_note
-export def "dags-dag-runs-task-instances-set-note update-mapped" [
+export def "set-mapped-task-instance-note" [
   dag_id: string
   dag_run_id: string
   task_id: string
@@ -1597,7 +1597,7 @@ export def "dags-dag-runs-task-instances-set-note update-mapped" [
 #
 # GET /dags/{dag_id}/dagRuns/{dag_run_id}/upstreamDatasetEvents
 # operationId: get_upstream_dataset_events
-export def "dags-dag-runs-upstream-dataset-events get" [
+export def "get-upstream-dataset-events" [
   dag_id: string
   dag_run_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1635,7 +1635,7 @@ export def "dags-dag-runs-upstream-dataset-events get" [
 #
 # GET /dags/{dag_id}/details
 # operationId: get_dag_details
-export def "dags-details get" [
+export def "get-dag-details" [
   dag_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1671,7 +1671,7 @@ export def "dags-details get" [
 #
 # GET /dags/{dag_id}/tasks
 # operationId: get_tasks
-export def "dags-tasks list" [
+export def "get-tasks" [
   dag_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1709,7 +1709,7 @@ export def "dags-tasks list" [
 #
 # GET /dags/{dag_id}/tasks/{task_id}
 # operationId: get_task
-export def "dags-tasks get" [
+export def "get-task" [
   dag_id: string
   task_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1747,7 +1747,7 @@ export def "dags-tasks get" [
 #
 # POST /dags/{dag_id}/updateTaskInstancesState
 # operationId: post_set_task_instances_state
-export def "dags-update-task-instances-state create-update" [
+export def "post-set-task-instances-state" [
   dag_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1795,7 +1795,7 @@ export def "dags-update-task-instances-state create-update" [
 #
 # POST /dags/~/dagRuns/list
 # operationId: get_dag_runs_batch
-export def "dags-dag-runs-list get-batch" [
+export def "get-dag-runs-batch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1843,7 +1843,7 @@ export def "dags-dag-runs-list get-batch" [
 #
 # POST /dags/~/dagRuns/~/taskInstances/list
 # operationId: get_task_instances_batch
-export def "dags-dag-runs-task-instances-list get-batch" [
+export def "get-task-instances-batch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1892,7 +1892,7 @@ export def "dags-dag-runs-task-instances-list get-batch" [
 #
 # GET /datasets
 # operationId: get_datasets
-export def "datasets list" [
+export def "get-datasets" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1931,7 +1931,7 @@ export def "datasets list" [
 #
 # GET /datasets/events
 # operationId: get_dataset_events
-export def "datasets-events get" [
+export def "get-dataset-events" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1974,7 +1974,7 @@ export def "datasets-events get" [
 #
 # GET /datasets/{uri}
 # operationId: get_dataset
-export def "datasets get" [
+export def "get-dataset" [
   uri: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2010,7 +2010,7 @@ export def "datasets get" [
 #
 # GET /eventLogs
 # operationId: get_event_logs
-export def "event-logs list" [
+export def "get-event-logs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2048,7 +2048,7 @@ export def "event-logs list" [
 #
 # GET /eventLogs/{event_log_id}
 # operationId: get_event_log
-export def "event-logs get" [
+export def "get-event-log" [
   event_log_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2084,7 +2084,7 @@ export def "event-logs get" [
 #
 # GET /health
 # operationId: get_health
-export def "health get" [
+export def "get-health" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2118,7 +2118,7 @@ export def "health get" [
 #
 # GET /importErrors
 # operationId: get_import_errors
-export def "import-errors list" [
+export def "get-import-errors" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2156,7 +2156,7 @@ export def "import-errors list" [
 #
 # GET /importErrors/{import_error_id}
 # operationId: get_import_error
-export def "import-errors get" [
+export def "get-import-error" [
   import_error_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2192,7 +2192,7 @@ export def "import-errors get" [
 #
 # GET /permissions
 # operationId: get_permissions
-export def "permissions get" [
+export def "get-permissions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2229,7 +2229,7 @@ export def "permissions get" [
 #
 # GET /plugins
 # operationId: get_plugins
-export def "plugins get" [
+export def "get-plugins" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2266,7 +2266,7 @@ export def "plugins get" [
 #
 # GET /pools
 # operationId: get_pools
-export def "pools list" [
+export def "get-pools" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2304,7 +2304,7 @@ export def "pools list" [
 #
 # POST /pools
 # operationId: post_pool
-export def "pools create" [
+export def "post-pool" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2344,7 +2344,7 @@ export def "pools create" [
 #
 # DELETE /pools/{pool_name}
 # operationId: delete_pool
-export def "pools delete" [
+export def "delete-pool" [
   pool_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2380,7 +2380,7 @@ export def "pools delete" [
 #
 # GET /pools/{pool_name}
 # operationId: get_pool
-export def "pools get" [
+export def "get-pool" [
   pool_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2416,7 +2416,7 @@ export def "pools get" [
 #
 # PATCH /pools/{pool_name}
 # operationId: patch_pool
-export def "pools update" [
+export def "patch-pool" [
   pool_name: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2460,7 +2460,7 @@ export def "pools update" [
 #
 # GET /providers
 # operationId: get_providers
-export def "providers get" [
+export def "get-providers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2494,7 +2494,7 @@ export def "providers get" [
 #
 # GET /roles
 # operationId: get_roles
-export def "roles list" [
+export def "get-roles" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2533,7 +2533,7 @@ export def "roles list" [
 # POST /roles
 # operationId: post_role
 # --actions item shape: {action?: record, resource?: record}
-export def "roles create" [
+export def "post-role" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2572,7 +2572,7 @@ export def "roles create" [
 #
 # DELETE /roles/{role_name}
 # operationId: delete_role
-export def "roles delete" [
+export def "delete-role" [
   role_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2608,7 +2608,7 @@ export def "roles delete" [
 #
 # GET /roles/{role_name}
 # operationId: get_role
-export def "roles get" [
+export def "get-role" [
   role_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2645,7 +2645,7 @@ export def "roles get" [
 # PATCH /roles/{role_name}
 # operationId: patch_role
 # --actions item shape: {action?: record, resource?: record}
-export def "roles update" [
+export def "patch-role" [
   role_name: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2688,7 +2688,7 @@ export def "roles update" [
 #
 # GET /users
 # operationId: get_users
-export def "users list" [
+export def "get-users" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2727,7 +2727,7 @@ export def "users list" [
 # POST /users
 # operationId: post_user
 # --roles item shape: {name?: string}
-export def "users create" [
+export def "post-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2770,7 +2770,7 @@ export def "users create" [
 #
 # DELETE /users/{username}
 # operationId: delete_user
-export def "users delete" [
+export def "delete-user" [
   username: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2806,7 +2806,7 @@ export def "users delete" [
 #
 # GET /users/{username}
 # operationId: get_user
-export def "users get" [
+export def "get-user" [
   username: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2843,7 +2843,7 @@ export def "users get" [
 # PATCH /users/{username}
 # operationId: patch_user
 # --roles item shape: {name?: string}
-export def "users update" [
+export def "patch-user" [
   username: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2890,7 +2890,7 @@ export def "users update" [
 #
 # GET /variables
 # operationId: get_variables
-export def "variables list" [
+export def "get-variables" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2928,7 +2928,7 @@ export def "variables list" [
 #
 # POST /variables
 # operationId: post_variables
-export def "variables create" [
+export def "post-variables" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2968,7 +2968,7 @@ export def "variables create" [
 #
 # DELETE /variables/{variable_key}
 # operationId: delete_variable
-export def "variables delete" [
+export def "delete-variable" [
   variable_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3004,7 +3004,7 @@ export def "variables delete" [
 #
 # GET /variables/{variable_key}
 # operationId: get_variable
-export def "variables get" [
+export def "get-variable" [
   variable_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3040,7 +3040,7 @@ export def "variables get" [
 #
 # PATCH /variables/{variable_key}
 # operationId: patch_variable
-export def "variables update" [
+export def "patch-variable" [
   variable_key: any
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3084,7 +3084,7 @@ export def "variables update" [
 #
 # GET /version
 # operationId: get_version
-export def "version get" [
+export def "get-version" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

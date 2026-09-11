@@ -131,7 +131,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "file create" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "post-file" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -154,7 +154,7 @@ export def commands []: nothing -> table {
 # Faz o upload de um arquivo
 #
 # POST /file
-export def "file create" [
+export def "post-file" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -193,7 +193,7 @@ export def "file create" [
 # Retorna as informações básicas de um arquivo previamente processado
 #
 # GET /file/{fileId}
-export def "file get" [
+export def "get-file-file-id" [
   file_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -228,7 +228,7 @@ export def "file get" [
 # Retorna todas as linhas e seus respectivos campos (de forma não processada, apenas indicando os campos reconhecidos)
 #
 # GET /file/{fileId}/lines
-export def "file-lines get" [
+export def "get-file-file-id-lines" [
   file_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -263,7 +263,7 @@ export def "file-lines get" [
 # Retorna as informações de baixa de boletos e outros tipos de ocorrências
 #
 # GET /file/{fileId}/occurrences
-export def "file-occurrences get" [
+export def "get-file-file-id-occurrences" [
   file_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

@@ -100,7 +100,7 @@ def optional-completer [] { ["0" "1" "false" "true"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "info get-root" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "root" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -124,7 +124,7 @@ export def commands []: nothing -> table {
 #
 # GET /api/v1
 # operationId: Root
-export def "info get-root" [
+export def "root" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -158,7 +158,7 @@ export def "info get-root" [
 #
 # GET /api/v1/holidays
 # operationId: Holidays
-export def "holidays list" [
+export def "holidays" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -196,7 +196,7 @@ export def "holidays list" [
 #
 # GET /api/v1/holidays/{holidayId}
 # operationId: Holiday
-export def "holidays get" [
+export def "holiday" [
   holiday_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -235,7 +235,7 @@ export def "holidays get" [
 #
 # GET /api/v1/provinces
 # operationId: Provinces
-export def "provinces list" [
+export def "provinces" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -272,7 +272,7 @@ export def "provinces list" [
 #
 # GET /api/v1/provinces/{provinceId}
 # operationId: Province
-export def "provinces get" [
+export def "province" [
   province_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -311,7 +311,7 @@ export def "provinces get" [
 #
 # GET /api/v1/spec
 # operationId: Spec
-export def "spec get" [
+export def "spec" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

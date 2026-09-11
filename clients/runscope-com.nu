@@ -116,7 +116,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "account get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-account" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -139,7 +139,7 @@ export def commands []: nothing -> table {
 # Account Resource
 #
 # GET /account
-export def "account get" [
+export def "get-account" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -172,7 +172,7 @@ export def "account get" [
 # Returns a list of buckets.
 #
 # GET /buckets
-export def "buckets list" [
+export def "get-buckets" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -205,7 +205,7 @@ export def "buckets list" [
 # Create a new bucket
 #
 # POST /buckets
-export def "buckets create" [
+export def "post-buckets" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -243,7 +243,7 @@ export def "buckets create" [
 # Delete a single bucket resource.
 #
 # DELETE /buckets/{bucketKey}
-export def "buckets delete" [
+export def "delete-buckets-bucket-key" [
   bucket_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -278,7 +278,7 @@ export def "buckets delete" [
 # Returns a single bucket resource.
 #
 # GET /buckets/{bucketKey}
-export def "buckets get" [
+export def "get-buckets-bucket-key" [
   bucket_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -313,7 +313,7 @@ export def "buckets get" [
 # Returns list of shared environments for a specified bucket.
 #
 # GET /buckets/{bucketKey}/environments
-export def "buckets-environments get" [
+export def "get-buckets-bucket-key-environments" [
   bucket_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -350,7 +350,7 @@ export def "buckets-environments get" [
 # POST /buckets/{bucketKey}/environments
 # --integrations item shape: {description?: string, id?: string, type?: string, uuid?: string}
 # --remote_agents item shape: {agent_id?: string, name?: string, version?: string}
-export def "buckets-environments create" [
+export def "post-buckets-bucket-key-environments" [
   bucket_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -412,7 +412,7 @@ export def "buckets-environments create" [
 # PUT /buckets/{bucketKey}/environments/{environmentId}
 # --integrations item shape: {description?: string, id?: string, type?: string, uuid?: string}
 # --remote_agents item shape: {agent_id?: string, name?: string, version?: string}
-export def "buckets-environments update" [
+export def "put-buckets-bucket-key-environments-environment-id" [
   bucket_key: string
   environment_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -474,7 +474,7 @@ export def "buckets-environments update" [
 # Retrieve a list of error messages in a bucket
 #
 # GET /buckets/{bucketKey}/errors
-export def "buckets-errors get" [
+export def "get-buckets-bucket-key-errors" [
   bucket_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -513,7 +513,7 @@ export def "buckets-errors get" [
 # Clear a bucket (remove all messages).
 #
 # DELETE /buckets/{bucketKey}/messages
-export def "buckets-messages delete" [
+export def "delete-buckets-bucket-key-messages" [
   bucket_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -548,7 +548,7 @@ export def "buckets-messages delete" [
 # Retrieve a list of messages in a bucket
 #
 # GET /buckets/{bucketKey}/messages
-export def "buckets-messages list" [
+export def "get-buckets-bucket-key-messages" [
   bucket_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -589,7 +589,7 @@ export def "buckets-messages list" [
 # POST /buckets/{bucketKey}/messages
 # --request shape: {body?: string, body_encoding?: string, form?: string, headers?: string, method?: string, timestamp?: float, url?: string}
 # --response shape: {body?: string, body_encoding?: string, headers?: string, reason?: string, response_time?: float, status?: int, timestamp?: float}
-export def "buckets-messages create" [
+export def "post-buckets-bucket-key-messages" [
   bucket_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -629,7 +629,7 @@ export def "buckets-messages create" [
 # Retrieve the details for a single message.
 #
 # GET /buckets/{bucketKey}/messages/{messageId}
-export def "buckets-messages get" [
+export def "get-buckets-bucket-key-messages-message-id" [
   bucket_key: string
   message_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -666,7 +666,7 @@ export def "buckets-messages get" [
 # Returns a list of tests.
 #
 # GET /buckets/{bucketKey}/tests
-export def "buckets-tests list" [
+export def "get-buckets-bucket-key-tests" [
   bucket_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -702,7 +702,7 @@ export def "buckets-tests list" [
 #
 # POST /buckets/{bucketKey}/tests
 # --created_by shape: {email?: string, id?: string, name?: string}
-export def "buckets-tests create" [
+export def "post-buckets-bucket-key-tests" [
   bucket_key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -748,7 +748,7 @@ export def "buckets-tests create" [
 # Delete a test, including all steps, schedules, test-specific environments and results.
 #
 # DELETE /buckets/{bucketKey}/tests/{testId}
-export def "buckets-tests delete" [
+export def "delete-buckets-bucket-key-tests-test-id" [
   bucket_key: string
   test_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -785,7 +785,7 @@ export def "buckets-tests delete" [
 # Retrieve the details of a given test by ID.
 #
 # GET /buckets/{bucketKey}/tests/{testId}
-export def "buckets-tests get" [
+export def "get-buckets-bucket-key-tests-test-id" [
   bucket_key: string
   test_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -822,7 +822,7 @@ export def "buckets-tests get" [
 # Modify a test's name, description, default environment and its steps. To modify other individual properties of a test, make requests to the steps, environments, and schedules subresources of the test.
 #
 # PUT /buckets/{bucketKey}/tests/{testId}
-export def "buckets-tests update" [
+export def "put-buckets-bucket-key-tests-test-id" [
   bucket_key: string
   test_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -859,7 +859,7 @@ export def "buckets-tests update" [
 # Return details of the test's environments (only those that belong to the specified test)
 #
 # GET /buckets/{bucketKey}/tests/{testId}/environments
-export def "buckets-tests-environments get" [
+export def "get-buckets-bucket-key-tests-test-id-environments" [
   bucket_key: string
   test_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -898,7 +898,7 @@ export def "buckets-tests-environments get" [
 # POST /buckets/{bucketKey}/tests/{testId}/environments
 # --integrations item shape: {description?: string, id?: string, type?: string, uuid?: string}
 # --remote_agents item shape: {agent_id?: string, name?: string, version?: string}
-export def "buckets-tests-environments create" [
+export def "post-buckets-bucket-key-tests-test-id-environments" [
   bucket_key: string
   test_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -962,7 +962,7 @@ export def "buckets-tests-environments create" [
 # PUT /buckets/{bucketKey}/tests/{testId}/environments/{environmentId}
 # --integrations item shape: {description?: string, id?: string, type?: string, uuid?: string}
 # --remote_agents item shape: {agent_id?: string, name?: string, version?: string}
-export def "buckets-tests-environments update" [
+export def "put-buckets-bucket-key-tests-test-id-environments-environment-id" [
   bucket_key: string
   test_id: string
   environment_id: string
@@ -1026,7 +1026,7 @@ export def "buckets-tests-environments update" [
 # Return details of the test metrics for the specified timeframe.
 #
 # GET /buckets/{bucketKey}/tests/{testId}/metrics
-export def "buckets-tests-metrics get" [
+export def "get-buckets-bucket-key-tests-test-id-metrics" [
   bucket_key: string
   test_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1063,7 +1063,7 @@ export def "buckets-tests-metrics get" [
 # List test steps for a test.
 #
 # GET /buckets/{bucketKey}/tests/{testId}/steps
-export def "buckets-tests-steps get" [
+export def "get-buckets-bucket-key-tests-test-id-steps" [
   bucket_key: string
   test_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1100,7 +1100,7 @@ export def "buckets-tests-steps get" [
 # Add new test step.
 #
 # POST /buckets/{bucketKey}/tests/{testId}/steps
-export def "buckets-tests-steps create" [
+export def "post-buckets-bucket-key-tests-test-id-steps" [
   bucket_key: string
   test_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1141,7 +1141,7 @@ export def "buckets-tests-steps create" [
 # Delete a step from a test.
 #
 # DELETE /buckets/{bucketKey}/tests/{testId}/steps/{stepId}
-export def "buckets-tests-steps delete" [
+export def "delete-buckets-bucket-key-tests-test-id-steps-step-id" [
   bucket_key: string
   test_id: string
   step_id: string
@@ -1180,7 +1180,7 @@ export def "buckets-tests-steps delete" [
 # Update the details of a single test step.
 #
 # PUT /buckets/{bucketKey}/tests/{testId}/steps/{stepId}
-export def "buckets-tests-steps update" [
+export def "put-buckets-bucket-key-tests-test-id-steps-step-id" [
   bucket_key: string
   test_id: string
   step_id: string
@@ -1223,7 +1223,7 @@ export def "buckets-tests-steps update" [
 # Team agents list
 #
 # GET /teams/{teamId}/agents
-export def "teams-agents get" [
+export def "get-teams-team-id-agents" [
   team_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1258,7 +1258,7 @@ export def "teams-agents get" [
 # Team integrations list
 #
 # GET /teams/{teamId}/integrations
-export def "teams-integrations get" [
+export def "get-teams-team-id-integrations" [
   team_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1293,7 +1293,7 @@ export def "teams-integrations get" [
 # Teams Resource
 #
 # GET /teams/{teamId}/people
-export def "teams-people get" [
+export def "get-teams-team-id-people" [
   team_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

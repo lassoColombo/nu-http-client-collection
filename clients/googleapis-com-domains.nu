@@ -129,7 +129,7 @@ def alt-completer [] { ["json" "media" "proto"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "v1beta1-registrations-retrieve-importable-domains get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "domains-projects-locations-registrations-retrieve-importable-domains" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -153,7 +153,7 @@ export def commands []: nothing -> table {
 #
 # GET /v1beta1/{location}/registrations:retrieveImportableDomains
 # operationId: domains.projects.locations.registrations.retrieveImportableDomains
-export def "v1beta1-registrations-retrieve-importable-domains get" [
+export def "domains-projects-locations-registrations-retrieve-importable-domains" [
   location: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -203,7 +203,7 @@ export def "v1beta1-registrations-retrieve-importable-domains get" [
 #
 # GET /v1beta1/{location}/registrations:retrieveRegisterParameters
 # operationId: domains.projects.locations.registrations.retrieveRegisterParameters
-export def "v1beta1-registrations-retrieve-register-parameters get" [
+export def "domains-projects-locations-registrations-retrieve-register-parameters" [
   location: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -252,7 +252,7 @@ export def "v1beta1-registrations-retrieve-register-parameters get" [
 #
 # GET /v1beta1/{location}/registrations:retrieveTransferParameters
 # operationId: domains.projects.locations.registrations.retrieveTransferParameters
-export def "v1beta1-registrations-retrieve-transfer-parameters get" [
+export def "domains-projects-locations-registrations-retrieve-transfer-parameters" [
   location: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -301,7 +301,7 @@ export def "v1beta1-registrations-retrieve-transfer-parameters get" [
 #
 # GET /v1beta1/{location}/registrations:searchDomains
 # operationId: domains.projects.locations.registrations.searchDomains
-export def "v1beta1-registrations-search-domains list" [
+export def "domains-projects-locations-registrations-search-domains" [
   location: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -350,7 +350,7 @@ export def "v1beta1-registrations-search-domains list" [
 #
 # DELETE /v1beta1/{name}
 # operationId: domains.projects.locations.registrations.delete
-export def "v1beta1 delete" [
+export def "domains-projects-locations-registrations-delete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -398,7 +398,7 @@ export def "v1beta1 delete" [
 #
 # GET /v1beta1/{name}
 # operationId: domains.projects.locations.registrations.get
-export def "v1beta1 get" [
+export def "domains-projects-locations-registrations-get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -450,7 +450,7 @@ export def "v1beta1 get" [
 # --dnsSettings shape: {customDns?: record, glueRecords?: list, googleDomainsDns?: record}
 # --managementSettings shape: {transferLockState?: "TRANSFER_LOCK_STATE_UNSPECIFIED"|"UNLOCKED"|"LOCKED"}
 # --pendingContactSettings shape: {adminContact?: record, privacy?: "CONTACT_PRIVACY_UNSPECIFIED"|"PUBLIC_CONTACT_DATA"|"PRIVATE_CONTACT_DATA"|"REDACTED_CONTACT_DATA", registrantContact?: record, technicalContact?: record}
-export def "v1beta1 update" [
+export def "domains-projects-locations-registrations-patch" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -508,7 +508,7 @@ export def "v1beta1 update" [
 #
 # GET /v1beta1/{name}/locations
 # operationId: domains.projects.locations.list
-export def "v1beta1-locations list" [
+export def "domains-projects-locations-list" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -559,7 +559,7 @@ export def "v1beta1-locations list" [
 #
 # GET /v1beta1/{name}/operations
 # operationId: domains.projects.locations.operations.list
-export def "v1beta1-operations list" [
+export def "domains-projects-locations-operations-list" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -610,7 +610,7 @@ export def "v1beta1-operations list" [
 #
 # POST /v1beta1/{name}:export
 # operationId: domains.projects.locations.registrations.export
-export def "v1beta1 export" [
+export def "domains-projects-locations-registrations-export" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -662,7 +662,7 @@ export def "v1beta1 export" [
 #
 # GET /v1beta1/{parent}/registrations
 # operationId: domains.projects.locations.registrations.list
-export def "v1beta1-registrations list" [
+export def "domains-projects-locations-registrations-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -713,7 +713,7 @@ export def "v1beta1-registrations list" [
 #
 # POST /v1beta1/{parent}/registrations:import
 # operationId: domains.projects.locations.registrations.import
-export def "v1beta1-registrations-import import" [
+export def "domains-projects-locations-registrations-import" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -768,7 +768,7 @@ export def "v1beta1-registrations-import import" [
 # operationId: domains.projects.locations.registrations.register
 # --registration shape: {contactSettings?: record, dnsSettings?: record, domainName?: string, labels?: record, managementSettings?: record, pendingContactSettings?: record}
 # --yearlyPrice shape: {currencyCode?: string, nanos?: int, units?: string}
-export def "v1beta1-registrations-register create" [
+export def "domains-projects-locations-registrations-register" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -827,7 +827,7 @@ export def "v1beta1-registrations-register create" [
 # --authorizationCode shape: {code?: string}
 # --registration shape: {contactSettings?: record, dnsSettings?: record, domainName?: string, labels?: record, managementSettings?: record, pendingContactSettings?: record}
 # --yearlyPrice shape: {currencyCode?: string, nanos?: int, units?: string}
-export def "v1beta1-registrations-transfer create" [
+export def "domains-projects-locations-registrations-transfer" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -884,7 +884,7 @@ export def "v1beta1-registrations-transfer create" [
 # POST /v1beta1/{registration}:configureContactSettings
 # operationId: domains.projects.locations.registrations.configureContactSettings
 # --contactSettings shape: {adminContact?: record, privacy?: "CONTACT_PRIVACY_UNSPECIFIED"|"PUBLIC_CONTACT_DATA"|"PRIVATE_CONTACT_DATA"|"REDACTED_CONTACT_DATA", registrantContact?: record, technicalContact?: record}
-export def "v1beta1 create-configure-contact-settings" [
+export def "domains-projects-locations-registrations-configure-contact-settings" [
   registration: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -940,7 +940,7 @@ export def "v1beta1 create-configure-contact-settings" [
 # POST /v1beta1/{registration}:configureDnsSettings
 # operationId: domains.projects.locations.registrations.configureDnsSettings
 # --dnsSettings shape: {customDns?: record, glueRecords?: list, googleDomainsDns?: record}
-export def "v1beta1 create-configure-dns-settings" [
+export def "domains-projects-locations-registrations-configure-dns-settings" [
   registration: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -995,7 +995,7 @@ export def "v1beta1 create-configure-dns-settings" [
 # POST /v1beta1/{registration}:configureManagementSettings
 # operationId: domains.projects.locations.registrations.configureManagementSettings
 # --managementSettings shape: {transferLockState?: "TRANSFER_LOCK_STATE_UNSPECIFIED"|"UNLOCKED"|"LOCKED"}
-export def "v1beta1 create-configure-management-settings" [
+export def "domains-projects-locations-registrations-configure-management-settings" [
   registration: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1048,7 +1048,7 @@ export def "v1beta1 create-configure-management-settings" [
 #
 # POST /v1beta1/{registration}:resetAuthorizationCode
 # operationId: domains.projects.locations.registrations.resetAuthorizationCode
-export def "v1beta1 reset-authorization-code" [
+export def "domains-projects-locations-registrations-reset-authorization-code" [
   registration: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1100,7 +1100,7 @@ export def "v1beta1 reset-authorization-code" [
 #
 # GET /v1beta1/{registration}:retrieveAuthorizationCode
 # operationId: domains.projects.locations.registrations.retrieveAuthorizationCode
-export def "v1beta1 get-authorization-code" [
+export def "domains-projects-locations-registrations-retrieve-authorization-code" [
   registration: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1148,7 +1148,7 @@ export def "v1beta1 get-authorization-code" [
 #
 # GET /v1beta1/{resource}:getIamPolicy
 # operationId: domains.projects.locations.registrations.getIamPolicy
-export def "v1beta1 get-iam-policy" [
+export def "domains-projects-locations-registrations-get-iam-policy" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1198,7 +1198,7 @@ export def "v1beta1 get-iam-policy" [
 # POST /v1beta1/{resource}:setIamPolicy
 # operationId: domains.projects.locations.registrations.setIamPolicy
 # --policy shape: {auditConfigs?: list, bindings?: list, etag?: string, version?: int}
-export def "v1beta1 update-iam-policy" [
+export def "domains-projects-locations-registrations-set-iam-policy" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1251,7 +1251,7 @@ export def "v1beta1 update-iam-policy" [
 #
 # POST /v1beta1/{resource}:testIamPermissions
 # operationId: domains.projects.locations.registrations.testIamPermissions
-export def "v1beta1 test-iam-permissions" [
+export def "domains-projects-locations-registrations-test-iam-permissions" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)

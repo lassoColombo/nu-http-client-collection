@@ -124,7 +124,7 @@ def serial-completer [] { ["1" "2"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-mixed-reality-operations list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "operations-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -148,7 +148,7 @@ export def commands []: nothing -> table {
 #
 # GET /providers/Microsoft.MixedReality/operations
 # operationId: Operations_List
-export def "providers-microsoft-mixed-reality-operations list" [
+export def "operations-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -184,7 +184,7 @@ export def "providers-microsoft-mixed-reality-operations list" [
 #
 # POST /subscriptions/{subscriptionId}/providers/Microsoft.MixedReality/locations/{location}/checkNameAvailability
 # operationId: CheckNameAvailabilityLocal
-export def "subscriptions-providers-microsoft-mixed-reality-locations-check-name-availability check-local" [
+export def "check-name-availability-local" [
   subscription_id: string
   location: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -229,7 +229,7 @@ export def "subscriptions-providers-microsoft-mixed-reality-locations-check-name
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.MixedReality/spatialAnchorsAccounts
 # operationId: SpatialAnchorsAccounts_ListBySubscription
-export def "subscriptions-providers-microsoft-mixed-reality-spatial-anchors-accounts list" [
+export def "spatial-anchors-accounts-list-by-subscription" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -267,7 +267,7 @@ export def "subscriptions-providers-microsoft-mixed-reality-spatial-anchors-acco
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MixedReality/spatialAnchorsAccounts
 # operationId: SpatialAnchorsAccounts_ListByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-mixed-reality-spatial-anchors-accounts list" [
+export def "spatial-anchors-accounts-list-by-resource-group" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -307,7 +307,7 @@ export def "subscriptions-resource-groups-providers-microsoft-mixed-reality-spat
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MixedReality/spatialAnchorsAccounts/{spatialAnchorsAccountName}
 # operationId: SpatialAnchorsAccounts_Delete
-export def "subscriptions-resource-groups-providers-microsoft-mixed-reality-spatial-anchors-accounts delete" [
+export def "spatial-anchors-accounts-delete" [
   subscription_id: string
   resource_group_name: string
   spatial_anchors_account_name: string
@@ -349,7 +349,7 @@ export def "subscriptions-resource-groups-providers-microsoft-mixed-reality-spat
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MixedReality/spatialAnchorsAccounts/{spatialAnchorsAccountName}
 # operationId: SpatialAnchorsAccounts_Get
-export def "subscriptions-resource-groups-providers-microsoft-mixed-reality-spatial-anchors-accounts get" [
+export def "spatial-anchors-accounts-get" [
   subscription_id: string
   resource_group_name: string
   spatial_anchors_account_name: string
@@ -391,7 +391,7 @@ export def "subscriptions-resource-groups-providers-microsoft-mixed-reality-spat
 #
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MixedReality/spatialAnchorsAccounts/{spatialAnchorsAccountName}
 # operationId: SpatialAnchorsAccounts_Update
-export def "subscriptions-resource-groups-providers-microsoft-mixed-reality-spatial-anchors-accounts update" [
+export def "spatial-anchors-accounts-update" [
   subscription_id: string
   resource_group_name: string
   spatial_anchors_account_name: string
@@ -439,7 +439,7 @@ export def "subscriptions-resource-groups-providers-microsoft-mixed-reality-spat
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MixedReality/spatialAnchorsAccounts/{spatialAnchorsAccountName}
 # operationId: SpatialAnchorsAccounts_Create
-export def "subscriptions-resource-groups-providers-microsoft-mixed-reality-spatial-anchors-accounts create" [
+export def "spatial-anchors-accounts-create" [
   subscription_id: string
   resource_group_name: string
   spatial_anchors_account_name: string
@@ -487,7 +487,7 @@ export def "subscriptions-resource-groups-providers-microsoft-mixed-reality-spat
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MixedReality/spatialAnchorsAccounts/{spatialAnchorsAccountName}/keys
 # operationId: SpatialAnchorsAccounts_GetKeys
-export def "subscriptions-resource-groups-providers-microsoft-mixed-reality-spatial-anchors-accounts-keys get" [
+export def "spatial-anchors-accounts-get-keys" [
   subscription_id: string
   resource_group_name: string
   spatial_anchors_account_name: string
@@ -529,7 +529,7 @@ export def "subscriptions-resource-groups-providers-microsoft-mixed-reality-spat
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MixedReality/spatialAnchorsAccounts/{spatialAnchorsAccountName}/keys
 # operationId: SpatialAnchorsAccounts_RegenerateKeys
-export def "subscriptions-resource-groups-providers-microsoft-mixed-reality-spatial-anchors-accounts-keys create-regenerate" [
+export def "spatial-anchors-accounts-regenerate-keys" [
   subscription_id: string
   resource_group_name: string
   spatial_anchors_account_name: string

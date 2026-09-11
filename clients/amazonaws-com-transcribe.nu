@@ -139,7 +139,7 @@ def x-amz-target-completer-38 [] { ["Transcribe.UpdateVocabularyFilter"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "api create-call-analytics-category" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "create-call-analytics-category" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -163,7 +163,7 @@ export def commands []: nothing -> table {
 #
 # POST /
 # operationId: CreateCallAnalyticsCategory
-export def "api create-call-analytics-category" [
+export def "create-call-analytics-category" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -213,7 +213,7 @@ export def "api create-call-analytics-category" [
 #
 # POST /
 # operationId: CreateLanguageModel
-export def "api create-language-model" [
+export def "create-language-model" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -265,7 +265,7 @@ export def "api create-language-model" [
 #
 # POST /
 # operationId: CreateMedicalVocabulary
-export def "api create-medical-vocabulary" [
+export def "create-medical-vocabulary" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -316,7 +316,7 @@ export def "api create-medical-vocabulary" [
 #
 # POST /
 # operationId: CreateVocabulary
-export def "api create-vocabulary" [
+export def "create-vocabulary" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -369,7 +369,7 @@ export def "api create-vocabulary" [
 #
 # POST /
 # operationId: CreateVocabularyFilter
-export def "api create-vocabulary-filter" [
+export def "create-vocabulary-filter" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -422,7 +422,7 @@ export def "api create-vocabulary-filter" [
 #
 # POST /
 # operationId: DeleteCallAnalyticsCategory
-export def "api delete-call-analytics-category" [
+export def "delete-call-analytics-category" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -470,7 +470,7 @@ export def "api delete-call-analytics-category" [
 #
 # POST /
 # operationId: DeleteCallAnalyticsJob
-export def "api delete-call-analytics-job" [
+export def "delete-call-analytics-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -518,7 +518,7 @@ export def "api delete-call-analytics-job" [
 #
 # POST /
 # operationId: DeleteLanguageModel
-export def "api delete-language-model" [
+export def "delete-language-model" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -566,7 +566,7 @@ export def "api delete-language-model" [
 #
 # POST /
 # operationId: DeleteMedicalTranscriptionJob
-export def "api delete-medical-transcription-job" [
+export def "delete-medical-transcription-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -614,7 +614,7 @@ export def "api delete-medical-transcription-job" [
 #
 # POST /
 # operationId: DeleteMedicalVocabulary
-export def "api delete-medical-vocabulary" [
+export def "delete-medical-vocabulary" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -662,7 +662,7 @@ export def "api delete-medical-vocabulary" [
 #
 # POST /
 # operationId: DeleteTranscriptionJob
-export def "api delete-transcription-job" [
+export def "delete-transcription-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -710,7 +710,7 @@ export def "api delete-transcription-job" [
 #
 # POST /
 # operationId: DeleteVocabulary
-export def "api delete-vocabulary" [
+export def "delete-vocabulary" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -758,7 +758,7 @@ export def "api delete-vocabulary" [
 #
 # POST /
 # operationId: DeleteVocabularyFilter
-export def "api delete-vocabulary-filter" [
+export def "delete-vocabulary-filter" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -806,7 +806,7 @@ export def "api delete-vocabulary-filter" [
 #
 # POST /
 # operationId: DescribeLanguageModel
-export def "api get-language-model" [
+export def "describe-language-model" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -854,7 +854,7 @@ export def "api get-language-model" [
 #
 # POST /
 # operationId: GetCallAnalyticsCategory
-export def "api get-call-analytics-category" [
+export def "get-call-analytics-category" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -902,7 +902,7 @@ export def "api get-call-analytics-category" [
 #
 # POST /
 # operationId: GetCallAnalyticsJob
-export def "api get-call-analytics-job" [
+export def "get-call-analytics-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -950,7 +950,7 @@ export def "api get-call-analytics-job" [
 #
 # POST /
 # operationId: GetMedicalTranscriptionJob
-export def "api get-medical-transcription-job" [
+export def "get-medical-transcription-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -998,7 +998,7 @@ export def "api get-medical-transcription-job" [
 #
 # POST /
 # operationId: GetMedicalVocabulary
-export def "api get-medical-vocabulary" [
+export def "get-medical-vocabulary" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1046,7 +1046,7 @@ export def "api get-medical-vocabulary" [
 #
 # POST /
 # operationId: GetTranscriptionJob
-export def "api get-transcription-job" [
+export def "get-transcription-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1094,7 +1094,7 @@ export def "api get-transcription-job" [
 #
 # POST /
 # operationId: GetVocabulary
-export def "api get-vocabulary" [
+export def "get-vocabulary" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1142,7 +1142,7 @@ export def "api get-vocabulary" [
 #
 # POST /
 # operationId: GetVocabularyFilter
-export def "api get-vocabulary-filter" [
+export def "get-vocabulary-filter" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1190,7 +1190,7 @@ export def "api get-vocabulary-filter" [
 #
 # POST /
 # operationId: ListCallAnalyticsCategories
-export def "api list-call-analytics-categories" [
+export def "list-call-analytics-categories" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1242,7 +1242,7 @@ export def "api list-call-analytics-categories" [
 #
 # POST /
 # operationId: ListCallAnalyticsJobs
-export def "api list-call-analytics-jobs" [
+export def "list-call-analytics-jobs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1296,7 +1296,7 @@ export def "api list-call-analytics-jobs" [
 #
 # POST /
 # operationId: ListLanguageModels
-export def "api list-language-models" [
+export def "list-language-models" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1350,7 +1350,7 @@ export def "api list-language-models" [
 #
 # POST /
 # operationId: ListMedicalTranscriptionJobs
-export def "api list-medical-transcription-jobs" [
+export def "list-medical-transcription-jobs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1404,7 +1404,7 @@ export def "api list-medical-transcription-jobs" [
 #
 # POST /
 # operationId: ListMedicalVocabularies
-export def "api list-medical-vocabularies" [
+export def "list-medical-vocabularies" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1458,7 +1458,7 @@ export def "api list-medical-vocabularies" [
 #
 # POST /
 # operationId: ListTagsForResource
-export def "api list-tags-for-resource" [
+export def "list-tags-for-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1506,7 +1506,7 @@ export def "api list-tags-for-resource" [
 #
 # POST /
 # operationId: ListTranscriptionJobs
-export def "api list-transcription-jobs" [
+export def "list-transcription-jobs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1560,7 +1560,7 @@ export def "api list-transcription-jobs" [
 #
 # POST /
 # operationId: ListVocabularies
-export def "api list-vocabularies" [
+export def "list-vocabularies" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1614,7 +1614,7 @@ export def "api list-vocabularies" [
 #
 # POST /
 # operationId: ListVocabularyFilters
-export def "api list-vocabulary-filters" [
+export def "list-vocabulary-filters" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1667,7 +1667,7 @@ export def "api list-vocabulary-filters" [
 #
 # POST /
 # operationId: StartCallAnalyticsJob
-export def "api start-call-analytics-job" [
+export def "start-call-analytics-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1722,7 +1722,7 @@ export def "api start-call-analytics-job" [
 # POST /
 # operationId: StartMedicalTranscriptionJob
 # --Media shape: {MediaFileUri?: any, RedactedMediaFileUri?: any}
-export def "api start-medical-transcription-job" [
+export def "start-medical-transcription-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1783,7 +1783,7 @@ export def "api start-medical-transcription-job" [
 #
 # POST /
 # operationId: StartTranscriptionJob
-export def "api start-transcription-job" [
+export def "start-transcription-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1849,7 +1849,7 @@ export def "api start-transcription-job" [
 #
 # POST /
 # operationId: TagResource
-export def "api tag-resource" [
+export def "tag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1898,7 +1898,7 @@ export def "api tag-resource" [
 #
 # POST /
 # operationId: UntagResource
-export def "api untag-resource" [
+export def "untag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1947,7 +1947,7 @@ export def "api untag-resource" [
 #
 # POST /
 # operationId: UpdateCallAnalyticsCategory
-export def "api update-call-analytics-category" [
+export def "update-call-analytics-category" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1997,7 +1997,7 @@ export def "api update-call-analytics-category" [
 #
 # POST /
 # operationId: UpdateMedicalVocabulary
-export def "api update-medical-vocabulary" [
+export def "update-medical-vocabulary" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2047,7 +2047,7 @@ export def "api update-medical-vocabulary" [
 #
 # POST /
 # operationId: UpdateVocabulary
-export def "api update-vocabulary" [
+export def "update-vocabulary" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2099,7 +2099,7 @@ export def "api update-vocabulary" [
 #
 # POST /
 # operationId: UpdateVocabularyFilter
-export def "api update-vocabulary-filter" [
+export def "update-vocabulary-filter" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

@@ -121,7 +121,7 @@ def auth-scheme-completer [] { ["x-vtex-api-appkey" "x-vtex-api-apptoken"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "report-report-status get-reportstatusby" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "getreportstatusby-id" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -145,7 +145,7 @@ export def commands []: nothing -> table {
 #
 # GET /report/reportStatus/{reportId}
 # operationId: GetreportstatusbyID
-export def "report-report-status get-reportstatusby" [
+export def "getreportstatusby-id" [
   report_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -185,7 +185,7 @@ export def "report-report-status get-reportstatusby" [
 #
 # GET /report/subscriptionsByDate
 # operationId: Requestreportbydate
-export def "report-subscriptions-by-date get-requestreportbydate" [
+export def "requestreportbydate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
   --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
@@ -227,7 +227,7 @@ export def "report-subscriptions-by-date get-requestreportbydate" [
 #
 # GET /report/subscriptionsByStatus
 # operationId: RequestreportbyStatus
-export def "report-subscriptions-by-status get-requestreportby" [
+export def "requestreportby-status" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
   --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
@@ -268,7 +268,7 @@ export def "report-subscriptions-by-status get-requestreportby" [
 #
 # GET /report/subscriptionsOrderByDate
 # operationId: Requestreportbyorderdate
-export def "report-subscriptions-order-by-date get-requestreportbyorderdate" [
+export def "requestreportbyorderdate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
   --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
@@ -310,7 +310,7 @@ export def "report-subscriptions-order-by-date get-requestreportbyorderdate" [
 #
 # GET /report/subscriptionsScheduled
 # operationId: Requestreportbyschedule
-export def "report-subscriptions-scheduled get-requestreportbyschedule" [
+export def "requestreportbyschedule" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
   --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
@@ -352,7 +352,7 @@ export def "report-subscriptions-scheduled get-requestreportbyschedule" [
 #
 # GET /report/subscriptionsUpdated
 # operationId: Requestreportbyupdate
-export def "report-subscriptions-updated get-requestreportbyupdate" [
+export def "requestreportbyupdate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
   --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
@@ -394,7 +394,7 @@ export def "report-subscriptions-updated get-requestreportbyupdate" [
 #
 # GET /settings
 # operationId: GetSettings
-export def "settings get" [
+export def "get-settings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
   --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
@@ -432,7 +432,7 @@ export def "settings get" [
 #
 # POST /settings
 # operationId: EditSettings
-export def "settings create-edit" [
+export def "edit-settings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
   --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
@@ -489,7 +489,7 @@ export def "settings create-edit" [
 #
 # GET /subscriptions
 # operationId: Getsubscriptionstocustomer
-export def "subscriptions get-subscriptionstocustomer" [
+export def "getsubscriptionstocustomer" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
   --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
@@ -529,7 +529,7 @@ export def "subscriptions get-subscriptionstocustomer" [
 #
 # GET /subscriptions-group
 # operationId: GetAllsubscriptiongroup
-export def "subscriptions-group get-allsubscriptiongroup" [
+export def "get-allsubscriptiongroup" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
   --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
@@ -567,7 +567,7 @@ export def "subscriptions-group get-allsubscriptiongroup" [
 #
 # GET /subscriptions-group/list
 # operationId: Getsubscriptiongrouplist
-export def "subscriptions-group-list get-subscriptiongrouplist" [
+export def "getsubscriptiongrouplist" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
   --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
@@ -605,7 +605,7 @@ export def "subscriptions-group-list get-subscriptiongrouplist" [
 #
 # GET /subscriptions-group/nextPurchase/{dateStr}
 # operationId: GetNextpurchase
-export def "subscriptions-group-next-purchase get-nextpurchase" [
+export def "get-nextpurchase" [
   date_str: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -645,7 +645,7 @@ export def "subscriptions-group-next-purchase get-nextpurchase" [
 #
 # GET /subscriptions-group/simulate/{groupId}
 # operationId: GetSimulatebysubscription-group
-export def "subscriptions-group-simulate get-simulatebysubscription" [
+export def "get-simulatebysubscription-group" [
   group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -685,7 +685,7 @@ export def "subscriptions-group-simulate get-simulatebysubscription" [
 #
 # GET /subscriptions-group/{groupId}
 # operationId: GetSubscriptionbygroupId
-export def "subscriptions-group get-subscriptionbygroup" [
+export def "get-subscriptionbygroup-id" [
   group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -730,7 +730,7 @@ export def "subscriptions-group get-subscriptionbygroup" [
 # --plan shape: {frequency: record, type: string, validity: record}
 # --purchaseSettings shape: {currencyCode: string, paymentMethod: record, purchaseDay: string, salesChannel: string, selectedSla: string, seller: string}
 # --shippingAddress shape: {additionalComponents: list, addressId: string, addressName: string, addressType: string, city: string, complement: string, country: string, formattedAddress: string, geoCoordinate: list<int>, neighborhood: string, number: string, postalCode: string, receiverName: string, reference: string, state: string, street: string}
-export def "subscriptions-group update-subscriptionbygroup" [
+export def "update-subscriptionbygroup-id" [
   group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -777,7 +777,7 @@ export def "subscriptions-group update-subscriptionbygroup" [
 # POST /subscriptions-group/{groupId}/additem
 # operationId: Additemsubscription-groupId
 # --sku shape: {detailUrl: string, id: string, imageUrl: string, name: string, nameComplete: string, productName: string}
-export def "subscriptions-group-additem create-additemsubscription" [
+export def "additemsubscription-group-id" [
   group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -827,7 +827,7 @@ export def "subscriptions-group-additem create-additemsubscription" [
 #
 # GET /subscriptions-group/{groupId}/addresses
 # operationId: GetaddressesbygroupId
-export def "subscriptions-group-addresses get-addressesbygroup" [
+export def "getaddressesbygroup-id" [
   group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -868,7 +868,7 @@ export def "subscriptions-group-addresses get-addressesbygroup" [
 # POST /subscriptions-group/{groupId}/addresses
 # operationId: InsertAddressesbygroupId
 # --additionalComponents item shape: {longName: string, shortName: string, types: list<string>}
-export def "subscriptions-group-addresses create-addressesbygroup" [
+export def "insert-addressesbygroup-id" [
   group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -929,7 +929,7 @@ export def "subscriptions-group-addresses create-addressesbygroup" [
 #
 # PATCH /subscriptions-group/{groupId}/cancel
 # operationId: CancelSubscriptionbygroupId
-export def "subscriptions-group-cancel cancel-subscriptionbygroup" [
+export def "cancel-subscriptionbygroup-id" [
   group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -969,7 +969,7 @@ export def "subscriptions-group-cancel cancel-subscriptionbygroup" [
 #
 # GET /subscriptions-group/{groupId}/config
 # operationId: GetConfigsubscriptionsgroup
-export def "subscriptions-group-config get-configsubscriptionsgroup" [
+export def "get-configsubscriptionsgroup" [
   group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -1009,7 +1009,7 @@ export def "subscriptions-group-config get-configsubscriptionsgroup" [
 #
 # GET /subscriptions-group/{groupId}/conversation-message
 # operationId: GetConversationMessagebygroupId
-export def "subscriptions-group-conversation-message get-messagebygroup" [
+export def "get-conversation-messagebygroup-id" [
   group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -1049,7 +1049,7 @@ export def "subscriptions-group-conversation-message get-messagebygroup" [
 #
 # GET /subscriptions-group/{groupId}/frequency-options
 # operationId: GetfrequencyoptionsbygroupId
-export def "subscriptions-group-frequency-options get-frequencyoptionsbygroup" [
+export def "getfrequencyoptionsbygroup-id" [
   group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -1089,7 +1089,7 @@ export def "subscriptions-group-frequency-options get-frequencyoptionsbygroup" [
 #
 # GET /subscriptions-group/{groupId}/payment-systems
 # operationId: GetpaymentSystembygroupId
-export def "subscriptions-group-payment-systems get-systembygroup" [
+export def "getpayment-systembygroup-id" [
   group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -1129,7 +1129,7 @@ export def "subscriptions-group-payment-systems get-systembygroup" [
 #
 # GET /subscriptions-group/{groupId}/will-create
 # operationId: GetwillcreatebygroupId
-export def "subscriptions-group-will-create get-willcreatebygroup" [
+export def "getwillcreatebygroup-id" [
   group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -1169,7 +1169,7 @@ export def "subscriptions-group-will-create get-willcreatebygroup" [
 #
 # POST /subscriptions-group/{groupid}/instances/{instanceId}/retry
 # operationId: RetrysubscriptionbygroupId
-export def "subscriptions-group-instances-retry create-retrysubscriptionbygroup" [
+export def "retrysubscriptionbygroup-id" [
   groupid: string
   instance_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1211,7 +1211,7 @@ export def "subscriptions-group-instances-retry create-retrysubscriptionbygroup"
 #
 # GET /subscriptions/list
 # operationId: GetSubscriptionList
-export def "subscriptions-list get" [
+export def "get-subscription-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
   --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
@@ -1249,7 +1249,7 @@ export def "subscriptions-list get" [
 #
 # GET /subscriptions/{subscriptionId}
 # operationId: GetsubscriptionbyId
-export def "subscriptions get-subscriptionby" [
+export def "getsubscriptionby-id" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -1294,7 +1294,7 @@ export def "subscriptions get-subscriptionby" [
 # --plan shape: {frequency: record, type: string, validity: record}
 # --purchaseSettings shape: {currencyCode: string, paymentMethod: record, purchaseDay: string, salesChannel: string, selectedSla: string, seller: string}
 # --shippingAddress shape: {additionalComponents: list, addressId: string, addressName: string, addressType: string, city: string, complement: string, country: string, formattedAddress: string, geoCoordinate: list<int>, neighborhood: string, number: string, postalCode: string, receiverName: string, reference: string, state: string, street: string}
-export def "subscriptions update-subscriptionsby" [
+export def "update-subscriptionsby-subscription-id" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -1346,7 +1346,7 @@ export def "subscriptions update-subscriptionsby" [
 #
 # POST /subscriptions/{subscriptionId}/addresses
 # operationId: InsertAddressesforSubscription
-export def "subscriptions-addresses create-addressesfor" [
+export def "insert-addressesfor-subscription" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -1392,7 +1392,7 @@ export def "subscriptions-addresses create-addressesfor" [
 #
 # PATCH /subscriptions/{subscriptionId}/cancel
 # operationId: CancelSubscriptionsbySubscriptionId
-export def "subscriptions-cancel cancel-subscriptionsby" [
+export def "cancel-subscriptionsby-subscription-id" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -1432,7 +1432,7 @@ export def "subscriptions-cancel cancel-subscriptionsby" [
 #
 # GET /subscriptions/{subscriptionId}/frequency-options
 # operationId: GetfrequencyoptionsbysubscriptionId
-export def "subscriptions-frequency-options get-frequencyoptionsbysubscription" [
+export def "getfrequencyoptionsbysubscription-id" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)

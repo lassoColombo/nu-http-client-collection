@@ -114,7 +114,7 @@ def status-completer [] { ["error" "ok" "unchanged" "warn"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "graphql create-graph-ql" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "post-graph-ql" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -138,7 +138,7 @@ export def commands []: nothing -> table {
 #
 # POST /graphql
 # operationId: postGraphQL
-export def "graphql create-graph-ql" [
+export def "post-graph-ql" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -178,7 +178,7 @@ export def "graphql create-graph-ql" [
 #
 # GET /openapi.json
 # operationId: getDocumentation
-export def "openapi-json get-documentation" [
+export def "get-documentation" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -212,7 +212,7 @@ export def "openapi-json get-documentation" [
 #
 # GET /service_credential_types
 # operationId: listServiceCredentialTypes
-export def "service-credential-types list" [
+export def "list-service-credential-types" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -251,7 +251,7 @@ export def "service-credential-types list" [
 #
 # GET /service_credential_types/{id}
 # operationId: showServiceCredentialType
-export def "service-credential-types get-show" [
+export def "show-service-credential-type" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -287,7 +287,7 @@ export def "service-credential-types get-show" [
 #
 # GET /service_credentials
 # operationId: listServiceCredentials
-export def "service-credentials list" [
+export def "list-service-credentials" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -326,7 +326,7 @@ export def "service-credentials list" [
 #
 # GET /service_credentials/{id}
 # operationId: showServiceCredential
-export def "service-credentials get-show" [
+export def "show-service-credential" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -362,7 +362,7 @@ export def "service-credentials get-show" [
 #
 # GET /service_instances
 # operationId: listServiceInstances
-export def "service-instances list" [
+export def "list-service-instances" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -401,7 +401,7 @@ export def "service-instances list" [
 #
 # GET /service_instances/{id}
 # operationId: showServiceInstance
-export def "service-instances get-show" [
+export def "show-service-instance" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -437,7 +437,7 @@ export def "service-instances get-show" [
 #
 # GET /service_inventories
 # operationId: listServiceInventories
-export def "service-inventories list" [
+export def "list-service-inventories" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -476,7 +476,7 @@ export def "service-inventories list" [
 #
 # GET /service_inventories/{id}
 # operationId: showServiceInventory
-export def "service-inventories get-show-inventory" [
+export def "show-service-inventory" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -512,7 +512,7 @@ export def "service-inventories get-show-inventory" [
 #
 # POST /service_inventories/{id}/tag
 # operationId: tagServiceInventory
-export def "service-inventories-tag tag-inventory" [
+export def "tag-service-inventory" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -552,7 +552,7 @@ export def "service-inventories-tag tag-inventory" [
 #
 # GET /service_inventories/{id}/tags
 # operationId: listServiceInventoryTags
-export def "service-inventories-tags list-inventory" [
+export def "list-service-inventory-tags" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -593,7 +593,7 @@ export def "service-inventories-tags list-inventory" [
 #
 # POST /service_inventories/{id}/untag
 # operationId: untagServiceInventory
-export def "service-inventories-untag untag-inventory" [
+export def "untag-service-inventory" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -633,7 +633,7 @@ export def "service-inventories-untag untag-inventory" [
 #
 # GET /service_offering_nodes
 # operationId: listServiceOfferingNodes
-export def "service-offering-nodes list" [
+export def "list-service-offering-nodes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -672,7 +672,7 @@ export def "service-offering-nodes list" [
 #
 # GET /service_offering_nodes/{id}
 # operationId: showServiceOfferingNode
-export def "service-offering-nodes get-show" [
+export def "show-service-offering-node" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -708,7 +708,7 @@ export def "service-offering-nodes get-show" [
 #
 # GET /service_offerings
 # operationId: listServiceOfferings
-export def "service-offerings list" [
+export def "list-service-offerings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -747,7 +747,7 @@ export def "service-offerings list" [
 #
 # GET /service_offerings/{id}
 # operationId: showServiceOffering
-export def "service-offerings get-show" [
+export def "show-service-offering" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -783,7 +783,7 @@ export def "service-offerings get-show" [
 #
 # POST /service_offerings/{id}/applied_inventories_tags
 # operationId: appliedInventoriesTagsForServiceOffering
-export def "service-offerings-applied-inventories-tags create" [
+export def "applied-inventories-tags-for-service-offering" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -823,7 +823,7 @@ export def "service-offerings-applied-inventories-tags create" [
 #
 # POST /service_offerings/{id}/order
 # operationId: orderServiceOffering
-export def "service-offerings-order create" [
+export def "order-service-offering" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -864,7 +864,7 @@ export def "service-offerings-order create" [
 #
 # GET /service_offerings/{id}/service_instances
 # operationId: listServiceOfferingServiceInstances
-export def "service-offerings-service-instances list" [
+export def "list-service-offering-service-instances" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -905,7 +905,7 @@ export def "service-offerings-service-instances list" [
 #
 # GET /service_offerings/{id}/service_offering_nodes
 # operationId: listServiceOfferingServiceOfferingNodes
-export def "service-offerings-service-offering-nodes list" [
+export def "list-service-offering-service-offering-nodes" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -946,7 +946,7 @@ export def "service-offerings-service-offering-nodes list" [
 #
 # GET /service_offerings/{id}/service_plans
 # operationId: listServiceOfferingServicePlans
-export def "service-offerings-service-plans list" [
+export def "list-service-offering-service-plans" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -987,7 +987,7 @@ export def "service-offerings-service-plans list" [
 #
 # GET /service_plans
 # operationId: listServicePlans
-export def "service-plans list" [
+export def "list-service-plans" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1026,7 +1026,7 @@ export def "service-plans list" [
 #
 # GET /service_plans/{id}
 # operationId: showServicePlan
-export def "service-plans get-show" [
+export def "show-service-plan" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1062,7 +1062,7 @@ export def "service-plans get-show" [
 #
 # GET /sources
 # operationId: listSources
-export def "sources list" [
+export def "list-sources" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1101,7 +1101,7 @@ export def "sources list" [
 #
 # GET /sources/{id}
 # operationId: showSource
-export def "sources get-show" [
+export def "show-source" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1137,7 +1137,7 @@ export def "sources get-show" [
 #
 # PATCH /sources/{id}/incremental_refresh
 # operationId: incrementalRefreshSource
-export def "sources-incremental-refresh refresh" [
+export def "incremental-refresh-source" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1173,7 +1173,7 @@ export def "sources-incremental-refresh refresh" [
 #
 # PATCH /sources/{id}/refresh
 # operationId: refreshSource
-export def "sources-refresh refresh" [
+export def "refresh-source" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1209,7 +1209,7 @@ export def "sources-refresh refresh" [
 #
 # GET /sources/{id}/service_instances
 # operationId: listSourceServiceInstances
-export def "sources-service-instances list" [
+export def "list-source-service-instances" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1250,7 +1250,7 @@ export def "sources-service-instances list" [
 #
 # GET /sources/{id}/service_inventories
 # operationId: listSourceServiceInventories
-export def "sources-service-inventories list" [
+export def "list-source-service-inventories" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1291,7 +1291,7 @@ export def "sources-service-inventories list" [
 #
 # GET /sources/{id}/service_offering_nodes
 # operationId: listSourceServiceOfferingNodes
-export def "sources-service-offering-nodes list" [
+export def "list-source-service-offering-nodes" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1332,7 +1332,7 @@ export def "sources-service-offering-nodes list" [
 #
 # GET /sources/{id}/service_offerings
 # operationId: listSourceServiceOfferings
-export def "sources-service-offerings list" [
+export def "list-source-service-offerings" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1373,7 +1373,7 @@ export def "sources-service-offerings list" [
 #
 # GET /sources/{id}/service_plans
 # operationId: listSourceServicePlans
-export def "sources-service-plans list" [
+export def "list-source-service-plans" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1414,7 +1414,7 @@ export def "sources-service-plans list" [
 #
 # GET /sources/{id}/tasks
 # operationId: listSourceTasks
-export def "sources-tasks list" [
+export def "list-source-tasks" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1455,7 +1455,7 @@ export def "sources-tasks list" [
 #
 # GET /tags
 # operationId: listTags
-export def "tags list" [
+export def "list-tags" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1494,7 +1494,7 @@ export def "tags list" [
 #
 # GET /tasks
 # operationId: listTasks
-export def "tasks list" [
+export def "list-tasks" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1533,7 +1533,7 @@ export def "tasks list" [
 #
 # GET /tasks/{id}
 # operationId: showTask
-export def "tasks get-show" [
+export def "show-task" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1569,7 +1569,7 @@ export def "tasks get-show" [
 #
 # PATCH /tasks/{id}
 # operationId: updateTask
-export def "tasks update" [
+export def "update-task" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

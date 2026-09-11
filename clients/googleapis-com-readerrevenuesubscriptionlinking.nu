@@ -112,7 +112,7 @@ def alt-completer [] { ["json" "media" "proto"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "publications delete" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "readerrevenuesubscriptionlinking-publications-readers-delete" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -136,7 +136,7 @@ export def commands []: nothing -> table {
 #
 # DELETE /v1/{name}
 # operationId: readerrevenuesubscriptionlinking.publications.readers.delete
-export def "publications delete" [
+export def "readerrevenuesubscriptionlinking-publications-readers-delete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -185,7 +185,7 @@ export def "publications delete" [
 #
 # GET /v1/{name}
 # operationId: readerrevenuesubscriptionlinking.publications.readers.getEntitlements
-export def "publications get-entitlements" [
+export def "readerrevenuesubscriptionlinking-publications-readers-get-entitlements" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -234,7 +234,7 @@ export def "publications get-entitlements" [
 # PATCH /v1/{name}
 # operationId: readerrevenuesubscriptionlinking.publications.readers.updateEntitlements
 # --entitlements item shape: {detail?: string, expireTime?: string, productId?: string, subscriptionToken?: string}
-export def "publications update-entitlements" [
+export def "readerrevenuesubscriptionlinking-publications-readers-update-entitlements" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

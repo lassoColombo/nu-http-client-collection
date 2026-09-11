@@ -97,7 +97,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "common list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-api" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -120,7 +120,7 @@ export def commands []: nothing -> table {
 # Get all resource URLs.
 #
 # GET /api
-export def "common list" [
+export def "get-api" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -153,7 +153,7 @@ export def "common list" [
 # Get an ability score by index.
 #
 # GET /api/ability-scores/{index}
-export def "ability-scores get" [
+export def "get-api-ability-scores-index" [
   index: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -188,7 +188,7 @@ export def "ability-scores get" [
 # Get an alignment by index.
 #
 # GET /api/alignments/{index}
-export def "alignments get" [
+export def "get-api-alignments-index" [
   index: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -223,7 +223,7 @@ export def "alignments get" [
 # Get a background by index.
 #
 # GET /api/backgrounds/{index}
-export def "backgrounds get" [
+export def "get-api-backgrounds-index" [
   index: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -258,7 +258,7 @@ export def "backgrounds get" [
 # Get a class by index.
 #
 # GET /api/classes/{index}
-export def "classes get" [
+export def "get-api-classes-index" [
   index: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -293,7 +293,7 @@ export def "classes get" [
 # Get features available for a class.
 #
 # GET /api/classes/{index}/features
-export def "classes-features get" [
+export def "get-api-classes-index-features" [
   index: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -328,7 +328,7 @@ export def "classes-features get" [
 # Get all level resources for a class.
 #
 # GET /api/classes/{index}/levels
-export def "classes-levels list" [
+export def "get-api-classes-index-levels" [
   index: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -365,7 +365,7 @@ export def "classes-levels list" [
 # Get level resource for a class and level.
 #
 # GET /api/classes/{index}/levels/{class_level}
-export def "classes-levels get" [
+export def "get-api-classes-index-levels-class-level" [
   index: string
   class_level: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -402,7 +402,7 @@ export def "classes-levels get" [
 # Get features available to a class at the requested level.
 #
 # GET /api/classes/{index}/levels/{class_level}/features
-export def "classes-levels-features get" [
+export def "get-api-classes-index-levels-class-level-features" [
   index: string
   class_level: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -439,7 +439,7 @@ export def "classes-levels-features get" [
 # Get spells of the requested level available to the class.
 #
 # GET /api/classes/{index}/levels/{spell_level}/spells
-export def "classes-levels-spells get" [
+export def "get-api-classes-index-levels-spell-level-spells" [
   index: string
   spell_level: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -476,7 +476,7 @@ export def "classes-levels-spells get" [
 # Get multiclassing resource for a class.
 #
 # GET /api/classes/{index}/multi-classing
-export def "classes-multi-classing get" [
+export def "get-api-classes-index-multi-classing" [
   index: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -511,7 +511,7 @@ export def "classes-multi-classing get" [
 # Get proficiencies available for a class.
 #
 # GET /api/classes/{index}/proficiencies
-export def "classes-proficiencies get" [
+export def "get-api-classes-index-proficiencies" [
   index: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -546,7 +546,7 @@ export def "classes-proficiencies get" [
 # Get spellcasting info for a class.
 #
 # GET /api/classes/{index}/spellcasting
-export def "classes-spellcasting get" [
+export def "get-api-classes-index-spellcasting" [
   index: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -581,7 +581,7 @@ export def "classes-spellcasting get" [
 # Get spells available for a class.
 #
 # GET /api/classes/{index}/spells
-export def "classes-spells get" [
+export def "get-api-classes-index-spells" [
   index: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -616,7 +616,7 @@ export def "classes-spells get" [
 # Get subclasses available for a class.
 #
 # GET /api/classes/{index}/subclasses
-export def "classes-subclasses get" [
+export def "get-api-classes-index-subclasses" [
   index: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -651,7 +651,7 @@ export def "classes-subclasses get" [
 # Get a condition by index.
 #
 # GET /api/conditions/{index}
-export def "conditions get" [
+export def "get-api-conditions-index" [
   index: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -686,7 +686,7 @@ export def "conditions get" [
 # Get a damage type by index.
 #
 # GET /api/damage-types/{index}
-export def "damage-types get" [
+export def "get-api-damage-types-index" [
   index: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -721,7 +721,7 @@ export def "damage-types get" [
 # Get an equipment category by index.
 #
 # GET /api/equipment-categories/{index}
-export def "equipment-categories get" [
+export def "get-api-equipment-categories-index" [
   index: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -756,7 +756,7 @@ export def "equipment-categories get" [
 # Get an equipment item by index.
 #
 # GET /api/equipment/{index}
-export def "equipment get" [
+export def "get-api-equipment-index" [
   index: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -791,7 +791,7 @@ export def "equipment get" [
 # Get a feat by index.
 #
 # GET /api/feats/{index}
-export def "feats get" [
+export def "get-api-feats-index" [
   index: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -826,7 +826,7 @@ export def "feats get" [
 # Get a feature by index.
 #
 # GET /api/features/{index}
-export def "features get" [
+export def "get-api-features-index" [
   index: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -861,7 +861,7 @@ export def "features get" [
 # Get a language by index.
 #
 # GET /api/languages/{index}
-export def "languages get" [
+export def "get-api-languages-index" [
   index: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -896,7 +896,7 @@ export def "languages get" [
 # Get a magic item by index.
 #
 # GET /api/magic-items/{index}
-export def "magic-items get" [
+export def "get-api-magic-items-index" [
   index: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -931,7 +931,7 @@ export def "magic-items get" [
 # Get a magic school by index.
 #
 # GET /api/magic-schools/{index}
-export def "magic-schools get" [
+export def "get-api-magic-schools-index" [
   index: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -966,7 +966,7 @@ export def "magic-schools get" [
 # Get list of monsters with optional filtering
 #
 # GET /api/monsters
-export def "monsters list" [
+export def "get-api-monsters" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1001,7 +1001,7 @@ export def "monsters list" [
 # Get monster by index.
 #
 # GET /api/monsters/{index}
-export def "monsters get" [
+export def "get-api-monsters-index" [
   index: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1036,7 +1036,7 @@ export def "monsters get" [
 # Get a proficiency by index.
 #
 # GET /api/proficiencies/{index}
-export def "proficiencies get" [
+export def "get-api-proficiencies-index" [
   index: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1071,7 +1071,7 @@ export def "proficiencies get" [
 # Get a race by index.
 #
 # GET /api/races/{index}
-export def "races get" [
+export def "get-api-races-index" [
   index: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1106,7 +1106,7 @@ export def "races get" [
 # Get proficiencies available for a race.
 #
 # GET /api/races/{index}/proficiencies
-export def "races-proficiencies get" [
+export def "get-api-races-index-proficiencies" [
   index: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1141,7 +1141,7 @@ export def "races-proficiencies get" [
 # Get subraces available for a race.
 #
 # GET /api/races/{index}/subraces
-export def "races-subraces get" [
+export def "get-api-races-index-subraces" [
   index: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1176,7 +1176,7 @@ export def "races-subraces get" [
 # Get traits available for a race.
 #
 # GET /api/races/{index}/traits
-export def "races-traits get" [
+export def "get-api-races-index-traits" [
   index: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1211,7 +1211,7 @@ export def "races-traits get" [
 # Get a rule section by index.
 #
 # GET /api/rule-sections/{index}
-export def "rule-sections get" [
+export def "get-api-rule-sections-index" [
   index: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1246,7 +1246,7 @@ export def "rule-sections get" [
 # Get a rule by index.
 #
 # GET /api/rules/{index}
-export def "rules get" [
+export def "get-api-rules-index" [
   index: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1281,7 +1281,7 @@ export def "rules get" [
 # Get a skill by index.
 #
 # GET /api/skills/{index}
-export def "skills get" [
+export def "get-api-skills-index" [
   index: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1316,7 +1316,7 @@ export def "skills get" [
 # Get list of spells with optional filtering.
 #
 # GET /api/spells
-export def "spells list" [
+export def "get-api-spells" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1352,7 +1352,7 @@ export def "spells list" [
 # Get a spell by index.
 #
 # GET /api/spells/{index}
-export def "spells get" [
+export def "get-api-spells-index" [
   index: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1387,7 +1387,7 @@ export def "spells get" [
 # Get a subclass by index.
 #
 # GET /api/subclasses/{index}
-export def "subclasses get" [
+export def "get-api-subclasses-index" [
   index: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1422,7 +1422,7 @@ export def "subclasses get" [
 # Get features available for a subclass.
 #
 # GET /api/subclasses/{index}/features
-export def "subclasses-features get" [
+export def "get-api-subclasses-index-features" [
   index: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1457,7 +1457,7 @@ export def "subclasses-features get" [
 # Get all level resources for a subclass.
 #
 # GET /api/subclasses/{index}/levels
-export def "subclasses-levels list" [
+export def "get-api-subclasses-index-levels" [
   index: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1492,7 +1492,7 @@ export def "subclasses-levels list" [
 # Get level resources for a subclass and level.
 #
 # GET /api/subclasses/{index}/levels/{subclass_level}
-export def "subclasses-levels get" [
+export def "get-api-subclasses-index-levels-subclass-level" [
   index: string
   subclass_level: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -1529,7 +1529,7 @@ export def "subclasses-levels get" [
 # Get features of the requested spell level available to the class.
 #
 # GET /api/subclasses/{index}/levels/{subclass_level}/features
-export def "subclasses-levels-features get" [
+export def "get-api-subclasses-index-levels-subclass-level-features" [
   index: string
   subclass_level: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -1566,7 +1566,7 @@ export def "subclasses-levels-features get" [
 # Get a subrace by index.
 #
 # GET /api/subraces/{index}
-export def "subraces get" [
+export def "get-api-subraces-index" [
   index: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1601,7 +1601,7 @@ export def "subraces get" [
 # Get proficiences available for a subrace.
 #
 # GET /api/subraces/{index}/proficiencies
-export def "subraces-proficiencies get" [
+export def "get-api-subraces-index-proficiencies" [
   index: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1636,7 +1636,7 @@ export def "subraces-proficiencies get" [
 # Get traits available for a subrace.
 #
 # GET /api/subraces/{index}/traits
-export def "subraces-traits get" [
+export def "get-api-subraces-index-traits" [
   index: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1671,7 +1671,7 @@ export def "subraces-traits get" [
 # Get a trait by index.
 #
 # GET /api/traits/{index}
-export def "traits get" [
+export def "get-api-traits-index" [
   index: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1706,7 +1706,7 @@ export def "traits get" [
 # Get a weapon property by index.
 #
 # GET /api/weapon-properties/{index}
-export def "weapon-properties get" [
+export def "get-api-weapon-properties-index" [
   index: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1741,7 +1741,7 @@ export def "weapon-properties get" [
 # Get list of all available resources for an endpoint.
 #
 # GET /api/{endpoint}
-export def "common get" [
+export def "get-api-endpoint" [
   endpoint: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

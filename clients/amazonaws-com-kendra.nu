@@ -165,7 +165,7 @@ def x-amz-target-completer-64 [] { ["AWSKendraFrontendService.UpdateThesaurus"] 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "api create-associate-entities-to-experience" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "associate-entities-to-experience" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -189,7 +189,7 @@ export def commands []: nothing -> table {
 #
 # POST /
 # operationId: AssociateEntitiesToExperience
-export def "api create-associate-entities-to-experience" [
+export def "associate-entities-to-experience" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -239,7 +239,7 @@ export def "api create-associate-entities-to-experience" [
 #
 # POST /
 # operationId: AssociatePersonasToEntities
-export def "api create-associate-personas-to-entities" [
+export def "associate-personas-to-entities" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -290,7 +290,7 @@ export def "api create-associate-personas-to-entities" [
 # POST /
 # operationId: BatchDeleteDocument
 # --DataSourceSyncJobMetricTarget shape: {DataSourceId: any, DataSourceSyncJobId?: any}
-export def "api delete-batch-document" [
+export def "batch-delete-document" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -340,7 +340,7 @@ export def "api delete-batch-document" [
 #
 # POST /
 # operationId: BatchDeleteFeaturedResultsSet
-export def "api delete-batch-featured-results-update" [
+export def "batch-delete-featured-results-set" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -389,7 +389,7 @@ export def "api delete-batch-featured-results-update" [
 #
 # POST /
 # operationId: BatchGetDocumentStatus
-export def "api get-batch-document-status" [
+export def "batch-get-document-status" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -438,7 +438,7 @@ export def "api get-batch-document-status" [
 #
 # POST /
 # operationId: BatchPutDocument
-export def "api update-batch-document" [
+export def "batch-put-document" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -489,7 +489,7 @@ export def "api update-batch-document" [
 #
 # POST /
 # operationId: ClearQuerySuggestions
-export def "api list-clear-suggestions" [
+export def "clear-query-suggestions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -537,7 +537,7 @@ export def "api list-clear-suggestions" [
 #
 # POST /
 # operationId: CreateAccessControlConfiguration
-export def "api create-access-control-configuration" [
+export def "create-access-control-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -590,7 +590,7 @@ export def "api create-access-control-configuration" [
 #
 # POST /
 # operationId: CreateDataSource
-export def "api create-data-source" [
+export def "create-data-source" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -649,7 +649,7 @@ export def "api create-data-source" [
 #
 # POST /
 # operationId: CreateExperience
-export def "api create-experience" [
+export def "create-experience" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -702,7 +702,7 @@ export def "api create-experience" [
 #
 # POST /
 # operationId: CreateFaq
-export def "api create-faq" [
+export def "create-faq" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -758,7 +758,7 @@ export def "api create-faq" [
 #
 # POST /
 # operationId: CreateFeaturedResultsSet
-export def "api create-featured-results-update" [
+export def "create-featured-results-set" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -813,7 +813,7 @@ export def "api create-featured-results-update" [
 #
 # POST /
 # operationId: CreateIndex
-export def "api create-index" [
+export def "create-index" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -870,7 +870,7 @@ export def "api create-index" [
 #
 # POST /
 # operationId: CreateQuerySuggestionsBlockList
-export def "api create-list-suggestions-block" [
+export def "create-query-suggestions-block-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -924,7 +924,7 @@ export def "api create-list-suggestions-block" [
 #
 # POST /
 # operationId: CreateThesaurus
-export def "api create-thesaurus" [
+export def "create-thesaurus" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -978,7 +978,7 @@ export def "api create-thesaurus" [
 #
 # POST /
 # operationId: DeleteAccessControlConfiguration
-export def "api delete-access-control-configuration" [
+export def "delete-access-control-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1027,7 +1027,7 @@ export def "api delete-access-control-configuration" [
 #
 # POST /
 # operationId: DeleteDataSource
-export def "api delete-data-source" [
+export def "delete-data-source" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1076,7 +1076,7 @@ export def "api delete-data-source" [
 #
 # POST /
 # operationId: DeleteExperience
-export def "api delete-experience" [
+export def "delete-experience" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1125,7 +1125,7 @@ export def "api delete-experience" [
 #
 # POST /
 # operationId: DeleteFaq
-export def "api delete-faq" [
+export def "delete-faq" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1174,7 +1174,7 @@ export def "api delete-faq" [
 #
 # POST /
 # operationId: DeleteIndex
-export def "api delete-index" [
+export def "delete-index" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1222,7 +1222,7 @@ export def "api delete-index" [
 #
 # POST /
 # operationId: DeletePrincipalMapping
-export def "api delete-principal-mapping" [
+export def "delete-principal-mapping" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1273,7 +1273,7 @@ export def "api delete-principal-mapping" [
 #
 # POST /
 # operationId: DeleteQuerySuggestionsBlockList
-export def "api delete-list-suggestions-block" [
+export def "delete-query-suggestions-block-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1322,7 +1322,7 @@ export def "api delete-list-suggestions-block" [
 #
 # POST /
 # operationId: DeleteThesaurus
-export def "api delete-thesaurus" [
+export def "delete-thesaurus" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1371,7 +1371,7 @@ export def "api delete-thesaurus" [
 #
 # POST /
 # operationId: DescribeAccessControlConfiguration
-export def "api get-access-control-configuration" [
+export def "describe-access-control-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1420,7 +1420,7 @@ export def "api get-access-control-configuration" [
 #
 # POST /
 # operationId: DescribeDataSource
-export def "api get-data-source" [
+export def "describe-data-source" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1469,7 +1469,7 @@ export def "api get-data-source" [
 #
 # POST /
 # operationId: DescribeExperience
-export def "api get-experience" [
+export def "describe-experience" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1518,7 +1518,7 @@ export def "api get-experience" [
 #
 # POST /
 # operationId: DescribeFaq
-export def "api get-faq" [
+export def "describe-faq" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1567,7 +1567,7 @@ export def "api get-faq" [
 #
 # POST /
 # operationId: DescribeFeaturedResultsSet
-export def "api get-featured-results-update" [
+export def "describe-featured-results-set" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1616,7 +1616,7 @@ export def "api get-featured-results-update" [
 #
 # POST /
 # operationId: DescribeIndex
-export def "api get-index" [
+export def "describe-index" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1664,7 +1664,7 @@ export def "api get-index" [
 #
 # POST /
 # operationId: DescribePrincipalMapping
-export def "api get-principal-mapping" [
+export def "describe-principal-mapping" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1714,7 +1714,7 @@ export def "api get-principal-mapping" [
 #
 # POST /
 # operationId: DescribeQuerySuggestionsBlockList
-export def "api get-list-suggestions-block" [
+export def "describe-query-suggestions-block-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1763,7 +1763,7 @@ export def "api get-list-suggestions-block" [
 #
 # POST /
 # operationId: DescribeQuerySuggestionsConfig
-export def "api get-list-suggestions-config" [
+export def "describe-query-suggestions-config" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1811,7 +1811,7 @@ export def "api get-list-suggestions-config" [
 #
 # POST /
 # operationId: DescribeThesaurus
-export def "api get-thesaurus" [
+export def "describe-thesaurus" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1860,7 +1860,7 @@ export def "api get-thesaurus" [
 #
 # POST /
 # operationId: DisassociateEntitiesFromExperience
-export def "api create-disassociate-entities-from-experience" [
+export def "disassociate-entities-from-experience" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1910,7 +1910,7 @@ export def "api create-disassociate-entities-from-experience" [
 #
 # POST /
 # operationId: DisassociatePersonasFromEntities
-export def "api create-disassociate-personas-from-entities" [
+export def "disassociate-personas-from-entities" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1960,7 +1960,7 @@ export def "api create-disassociate-personas-from-entities" [
 #
 # POST /
 # operationId: GetQuerySuggestions
-export def "api get-list-suggestions" [
+export def "get-query-suggestions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2010,7 +2010,7 @@ export def "api get-list-suggestions" [
 #
 # POST /
 # operationId: GetSnapshots
-export def "api get-snapshots" [
+export def "get-snapshots" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2065,7 +2065,7 @@ export def "api get-snapshots" [
 #
 # POST /
 # operationId: ListAccessControlConfigurations
-export def "api list-access-control-configurations" [
+export def "list-access-control-configurations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2118,7 +2118,7 @@ export def "api list-access-control-configurations" [
 #
 # POST /
 # operationId: ListDataSourceSyncJobs
-export def "api list-data-source-sync-jobs" [
+export def "list-data-source-sync-jobs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2174,7 +2174,7 @@ export def "api list-data-source-sync-jobs" [
 #
 # POST /
 # operationId: ListDataSources
-export def "api list-data-sources" [
+export def "list-data-sources" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2227,7 +2227,7 @@ export def "api list-data-sources" [
 #
 # POST /
 # operationId: ListEntityPersonas
-export def "api list-entity-personas" [
+export def "list-entity-personas" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2281,7 +2281,7 @@ export def "api list-entity-personas" [
 #
 # POST /
 # operationId: ListExperienceEntities
-export def "api list-experience-entities" [
+export def "list-experience-entities" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2333,7 +2333,7 @@ export def "api list-experience-entities" [
 #
 # POST /
 # operationId: ListExperiences
-export def "api list-experiences" [
+export def "list-experiences" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2386,7 +2386,7 @@ export def "api list-experiences" [
 #
 # POST /
 # operationId: ListFaqs
-export def "api list-faqs" [
+export def "list-faqs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2439,7 +2439,7 @@ export def "api list-faqs" [
 #
 # POST /
 # operationId: ListFeaturedResultsSets
-export def "api list-featured-results-sets" [
+export def "list-featured-results-sets" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2489,7 +2489,7 @@ export def "api list-featured-results-sets" [
 #
 # POST /
 # operationId: ListGroupsOlderThanOrderingId
-export def "api list-groups-older-than-ordering" [
+export def "list-groups-older-than-ordering-id" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2544,7 +2544,7 @@ export def "api list-groups-older-than-ordering" [
 #
 # POST /
 # operationId: ListIndices
-export def "api list-indices" [
+export def "list-indices" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2596,7 +2596,7 @@ export def "api list-indices" [
 #
 # POST /
 # operationId: ListQuerySuggestionsBlockLists
-export def "api list-suggestions-block-lists" [
+export def "list-query-suggestions-block-lists" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2649,7 +2649,7 @@ export def "api list-suggestions-block-lists" [
 #
 # POST /
 # operationId: ListTagsForResource
-export def "api list-tags-for-resource" [
+export def "list-tags-for-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2697,7 +2697,7 @@ export def "api list-tags-for-resource" [
 #
 # POST /
 # operationId: ListThesauri
-export def "api list-thesauri" [
+export def "list-thesauri" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2750,7 +2750,7 @@ export def "api list-thesauri" [
 #
 # POST /
 # operationId: PutPrincipalMapping
-export def "api update-principal-mapping" [
+export def "put-principal-mapping" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2803,7 +2803,7 @@ export def "api update-principal-mapping" [
 #
 # POST /
 # operationId: Query
-export def "api list" [
+export def "query" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2863,7 +2863,7 @@ export def "api list" [
 #
 # POST /
 # operationId: StartDataSourceSyncJob
-export def "api start-data-source-sync-job" [
+export def "start-data-source-sync-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2912,7 +2912,7 @@ export def "api start-data-source-sync-job" [
 #
 # POST /
 # operationId: StopDataSourceSyncJob
-export def "api stop-data-source-sync-job" [
+export def "stop-data-source-sync-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2961,7 +2961,7 @@ export def "api stop-data-source-sync-job" [
 #
 # POST /
 # operationId: SubmitFeedback
-export def "api submit-feedback" [
+export def "submit-feedback" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3012,7 +3012,7 @@ export def "api submit-feedback" [
 #
 # POST /
 # operationId: TagResource
-export def "api tag-resource" [
+export def "tag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3061,7 +3061,7 @@ export def "api tag-resource" [
 #
 # POST /
 # operationId: UntagResource
-export def "api untag-resource" [
+export def "untag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3110,7 +3110,7 @@ export def "api untag-resource" [
 #
 # POST /
 # operationId: UpdateAccessControlConfiguration
-export def "api update-access-control-configuration" [
+export def "update-access-control-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3163,7 +3163,7 @@ export def "api update-access-control-configuration" [
 #
 # POST /
 # operationId: UpdateDataSource
-export def "api update-data-source" [
+export def "update-data-source" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3220,7 +3220,7 @@ export def "api update-data-source" [
 #
 # POST /
 # operationId: UpdateExperience
-export def "api update-experience" [
+export def "update-experience" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3273,7 +3273,7 @@ export def "api update-experience" [
 #
 # POST /
 # operationId: UpdateFeaturedResultsSet
-export def "api update-featured-results" [
+export def "update-featured-results-set" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3327,7 +3327,7 @@ export def "api update-featured-results" [
 #
 # POST /
 # operationId: UpdateIndex
-export def "api update-index" [
+export def "update-index" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3383,7 +3383,7 @@ export def "api update-index" [
 #
 # POST /
 # operationId: UpdateQuerySuggestionsBlockList
-export def "api update-list-suggestions-block" [
+export def "update-query-suggestions-block-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3436,7 +3436,7 @@ export def "api update-list-suggestions-block" [
 #
 # POST /
 # operationId: UpdateQuerySuggestionsConfig
-export def "api update-list-suggestions-config" [
+export def "update-query-suggestions-config" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3490,7 +3490,7 @@ export def "api update-list-suggestions-config" [
 # POST /
 # operationId: UpdateThesaurus
 # --SourceS3Path shape: {Bucket: any, Key: any}
-export def "api update-thesaurus" [
+export def "update-thesaurus" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

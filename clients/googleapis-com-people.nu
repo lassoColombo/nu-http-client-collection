@@ -136,7 +136,7 @@ def sort-order-completer [] { ["FIRST_NAME_ASCENDING" "LAST_MODIFIED_ASCENDING" 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "contact-groups list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "people-contact-groups-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -160,7 +160,7 @@ export def commands []: nothing -> table {
 #
 # GET /v1/contactGroups
 # operationId: people.contactGroups.list
-export def "contact-groups list" [
+export def "people-contact-groups-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -211,7 +211,7 @@ export def "contact-groups list" [
 # POST /v1/contactGroups
 # operationId: people.contactGroups.create
 # --contactGroup shape: {clientData?: list, etag?: string, metadata?: record, name?: string, resourceName?: string}
-export def "contact-groups create" [
+export def "people-contact-groups-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -262,7 +262,7 @@ export def "contact-groups create" [
 #
 # GET /v1/contactGroups:batchGet
 # operationId: people.contactGroups.batchGet
-export def "contact-groups-batch-get get" [
+export def "people-contact-groups-batch-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -311,7 +311,7 @@ export def "contact-groups-batch-get get" [
 #
 # GET /v1/otherContacts
 # operationId: people.otherContacts.list
-export def "other-contacts list" [
+export def "people-other-contacts-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -363,7 +363,7 @@ export def "other-contacts list" [
 #
 # GET /v1/otherContacts:search
 # operationId: people.otherContacts.search
-export def "other-contacts-search list" [
+export def "people-other-contacts-search" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -413,7 +413,7 @@ export def "other-contacts-search list" [
 # POST /v1/people:batchCreateContacts
 # operationId: people.people.batchCreateContacts
 # --contacts item shape: {contactPerson?: record}
-export def "people-batch-create-contacts create" [
+export def "people-people-batch-create-contacts" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -465,7 +465,7 @@ export def "people-batch-create-contacts create" [
 #
 # POST /v1/people:batchDeleteContacts
 # operationId: people.people.batchDeleteContacts
-export def "people-batch-delete-contacts delete" [
+export def "people-people-batch-delete-contacts" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -515,7 +515,7 @@ export def "people-batch-delete-contacts delete" [
 #
 # GET /v1/people:batchGet
 # operationId: people.people.getBatchGet
-export def "people-batch-get get" [
+export def "people-people-get-batch-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -565,7 +565,7 @@ export def "people-batch-get get" [
 #
 # POST /v1/people:batchUpdateContacts
 # operationId: people.people.batchUpdateContacts
-export def "people-batch-update-contacts update" [
+export def "people-people-batch-update-contacts" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -653,7 +653,7 @@ export def "people-batch-update-contacts update" [
 # --taglines item shape: {metadata?: record, value?: string}
 # --urls item shape: {metadata?: record, type?: string, value?: string}
 # --userDefined item shape: {key?: string, metadata?: record, value?: string}
-export def "people-create-contact create" [
+export def "people-people-create-contact" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -735,7 +735,7 @@ export def "people-create-contact create" [
 #
 # GET /v1/people:listDirectoryPeople
 # operationId: people.people.listDirectoryPeople
-export def "people-list-directory-people list" [
+export def "people-people-list-directory-people" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -788,7 +788,7 @@ export def "people-list-directory-people list" [
 #
 # GET /v1/people:searchContacts
 # operationId: people.people.searchContacts
-export def "people-search-contacts list" [
+export def "people-people-search-contacts" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -838,7 +838,7 @@ export def "people-search-contacts list" [
 #
 # GET /v1/people:searchDirectoryPeople
 # operationId: people.people.searchDirectoryPeople
-export def "people-search-directory-people list" [
+export def "people-people-search-directory-people" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -890,7 +890,7 @@ export def "people-search-directory-people list" [
 #
 # DELETE /v1/{resourceName}
 # operationId: people.contactGroups.delete
-export def "contact-groups delete" [
+export def "people-contact-groups-delete" [
   resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -939,7 +939,7 @@ export def "contact-groups delete" [
 #
 # GET /v1/{resourceName}
 # operationId: people.people.get
-export def "people get" [
+export def "people-people-get" [
   resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -991,7 +991,7 @@ export def "people get" [
 # PUT /v1/{resourceName}
 # operationId: people.contactGroups.update
 # --contactGroup shape: {clientData?: list, etag?: string, metadata?: record, name?: string, resourceName?: string}
-export def "contact-groups update" [
+export def "people-contact-groups-update" [
   resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1045,7 +1045,7 @@ export def "contact-groups update" [
 #
 # GET /v1/{resourceName}/connections
 # operationId: people.people.connections.list
-export def "connections list" [
+export def "people-people-connections-list" [
   resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1101,7 +1101,7 @@ export def "connections list" [
 #
 # POST /v1/{resourceName}/members:modify
 # operationId: people.contactGroups.members.modify
-export def "members-modify create" [
+export def "people-contact-groups-members-modify" [
   resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1154,7 +1154,7 @@ export def "members-modify create" [
 #
 # POST /v1/{resourceName}:copyOtherContactToMyContactsGroup
 # operationId: people.otherContacts.copyOtherContactToMyContactsGroup
-export def "other-contacts copy-to-my-group" [
+export def "people-other-contacts-copy-other-contact-to-my-contacts-group" [
   resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1208,7 +1208,7 @@ export def "other-contacts copy-to-my-group" [
 #
 # DELETE /v1/{resourceName}:deleteContact
 # operationId: people.people.deleteContact
-export def "people delete-contact" [
+export def "people-people-delete-contact" [
   resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1256,7 +1256,7 @@ export def "people delete-contact" [
 #
 # DELETE /v1/{resourceName}:deleteContactPhoto
 # operationId: people.people.deleteContactPhoto
-export def "people delete-contact-photo" [
+export def "people-people-delete-contact-photo" [
   resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1341,7 +1341,7 @@ export def "people delete-contact-photo" [
 # --taglines item shape: {metadata?: record, value?: string}
 # --urls item shape: {metadata?: record, type?: string, value?: string}
 # --userDefined item shape: {key?: string, metadata?: record, value?: string}
-export def "people update-contact" [
+export def "people-people-update-contact" [
   resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1426,7 +1426,7 @@ export def "people update-contact" [
 #
 # PATCH /v1/{resourceName}:updateContactPhoto
 # operationId: people.people.updateContactPhoto
-export def "people update-contact-photo" [
+export def "people-people-update-contact-photo" [
   resource_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)

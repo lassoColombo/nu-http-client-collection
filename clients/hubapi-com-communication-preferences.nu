@@ -108,7 +108,7 @@ def legal-basis-completer [] { ["CONSENT_WITH_NOTICE" "LEGITIMATE_INTEREST_CLIEN
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "communication-preferences-definitions get-page" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-communication-preferences-v3-definitions-get-page" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -132,7 +132,7 @@ export def commands []: nothing -> table {
 #
 # GET /communication-preferences/v3/definitions
 # operationId: get-/communication-preferences/v3/definitions_getPage
-export def "communication-preferences-definitions get-page" [
+export def "get-communication-preferences-v3-definitions-get-page" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -166,7 +166,7 @@ export def "communication-preferences-definitions get-page" [
 #
 # GET /communication-preferences/v3/status/email/{emailAddress}
 # operationId: get-/communication-preferences/v3/status/email/{emailAddress}_getEmailStatus
-export def "communication-preferences-status-email get-address" [
+export def "get-communication-preferences-v3-status-email-get-email-status" [
   email_address: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -202,7 +202,7 @@ export def "communication-preferences-status-email get-address" [
 #
 # POST /communication-preferences/v3/subscribe
 # operationId: post-/communication-preferences/v3/subscribe_subscribe
-export def "communication-preferences-subscribe create" [
+export def "post-communication-preferences-v3-subscribe-subscribe" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -243,7 +243,7 @@ export def "communication-preferences-subscribe create" [
 #
 # POST /communication-preferences/v3/unsubscribe
 # operationId: post-/communication-preferences/v3/unsubscribe_unsubscribe
-export def "communication-preferences-unsubscribe create" [
+export def "post-communication-preferences-v3-unsubscribe-unsubscribe" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

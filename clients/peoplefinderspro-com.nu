@@ -98,7 +98,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "address-autocomplete create" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "post-address-autocomplete" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -121,7 +121,7 @@ export def commands []: nothing -> table {
 # Search
 #
 # POST /address/autocomplete
-export def "address-autocomplete create" [
+export def "post-address-autocomplete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -164,7 +164,7 @@ export def "address-autocomplete create" [
 #
 # POST /contact/enrich
 # --Address shape: {addressLine1?: string, addressLine2?: string}
-export def "contact-enrich create" [
+export def "post-contact-enrich" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -213,7 +213,7 @@ export def "contact-enrich create" [
 # Search
 #
 # POST /email/enrich
-export def "email-enrich create" [
+export def "post-email-enrich" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -257,7 +257,7 @@ export def "email-enrich create" [
 # POST /identity/verify_id
 # operationId: Search
 # --Address shape: {addressLine1?: string, addressLine2?: string}
-export def "identity-verify-id list" [
+export def "search" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -306,7 +306,7 @@ export def "identity-verify-id list" [
 # Search
 #
 # POST /phone/enrich
-export def "phone-enrich create" [
+export def "post-phone-enrich" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

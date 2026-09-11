@@ -107,7 +107,7 @@ def include-completer-1 [] { ["agreement" "association" "garageSpaces" "maintena
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "openhouses list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-openhouses" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -130,7 +130,7 @@ export def commands []: nothing -> table {
 # The SimplyRETS OpenHouses API
 #
 # GET /openhouses
-export def "openhouses list" [
+export def "get-openhouses" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -177,7 +177,7 @@ export def "openhouses list" [
 # Single OpenHouse Endpoint
 #
 # GET /openhouses/{openHouseKey}
-export def "openhouses get" [
+export def "get-openhouses-open-house-key" [
   open_house_key: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -215,7 +215,7 @@ export def "openhouses get" [
 # The SimplyRETS Listings API
 #
 # GET /properties
-export def "properties list" [
+export def "get-properties" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -280,7 +280,7 @@ export def "properties list" [
 # Single Listing Endpoint
 #
 # GET /properties/{mlsId}
-export def "properties get" [
+export def "get-properties-mls-id" [
   mls_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

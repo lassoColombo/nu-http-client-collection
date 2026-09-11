@@ -109,7 +109,7 @@ def unit-completer-1 [] { ["feet" "meters"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "airports get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-airport" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -133,7 +133,7 @@ export def commands []: nothing -> table {
 #
 # GET /airports
 # operationId: getAirport
-export def "airports get" [
+export def "get-airport" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -172,7 +172,7 @@ export def "airports get" [
 # CORS support
 #
 # OPTIONS /airports
-export def "airports options" [
+export def "options-airports" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -206,7 +206,7 @@ export def "airports options" [
 #
 # GET /cities/findcitiesfromlatlong
 # operationId: getCities
-export def "cities-findcitiesfromlatlong get" [
+export def "get-cities" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -247,7 +247,7 @@ export def "cities-findcitiesfromlatlong get" [
 # CORS support
 #
 # OPTIONS /cities/findcitiesfromlatlong
-export def "cities-findcitiesfromlatlong options" [
+export def "options-cities-findcitiesfromlatlong" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -281,7 +281,7 @@ export def "cities-findcitiesfromlatlong options" [
 #
 # GET /cities/findcitiesfromtext
 # operationId: getAutocomplete
-export def "cities-findcitiesfromtext get-autocomplete" [
+export def "get-autocomplete" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -319,7 +319,7 @@ export def "cities-findcitiesfromtext get-autocomplete" [
 # CORS support
 #
 # OPTIONS /cities/findcitiesfromtext
-export def "cities-findcitiesfromtext options" [
+export def "options-cities-findcitiesfromtext" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -353,7 +353,7 @@ export def "cities-findcitiesfromtext options" [
 #
 # GET /cities/significant
 # operationId: getSignificantCities
-export def "cities-significant get" [
+export def "get-significant-cities" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -395,7 +395,7 @@ export def "cities-significant get" [
 # CORS support
 #
 # OPTIONS /cities/significant
-export def "cities-significant options" [
+export def "options-cities-significant" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -429,7 +429,7 @@ export def "cities-significant options" [
 #
 # GET /continents
 # operationId: getContinents
-export def "continents get" [
+export def "get-continents" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -465,7 +465,7 @@ export def "continents get" [
 # CORS support
 #
 # OPTIONS /continents
-export def "continents options" [
+export def "options-continents" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -499,7 +499,7 @@ export def "continents options" [
 #
 # GET /countries
 # operationId: getCountries
-export def "countries get" [
+export def "get-countries" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -535,7 +535,7 @@ export def "countries get" [
 # CORS support
 #
 # OPTIONS /countries
-export def "countries options" [
+export def "options-countries" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -569,7 +569,7 @@ export def "countries options" [
 #
 # GET /distance
 # operationId: getDistance
-export def "distance get" [
+export def "get-distance" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -606,7 +606,7 @@ export def "distance get" [
 # CORS support
 #
 # OPTIONS /distance
-export def "distance options" [
+export def "options-distance" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -640,7 +640,7 @@ export def "distance options" [
 #
 # GET /elevation
 # operationId: getElevation
-export def "elevation get" [
+export def "get-elevation" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -676,7 +676,7 @@ export def "elevation get" [
 # CORS support
 #
 # OPTIONS /elevation
-export def "elevation options" [
+export def "options-elevation" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -710,7 +710,7 @@ export def "elevation options" [
 #
 # GET /pong
 # operationId: getPing
-export def "pong get-ping" [
+export def "get-ping" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -744,7 +744,7 @@ export def "pong get-ping" [
 #
 # GET /sun_positions
 # operationId: getSun
-export def "sun-positions get" [
+export def "get-sun" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -780,7 +780,7 @@ export def "sun-positions get" [
 # CORS support
 #
 # OPTIONS /sun_positions
-export def "sun-positions options" [
+export def "options-sun-positions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -814,7 +814,7 @@ export def "sun-positions options" [
 #
 # GET /timezone
 # operationId: getTimezone
-export def "timezone get" [
+export def "get-timezone" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -849,7 +849,7 @@ export def "timezone get" [
 # CORS support
 #
 # OPTIONS /timezone
-export def "timezone options" [
+export def "options-timezone" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

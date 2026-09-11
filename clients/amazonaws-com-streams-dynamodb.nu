@@ -104,7 +104,7 @@ def x-amz-target-completer-3 [] { ["DynamoDBStreams_20120810.ListStreams"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "api get-stream" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "describe-stream" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -128,7 +128,7 @@ export def commands []: nothing -> table {
 #
 # POST /
 # operationId: DescribeStream
-export def "api get-stream" [
+export def "describe-stream" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -178,7 +178,7 @@ export def "api get-stream" [
 #
 # POST /
 # operationId: GetRecords
-export def "api get-records" [
+export def "get-records" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -227,7 +227,7 @@ export def "api get-records" [
 #
 # POST /
 # operationId: GetShardIterator
-export def "api get-shard-iterator" [
+export def "get-shard-iterator" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -278,7 +278,7 @@ export def "api get-shard-iterator" [
 #
 # POST /
 # operationId: ListStreams
-export def "api list-streams" [
+export def "list-streams" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

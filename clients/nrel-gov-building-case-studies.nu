@@ -97,7 +97,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "project-output-format get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "project" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -121,7 +121,7 @@ export def commands []: nothing -> table {
 #
 # GET /project.{output_format}
 # operationId: project
-export def "project-output-format get" [
+export def "project" [
   output_format: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -165,7 +165,7 @@ export def "project-output-format get" [
 #
 # GET /project/{project_id}.{output_format}
 # operationId: document
-export def "project get-document" [
+export def "document" [
   project_id: int
   output_format: string
   --base-url(-b): string@base-url-completer # API base URL

@@ -124,7 +124,7 @@ def key-type-completer [] { ["PrimaryKey" "SecondaryKey"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-event-hub-operations list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "operations-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -148,7 +148,7 @@ export def commands []: nothing -> table {
 #
 # GET /providers/Microsoft.EventHub/operations
 # operationId: Operations_List
-export def "providers-microsoft-event-hub-operations list" [
+export def "operations-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -184,7 +184,7 @@ export def "providers-microsoft-event-hub-operations list" [
 #
 # POST /subscriptions/{subscriptionId}/providers/Microsoft.EventHub/CheckNameAvailability
 # operationId: Namespaces_CheckNameAvailability
-export def "subscriptions-providers-microsoft-event-hub-check-name-availability check-namespaces" [
+export def "namespaces-check-name-availability" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -226,7 +226,7 @@ export def "subscriptions-providers-microsoft-event-hub-check-name-availability 
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.EventHub/namespaces
 # operationId: Namespaces_List
-export def "subscriptions-providers-microsoft-event-hub-namespaces list" [
+export def "namespaces-list" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -264,7 +264,7 @@ export def "subscriptions-providers-microsoft-event-hub-namespaces list" [
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.EventHub/sku/{sku}/regions
 # operationId: Regions_ListBySku
-export def "subscriptions-providers-microsoft-event-hub-sku-regions list" [
+export def "regions-list-by-sku" [
   subscription_id: string
   sku: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -304,7 +304,7 @@ export def "subscriptions-providers-microsoft-event-hub-sku-regions list" [
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.EventHub/namespaces
 # operationId: Namespaces_ListByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespaces list" [
+export def "namespaces-list-by-resource-group" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -344,7 +344,7 @@ export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespac
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.EventHub/namespaces/{namespaceName}
 # operationId: Namespaces_Delete
-export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespaces delete" [
+export def "namespaces-delete" [
   subscription_id: string
   resource_group_name: string
   namespace_name: string
@@ -386,7 +386,7 @@ export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespac
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.EventHub/namespaces/{namespaceName}
 # operationId: Namespaces_Get
-export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespaces get" [
+export def "namespaces-get" [
   subscription_id: string
   resource_group_name: string
   namespace_name: string
@@ -430,7 +430,7 @@ export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespac
 # operationId: Namespaces_Update
 # --properties shape: {isAutoInflateEnabled?: bool, kafkaEnabled?: bool, maximumThroughputUnits?: int}
 # --sku shape: {capacity?: int, name: "Basic"|"Standard", tier?: "Basic"|"Standard"}
-export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespaces update" [
+export def "namespaces-update" [
   subscription_id: string
   resource_group_name: string
   namespace_name: string
@@ -481,7 +481,7 @@ export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespac
 # operationId: Namespaces_CreateOrUpdate
 # --properties shape: {isAutoInflateEnabled?: bool, kafkaEnabled?: bool, maximumThroughputUnits?: int}
 # --sku shape: {capacity?: int, name: "Basic"|"Standard", tier?: "Basic"|"Standard"}
-export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespaces create-or-update" [
+export def "namespaces-create-or-update" [
   subscription_id: string
   resource_group_name: string
   namespace_name: string
@@ -530,7 +530,7 @@ export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespac
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.EventHub/namespaces/{namespaceName}/AuthorizationRules
 # operationId: Namespaces_ListAuthorizationRules
-export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespaces-authorization-rules list" [
+export def "namespaces-list-authorization-rules" [
   subscription_id: string
   resource_group_name: string
   namespace_name: string
@@ -572,7 +572,7 @@ export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespac
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.EventHub/namespaces/{namespaceName}/AuthorizationRules/{authorizationRuleName}
 # operationId: Namespaces_DeleteAuthorizationRule
-export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespaces-authorization-rules delete" [
+export def "namespaces-delete-authorization-rule" [
   subscription_id: string
   resource_group_name: string
   namespace_name: string
@@ -616,7 +616,7 @@ export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespac
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.EventHub/namespaces/{namespaceName}/AuthorizationRules/{authorizationRuleName}
 # operationId: Namespaces_GetAuthorizationRule
-export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespaces-authorization-rules get" [
+export def "namespaces-get-authorization-rule" [
   subscription_id: string
   resource_group_name: string
   namespace_name: string
@@ -661,7 +661,7 @@ export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespac
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.EventHub/namespaces/{namespaceName}/AuthorizationRules/{authorizationRuleName}
 # operationId: Namespaces_CreateOrUpdateAuthorizationRule
 # --properties shape: {rights: list<string>}
-export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespaces-authorization-rules create-or-update" [
+export def "namespaces-create-or-update-authorization-rule" [
   subscription_id: string
   resource_group_name: string
   namespace_name: string
@@ -709,7 +709,7 @@ export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespac
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.EventHub/namespaces/{namespaceName}/AuthorizationRules/{authorizationRuleName}/listKeys
 # operationId: Namespaces_ListKeys
-export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespaces-authorization-rules-list-keys list" [
+export def "namespaces-list-keys" [
   subscription_id: string
   resource_group_name: string
   namespace_name: string
@@ -753,7 +753,7 @@ export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespac
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.EventHub/namespaces/{namespaceName}/AuthorizationRules/{authorizationRuleName}/regenerateKeys
 # operationId: Namespaces_RegenerateKeys
-export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespaces-authorization-rules-regenerate-keys create" [
+export def "namespaces-regenerate-keys" [
   subscription_id: string
   resource_group_name: string
   namespace_name: string
@@ -802,7 +802,7 @@ export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespac
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.EventHub/namespaces/{namespaceName}/disasterRecoveryConfigs
 # operationId: DisasterRecoveryConfigs_List
-export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespaces-disaster-recovery-configs list" [
+export def "disaster-recovery-configs-list" [
   subscription_id: string
   resource_group_name: string
   namespace_name: string
@@ -844,7 +844,7 @@ export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespac
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.EventHub/namespaces/{namespaceName}/disasterRecoveryConfigs/CheckNameAvailability
 # operationId: DisasterRecoveryConfigs_CheckNameAvailability
-export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespaces-disaster-recovery-configs-check-name-availability check" [
+export def "disaster-recovery-configs-check-name-availability" [
   subscription_id: string
   resource_group_name: string
   namespace_name: string
@@ -890,7 +890,7 @@ export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespac
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.EventHub/namespaces/{namespaceName}/disasterRecoveryConfigs/{alias}
 # operationId: DisasterRecoveryConfigs_Delete
-export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespaces-disaster-recovery-configs delete" [
+export def "disaster-recovery-configs-delete" [
   subscription_id: string
   resource_group_name: string
   namespace_name: string
@@ -934,7 +934,7 @@ export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespac
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.EventHub/namespaces/{namespaceName}/disasterRecoveryConfigs/{alias}
 # operationId: DisasterRecoveryConfigs_Get
-export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespaces-disaster-recovery-configs get" [
+export def "disaster-recovery-configs-get" [
   subscription_id: string
   resource_group_name: string
   namespace_name: string
@@ -979,7 +979,7 @@ export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespac
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.EventHub/namespaces/{namespaceName}/disasterRecoveryConfigs/{alias}
 # operationId: DisasterRecoveryConfigs_CreateOrUpdate
 # --properties shape: {alternateName?: string, partnerNamespace?: string}
-export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespaces-disaster-recovery-configs create-or-update" [
+export def "disaster-recovery-configs-create-or-update" [
   subscription_id: string
   resource_group_name: string
   namespace_name: string
@@ -1027,7 +1027,7 @@ export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespac
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.EventHub/namespaces/{namespaceName}/disasterRecoveryConfigs/{alias}/AuthorizationRules
 # operationId: DisasterRecoveryConfigs_ListAuthorizationRules
-export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespaces-disaster-recovery-configs-authorization-rules list" [
+export def "disaster-recovery-configs-list-authorization-rules" [
   subscription_id: string
   resource_group_name: string
   namespace_name: string
@@ -1071,7 +1071,7 @@ export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespac
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.EventHub/namespaces/{namespaceName}/disasterRecoveryConfigs/{alias}/AuthorizationRules/{authorizationRuleName}
 # operationId: DisasterRecoveryConfigs_GetAuthorizationRule
-export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespaces-disaster-recovery-configs-authorization-rules get" [
+export def "disaster-recovery-configs-get-authorization-rule" [
   subscription_id: string
   resource_group_name: string
   namespace_name: string
@@ -1117,7 +1117,7 @@ export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespac
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.EventHub/namespaces/{namespaceName}/disasterRecoveryConfigs/{alias}/AuthorizationRules/{authorizationRuleName}/listKeys
 # operationId: DisasterRecoveryConfigs_ListKeys
-export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespaces-disaster-recovery-configs-authorization-rules-list-keys list" [
+export def "disaster-recovery-configs-list-keys" [
   subscription_id: string
   resource_group_name: string
   namespace_name: string
@@ -1163,7 +1163,7 @@ export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespac
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.EventHub/namespaces/{namespaceName}/disasterRecoveryConfigs/{alias}/breakPairing
 # operationId: DisasterRecoveryConfigs_BreakPairing
-export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespaces-disaster-recovery-configs-break-pairing create" [
+export def "disaster-recovery-configs-break-pairing" [
   subscription_id: string
   resource_group_name: string
   namespace_name: string
@@ -1207,7 +1207,7 @@ export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespac
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.EventHub/namespaces/{namespaceName}/disasterRecoveryConfigs/{alias}/failover
 # operationId: DisasterRecoveryConfigs_FailOver
-export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespaces-disaster-recovery-configs-failover create-fail-over" [
+export def "disaster-recovery-configs-fail-over" [
   subscription_id: string
   resource_group_name: string
   namespace_name: string
@@ -1251,7 +1251,7 @@ export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespac
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.EventHub/namespaces/{namespaceName}/eventhubs
 # operationId: EventHubs_ListByNamespace
-export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespaces-eventhubs list" [
+export def "event-hubs-list-by-namespace" [
   subscription_id: string
   resource_group_name: string
   namespace_name: string
@@ -1295,7 +1295,7 @@ export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespac
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.EventHub/namespaces/{namespaceName}/eventhubs/{eventHubName}
 # operationId: EventHubs_Delete
-export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespaces-eventhubs delete" [
+export def "event-hubs-delete" [
   subscription_id: string
   resource_group_name: string
   namespace_name: string
@@ -1339,7 +1339,7 @@ export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespac
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.EventHub/namespaces/{namespaceName}/eventhubs/{eventHubName}
 # operationId: EventHubs_Get
-export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespaces-eventhubs get" [
+export def "event-hubs-get" [
   subscription_id: string
   resource_group_name: string
   namespace_name: string
@@ -1384,7 +1384,7 @@ export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespac
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.EventHub/namespaces/{namespaceName}/eventhubs/{eventHubName}
 # operationId: EventHubs_CreateOrUpdate
 # --properties shape: {captureDescription?: any, messageRetentionInDays?: int, partitionCount?: int, status?: "Active"|"Disabled"|"Restoring"|"SendDisabled"|"ReceiveDisabled"|"Creating"|"Deleting"|"Renaming"|"Unknown"}
-export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespaces-eventhubs create-or-update" [
+export def "event-hubs-create-or-update" [
   subscription_id: string
   resource_group_name: string
   namespace_name: string
@@ -1432,7 +1432,7 @@ export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespac
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.EventHub/namespaces/{namespaceName}/eventhubs/{eventHubName}/authorizationRules
 # operationId: EventHubs_ListAuthorizationRules
-export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespaces-eventhubs-authorization-rules list" [
+export def "event-hubs-list-authorization-rules" [
   subscription_id: string
   resource_group_name: string
   namespace_name: string
@@ -1476,7 +1476,7 @@ export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespac
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.EventHub/namespaces/{namespaceName}/eventhubs/{eventHubName}/authorizationRules/{authorizationRuleName}
 # operationId: EventHubs_DeleteAuthorizationRule
-export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespaces-eventhubs-authorization-rules delete" [
+export def "event-hubs-delete-authorization-rule" [
   subscription_id: string
   resource_group_name: string
   namespace_name: string
@@ -1522,7 +1522,7 @@ export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespac
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.EventHub/namespaces/{namespaceName}/eventhubs/{eventHubName}/authorizationRules/{authorizationRuleName}
 # operationId: EventHubs_GetAuthorizationRule
-export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespaces-eventhubs-authorization-rules get" [
+export def "event-hubs-get-authorization-rule" [
   subscription_id: string
   resource_group_name: string
   namespace_name: string
@@ -1569,7 +1569,7 @@ export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespac
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.EventHub/namespaces/{namespaceName}/eventhubs/{eventHubName}/authorizationRules/{authorizationRuleName}
 # operationId: EventHubs_CreateOrUpdateAuthorizationRule
 # --properties shape: {rights: list<string>}
-export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespaces-eventhubs-authorization-rules create-or-update" [
+export def "event-hubs-create-or-update-authorization-rule" [
   subscription_id: string
   resource_group_name: string
   namespace_name: string
@@ -1619,7 +1619,7 @@ export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespac
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.EventHub/namespaces/{namespaceName}/eventhubs/{eventHubName}/authorizationRules/{authorizationRuleName}/ListKeys
 # operationId: EventHubs_ListKeys
-export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespaces-eventhubs-authorization-rules-list-keys list" [
+export def "event-hubs-list-keys" [
   subscription_id: string
   resource_group_name: string
   namespace_name: string
@@ -1665,7 +1665,7 @@ export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespac
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.EventHub/namespaces/{namespaceName}/eventhubs/{eventHubName}/authorizationRules/{authorizationRuleName}/regenerateKeys
 # operationId: EventHubs_RegenerateKeys
-export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespaces-eventhubs-authorization-rules-regenerate-keys create" [
+export def "event-hubs-regenerate-keys" [
   subscription_id: string
   resource_group_name: string
   namespace_name: string
@@ -1716,7 +1716,7 @@ export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespac
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.EventHub/namespaces/{namespaceName}/eventhubs/{eventHubName}/consumergroups
 # operationId: ConsumerGroups_ListByEventHub
-export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespaces-eventhubs-consumergroups list-consumer" [
+export def "consumer-groups-list-by-event-hub" [
   subscription_id: string
   resource_group_name: string
   namespace_name: string
@@ -1762,7 +1762,7 @@ export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespac
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.EventHub/namespaces/{namespaceName}/eventhubs/{eventHubName}/consumergroups/{consumerGroupName}
 # operationId: ConsumerGroups_Delete
-export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespaces-eventhubs-consumergroups delete-consumer" [
+export def "consumer-groups-delete" [
   subscription_id: string
   resource_group_name: string
   namespace_name: string
@@ -1808,7 +1808,7 @@ export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespac
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.EventHub/namespaces/{namespaceName}/eventhubs/{eventHubName}/consumergroups/{consumerGroupName}
 # operationId: ConsumerGroups_Get
-export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespaces-eventhubs-consumergroups get-consumer" [
+export def "consumer-groups-get" [
   subscription_id: string
   resource_group_name: string
   namespace_name: string
@@ -1855,7 +1855,7 @@ export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespac
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.EventHub/namespaces/{namespaceName}/eventhubs/{eventHubName}/consumergroups/{consumerGroupName}
 # operationId: ConsumerGroups_CreateOrUpdate
 # --properties shape: {userMetadata?: string}
-export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespaces-eventhubs-consumergroups create-consumer-or-update" [
+export def "consumer-groups-create-or-update" [
   subscription_id: string
   resource_group_name: string
   namespace_name: string
@@ -1905,7 +1905,7 @@ export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespac
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.EventHub/namespaces/{namespaceName}/messagingplan
 # operationId: Namespaces_GetMessagingPlan
-export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespaces-messagingplan get-messaging-plan" [
+export def "namespaces-get-messaging-plan" [
   subscription_id: string
   resource_group_name: string
   namespace_name: string
@@ -1947,7 +1947,7 @@ export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespac
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.EventHub/namespaces/{namespaceName}/networkRuleSets
 # operationId: Namespaces_ListNetworkRuleSets
-export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespaces-network-rule-sets list" [
+export def "namespaces-list-network-rule-sets" [
   subscription_id: string
   resource_group_name: string
   namespace_name: string
@@ -1989,7 +1989,7 @@ export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespac
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.EventHub/namespaces/{namespaceName}/networkRuleSets/default
 # operationId: Namespaces_GetNetworkRuleSet
-export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespaces-network-rule-sets-default get" [
+export def "namespaces-get-network-rule-set" [
   subscription_id: string
   resource_group_name: string
   namespace_name: string
@@ -2032,7 +2032,7 @@ export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespac
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.EventHub/namespaces/{namespaceName}/networkRuleSets/default
 # operationId: Namespaces_CreateOrUpdateNetworkRuleSet
 # --properties shape: {defaultAction?: "Allow"|"Deny", ipRules?: list, virtualNetworkRules?: list}
-export def "subscriptions-resource-groups-providers-microsoft-event-hub-namespaces-network-rule-sets-default create-or-update" [
+export def "namespaces-create-or-update-network-rule-set" [
   subscription_id: string
   resource_group_name: string
   namespace_name: string

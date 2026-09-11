@@ -114,7 +114,7 @@ def type-completer-1 [] { ["ServerFarm" "Site"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-web-publishing-users-web get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-publishing-user" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -138,7 +138,7 @@ export def commands []: nothing -> table {
 #
 # GET /providers/Microsoft.Web/publishingUsers/web
 # operationId: GetPublishingUser
-export def "providers-microsoft-web-publishing-users-web get" [
+export def "get-publishing-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -175,7 +175,7 @@ export def "providers-microsoft-web-publishing-users-web get" [
 # PUT /providers/Microsoft.Web/publishingUsers/web
 # operationId: UpdatePublishingUser
 # --properties shape: {publishingPassword?: string, publishingPasswordHash?: string, publishingPasswordHashSalt?: string, publishingUserName: string, scmUri?: string}
-export def "providers-microsoft-web-publishing-users-web update" [
+export def "update-publishing-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -216,7 +216,7 @@ export def "providers-microsoft-web-publishing-users-web update" [
 #
 # GET /providers/Microsoft.Web/sourcecontrols
 # operationId: ListSourceControls
-export def "providers-microsoft-web-sourcecontrols list-source-controls" [
+export def "list-source-controls" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -252,7 +252,7 @@ export def "providers-microsoft-web-sourcecontrols list-source-controls" [
 #
 # GET /providers/Microsoft.Web/sourcecontrols/{sourceControlType}
 # operationId: GetSourceControl
-export def "providers-microsoft-web-sourcecontrols get-source-control" [
+export def "get-source-control" [
   source_control_type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -291,7 +291,7 @@ export def "providers-microsoft-web-sourcecontrols get-source-control" [
 # PUT /providers/Microsoft.Web/sourcecontrols/{sourceControlType}
 # operationId: UpdateSourceControl
 # --properties shape: {expirationTime?: string, refreshToken?: string, token?: string, tokenSecret?: string}
-export def "providers-microsoft-web-sourcecontrols update-source-control" [
+export def "update-source-control" [
   source_control_type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -334,7 +334,7 @@ export def "providers-microsoft-web-sourcecontrols update-source-control" [
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Web/billingMeters
 # operationId: ListBillingMeters
-export def "subscriptions-providers-microsoft-web-billing-meters list" [
+export def "list-billing-meters" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -374,7 +374,7 @@ export def "subscriptions-providers-microsoft-web-billing-meters list" [
 #
 # POST /subscriptions/{subscriptionId}/providers/Microsoft.Web/checknameavailability
 # operationId: CheckNameAvailability
-export def "subscriptions-providers-microsoft-web-checknameavailability check-name-availability" [
+export def "check-name-availability" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -418,7 +418,7 @@ export def "subscriptions-providers-microsoft-web-checknameavailability check-na
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Web/deploymentLocations
 # operationId: GetSubscriptionDeploymentLocations
-export def "subscriptions-providers-microsoft-web-deployment-locations get" [
+export def "get-subscription-deployment-locations" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -456,7 +456,7 @@ export def "subscriptions-providers-microsoft-web-deployment-locations get" [
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Web/geoRegions
 # operationId: ListGeoRegions
-export def "subscriptions-providers-microsoft-web-geo-regions list" [
+export def "list-geo-regions" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -498,7 +498,7 @@ export def "subscriptions-providers-microsoft-web-geo-regions list" [
 #
 # POST /subscriptions/{subscriptionId}/providers/Microsoft.Web/listSitesAssignedToHostName
 # operationId: ListSiteIdentifiersAssignedToHostName
-export def "subscriptions-providers-microsoft-web-list-sites-assigned-to-host-name list-identifiers" [
+export def "list-site-identifiers-assigned-to-host-name" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -540,7 +540,7 @@ export def "subscriptions-providers-microsoft-web-list-sites-assigned-to-host-na
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Web/premieraddonoffers
 # operationId: ListPremierAddOnOffers
-export def "subscriptions-providers-microsoft-web-premieraddonoffers list-premier-create-on-offers" [
+export def "list-premier-add-on-offers" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -578,7 +578,7 @@ export def "subscriptions-providers-microsoft-web-premieraddonoffers list-premie
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Web/skus
 # operationId: ListSkus
-export def "subscriptions-providers-microsoft-web-skus list" [
+export def "list-skus" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -617,7 +617,7 @@ export def "subscriptions-providers-microsoft-web-skus list" [
 # POST /subscriptions/{subscriptionId}/providers/Microsoft.Web/verifyHostingEnvironmentVnet
 # operationId: VerifyHostingEnvironmentVnet
 # --properties shape: {vnetName?: string, vnetResourceGroup?: string, vnetSubnetName?: string}
-export def "subscriptions-providers-microsoft-web-verify-hosting-environment-vnet verify" [
+export def "verify-hosting-environment-vnet" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -660,7 +660,7 @@ export def "subscriptions-providers-microsoft-web-verify-hosting-environment-vne
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/moveResources
 # operationId: Move
-export def "subscriptions-resource-groups-move-resources move" [
+export def "move" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -706,7 +706,7 @@ export def "subscriptions-resource-groups-move-resources move" [
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/validate
 # operationId: Validate
 # --properties shape: {capacity?: int, hostingEnvironment?: string, isSpot?: bool, isXenon?: bool, needLinuxWorkers?: bool, serverFarmId?: string, skuName?: string}
-export def "subscriptions-resource-groups-providers-microsoft-web-validate validate" [
+export def "validate" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -753,7 +753,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-validate valid
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/validateContainerSettings
 # operationId: ValidateContainerSettings
-export def "subscriptions-resource-groups-providers-microsoft-web-validate-container-settings validate" [
+export def "validate-container-settings" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -802,7 +802,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-validate-conta
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/validateMoveResources
 # operationId: ValidateMove
-export def "subscriptions-resource-groups-validate-move-resources validate" [
+export def "validate-move" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL

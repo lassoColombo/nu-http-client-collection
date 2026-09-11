@@ -103,7 +103,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "call-phone-number-auth create" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "post-call-phone-number-auth" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -126,7 +126,7 @@ export def commands []: nothing -> table {
 # Call phone number auth.
 #
 # POST /call_phone_number_auth
-export def "call-phone-number-auth create" [
+export def "post-call-phone-number-auth" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -163,7 +163,7 @@ export def "call-phone-number-auth create" [
 # Clubhouse uses this to check for updates when app is not installed from App Store (eg TestFlight)
 #
 # GET /check_for_update
-export def "check-for-update get" [
+export def "get-check-for-update" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -198,7 +198,7 @@ export def "check-for-update get" [
 # checks waitlist status.
 #
 # POST /check_waitlist_status
-export def "check-waitlist-status create" [
+export def "post-check-waitlist-status" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -231,7 +231,7 @@ export def "check-waitlist-status create" [
 # Call phone number auth.
 #
 # POST /complete_phone_number_auth
-export def "complete-phone-number-auth create" [
+export def "post-complete-phone-number-auth" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -268,7 +268,7 @@ export def "complete-phone-number-auth create" [
 # creates a channel
 #
 # POST /create_channel
-export def "create-channel create" [
+export def "post-create-channel" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -305,7 +305,7 @@ export def "create-channel create" [
 # follows a user
 #
 # POST /follow
-export def "follow create" [
+export def "post-follow" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -342,7 +342,7 @@ export def "follow create" [
 # get actionable notifications (the bell again)
 #
 # GET /get_actionable_notifications
-export def "get-actionable-notifications get" [
+export def "get-get-actionable-notifications" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -375,7 +375,7 @@ export def "get-actionable-notifications get" [
 # gets all topics.
 #
 # GET /get_all_topics
-export def "get-all-topics get" [
+export def "get-get-all-topics" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -408,7 +408,7 @@ export def "get-all-topics get" [
 # get all channels
 #
 # GET /get_channels
-export def "get-channels get" [
+export def "get-get-channels" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -441,7 +441,7 @@ export def "get-channels get" [
 # gets club by id
 #
 # POST /get_club
-export def "get-club create" [
+export def "post-get-club" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -478,7 +478,7 @@ export def "get-club create" [
 # looks up clubs by topic.
 #
 # POST /get_clubs_for_topic
-export def "get-clubs-for-topic create" [
+export def "post-get-clubs-for-topic" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -515,7 +515,7 @@ export def "get-clubs-for-topic create" [
 # is fetched when you tap Create Room
 #
 # POST /get_create_channel_targets
-export def "get-create-channel-targets create" [
+export def "post-get-create-channel-targets" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -552,7 +552,7 @@ export def "get-create-channel-targets create" [
 # the Upcoming for You page
 #
 # GET /get_events
-export def "get-events get" [
+export def "get-get-events" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -589,7 +589,7 @@ export def "get-events get" [
 # get a list of the users and clubs that this user is following. Returned users have bios truncated to ~80 characters.
 #
 # POST /get_following
-export def "get-following create" [
+export def "post-get-following" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -626,7 +626,7 @@ export def "get-following create" [
 # get notifications (the bell icon)
 #
 # GET /get_notifications
-export def "get-notifications get" [
+export def "get-get-notifications" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -662,7 +662,7 @@ export def "get-notifications get" [
 # gets online friends on the app homepage.
 #
 # POST /get_online_friends
-export def "get-online-friends create" [
+export def "post-get-online-friends" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -699,7 +699,7 @@ export def "get-online-friends create" [
 # looks up user profile by ID.
 #
 # POST /get_profile
-export def "get-profile create" [
+export def "post-get-profile" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -736,7 +736,7 @@ export def "get-profile create" [
 # gets release notes.
 #
 # POST /get_release_notes
-export def "get-release-notes create" [
+export def "post-get-release-notes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -769,7 +769,7 @@ export def "get-release-notes create" [
 # get notification settings
 #
 # GET /get_settings
-export def "get-settings get" [
+export def "get-get-settings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -802,7 +802,7 @@ export def "get-settings get" [
 # find users to invite to clubs based on phone number
 #
 # POST /get_suggested_club_invites
-export def "get-suggested-club-invites create" [
+export def "post-get-suggested-club-invites" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -839,7 +839,7 @@ export def "get-suggested-club-invites create" [
 # gets suggested follows during signup
 #
 # GET /get_suggested_follows_all
-export def "get-suggested-follows-all get" [
+export def "get-get-suggested-follows-all" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -876,7 +876,7 @@ export def "get-suggested-follows-all get" [
 # find people to follow by uploading contacts during signup
 #
 # POST /get_suggested_follows_friends_only
-export def "get-suggested-follows-friends-only create" [
+export def "post-get-suggested-follows-friends-only" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -913,7 +913,7 @@ export def "get-suggested-follows-friends-only create" [
 # find similar users. (The Sparkles button on Clubhouse's profile page)
 #
 # POST /get_suggested_follows_similar
-export def "get-suggested-follows-similar create" [
+export def "post-get-suggested-follows-similar" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -950,7 +950,7 @@ export def "get-suggested-follows-similar create" [
 # find users to invite based on phone number.
 #
 # POST /get_suggested_invites
-export def "get-suggested-invites create" [
+export def "post-get-suggested-invites" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -987,7 +987,7 @@ export def "get-suggested-invites create" [
 # gets suggested users when you start a private room
 #
 # POST /get_suggested_speakers
-export def "get-suggested-speakers create" [
+export def "post-get-suggested-speakers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1024,7 +1024,7 @@ export def "get-suggested-speakers create" [
 # looks up topic by ID.
 #
 # POST /get_topic
-export def "get-topic create" [
+export def "post-get-topic" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1061,7 +1061,7 @@ export def "get-topic create" [
 # looks up users by topic.
 #
 # GET /get_users_for_topic
-export def "get-users-for-topic get" [
+export def "get-get-users-for-topic" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1098,7 +1098,7 @@ export def "get-users-for-topic get" [
 # called during signup
 #
 # GET /get_welcome_channel
-export def "get-welcome-channel get" [
+export def "get-get-welcome-channel" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1131,7 +1131,7 @@ export def "get-welcome-channel get" [
 # wave to another user on the waitlist to give them access
 #
 # POST /invite_from_waitlist
-export def "invite-from-waitlist create" [
+export def "post-invite-from-waitlist" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1168,7 +1168,7 @@ export def "invite-from-waitlist create" [
 # invite a user to the app, using one of your invites
 #
 # POST /invite_to_app
-export def "invite-to-app create" [
+export def "post-invite-to-app" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1205,7 +1205,7 @@ export def "invite-to-app create" [
 # join a channel.
 #
 # POST /join_channel
-export def "join-channel create" [
+export def "post-join-channel" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1242,7 +1242,7 @@ export def "join-channel create" [
 # leave a channel.
 #
 # POST /leave_channel
-export def "leave-channel create" [
+export def "post-leave-channel" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1279,7 +1279,7 @@ export def "leave-channel create" [
 # gets user
 #
 # POST /me
-export def "me create" [
+export def "post-me" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1316,7 +1316,7 @@ export def "me create" [
 # analytics
 #
 # POST /record_action_trails
-export def "record-action-trails create" [
+export def "post-record-action-trails" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1353,7 +1353,7 @@ export def "record-action-trails create" [
 # gets an access_token from a refresh_token.
 #
 # POST /refresh_token
-export def "refresh-token create" [
+export def "post-refresh-token" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1390,7 +1390,7 @@ export def "refresh-token create" [
 # Resend phone number auth.
 #
 # POST /resend_phone_number_auth
-export def "resend-phone-number-auth create" [
+export def "post-resend-phone-number-auth" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1427,7 +1427,7 @@ export def "resend-phone-number-auth create" [
 # search clubs.
 #
 # POST /search_clubs
-export def "search-clubs create" [
+export def "post-search-clubs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1464,7 +1464,7 @@ export def "search-clubs create" [
 # search for users
 #
 # POST /search_users
-export def "search-users create" [
+export def "post-search-users" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1501,7 +1501,7 @@ export def "search-users create" [
 # Starts phone number auth.
 #
 # POST /start_phone_number_auth
-export def "start-phone-number-auth create" [
+export def "post-start-phone-number-auth" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1538,7 +1538,7 @@ export def "start-phone-number-auth create" [
 # updates notification during signup.
 #
 # POST /update_notifications
-export def "update-notifications create" [
+export def "post-update-notifications" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1575,7 +1575,7 @@ export def "update-notifications create" [
 # edits username.
 #
 # POST /update_username
-export def "update-username create" [
+export def "post-update-username" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

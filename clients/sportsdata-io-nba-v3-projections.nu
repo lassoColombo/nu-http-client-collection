@@ -99,7 +99,7 @@ def auth-scheme-completer [] { ["ocp-apim-subscription-key" "query-key"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "depth-charts get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "depth-charts" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -123,7 +123,7 @@ export def commands []: nothing -> table {
 #
 # GET /{format}/DepthCharts
 # operationId: DepthCharts
-export def "depth-charts get" [
+export def "depth-charts" [
   format: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -159,7 +159,7 @@ export def "depth-charts get" [
 #
 # GET /{format}/DfsSlatesByDate/{date}
 # operationId: DfsSlatesByDate
-export def "dfs-slates-by-date get" [
+export def "dfs-slates-by-date" [
   format: string
   date: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -197,7 +197,7 @@ export def "dfs-slates-by-date get" [
 #
 # GET /{format}/InjuredPlayers
 # operationId: InjuredPlayers
-export def "injured-players get" [
+export def "injured-players" [
   format: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -233,7 +233,7 @@ export def "injured-players get" [
 #
 # GET /{format}/PlayerGameProjectionStatsByDate/{date}
 # operationId: ProjectedPlayerGameStatsByDateWInjuriesDfsSalaries
-export def "player-game-projection-stats-by-date stats-projected-w-injuries-dfs-salaries" [
+export def "projected-player-game-stats-by-date-w-injuries-dfs-salaries" [
   format: string
   date: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -271,7 +271,7 @@ export def "player-game-projection-stats-by-date stats-projected-w-injuries-dfs-
 #
 # GET /{format}/PlayerGameProjectionStatsByPlayer/{date}/{playerid}
 # operationId: ProjectedPlayerGameStatsByPlayerWInjuriesDfsSalaries
-export def "player-game-projection-stats-by-player stats-projected-w-injuries-dfs-salaries" [
+export def "projected-player-game-stats-by-player-w-injuries-dfs-salaries" [
   format: string
   date: string
   playerid: string
@@ -311,7 +311,7 @@ export def "player-game-projection-stats-by-player stats-projected-w-injuries-df
 #
 # GET /{format}/PlayerSeasonProjectionStats/{season}
 # operationId: ProjectedPlayerSeasonStats
-export def "player-season-projection-stats stats-projected" [
+export def "projected-player-season-stats" [
   format: string
   season: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -349,7 +349,7 @@ export def "player-season-projection-stats stats-projected" [
 #
 # GET /{format}/PlayerSeasonProjectionStatsByPlayer/{season}/{playerid}
 # operationId: ProjectedPlayerSeasonStatsByPlayer
-export def "player-season-projection-stats-by-player stats-projected" [
+export def "projected-player-season-stats-by-player" [
   format: string
   season: string
   playerid: string
@@ -389,7 +389,7 @@ export def "player-season-projection-stats-by-player stats-projected" [
 #
 # GET /{format}/PlayerSeasonProjectionStatsByTeam/{season}/{team}
 # operationId: ProjectedPlayerSeasonStatsByTeam
-export def "player-season-projection-stats-by-team stats-projected" [
+export def "projected-player-season-stats-by-team" [
   format: string
   season: string
   team: string
@@ -429,7 +429,7 @@ export def "player-season-projection-stats-by-team stats-projected" [
 #
 # GET /{format}/StartingLineupsByDate/{date}
 # operationId: StartingLineupsByDate
-export def "starting-lineups-by-date get" [
+export def "starting-lineups-by-date" [
   format: string
   date: string
   --base-url(-b): string@base-url-completer # API base URL

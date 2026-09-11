@@ -105,7 +105,7 @@ def load-type-completer [] { ["load" "merchandiseReturn"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "change-status create" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "post-change-status" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -130,7 +130,7 @@ export def commands []: nothing -> table {
 # POST /changeStatus
 # operationId: post-changeStatus
 # --amount shape: {currency: string, value: int}
-export def "change-status create" [
+export def "post-change-status" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -177,7 +177,7 @@ export def "change-status create" [
 # POST /checkBalance
 # operationId: post-checkBalance
 # --amount shape: {currency: string, value: int}
-export def "check-balance create" [
+export def "post-check-balance" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -223,7 +223,7 @@ export def "check-balance create" [
 # POST /issue
 # operationId: post-issue
 # --amount shape: {currency: string, value: int}
-export def "issue create" [
+export def "post-issue" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -269,7 +269,7 @@ export def "issue create" [
 # POST /load
 # operationId: post-load
 # --amount shape: {currency: string, value: int}
-export def "load create" [
+export def "post-load" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -316,7 +316,7 @@ export def "load create" [
 # POST /mergeBalance
 # operationId: post-mergeBalance
 # --amount shape: {currency: string, value: int}
-export def "merge-balance create" [
+export def "post-merge-balance" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -362,7 +362,7 @@ export def "merge-balance create" [
 #
 # POST /voidTransaction
 # operationId: post-voidTransaction
-export def "void-transaction create" [
+export def "post-void-transaction" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

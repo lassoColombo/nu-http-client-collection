@@ -182,7 +182,7 @@ def type-completer-3 [] { ["all" "member" "owner"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "meta get-root" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "meta-root" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -207,7 +207,7 @@ export def commands []: nothing -> table {
 # GET /
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/overview/resources-in-the-rest-api#root-endpoint — API method documentation
 # operationId: meta/root
-export def "meta get-root" [
+export def "meta-root" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -242,7 +242,7 @@ export def "meta get-root" [
 # GET /admin/hooks
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/enterprise-admin#list-global-webhooks — API method documentation
 # operationId: enterprise-admin/list-global-webhooks
-export def "admin-hooks list-enterprise-global-webhooks" [
+export def "enterprise-admin-list-global-webhooks" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -284,7 +284,7 @@ export def "admin-hooks list-enterprise-global-webhooks" [
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/enterprise-admin#create-a-global-webhook — API method documentation
 # operationId: enterprise-admin/create-global-webhook
 # --config shape: {content_type?: string, insecure_ssl?: string, secret?: string, url: string}
-export def "admin-hooks create-enterprise-global-webhook" [
+export def "enterprise-admin-create-global-webhook" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -329,7 +329,7 @@ export def "admin-hooks create-enterprise-global-webhook" [
 # DELETE /admin/hooks/{hook_id}
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/enterprise-admin#delete-a-global-webhook — API method documentation
 # operationId: enterprise-admin/delete-global-webhook
-export def "admin-hooks delete-enterprise-global-webhook" [
+export def "enterprise-admin-delete-global-webhook" [
   hook_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -369,7 +369,7 @@ export def "admin-hooks delete-enterprise-global-webhook" [
 # GET /admin/hooks/{hook_id}
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/enterprise-admin#get-a-global-webhook — API method documentation
 # operationId: enterprise-admin/get-global-webhook
-export def "admin-hooks get-enterprise-global-webhook" [
+export def "enterprise-admin-get-global-webhook" [
   hook_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -410,7 +410,7 @@ export def "admin-hooks get-enterprise-global-webhook" [
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/enterprise-admin#update-a-global-webhook — API method documentation
 # operationId: enterprise-admin/update-global-webhook
 # --config shape: {content_type?: string, insecure_ssl?: string, secret?: string, url: string}
-export def "admin-hooks update-enterprise-global-webhook" [
+export def "enterprise-admin-update-global-webhook" [
   hook_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -456,7 +456,7 @@ export def "admin-hooks update-enterprise-global-webhook" [
 # POST /admin/hooks/{hook_id}/pings
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/enterprise-admin#ping-a-global-webhook — API method documentation
 # operationId: enterprise-admin/ping-global-webhook
-export def "admin-hooks-pings ping-enterprise-global-webhook" [
+export def "enterprise-admin-ping-global-webhook" [
   hook_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -496,7 +496,7 @@ export def "admin-hooks-pings ping-enterprise-global-webhook" [
 # GET /admin/keys
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/enterprise-admin#list-public-keys — API method documentation
 # operationId: enterprise-admin/list-public-keys
-export def "admin-keys list-enterprise-public" [
+export def "enterprise-admin-list-public-keys" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -537,7 +537,7 @@ export def "admin-keys list-enterprise-public" [
 # DELETE /admin/keys/{key_ids}
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/enterprise-admin#delete-a-public-key — API method documentation
 # operationId: enterprise-admin/delete-public-key
-export def "admin-keys delete-enterprise-public" [
+export def "enterprise-admin-delete-public-key" [
   key_ids: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -574,7 +574,7 @@ export def "admin-keys delete-enterprise-public" [
 # PATCH /admin/ldap/teams/{team_id}/mapping
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/enterprise-admin#update-ldap-mapping-for-a-team — API method documentation
 # operationId: enterprise-admin/update-ldap-mapping-for-team
-export def "admin-ldap-teams-mapping update-enterprise" [
+export def "enterprise-admin-update-ldap-mapping-for-team" [
   team_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -615,7 +615,7 @@ export def "admin-ldap-teams-mapping update-enterprise" [
 # POST /admin/ldap/teams/{team_id}/sync
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/enterprise-admin#sync-ldap-mapping-for-a-team — API method documentation
 # operationId: enterprise-admin/sync-ldap-mapping-for-team
-export def "admin-ldap-teams-sync sync-enterprise-mapping" [
+export def "enterprise-admin-sync-ldap-mapping-for-team" [
   team_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -652,7 +652,7 @@ export def "admin-ldap-teams-sync sync-enterprise-mapping" [
 # PATCH /admin/ldap/users/{username}/mapping
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/enterprise-admin#update-ldap-mapping-for-a-user — API method documentation
 # operationId: enterprise-admin/update-ldap-mapping-for-user
-export def "admin-ldap-users-mapping update-enterprise" [
+export def "enterprise-admin-update-ldap-mapping-for-user" [
   username: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -693,7 +693,7 @@ export def "admin-ldap-users-mapping update-enterprise" [
 # POST /admin/ldap/users/{username}/sync
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/enterprise-admin#sync-ldap-mapping-for-a-user — API method documentation
 # operationId: enterprise-admin/sync-ldap-mapping-for-user
-export def "admin-ldap-users-sync sync-enterprise-mapping" [
+export def "enterprise-admin-sync-ldap-mapping-for-user" [
   username: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -730,7 +730,7 @@ export def "admin-ldap-users-sync sync-enterprise-mapping" [
 # POST /admin/organizations
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/enterprise-admin#create-an-organization — API method documentation
 # operationId: enterprise-admin/create-org
-export def "admin-organizations create-enterprise-org" [
+export def "enterprise-admin-create-org" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -771,7 +771,7 @@ export def "admin-organizations create-enterprise-org" [
 # PATCH /admin/organizations/{org}
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/enterprise-admin#update-an-organization-name — API method documentation
 # operationId: enterprise-admin/update-org-name
-export def "admin-organizations update-enterprise-name" [
+export def "enterprise-admin-update-org-name" [
   org: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -812,7 +812,7 @@ export def "admin-organizations update-enterprise-name" [
 # GET /admin/pre-receive-environments
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/enterprise-admin#list-pre-receive-environments — API method documentation
 # operationId: enterprise-admin/list-pre-receive-environments
-export def "admin-pre-receive-environments list-enterprise" [
+export def "enterprise-admin-list-pre-receive-environments" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -852,7 +852,7 @@ export def "admin-pre-receive-environments list-enterprise" [
 # POST /admin/pre-receive-environments
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/enterprise-admin#create-a-pre-receive-environment — API method documentation
 # operationId: enterprise-admin/create-pre-receive-environment
-export def "admin-pre-receive-environments create-enterprise" [
+export def "enterprise-admin-create-pre-receive-environment" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -892,7 +892,7 @@ export def "admin-pre-receive-environments create-enterprise" [
 # DELETE /admin/pre-receive-environments/{pre_receive_environment_id}
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/enterprise-admin#delete-a-pre-receive-environment — API method documentation
 # operationId: enterprise-admin/delete-pre-receive-environment
-export def "admin-pre-receive-environments delete-enterprise" [
+export def "enterprise-admin-delete-pre-receive-environment" [
   pre_receive_environment_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -929,7 +929,7 @@ export def "admin-pre-receive-environments delete-enterprise" [
 # GET /admin/pre-receive-environments/{pre_receive_environment_id}
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/enterprise-admin#get-a-pre-receive-environment — API method documentation
 # operationId: enterprise-admin/get-pre-receive-environment
-export def "admin-pre-receive-environments get-enterprise" [
+export def "enterprise-admin-get-pre-receive-environment" [
   pre_receive_environment_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -966,7 +966,7 @@ export def "admin-pre-receive-environments get-enterprise" [
 # PATCH /admin/pre-receive-environments/{pre_receive_environment_id}
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/enterprise-admin#update-a-pre-receive-environment — API method documentation
 # operationId: enterprise-admin/update-pre-receive-environment
-export def "admin-pre-receive-environments update-enterprise" [
+export def "enterprise-admin-update-pre-receive-environment" [
   pre_receive_environment_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1008,7 +1008,7 @@ export def "admin-pre-receive-environments update-enterprise" [
 # POST /admin/pre-receive-environments/{pre_receive_environment_id}/downloads
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/enterprise-admin#start-a-pre-receive-environment-download — API method documentation
 # operationId: enterprise-admin/start-pre-receive-environment-download
-export def "admin-pre-receive-environments-downloads start-enterprise" [
+export def "enterprise-admin-start-pre-receive-environment-download" [
   pre_receive_environment_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1045,7 +1045,7 @@ export def "admin-pre-receive-environments-downloads start-enterprise" [
 # GET /admin/pre-receive-environments/{pre_receive_environment_id}/downloads/latest
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/enterprise-admin#get-the-download-status-for-a-pre-receive-environment — API method documentation
 # operationId: enterprise-admin/get-download-status-for-pre-receive-environment
-export def "admin-pre-receive-environments-downloads-latest get-enterprise-status" [
+export def "enterprise-admin-get-download-status-for-pre-receive-environment" [
   pre_receive_environment_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1082,7 +1082,7 @@ export def "admin-pre-receive-environments-downloads-latest get-enterprise-statu
 # GET /admin/pre-receive-hooks
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/enterprise-admin#list-pre-receive-hooks — API method documentation
 # operationId: enterprise-admin/list-pre-receive-hooks
-export def "admin-pre-receive-hooks list-enterprise" [
+export def "enterprise-admin-list-pre-receive-hooks" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1122,7 +1122,7 @@ export def "admin-pre-receive-hooks list-enterprise" [
 # POST /admin/pre-receive-hooks
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/enterprise-admin#create-a-pre-receive-hook — API method documentation
 # operationId: enterprise-admin/create-pre-receive-hook
-export def "admin-pre-receive-hooks create-enterprise" [
+export def "enterprise-admin-create-pre-receive-hook" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1166,7 +1166,7 @@ export def "admin-pre-receive-hooks create-enterprise" [
 # DELETE /admin/pre-receive-hooks/{pre_receive_hook_id}
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/enterprise-admin#delete-a-pre-receive-hook — API method documentation
 # operationId: enterprise-admin/delete-pre-receive-hook
-export def "admin-pre-receive-hooks delete-enterprise" [
+export def "enterprise-admin-delete-pre-receive-hook" [
   pre_receive_hook_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1203,7 +1203,7 @@ export def "admin-pre-receive-hooks delete-enterprise" [
 # GET /admin/pre-receive-hooks/{pre_receive_hook_id}
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/enterprise-admin#get-a-pre-receive-hook — API method documentation
 # operationId: enterprise-admin/get-pre-receive-hook
-export def "admin-pre-receive-hooks get-enterprise" [
+export def "enterprise-admin-get-pre-receive-hook" [
   pre_receive_hook_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1240,7 +1240,7 @@ export def "admin-pre-receive-hooks get-enterprise" [
 # PATCH /admin/pre-receive-hooks/{pre_receive_hook_id}
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/enterprise-admin#update-a-pre-receive-hook — API method documentation
 # operationId: enterprise-admin/update-pre-receive-hook
-export def "admin-pre-receive-hooks update-enterprise" [
+export def "enterprise-admin-update-pre-receive-hook" [
   pre_receive_hook_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1286,7 +1286,7 @@ export def "admin-pre-receive-hooks update-enterprise" [
 # GET /admin/tokens
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/enterprise-admin#list-personal-access-tokens — API method documentation
 # operationId: enterprise-admin/list-personal-access-tokens
-export def "admin-tokens list-enterprise-personal-access" [
+export def "enterprise-admin-list-personal-access-tokens" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1324,7 +1324,7 @@ export def "admin-tokens list-enterprise-personal-access" [
 # DELETE /admin/tokens/{token_id}
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/enterprise-admin#delete-a-personal-access-token — API method documentation
 # operationId: enterprise-admin/delete-personal-access-token
-export def "admin-tokens delete-enterprise-personal-access" [
+export def "enterprise-admin-delete-personal-access-token" [
   token_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1361,7 +1361,7 @@ export def "admin-tokens delete-enterprise-personal-access" [
 # POST /admin/users
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/enterprise-admin#create-a-user — API method documentation
 # operationId: enterprise-admin/create-user
-export def "admin-users create-enterprise" [
+export def "enterprise-admin-create-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1401,7 +1401,7 @@ export def "admin-users create-enterprise" [
 # DELETE /admin/users/{username}
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/enterprise-admin#delete-a-user — API method documentation
 # operationId: enterprise-admin/delete-user
-export def "admin-users delete-enterprise" [
+export def "enterprise-admin-delete-user" [
   username: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1438,7 +1438,7 @@ export def "admin-users delete-enterprise" [
 # PATCH /admin/users/{username}
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/enterprise-admin#update-the-username-for-a-user — API method documentation
 # operationId: enterprise-admin/update-username-for-user
-export def "admin-users update-enterprise" [
+export def "enterprise-admin-update-username-for-user" [
   username: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1479,7 +1479,7 @@ export def "admin-users update-enterprise" [
 # DELETE /admin/users/{username}/authorizations
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/enterprise-admin#delete-an-impersonation-oauth-token — API method documentation
 # operationId: enterprise-admin/delete-impersonation-o-auth-token
-export def "admin-users-authorizations delete-enterprise-impersonation-o-auth-token" [
+export def "enterprise-admin-delete-impersonation-o-auth-token" [
   username: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1516,7 +1516,7 @@ export def "admin-users-authorizations delete-enterprise-impersonation-o-auth-to
 # POST /admin/users/{username}/authorizations
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/enterprise-admin#create-an-impersonation-oauth-token — API method documentation
 # operationId: enterprise-admin/create-impersonation-o-auth-token
-export def "admin-users-authorizations create-enterprise-impersonation-o-auth-token" [
+export def "enterprise-admin-create-impersonation-o-auth-token" [
   username: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1557,7 +1557,7 @@ export def "admin-users-authorizations create-enterprise-impersonation-o-auth-to
 # GET /app
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/apps#get-the-authenticated-app — API method documentation
 # operationId: apps/get-authenticated
-export def "app get-authenticated" [
+export def "apps-get-authenticated" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1592,7 +1592,7 @@ export def "app get-authenticated" [
 # POST /app-manifests/{code}/conversions
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/apps#create-a-github-app-from-a-manifest — API method documentation
 # operationId: apps/create-from-manifest
-export def "app-manifests-conversions create" [
+export def "apps-create-from-manifest" [
   code: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1633,7 +1633,7 @@ export def "app-manifests-conversions create" [
 # GET /app/installations
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/apps#list-installations-for-the-authenticated-app — API method documentation
 # operationId: apps/list-installations
-export def "app-installations list" [
+export def "apps-list-installations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1674,7 +1674,7 @@ export def "app-installations list" [
 # DELETE /app/installations/{installation_id}
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/apps#delete-an-installation-for-the-authenticated-app — API method documentation
 # operationId: apps/delete-installation
-export def "app-installations delete" [
+export def "apps-delete-installation" [
   installation_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1714,7 +1714,7 @@ export def "app-installations delete" [
 # GET /app/installations/{installation_id}
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/apps#get-an-installation-for-the-authenticated-app — API method documentation
 # operationId: apps/get-installation
-export def "app-installations get" [
+export def "apps-get-installation" [
   installation_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1755,7 +1755,7 @@ export def "app-installations get" [
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/apps/#create-an-installation-access-token-for-an-app — API method documentation
 # operationId: apps/create-installation-access-token
 # --permissions shape: {actions?: "read"|"write", administration?: "read"|"write", checks?: "read"|"write", content_references?: "read"|"write", contents?: "read"|"write", deployments?: "read"|"write", environments?: "read"|"write", issues?: "read"|"write", members?: "read"|"write", metadata?: "read"|"write", organization_administration?: "read"|"write", organization_hooks?: "read"|"write", organization_packages?: "read"|"write", organization_plan?: "read", organization_projects?: "read"|"write"|"admin", ... (16 more fields)}
-export def "app-installations-access-tokens create" [
+export def "apps-create-installation-access-token" [
   installation_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1803,7 +1803,7 @@ export def "app-installations-access-tokens create" [
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/oauth-authorizations#list-your-grants — API method documentation
 # operationId: oauth-authorizations/list-grants
 @deprecated
-export def "applications-grants list-oauth-authorizations" [
+export def "oauth-authorizations-list-grants" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1844,7 +1844,7 @@ export def "applications-grants list-oauth-authorizations" [
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/oauth-authorizations#delete-a-grant — API method documentation
 # operationId: oauth-authorizations/delete-grant
 @deprecated
-export def "applications-grants delete-oauth-authorizations-by-grant-id" [
+export def "oauth-authorizations-delete-grant" [
   grant_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1883,7 +1883,7 @@ export def "applications-grants delete-oauth-authorizations-by-grant-id" [
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/oauth-authorizations#get-a-single-grant — API method documentation
 # operationId: oauth-authorizations/get-grant
 @deprecated
-export def "applications-grants get-oauth-authorizations" [
+export def "oauth-authorizations-get-grant" [
   grant_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1920,7 +1920,7 @@ export def "applications-grants get-oauth-authorizations" [
 # DELETE /applications/{client_id}/grants/{access_token}
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/oauth-authorizations#revoke-a-grant-for-an-application — API method documentation
 # operationId: oauth-authorizations/revoke-grant-for-application
-export def "applications-grants delete-oauth-authorizations-by-client-id-access-token" [
+export def "oauth-authorizations-revoke-grant-for-application" [
   client_id: string
   access_token: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1959,7 +1959,7 @@ export def "applications-grants delete-oauth-authorizations-by-client-id-access-
 # DELETE /applications/{client_id}/tokens/{access_token}
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/oauth-authorizations#revoke-an-authorization-for-an-application — API method documentation
 # operationId: oauth-authorizations/revoke-authorization-for-application
-export def "applications-tokens delete-oauth-authorizations-authorization" [
+export def "oauth-authorizations-revoke-authorization-for-application" [
   client_id: string
   access_token: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1998,7 +1998,7 @@ export def "applications-tokens delete-oauth-authorizations-authorization" [
 # GET /applications/{client_id}/tokens/{access_token}
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/oauth-authorizations#check-an-authorization — API method documentation
 # operationId: oauth-authorizations/check-authorization
-export def "applications-tokens check-oauth-authorizations-authorization" [
+export def "oauth-authorizations-check-authorization" [
   client_id: string
   access_token: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2037,7 +2037,7 @@ export def "applications-tokens check-oauth-authorizations-authorization" [
 # POST /applications/{client_id}/tokens/{access_token}
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/oauth-authorizations#reset-an-authorization — API method documentation
 # operationId: oauth-authorizations/reset-authorization
-export def "applications-tokens reset-oauth-authorizations-authorization" [
+export def "oauth-authorizations-reset-authorization" [
   client_id: string
   access_token: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2076,7 +2076,7 @@ export def "applications-tokens reset-oauth-authorizations-authorization" [
 # GET /apps/{app_slug}
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/apps/#get-an-app — API method documentation
 # operationId: apps/get-by-slug
-export def "apps get" [
+export def "apps-get-by-slug" [
   app_slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2115,7 +2115,7 @@ export def "apps get" [
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/oauth-authorizations#list-your-authorizations — API method documentation
 # operationId: oauth-authorizations/list-authorizations
 @deprecated
-export def "authorizations list-oauth" [
+export def "oauth-authorizations-list-authorizations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2156,7 +2156,7 @@ export def "authorizations list-oauth" [
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/oauth-authorizations#create-a-new-authorization — API method documentation
 # operationId: oauth-authorizations/create-authorization
 @deprecated
-export def "authorizations create-oauth" [
+export def "oauth-authorizations-create-authorization" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2202,7 +2202,7 @@ export def "authorizations create-oauth" [
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/oauth-authorizations#get-or-create-an-authorization-for-a-specific-app — API method documentation
 # operationId: oauth-authorizations/get-or-create-authorization-for-app
 @deprecated
-export def "authorizations-clients get-oauth-or-create-for-app" [
+export def "oauth-authorizations-get-or-create-authorization-for-app" [
   client_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2249,7 +2249,7 @@ export def "authorizations-clients get-oauth-or-create-for-app" [
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/oauth-authorizations#get-or-create-an-authorization-for-a-specific-app-and-fingerprint — API method documentation
 # operationId: oauth-authorizations/get-or-create-authorization-for-app-and-fingerprint
 @deprecated
-export def "authorizations-clients get-oauth-or-create-for-app-and" [
+export def "oauth-authorizations-get-or-create-authorization-for-app-and-fingerprint" [
   client_id: string
   fingerprint: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2297,7 +2297,7 @@ export def "authorizations-clients get-oauth-or-create-for-app-and" [
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/oauth-authorizations#delete-an-authorization — API method documentation
 # operationId: oauth-authorizations/delete-authorization
 @deprecated
-export def "authorizations delete-oauth" [
+export def "oauth-authorizations-delete-authorization" [
   authorization_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2336,7 +2336,7 @@ export def "authorizations delete-oauth" [
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/oauth-authorizations#get-a-single-authorization — API method documentation
 # operationId: oauth-authorizations/get-authorization
 @deprecated
-export def "authorizations get-oauth" [
+export def "oauth-authorizations-get-authorization" [
   authorization_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2375,7 +2375,7 @@ export def "authorizations get-oauth" [
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/oauth-authorizations#update-an-existing-authorization — API method documentation
 # operationId: oauth-authorizations/update-authorization
 @deprecated
-export def "authorizations update-oauth" [
+export def "oauth-authorizations-update-authorization" [
   authorization_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2421,7 +2421,7 @@ export def "authorizations update-oauth" [
 # GET /codes_of_conduct
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/codes-of-conduct#get-all-codes-of-conduct — API method documentation
 # operationId: codes-of-conduct/get-all-codes-of-conduct
-export def "codes-of-conduct get-list" [
+export def "codes-of-conduct-get-all-codes-of-conduct" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2456,7 +2456,7 @@ export def "codes-of-conduct get-list" [
 # GET /codes_of_conduct/{key}
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/codes-of-conduct#get-a-code-of-conduct — API method documentation
 # operationId: codes-of-conduct/get-conduct-code
-export def "codes-of-conduct get" [
+export def "codes-of-conduct-get-conduct-code" [
   key: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2493,7 +2493,7 @@ export def "codes-of-conduct get" [
 # GET /emojis
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/emojis#get-emojis — API method documentation
 # operationId: emojis/get
-export def "emojis get" [
+export def "emojis-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2528,7 +2528,7 @@ export def "emojis get" [
 # GET /enterprise/settings/license
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/enterprise-admin#get-license-information — API method documentation
 # operationId: enterprise-admin/get-license-information
-export def "enterprise-settings-license get-admin-information" [
+export def "enterprise-admin-get-license-information" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2563,7 +2563,7 @@ export def "enterprise-settings-license get-admin-information" [
 # GET /enterprise/stats/all
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/enterprise-admin#get-statistics — API method documentation
 # operationId: enterprise-admin/get-all-stats
-export def "enterprise-stats-all get-admin" [
+export def "enterprise-admin-get-all-stats" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2598,7 +2598,7 @@ export def "enterprise-stats-all get-admin" [
 # GET /enterprise/stats/comments
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/enterprise-admin#get-comment-statistics — API method documentation
 # operationId: enterprise-admin/get-comment-stats
-export def "enterprise-stats-comments get-admin" [
+export def "enterprise-admin-get-comment-stats" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2632,7 +2632,7 @@ export def "enterprise-stats-comments get-admin" [
 #
 # GET /enterprise/stats/gists
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/enterprise-admin#get-gist-statistics — API method documentation
-export def "enterprise-stats-gists get" [
+export def "get-enterprise-stats-gists" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2667,7 +2667,7 @@ export def "enterprise-stats-gists get" [
 # GET /enterprise/stats/hooks
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/enterprise-admin#get-hooks-statistics — API method documentation
 # operationId: enterprise-admin/get-hooks-stats
-export def "enterprise-stats-hooks get-admin" [
+export def "enterprise-admin-get-hooks-stats" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2702,7 +2702,7 @@ export def "enterprise-stats-hooks get-admin" [
 # GET /enterprise/stats/issues
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/enterprise-admin#get-issues-statistics — API method documentation
 # operationId: enterprise-admin/get-issue-stats
-export def "enterprise-stats-issues get-admin" [
+export def "enterprise-admin-get-issue-stats" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2737,7 +2737,7 @@ export def "enterprise-stats-issues get-admin" [
 # GET /enterprise/stats/milestones
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/enterprise-admin#get-milestone-statistics — API method documentation
 # operationId: enterprise-admin/get-milestone-stats
-export def "enterprise-stats-milestones get-admin" [
+export def "enterprise-admin-get-milestone-stats" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2772,7 +2772,7 @@ export def "enterprise-stats-milestones get-admin" [
 # GET /enterprise/stats/orgs
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/enterprise-admin#get-organization-statistics — API method documentation
 # operationId: enterprise-admin/get-org-stats
-export def "enterprise-stats-orgs get-admin" [
+export def "enterprise-admin-get-org-stats" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2807,7 +2807,7 @@ export def "enterprise-stats-orgs get-admin" [
 # GET /enterprise/stats/pages
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/enterprise-admin#get-pages-statistics — API method documentation
 # operationId: enterprise-admin/get-pages-stats
-export def "enterprise-stats-pages get-admin" [
+export def "enterprise-admin-get-pages-stats" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2842,7 +2842,7 @@ export def "enterprise-stats-pages get-admin" [
 # GET /enterprise/stats/pulls
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/enterprise-admin#get-pull-requests-statistics — API method documentation
 # operationId: enterprise-admin/get-pull-request-stats
-export def "enterprise-stats-pulls get-admin-request" [
+export def "enterprise-admin-get-pull-request-stats" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2877,7 +2877,7 @@ export def "enterprise-stats-pulls get-admin-request" [
 # GET /enterprise/stats/repos
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/enterprise-admin#get-repository-statistics — API method documentation
 # operationId: enterprise-admin/get-repo-stats
-export def "enterprise-stats-repos get-admin" [
+export def "enterprise-admin-get-repo-stats" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2912,7 +2912,7 @@ export def "enterprise-stats-repos get-admin" [
 # GET /enterprise/stats/users
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/enterprise-admin#get-users-statistics — API method documentation
 # operationId: enterprise-admin/get-user-stats
-export def "enterprise-stats-users get-admin" [
+export def "enterprise-admin-get-user-stats" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2947,7 +2947,7 @@ export def "enterprise-stats-users get-admin" [
 # GET /events
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/activity#list-public-events — API method documentation
 # operationId: activity/list-public-events
-export def "events list-activity-public" [
+export def "activity-list-public-events" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2985,7 +2985,7 @@ export def "events list-activity-public" [
 # GET /feeds
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/activity#get-feeds — API method documentation
 # operationId: activity/get-feeds
-export def "feeds get-activity" [
+export def "activity-get-feeds" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3020,7 +3020,7 @@ export def "feeds get-activity" [
 # GET /gists
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/gists#list-gists-for-the-authenticated-user — API method documentation
 # operationId: gists/list
-export def "gists list" [
+export def "gists-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3059,7 +3059,7 @@ export def "gists list" [
 # POST /gists
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/gists#create-a-gist — API method documentation
 # operationId: gists/create
-export def "gists create" [
+export def "gists-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3100,7 +3100,7 @@ export def "gists create" [
 # GET /gists/public
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/gists#list-public-gists — API method documentation
 # operationId: gists/list-public
-export def "gists-public list" [
+export def "gists-list-public" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3139,7 +3139,7 @@ export def "gists-public list" [
 # GET /gists/starred
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/gists#list-starred-gists — API method documentation
 # operationId: gists/list-starred
-export def "gists-starred list" [
+export def "gists-list-starred" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3178,7 +3178,7 @@ export def "gists-starred list" [
 # DELETE /gists/{gist_id}
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/gists#delete-a-gist — API method documentation
 # operationId: gists/delete
-export def "gists delete" [
+export def "gists-delete" [
   gist_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3215,7 +3215,7 @@ export def "gists delete" [
 # GET /gists/{gist_id}
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/gists#get-a-gist — API method documentation
 # operationId: gists/get
-export def "gists get" [
+export def "gists-get" [
   gist_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3252,7 +3252,7 @@ export def "gists get" [
 # PATCH /gists/{gist_id}
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/gists/#update-a-gist — API method documentation
 # operationId: gists/update
-export def "gists update" [
+export def "gists-update" [
   gist_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3294,7 +3294,7 @@ export def "gists update" [
 # GET /gists/{gist_id}/comments
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/gists#list-gist-comments — API method documentation
 # operationId: gists/list-comments
-export def "gists-comments list" [
+export def "gists-list-comments" [
   gist_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3334,7 +3334,7 @@ export def "gists-comments list" [
 # POST /gists/{gist_id}/comments
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/gists#create-a-gist-comment — API method documentation
 # operationId: gists/create-comment
-export def "gists-comments create" [
+export def "gists-create-comment" [
   gist_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3375,7 +3375,7 @@ export def "gists-comments create" [
 # DELETE /gists/{gist_id}/comments/{comment_id}
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/gists#delete-a-gist-comment — API method documentation
 # operationId: gists/delete-comment
-export def "gists-comments delete" [
+export def "gists-delete-comment" [
   gist_id: string
   comment_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -3414,7 +3414,7 @@ export def "gists-comments delete" [
 # GET /gists/{gist_id}/comments/{comment_id}
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/gists#get-a-gist-comment — API method documentation
 # operationId: gists/get-comment
-export def "gists-comments get" [
+export def "gists-get-comment" [
   gist_id: string
   comment_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -3453,7 +3453,7 @@ export def "gists-comments get" [
 # PATCH /gists/{gist_id}/comments/{comment_id}
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/gists#update-a-gist-comment — API method documentation
 # operationId: gists/update-comment
-export def "gists-comments update" [
+export def "gists-update-comment" [
   gist_id: string
   comment_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -3496,7 +3496,7 @@ export def "gists-comments update" [
 # GET /gists/{gist_id}/commits
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/gists#list-gist-commits — API method documentation
 # operationId: gists/list-commits
-export def "gists-commits list" [
+export def "gists-list-commits" [
   gist_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3536,7 +3536,7 @@ export def "gists-commits list" [
 # GET /gists/{gist_id}/forks
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/gists#list-gist-forks — API method documentation
 # operationId: gists/list-forks
-export def "gists-forks list" [
+export def "gists-list-forks" [
   gist_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3576,7 +3576,7 @@ export def "gists-forks list" [
 # POST /gists/{gist_id}/forks
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/gists#fork-a-gist — API method documentation
 # operationId: gists/fork
-export def "gists-forks create" [
+export def "gists-fork" [
   gist_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3613,7 +3613,7 @@ export def "gists-forks create" [
 # DELETE /gists/{gist_id}/star
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/gists#unstar-a-gist — API method documentation
 # operationId: gists/unstar
-export def "gists-star delete-unstar" [
+export def "gists-unstar" [
   gist_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3650,7 +3650,7 @@ export def "gists-star delete-unstar" [
 # GET /gists/{gist_id}/star
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/gists#check-if-a-gist-is-starred — API method documentation
 # operationId: gists/check-is-starred
-export def "gists-star check-is-starred" [
+export def "gists-check-is-starred" [
   gist_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3687,7 +3687,7 @@ export def "gists-star check-is-starred" [
 # PUT /gists/{gist_id}/star
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/gists#star-a-gist — API method documentation
 # operationId: gists/star
-export def "gists-star update" [
+export def "gists-star" [
   gist_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3724,7 +3724,7 @@ export def "gists-star update" [
 # GET /gists/{gist_id}/{sha}
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/gists#get-a-gist-revision — API method documentation
 # operationId: gists/get-revision
-export def "gists get-revision" [
+export def "gists-get-revision" [
   gist_id: string
   sha: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3763,7 +3763,7 @@ export def "gists get-revision" [
 # GET /gitignore/templates
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/gitignore#get-all-gitignore-templates — API method documentation
 # operationId: gitignore/get-all-templates
-export def "gitignore-templates get-list" [
+export def "gitignore-get-all-templates" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3798,7 +3798,7 @@ export def "gitignore-templates get-list" [
 # GET /gitignore/templates/{name}
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/gitignore#get-a-gitignore-template — API method documentation
 # operationId: gitignore/get-template
-export def "gitignore-templates get" [
+export def "gitignore-get-template" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3835,7 +3835,7 @@ export def "gitignore-templates get" [
 # GET /installation/repositories
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/apps#list-repositories-accessible-to-the-app-installation — API method documentation
 # operationId: apps/list-repos-accessible-to-installation
-export def "installation-repositories list-apps-repos-accessible" [
+export def "apps-list-repos-accessible-to-installation" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3876,7 +3876,7 @@ export def "installation-repositories list-apps-repos-accessible" [
 # GET /issues
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/issues#list-issues-assigned-to-the-authenticated-user — API method documentation
 # operationId: issues/list
-export def "issues list" [
+export def "issues-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3924,7 +3924,7 @@ export def "issues list" [
 # GET /licenses
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/licenses#get-all-commonly-used-licenses — API method documentation
 # operationId: licenses/get-all-commonly-used
-export def "licenses get-list-commonly-used" [
+export def "licenses-get-all-commonly-used" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3963,7 +3963,7 @@ export def "licenses get-list-commonly-used" [
 # GET /licenses/{license}
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/licenses#get-a-license — API method documentation
 # operationId: licenses/get
-export def "licenses get" [
+export def "licenses-get" [
   license: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4000,7 +4000,7 @@ export def "licenses get" [
 # POST /markdown
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/markdown#render-a-markdown-document — API method documentation
 # operationId: markdown/render
-export def "markdown create-render" [
+export def "markdown-render" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4041,7 +4041,7 @@ export def "markdown create-render" [
 # POST /markdown/raw
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/markdown#render-a-markdown-document-in-raw-mode — API method documentation
 # operationId: markdown/render-raw
-export def "markdown-raw create-render" [
+export def "markdown-render-raw" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4080,7 +4080,7 @@ export def "markdown-raw create-render" [
 # GET /meta
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/meta#get-github-meta-information — API method documentation
 # operationId: meta/get
-export def "meta get" [
+export def "meta-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4115,7 +4115,7 @@ export def "meta get" [
 # GET /networks/{owner}/{repo}/events
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/activity#list-public-events-for-a-network-of-repositories — API method documentation
 # operationId: activity/list-public-events-for-repo-network
-export def "networks-events list-activity-public" [
+export def "activity-list-public-events-for-repo-network" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4157,7 +4157,7 @@ export def "networks-events list-activity-public" [
 # GET /notifications
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/activity#list-notifications-for-the-authenticated-user — API method documentation
 # operationId: activity/list-notifications-for-authenticated-user
-export def "notifications list-activity-for-authenticated-user" [
+export def "activity-list-notifications-for-authenticated-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4199,7 +4199,7 @@ export def "notifications list-activity-for-authenticated-user" [
 # PUT /notifications
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/activity#mark-notifications-as-read — API method documentation
 # operationId: activity/mark-notifications-as-read
-export def "notifications get-activity-mark-as" [
+export def "activity-mark-notifications-as-read" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4239,7 +4239,7 @@ export def "notifications get-activity-mark-as" [
 # GET /notifications/threads/{thread_id}
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/activity#get-a-thread — API method documentation
 # operationId: activity/get-thread
-export def "notifications-threads get-activity" [
+export def "activity-get-thread" [
   thread_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4276,7 +4276,7 @@ export def "notifications-threads get-activity" [
 # PATCH /notifications/threads/{thread_id}
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/activity#mark-a-thread-as-read — API method documentation
 # operationId: activity/mark-thread-as-read
-export def "notifications-threads get-activity-mark-as" [
+export def "activity-mark-thread-as-read" [
   thread_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4313,7 +4313,7 @@ export def "notifications-threads get-activity-mark-as" [
 # DELETE /notifications/threads/{thread_id}/subscription
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/activity#delete-a-thread-subscription — API method documentation
 # operationId: activity/delete-thread-subscription
-export def "notifications-threads-subscription delete-activity" [
+export def "activity-delete-thread-subscription" [
   thread_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4350,7 +4350,7 @@ export def "notifications-threads-subscription delete-activity" [
 # GET /notifications/threads/{thread_id}/subscription
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/activity#get-a-thread-subscription-for-the-authenticated-user — API method documentation
 # operationId: activity/get-thread-subscription-for-authenticated-user
-export def "notifications-threads-subscription get-activity-for-authenticated-user" [
+export def "activity-get-thread-subscription-for-authenticated-user" [
   thread_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4387,7 +4387,7 @@ export def "notifications-threads-subscription get-activity-for-authenticated-us
 # PUT /notifications/threads/{thread_id}/subscription
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/activity#set-a-thread-subscription — API method documentation
 # operationId: activity/set-thread-subscription
-export def "notifications-threads-subscription update-activity" [
+export def "activity-set-thread-subscription" [
   thread_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4428,7 +4428,7 @@ export def "notifications-threads-subscription update-activity" [
 # GET /octocat
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/meta#get-octocat — API method documentation
 # operationId: meta/get-octocat
-export def "octocat get-meta" [
+export def "meta-get-octocat" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4465,7 +4465,7 @@ export def "octocat get-meta" [
 # GET /organizations
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/orgs#list-organizations — API method documentation
 # operationId: orgs/list
-export def "organizations list-orgs" [
+export def "orgs-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4503,7 +4503,7 @@ export def "organizations list-orgs" [
 # GET /orgs/{org}
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/orgs#get-an-organization — API method documentation
 # operationId: orgs/get
-export def "orgs get" [
+export def "orgs-get" [
   org: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4540,7 +4540,7 @@ export def "orgs get" [
 # PATCH /orgs/{org}
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/orgs/#update-an-organization — API method documentation
 # operationId: orgs/update
-export def "orgs update" [
+export def "orgs-update" [
   org: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4596,7 +4596,7 @@ export def "orgs update" [
 # GET /orgs/{org}/events
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/activity#list-public-organization-events — API method documentation
 # operationId: activity/list-public-org-events
-export def "orgs-events list-activity-public" [
+export def "activity-list-public-org-events" [
   org: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4636,7 +4636,7 @@ export def "orgs-events list-activity-public" [
 # GET /orgs/{org}/hooks
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/orgs#list-organization-webhooks — API method documentation
 # operationId: orgs/list-webhooks
-export def "orgs-hooks list-webhooks" [
+export def "orgs-list-webhooks" [
   org: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4677,7 +4677,7 @@ export def "orgs-hooks list-webhooks" [
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/orgs#create-an-organization-webhook — API method documentation
 # operationId: orgs/create-webhook
 # --config shape: {content_type?: string, insecure_ssl?: any, password?: string, secret?: string, url: string, username?: string}
-export def "orgs-hooks create-webhook" [
+export def "orgs-create-webhook" [
   org: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4721,7 +4721,7 @@ export def "orgs-hooks create-webhook" [
 # DELETE /orgs/{org}/hooks/{hook_id}
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/orgs#delete-an-organization-webhook — API method documentation
 # operationId: orgs/delete-webhook
-export def "orgs-hooks delete-webhook" [
+export def "orgs-delete-webhook" [
   org: string
   hook_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -4760,7 +4760,7 @@ export def "orgs-hooks delete-webhook" [
 # GET /orgs/{org}/hooks/{hook_id}
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/orgs#get-an-organization-webhook — API method documentation
 # operationId: orgs/get-webhook
-export def "orgs-hooks get-webhook" [
+export def "orgs-get-webhook" [
   org: string
   hook_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -4800,7 +4800,7 @@ export def "orgs-hooks get-webhook" [
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/orgs#update-an-organization-webhook — API method documentation
 # operationId: orgs/update-webhook
 # --config shape: {content_type?: string, insecure_ssl?: any, secret?: string, url: string}
-export def "orgs-hooks update-webhook" [
+export def "orgs-update-webhook" [
   org: string
   hook_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -4846,7 +4846,7 @@ export def "orgs-hooks update-webhook" [
 # POST /orgs/{org}/hooks/{hook_id}/pings
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/orgs#ping-an-organization-webhook — API method documentation
 # operationId: orgs/ping-webhook
-export def "orgs-hooks-pings ping-webhook" [
+export def "orgs-ping-webhook" [
   org: string
   hook_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -4885,7 +4885,7 @@ export def "orgs-hooks-pings ping-webhook" [
 # GET /orgs/{org}/installation
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/apps#get-an-organization-installation-for-the-authenticated-app — API method documentation
 # operationId: apps/get-org-installation
-export def "orgs-installation get-apps" [
+export def "apps-get-org-installation" [
   org: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4925,7 +4925,7 @@ export def "orgs-installation get-apps" [
 # GET /orgs/{org}/installations
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/orgs#list-app-installations-for-an-organization — API method documentation
 # operationId: orgs/list-app-installations
-export def "orgs-installations list-app" [
+export def "orgs-list-app-installations" [
   org: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4968,7 +4968,7 @@ export def "orgs-installations list-app" [
 # GET /orgs/{org}/issues
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/issues#list-organization-issues-assigned-to-the-authenticated-user — API method documentation
 # operationId: issues/list-for-org
-export def "orgs-issues list" [
+export def "issues-list-for-org" [
   org: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5014,7 +5014,7 @@ export def "orgs-issues list" [
 # GET /orgs/{org}/members
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/orgs#list-organization-members — API method documentation
 # operationId: orgs/list-members
-export def "orgs-members list" [
+export def "orgs-list-members" [
   org: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5056,7 +5056,7 @@ export def "orgs-members list" [
 # DELETE /orgs/{org}/members/{username}
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/orgs#remove-an-organization-member — API method documentation
 # operationId: orgs/remove-member
-export def "orgs-members delete" [
+export def "orgs-remove-member" [
   org: string
   username: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5095,7 +5095,7 @@ export def "orgs-members delete" [
 # GET /orgs/{org}/members/{username}
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/orgs#check-organization-membership-for-a-user — API method documentation
 # operationId: orgs/check-membership-for-user
-export def "orgs-members check-membership-for-user" [
+export def "orgs-check-membership-for-user" [
   org: string
   username: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5134,7 +5134,7 @@ export def "orgs-members check-membership-for-user" [
 # DELETE /orgs/{org}/memberships/{username}
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/orgs#remove-organization-membership-for-a-user — API method documentation
 # operationId: orgs/remove-membership-for-user
-export def "orgs-memberships delete-for-user" [
+export def "orgs-remove-membership-for-user" [
   org: string
   username: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5173,7 +5173,7 @@ export def "orgs-memberships delete-for-user" [
 # GET /orgs/{org}/memberships/{username}
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/orgs#get-organization-membership-for-a-user — API method documentation
 # operationId: orgs/get-membership-for-user
-export def "orgs-memberships get-for-user" [
+export def "orgs-get-membership-for-user" [
   org: string
   username: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5212,7 +5212,7 @@ export def "orgs-memberships get-for-user" [
 # PUT /orgs/{org}/memberships/{username}
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/orgs#set-organization-membership-for-a-user — API method documentation
 # operationId: orgs/set-membership-for-user
-export def "orgs-memberships update-for-user" [
+export def "orgs-set-membership-for-user" [
   org: string
   username: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5255,7 +5255,7 @@ export def "orgs-memberships update-for-user" [
 # GET /orgs/{org}/outside_collaborators
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/orgs#list-outside-collaborators-for-an-organization — API method documentation
 # operationId: orgs/list-outside-collaborators
-export def "orgs-outside-collaborators list" [
+export def "orgs-list-outside-collaborators" [
   org: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5296,7 +5296,7 @@ export def "orgs-outside-collaborators list" [
 # DELETE /orgs/{org}/outside_collaborators/{username}
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/orgs#remove-outside-collaborator-from-an-organization — API method documentation
 # operationId: orgs/remove-outside-collaborator
-export def "orgs-outside-collaborators delete" [
+export def "orgs-remove-outside-collaborator" [
   org: string
   username: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5335,7 +5335,7 @@ export def "orgs-outside-collaborators delete" [
 # PUT /orgs/{org}/outside_collaborators/{username}
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/orgs#convert-an-organization-member-to-outside-collaborator — API method documentation
 # operationId: orgs/convert-member-to-outside-collaborator
-export def "orgs-outside-collaborators update-convert-member" [
+export def "orgs-convert-member-to-outside-collaborator" [
   org: string
   username: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5374,7 +5374,7 @@ export def "orgs-outside-collaborators update-convert-member" [
 # GET /orgs/{org}/pre-receive-hooks
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/enterprise-admin#list-pre-receive-hooks-for-an-organization — API method documentation
 # operationId: enterprise-admin/list-pre-receive-hooks-for-org
-export def "orgs-pre-receive-hooks list-enterprise-admin" [
+export def "enterprise-admin-list-pre-receive-hooks-for-org" [
   org: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5416,7 +5416,7 @@ export def "orgs-pre-receive-hooks list-enterprise-admin" [
 # DELETE /orgs/{org}/pre-receive-hooks/{pre_receive_hook_id}
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/enterprise-admin#remove-pre-receive-hook-enforcement-for-an-organization — API method documentation
 # operationId: enterprise-admin/remove-pre-receive-hook-enforcement-for-org
-export def "orgs-pre-receive-hooks delete-enterprise-admin-enforcement" [
+export def "enterprise-admin-remove-pre-receive-hook-enforcement-for-org" [
   org: string
   pre_receive_hook_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -5455,7 +5455,7 @@ export def "orgs-pre-receive-hooks delete-enterprise-admin-enforcement" [
 # GET /orgs/{org}/pre-receive-hooks/{pre_receive_hook_id}
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/enterprise-admin#get-a-pre-receive-hook-for-an-organization — API method documentation
 # operationId: enterprise-admin/get-pre-receive-hook-for-org
-export def "orgs-pre-receive-hooks get-enterprise-admin" [
+export def "enterprise-admin-get-pre-receive-hook-for-org" [
   org: string
   pre_receive_hook_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -5494,7 +5494,7 @@ export def "orgs-pre-receive-hooks get-enterprise-admin" [
 # PATCH /orgs/{org}/pre-receive-hooks/{pre_receive_hook_id}
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/enterprise-admin#update-pre-receive-hook-enforcement-for-an-organization — API method documentation
 # operationId: enterprise-admin/update-pre-receive-hook-enforcement-for-org
-export def "orgs-pre-receive-hooks update-enterprise-admin-enforcement" [
+export def "enterprise-admin-update-pre-receive-hook-enforcement-for-org" [
   org: string
   pre_receive_hook_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -5538,7 +5538,7 @@ export def "orgs-pre-receive-hooks update-enterprise-admin-enforcement" [
 # GET /orgs/{org}/projects
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/projects#list-organization-projects — API method documentation
 # operationId: projects/list-for-org
-export def "orgs-projects list" [
+export def "projects-list-for-org" [
   org: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5579,7 +5579,7 @@ export def "orgs-projects list" [
 # POST /orgs/{org}/projects
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/projects#create-an-organization-project — API method documentation
 # operationId: projects/create-for-org
-export def "orgs-projects create" [
+export def "projects-create-for-org" [
   org: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5621,7 +5621,7 @@ export def "orgs-projects create" [
 # GET /orgs/{org}/public_members
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/orgs#list-public-organization-members — API method documentation
 # operationId: orgs/list-public-members
-export def "orgs-public-members list" [
+export def "orgs-list-public-members" [
   org: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5661,7 +5661,7 @@ export def "orgs-public-members list" [
 # DELETE /orgs/{org}/public_members/{username}
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/orgs#remove-public-organization-membership-for-the-authenticated-user — API method documentation
 # operationId: orgs/remove-public-membership-for-authenticated-user
-export def "orgs-public-members delete-membership-for-authenticated-user" [
+export def "orgs-remove-public-membership-for-authenticated-user" [
   org: string
   username: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5700,7 +5700,7 @@ export def "orgs-public-members delete-membership-for-authenticated-user" [
 # GET /orgs/{org}/public_members/{username}
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/orgs#check-public-organization-membership-for-a-user — API method documentation
 # operationId: orgs/check-public-membership-for-user
-export def "orgs-public-members check-membership-for-user" [
+export def "orgs-check-public-membership-for-user" [
   org: string
   username: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5739,7 +5739,7 @@ export def "orgs-public-members check-membership-for-user" [
 # PUT /orgs/{org}/public_members/{username}
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/orgs#set-public-organization-membership-for-the-authenticated-user — API method documentation
 # operationId: orgs/set-public-membership-for-authenticated-user
-export def "orgs-public-members update-membership-for-authenticated-user" [
+export def "orgs-set-public-membership-for-authenticated-user" [
   org: string
   username: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5778,7 +5778,7 @@ export def "orgs-public-members update-membership-for-authenticated-user" [
 # GET /orgs/{org}/repos
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/repos#list-organization-repositories — API method documentation
 # operationId: repos/list-for-org
-export def "orgs-repos list" [
+export def "repos-list-for-org" [
   org: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5821,7 +5821,7 @@ export def "orgs-repos list" [
 # POST /orgs/{org}/repos
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/repos#create-an-organization-repository — API method documentation
 # operationId: repos/create-in-org
-export def "orgs-repos create" [
+export def "repos-create-in-org" [
   org: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5878,7 +5878,7 @@ export def "orgs-repos create" [
 # GET /orgs/{org}/teams
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/teams#list-teams — API method documentation
 # operationId: teams/list
-export def "orgs-teams list" [
+export def "teams-list" [
   org: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5918,7 +5918,7 @@ export def "orgs-teams list" [
 # POST /orgs/{org}/teams
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/teams#create-a-team — API method documentation
 # operationId: teams/create
-export def "orgs-teams create" [
+export def "teams-create" [
   org: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5965,7 +5965,7 @@ export def "orgs-teams create" [
 # GET /orgs/{org}/teams/{team_slug}
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/teams#get-a-team-by-name — API method documentation
 # operationId: teams/get-by-name
-export def "orgs-teams get-by-name" [
+export def "teams-get-by-name" [
   org: string
   team_slug: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6004,7 +6004,7 @@ export def "orgs-teams get-by-name" [
 # DELETE /projects/columns/cards/{card_id}
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/projects#delete-a-project-card — API method documentation
 # operationId: projects/delete-card
-export def "projects-columns-cards delete" [
+export def "projects-delete-card" [
   card_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6041,7 +6041,7 @@ export def "projects-columns-cards delete" [
 # GET /projects/columns/cards/{card_id}
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/projects#get-a-project-card — API method documentation
 # operationId: projects/get-card
-export def "projects-columns-cards get" [
+export def "projects-get-card" [
   card_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6078,7 +6078,7 @@ export def "projects-columns-cards get" [
 # PATCH /projects/columns/cards/{card_id}
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/projects#update-a-project-card — API method documentation
 # operationId: projects/update-card
-export def "projects-columns-cards update" [
+export def "projects-update-card" [
   card_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6120,7 +6120,7 @@ export def "projects-columns-cards update" [
 # POST /projects/columns/cards/{card_id}/moves
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/projects#move-a-project-card — API method documentation
 # operationId: projects/move-card
-export def "projects-columns-cards-moves move" [
+export def "projects-move-card" [
   card_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6162,7 +6162,7 @@ export def "projects-columns-cards-moves move" [
 # DELETE /projects/columns/{column_id}
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/projects#delete-a-project-column — API method documentation
 # operationId: projects/delete-column
-export def "projects-columns delete" [
+export def "projects-delete-column" [
   column_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6199,7 +6199,7 @@ export def "projects-columns delete" [
 # GET /projects/columns/{column_id}
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/projects#get-a-project-column — API method documentation
 # operationId: projects/get-column
-export def "projects-columns get" [
+export def "projects-get-column" [
   column_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6236,7 +6236,7 @@ export def "projects-columns get" [
 # PATCH /projects/columns/{column_id}
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/projects#update-a-project-column — API method documentation
 # operationId: projects/update-column
-export def "projects-columns update" [
+export def "projects-update-column" [
   column_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6277,7 +6277,7 @@ export def "projects-columns update" [
 # GET /projects/columns/{column_id}/cards
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/projects#list-project-cards — API method documentation
 # operationId: projects/list-cards
-export def "projects-columns-cards list" [
+export def "projects-list-cards" [
   column_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6318,7 +6318,7 @@ export def "projects-columns-cards list" [
 # POST /projects/columns/{column_id}/cards
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/projects#create-a-project-card — API method documentation
 # operationId: projects/create-card
-export def "projects-columns-cards create" [
+export def "projects-create-card" [
   column_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6361,7 +6361,7 @@ export def "projects-columns-cards create" [
 # POST /projects/columns/{column_id}/moves
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/projects#move-a-project-column — API method documentation
 # operationId: projects/move-column
-export def "projects-columns-moves move" [
+export def "projects-move-column" [
   column_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6402,7 +6402,7 @@ export def "projects-columns-moves move" [
 # DELETE /projects/{project_id}
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/projects#delete-a-project — API method documentation
 # operationId: projects/delete
-export def "projects delete" [
+export def "projects-delete" [
   project_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6439,7 +6439,7 @@ export def "projects delete" [
 # GET /projects/{project_id}
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/projects#get-a-project — API method documentation
 # operationId: projects/get
-export def "projects get" [
+export def "projects-get" [
   project_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6476,7 +6476,7 @@ export def "projects get" [
 # PATCH /projects/{project_id}
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/projects#update-a-project — API method documentation
 # operationId: projects/update
-export def "projects update" [
+export def "projects-update" [
   project_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6521,7 +6521,7 @@ export def "projects update" [
 # GET /projects/{project_id}/collaborators
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/projects#list-project-collaborators — API method documentation
 # operationId: projects/list-collaborators
-export def "projects-collaborators list" [
+export def "projects-list-collaborators" [
   project_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6562,7 +6562,7 @@ export def "projects-collaborators list" [
 # DELETE /projects/{project_id}/collaborators/{username}
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/projects#remove-project-collaborator — API method documentation
 # operationId: projects/remove-collaborator
-export def "projects-collaborators delete" [
+export def "projects-remove-collaborator" [
   project_id: int
   username: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6601,7 +6601,7 @@ export def "projects-collaborators delete" [
 # PUT /projects/{project_id}/collaborators/{username}
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/projects#add-project-collaborator — API method documentation
 # operationId: projects/add-collaborator
-export def "projects-collaborators create" [
+export def "projects-add-collaborator" [
   project_id: int
   username: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6644,7 +6644,7 @@ export def "projects-collaborators create" [
 # GET /projects/{project_id}/collaborators/{username}/permission
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/projects#get-project-permission-for-a-user — API method documentation
 # operationId: projects/get-permission-for-user
-export def "projects-collaborators-permission get-for-user" [
+export def "projects-get-permission-for-user" [
   project_id: int
   username: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6683,7 +6683,7 @@ export def "projects-collaborators-permission get-for-user" [
 # GET /projects/{project_id}/columns
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/projects#list-project-columns — API method documentation
 # operationId: projects/list-columns
-export def "projects-columns list" [
+export def "projects-list-columns" [
   project_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6723,7 +6723,7 @@ export def "projects-columns list" [
 # POST /projects/{project_id}/columns
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/projects#create-a-project-column — API method documentation
 # operationId: projects/create-column
-export def "projects-columns create" [
+export def "projects-create-column" [
   project_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6764,7 +6764,7 @@ export def "projects-columns create" [
 # GET /rate_limit
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/rate-limit#get-rate-limit-status-for-the-authenticated-user — API method documentation
 # operationId: rate-limit/get
-export def "rate-limit get" [
+export def "rate-limit-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6799,7 +6799,7 @@ export def "rate-limit get" [
 # DELETE /reactions/{reaction_id}
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/reactions#delete-a-reaction-legacy — API method documentation
 # operationId: reactions/delete
-export def "reactions delete" [
+export def "reactions-delete" [
   reaction_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6839,7 +6839,7 @@ export def "reactions delete" [
 # DELETE /repos/{owner}/{repo}
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/repos#delete-a-repository — API method documentation
 # operationId: repos/delete
-export def "repos delete" [
+export def "repos-delete" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6878,7 +6878,7 @@ export def "repos delete" [
 # GET /repos/{owner}/{repo}
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/repos#get-a-repository — API method documentation
 # operationId: repos/get
-export def "repos get" [
+export def "repos-get" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6917,7 +6917,7 @@ export def "repos get" [
 # PATCH /repos/{owner}/{repo}
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/repos/#update-a-repository — API method documentation
 # operationId: repos/update
-export def "repos update" [
+export def "repos-update" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6975,7 +6975,7 @@ export def "repos update" [
 # GET /repos/{owner}/{repo}/assignees
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/issues#list-assignees — API method documentation
 # operationId: issues/list-assignees
-export def "repos-assignees list-issues" [
+export def "issues-list-assignees" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7017,7 +7017,7 @@ export def "repos-assignees list-issues" [
 # GET /repos/{owner}/{repo}/assignees/{assignee}
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/issues#check-if-a-user-can-be-assigned — API method documentation
 # operationId: issues/check-user-can-be-assigned
-export def "repos-assignees check-issues-user-can-be-assigned" [
+export def "issues-check-user-can-be-assigned" [
   owner: string
   repo: string
   assignee: string
@@ -7058,7 +7058,7 @@ export def "repos-assignees check-issues-user-can-be-assigned" [
 # GET /repos/{owner}/{repo}/branches
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/repos#list-branches — API method documentation
 # operationId: repos/list-branches
-export def "repos-branches list" [
+export def "repos-list-branches" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7101,7 +7101,7 @@ export def "repos-branches list" [
 # GET /repos/{owner}/{repo}/branches/{branch}
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/repos#get-a-branch — API method documentation
 # operationId: repos/get-branch
-export def "repos-branches get" [
+export def "repos-get-branch" [
   owner: string
   repo: string
   branch: string
@@ -7142,7 +7142,7 @@ export def "repos-branches get" [
 # DELETE /repos/{owner}/{repo}/branches/{branch}/protection
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/repos#delete-branch-protection — API method documentation
 # operationId: repos/delete-branch-protection
-export def "repos-branches-protection delete" [
+export def "repos-delete-branch-protection" [
   owner: string
   repo: string
   branch: string
@@ -7183,7 +7183,7 @@ export def "repos-branches-protection delete" [
 # GET /repos/{owner}/{repo}/branches/{branch}/protection
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/repos#get-branch-protection — API method documentation
 # operationId: repos/get-branch-protection
-export def "repos-branches-protection get" [
+export def "repos-get-branch-protection" [
   owner: string
   repo: string
   branch: string
@@ -7227,7 +7227,7 @@ export def "repos-branches-protection get" [
 # --required_pull_request_reviews shape: {dismiss_stale_reviews?: bool, dismissal_restrictions?: record, require_code_owner_reviews?: bool, required_approving_review_count?: int}
 # --required_status_checks shape: {contexts: list<string>, strict: bool}
 # --restrictions shape: {apps?: list<string>, teams: list<string>, users: list<string>}
-export def "repos-branches-protection update" [
+export def "repos-update-branch-protection" [
   owner: string
   repo: string
   branch: string
@@ -7279,7 +7279,7 @@ export def "repos-branches-protection update" [
 # DELETE /repos/{owner}/{repo}/branches/{branch}/protection/enforce_admins
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/repos#delete-admin-branch-protection — API method documentation
 # operationId: repos/delete-admin-branch-protection
-export def "repos-branches-protection-enforce-admins delete" [
+export def "repos-delete-admin-branch-protection" [
   owner: string
   repo: string
   branch: string
@@ -7320,7 +7320,7 @@ export def "repos-branches-protection-enforce-admins delete" [
 # GET /repos/{owner}/{repo}/branches/{branch}/protection/enforce_admins
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/repos#get-admin-branch-protection — API method documentation
 # operationId: repos/get-admin-branch-protection
-export def "repos-branches-protection-enforce-admins get" [
+export def "repos-get-admin-branch-protection" [
   owner: string
   repo: string
   branch: string
@@ -7361,7 +7361,7 @@ export def "repos-branches-protection-enforce-admins get" [
 # POST /repos/{owner}/{repo}/branches/{branch}/protection/enforce_admins
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/repos#set-admin-branch-protection — API method documentation
 # operationId: repos/set-admin-branch-protection
-export def "repos-branches-protection-enforce-admins update" [
+export def "repos-set-admin-branch-protection" [
   owner: string
   repo: string
   branch: string
@@ -7402,7 +7402,7 @@ export def "repos-branches-protection-enforce-admins update" [
 # DELETE /repos/{owner}/{repo}/branches/{branch}/protection/required_pull_request_reviews
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/repos#delete-pull-request-review-protection — API method documentation
 # operationId: repos/delete-pull-request-review-protection
-export def "repos-branches-protection-required-pull-request-reviews delete" [
+export def "repos-delete-pull-request-review-protection" [
   owner: string
   repo: string
   branch: string
@@ -7443,7 +7443,7 @@ export def "repos-branches-protection-required-pull-request-reviews delete" [
 # GET /repos/{owner}/{repo}/branches/{branch}/protection/required_pull_request_reviews
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/repos#get-pull-request-review-protection — API method documentation
 # operationId: repos/get-pull-request-review-protection
-export def "repos-branches-protection-required-pull-request-reviews get" [
+export def "repos-get-pull-request-review-protection" [
   owner: string
   repo: string
   branch: string
@@ -7485,7 +7485,7 @@ export def "repos-branches-protection-required-pull-request-reviews get" [
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/repos#update-pull-request-review-protection — API method documentation
 # operationId: repos/update-pull-request-review-protection
 # --dismissal_restrictions shape: {teams?: list<string>, users?: list<string>}
-export def "repos-branches-protection-required-pull-request-reviews update" [
+export def "repos-update-pull-request-review-protection" [
   owner: string
   repo: string
   branch: string
@@ -7533,7 +7533,7 @@ export def "repos-branches-protection-required-pull-request-reviews update" [
 # DELETE /repos/{owner}/{repo}/branches/{branch}/protection/required_signatures
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/repos#delete-commit-signature-protection — API method documentation
 # operationId: repos/delete-commit-signature-protection
-export def "repos-branches-protection-required-signatures delete-commit" [
+export def "repos-delete-commit-signature-protection" [
   owner: string
   repo: string
   branch: string
@@ -7574,7 +7574,7 @@ export def "repos-branches-protection-required-signatures delete-commit" [
 # GET /repos/{owner}/{repo}/branches/{branch}/protection/required_signatures
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/repos#get-commit-signature-protection — API method documentation
 # operationId: repos/get-commit-signature-protection
-export def "repos-branches-protection-required-signatures get-commit" [
+export def "repos-get-commit-signature-protection" [
   owner: string
   repo: string
   branch: string
@@ -7615,7 +7615,7 @@ export def "repos-branches-protection-required-signatures get-commit" [
 # POST /repos/{owner}/{repo}/branches/{branch}/protection/required_signatures
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/repos#create-commit-signature-protection — API method documentation
 # operationId: repos/create-commit-signature-protection
-export def "repos-branches-protection-required-signatures create-commit" [
+export def "repos-create-commit-signature-protection" [
   owner: string
   repo: string
   branch: string
@@ -7656,7 +7656,7 @@ export def "repos-branches-protection-required-signatures create-commit" [
 # DELETE /repos/{owner}/{repo}/branches/{branch}/protection/required_status_checks
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/repos#remove-status-check-protection — API method documentation
 # operationId: repos/remove-status-check-protection
-export def "repos-branches-protection-required-status-checks delete" [
+export def "repos-remove-status-check-protection" [
   owner: string
   repo: string
   branch: string
@@ -7697,7 +7697,7 @@ export def "repos-branches-protection-required-status-checks delete" [
 # GET /repos/{owner}/{repo}/branches/{branch}/protection/required_status_checks
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/repos#get-status-checks-protection — API method documentation
 # operationId: repos/get-status-checks-protection
-export def "repos-branches-protection-required-status-checks get" [
+export def "repos-get-status-checks-protection" [
   owner: string
   repo: string
   branch: string
@@ -7738,7 +7738,7 @@ export def "repos-branches-protection-required-status-checks get" [
 # PATCH /repos/{owner}/{repo}/branches/{branch}/protection/required_status_checks
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/repos#update-status-check-potection — API method documentation
 # operationId: repos/update-status-check-protection
-export def "repos-branches-protection-required-status-checks update" [
+export def "repos-update-status-check-protection" [
   owner: string
   repo: string
   branch: string
@@ -7784,7 +7784,7 @@ export def "repos-branches-protection-required-status-checks update" [
 # DELETE /repos/{owner}/{repo}/branches/{branch}/protection/required_status_checks/contexts
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/repos#remove-status-check-contexts — API method documentation
 # operationId: repos/remove-status-check-contexts
-export def "repos-branches-protection-required-status-checks-contexts delete" [
+export def "repos-remove-status-check-contexts" [
   owner: string
   repo: string
   branch: string
@@ -7829,7 +7829,7 @@ export def "repos-branches-protection-required-status-checks-contexts delete" [
 # GET /repos/{owner}/{repo}/branches/{branch}/protection/required_status_checks/contexts
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/repos#get-all-status-check-contexts — API method documentation
 # operationId: repos/get-all-status-check-contexts
-export def "repos-branches-protection-required-status-checks-contexts get-list" [
+export def "repos-get-all-status-check-contexts" [
   owner: string
   repo: string
   branch: string
@@ -7870,7 +7870,7 @@ export def "repos-branches-protection-required-status-checks-contexts get-list" 
 # POST /repos/{owner}/{repo}/branches/{branch}/protection/required_status_checks/contexts
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/repos#add-status-check-contexts — API method documentation
 # operationId: repos/add-status-check-contexts
-export def "repos-branches-protection-required-status-checks-contexts create" [
+export def "repos-add-status-check-contexts" [
   owner: string
   repo: string
   branch: string
@@ -7915,7 +7915,7 @@ export def "repos-branches-protection-required-status-checks-contexts create" [
 # PUT /repos/{owner}/{repo}/branches/{branch}/protection/required_status_checks/contexts
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/repos#set-status-check-contexts — API method documentation
 # operationId: repos/set-status-check-contexts
-export def "repos-branches-protection-required-status-checks-contexts update" [
+export def "repos-set-status-check-contexts" [
   owner: string
   repo: string
   branch: string
@@ -7960,7 +7960,7 @@ export def "repos-branches-protection-required-status-checks-contexts update" [
 # DELETE /repos/{owner}/{repo}/branches/{branch}/protection/restrictions
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/repos#delete-access-restrictions — API method documentation
 # operationId: repos/delete-access-restrictions
-export def "repos-branches-protection-restrictions delete-access" [
+export def "repos-delete-access-restrictions" [
   owner: string
   repo: string
   branch: string
@@ -8001,7 +8001,7 @@ export def "repos-branches-protection-restrictions delete-access" [
 # GET /repos/{owner}/{repo}/branches/{branch}/protection/restrictions
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/repos#get-access-restrictions — API method documentation
 # operationId: repos/get-access-restrictions
-export def "repos-branches-protection-restrictions get-access" [
+export def "repos-get-access-restrictions" [
   owner: string
   repo: string
   branch: string
@@ -8042,7 +8042,7 @@ export def "repos-branches-protection-restrictions get-access" [
 # DELETE /repos/{owner}/{repo}/branches/{branch}/protection/restrictions/apps
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/repos#remove-app-access-restrictions — API method documentation
 # operationId: repos/remove-app-access-restrictions
-export def "repos-branches-protection-restrictions-apps delete-access" [
+export def "repos-remove-app-access-restrictions" [
   owner: string
   repo: string
   branch: string
@@ -8087,7 +8087,7 @@ export def "repos-branches-protection-restrictions-apps delete-access" [
 # GET /repos/{owner}/{repo}/branches/{branch}/protection/restrictions/apps
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/repos#list-apps-with-access-to-the-protected-branch — API method documentation
 # operationId: repos/get-apps-with-access-to-protected-branch
-export def "repos-branches-protection-restrictions-apps get-with-access-to-protected" [
+export def "repos-get-apps-with-access-to-protected-branch" [
   owner: string
   repo: string
   branch: string
@@ -8128,7 +8128,7 @@ export def "repos-branches-protection-restrictions-apps get-with-access-to-prote
 # POST /repos/{owner}/{repo}/branches/{branch}/protection/restrictions/apps
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/repos#add-app-access-restrictions — API method documentation
 # operationId: repos/add-app-access-restrictions
-export def "repos-branches-protection-restrictions-apps create-access" [
+export def "repos-add-app-access-restrictions" [
   owner: string
   repo: string
   branch: string
@@ -8173,7 +8173,7 @@ export def "repos-branches-protection-restrictions-apps create-access" [
 # PUT /repos/{owner}/{repo}/branches/{branch}/protection/restrictions/apps
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/repos#set-app-access-restrictions — API method documentation
 # operationId: repos/set-app-access-restrictions
-export def "repos-branches-protection-restrictions-apps update-access" [
+export def "repos-set-app-access-restrictions" [
   owner: string
   repo: string
   branch: string
@@ -8218,7 +8218,7 @@ export def "repos-branches-protection-restrictions-apps update-access" [
 # DELETE /repos/{owner}/{repo}/branches/{branch}/protection/restrictions/teams
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/repos#remove-team-access-restrictions — API method documentation
 # operationId: repos/remove-team-access-restrictions
-export def "repos-branches-protection-restrictions-teams delete-access" [
+export def "repos-remove-team-access-restrictions" [
   owner: string
   repo: string
   branch: string
@@ -8263,7 +8263,7 @@ export def "repos-branches-protection-restrictions-teams delete-access" [
 # GET /repos/{owner}/{repo}/branches/{branch}/protection/restrictions/teams
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/repos#list-teams-with-access-to-the-protected-branch — API method documentation
 # operationId: repos/get-teams-with-access-to-protected-branch
-export def "repos-branches-protection-restrictions-teams get-with-access-to-protected" [
+export def "repos-get-teams-with-access-to-protected-branch" [
   owner: string
   repo: string
   branch: string
@@ -8304,7 +8304,7 @@ export def "repos-branches-protection-restrictions-teams get-with-access-to-prot
 # POST /repos/{owner}/{repo}/branches/{branch}/protection/restrictions/teams
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/repos#add-team-access-restrictions — API method documentation
 # operationId: repos/add-team-access-restrictions
-export def "repos-branches-protection-restrictions-teams create-access" [
+export def "repos-add-team-access-restrictions" [
   owner: string
   repo: string
   branch: string
@@ -8349,7 +8349,7 @@ export def "repos-branches-protection-restrictions-teams create-access" [
 # PUT /repos/{owner}/{repo}/branches/{branch}/protection/restrictions/teams
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/repos#set-team-access-restrictions — API method documentation
 # operationId: repos/set-team-access-restrictions
-export def "repos-branches-protection-restrictions-teams update-access" [
+export def "repos-set-team-access-restrictions" [
   owner: string
   repo: string
   branch: string
@@ -8394,7 +8394,7 @@ export def "repos-branches-protection-restrictions-teams update-access" [
 # DELETE /repos/{owner}/{repo}/branches/{branch}/protection/restrictions/users
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/repos#remove-user-access-restrictions — API method documentation
 # operationId: repos/remove-user-access-restrictions
-export def "repos-branches-protection-restrictions-users delete-access" [
+export def "repos-remove-user-access-restrictions" [
   owner: string
   repo: string
   branch: string
@@ -8439,7 +8439,7 @@ export def "repos-branches-protection-restrictions-users delete-access" [
 # GET /repos/{owner}/{repo}/branches/{branch}/protection/restrictions/users
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/repos#list-users-with-access-to-the-protected-branch — API method documentation
 # operationId: repos/get-users-with-access-to-protected-branch
-export def "repos-branches-protection-restrictions-users get-with-access-to-protected" [
+export def "repos-get-users-with-access-to-protected-branch" [
   owner: string
   repo: string
   branch: string
@@ -8480,7 +8480,7 @@ export def "repos-branches-protection-restrictions-users get-with-access-to-prot
 # POST /repos/{owner}/{repo}/branches/{branch}/protection/restrictions/users
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/repos#add-user-access-restrictions — API method documentation
 # operationId: repos/add-user-access-restrictions
-export def "repos-branches-protection-restrictions-users create-access" [
+export def "repos-add-user-access-restrictions" [
   owner: string
   repo: string
   branch: string
@@ -8525,7 +8525,7 @@ export def "repos-branches-protection-restrictions-users create-access" [
 # PUT /repos/{owner}/{repo}/branches/{branch}/protection/restrictions/users
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/repos#set-user-access-restrictions — API method documentation
 # operationId: repos/set-user-access-restrictions
-export def "repos-branches-protection-restrictions-users update-access" [
+export def "repos-set-user-access-restrictions" [
   owner: string
   repo: string
   branch: string
@@ -8572,7 +8572,7 @@ export def "repos-branches-protection-restrictions-users update-access" [
 # operationId: checks/create
 # --actions item shape: {description: string, identifier: string, label: string}
 # --output shape: {annotations?: list, images?: list, summary: string, text?: string, title: string}
-export def "repos-check-runs create" [
+export def "checks-create" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8624,7 +8624,7 @@ export def "repos-check-runs create" [
 # GET /repos/{owner}/{repo}/check-runs/{check_run_id}
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/checks#get-a-check-run — API method documentation
 # operationId: checks/get
-export def "repos-check-runs get" [
+export def "checks-get" [
   owner: string
   repo: string
   check_run_id: int
@@ -8667,7 +8667,7 @@ export def "repos-check-runs get" [
 # operationId: checks/update
 # --actions item shape: {description: string, identifier: string, label: string}
 # --output shape: {annotations?: list, images?: list, summary: string, text?: string, title?: string}
-export def "repos-check-runs update" [
+export def "checks-update" [
   owner: string
   repo: string
   check_run_id: int
@@ -8720,7 +8720,7 @@ export def "repos-check-runs update" [
 # GET /repos/{owner}/{repo}/check-runs/{check_run_id}/annotations
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/checks#list-check-run-annotations — API method documentation
 # operationId: checks/list-annotations
-export def "repos-check-runs-annotations list" [
+export def "checks-list-annotations" [
   owner: string
   repo: string
   check_run_id: int
@@ -8764,7 +8764,7 @@ export def "repos-check-runs-annotations list" [
 # POST /repos/{owner}/{repo}/check-suites
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/checks#create-a-check-suite — API method documentation
 # operationId: checks/create-suite
-export def "repos-check-suites create" [
+export def "checks-create-suite" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8808,7 +8808,7 @@ export def "repos-check-suites create" [
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/checks#update-repository-preferences-for-check-suites — API method documentation
 # operationId: checks/set-suites-preferences
 # --auto_trigger_checks item shape: {app_id: int, setting: bool}
-export def "repos-check-suites-preferences update" [
+export def "checks-set-suites-preferences" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8851,7 +8851,7 @@ export def "repos-check-suites-preferences update" [
 # GET /repos/{owner}/{repo}/check-suites/{check_suite_id}
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/checks#get-a-check-suite — API method documentation
 # operationId: checks/get-suite
-export def "repos-check-suites get" [
+export def "checks-get-suite" [
   owner: string
   repo: string
   check_suite_id: int
@@ -8892,7 +8892,7 @@ export def "repos-check-suites get" [
 # GET /repos/{owner}/{repo}/check-suites/{check_suite_id}/check-runs
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/checks#list-check-runs-in-a-check-suite — API method documentation
 # operationId: checks/list-for-suite
-export def "repos-check-suites-check-runs list" [
+export def "checks-list-for-suite" [
   owner: string
   repo: string
   check_suite_id: int
@@ -8939,7 +8939,7 @@ export def "repos-check-suites-check-runs list" [
 # POST /repos/{owner}/{repo}/check-suites/{check_suite_id}/rerequest
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/checks#rerequest-a-check-suite — API method documentation
 # operationId: checks/rerequest-suite
-export def "repos-check-suites-rerequest create" [
+export def "checks-rerequest-suite" [
   owner: string
   repo: string
   check_suite_id: int
@@ -8980,7 +8980,7 @@ export def "repos-check-suites-rerequest create" [
 # GET /repos/{owner}/{repo}/collaborators
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/repos#list-repository-collaborators — API method documentation
 # operationId: repos/list-collaborators
-export def "repos-collaborators list" [
+export def "repos-list-collaborators" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9023,7 +9023,7 @@ export def "repos-collaborators list" [
 # DELETE /repos/{owner}/{repo}/collaborators/{username}
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/repos#remove-a-repository-collaborator — API method documentation
 # operationId: repos/remove-collaborator
-export def "repos-collaborators delete" [
+export def "repos-remove-collaborator" [
   owner: string
   repo: string
   username: string
@@ -9064,7 +9064,7 @@ export def "repos-collaborators delete" [
 # GET /repos/{owner}/{repo}/collaborators/{username}
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/repos#check-if-a-user-is-a-repository-collaborator — API method documentation
 # operationId: repos/check-collaborator
-export def "repos-collaborators check" [
+export def "repos-check-collaborator" [
   owner: string
   repo: string
   username: string
@@ -9105,7 +9105,7 @@ export def "repos-collaborators check" [
 # PUT /repos/{owner}/{repo}/collaborators/{username}
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/repos#add-a-repository-collaborator — API method documentation
 # operationId: repos/add-collaborator
-export def "repos-collaborators create" [
+export def "repos-add-collaborator" [
   owner: string
   repo: string
   username: string
@@ -9151,7 +9151,7 @@ export def "repos-collaborators create" [
 # GET /repos/{owner}/{repo}/collaborators/{username}/permission
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/repos#get-repository-permissions-for-a-user — API method documentation
 # operationId: repos/get-collaborator-permission-level
-export def "repos-collaborators-permission get-level" [
+export def "repos-get-collaborator-permission-level" [
   owner: string
   repo: string
   username: string
@@ -9192,7 +9192,7 @@ export def "repos-collaborators-permission get-level" [
 # GET /repos/{owner}/{repo}/comments
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/repos#list-commit-comments-for-a-repository — API method documentation
 # operationId: repos/list-commit-comments-for-repo
-export def "repos-comments list-commit" [
+export def "repos-list-commit-comments-for-repo" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9234,7 +9234,7 @@ export def "repos-comments list-commit" [
 # DELETE /repos/{owner}/{repo}/comments/{comment_id}
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/repos#delete-a-commit-comment — API method documentation
 # operationId: repos/delete-commit-comment
-export def "repos-comments delete-commit" [
+export def "repos-delete-commit-comment" [
   owner: string
   repo: string
   comment_id: int
@@ -9275,7 +9275,7 @@ export def "repos-comments delete-commit" [
 # GET /repos/{owner}/{repo}/comments/{comment_id}
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/repos#get-a-commit-comment — API method documentation
 # operationId: repos/get-commit-comment
-export def "repos-comments get-commit" [
+export def "repos-get-commit-comment" [
   owner: string
   repo: string
   comment_id: int
@@ -9316,7 +9316,7 @@ export def "repos-comments get-commit" [
 # PATCH /repos/{owner}/{repo}/comments/{comment_id}
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/repos#update-a-commit-comment — API method documentation
 # operationId: repos/update-commit-comment
-export def "repos-comments update-commit" [
+export def "repos-update-commit-comment" [
   owner: string
   repo: string
   comment_id: int
@@ -9361,7 +9361,7 @@ export def "repos-comments update-commit" [
 # GET /repos/{owner}/{repo}/comments/{comment_id}/reactions
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/reactions#list-reactions-for-a-commit-comment — API method documentation
 # operationId: reactions/list-for-commit-comment
-export def "repos-comments-reactions list-for-commit" [
+export def "reactions-list-for-commit-comment" [
   owner: string
   repo: string
   comment_id: int
@@ -9406,7 +9406,7 @@ export def "repos-comments-reactions list-for-commit" [
 # POST /repos/{owner}/{repo}/comments/{comment_id}/reactions
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/reactions#create-reaction-for-a-commit-comment — API method documentation
 # operationId: reactions/create-for-commit-comment
-export def "repos-comments-reactions create-for-commit" [
+export def "reactions-create-for-commit-comment" [
   owner: string
   repo: string
   comment_id: int
@@ -9451,7 +9451,7 @@ export def "repos-comments-reactions create-for-commit" [
 # GET /repos/{owner}/{repo}/commits
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/repos#list-commits — API method documentation
 # operationId: repos/list-commits
-export def "repos-commits list" [
+export def "repos-list-commits" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9498,7 +9498,7 @@ export def "repos-commits list" [
 # GET /repos/{owner}/{repo}/commits/{commit_sha}/branches-where-head
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/repos#list-branches-for-head-commit — API method documentation
 # operationId: repos/list-branches-for-head-commit
-export def "repos-commits-branches-where-head list" [
+export def "repos-list-branches-for-head-commit" [
   owner: string
   repo: string
   commit_sha: string
@@ -9539,7 +9539,7 @@ export def "repos-commits-branches-where-head list" [
 # GET /repos/{owner}/{repo}/commits/{commit_sha}/comments
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/repos#list-commit-comments — API method documentation
 # operationId: repos/list-comments-for-commit
-export def "repos-commits-comments list" [
+export def "repos-list-comments-for-commit" [
   owner: string
   repo: string
   commit_sha: string
@@ -9583,7 +9583,7 @@ export def "repos-commits-comments list" [
 # POST /repos/{owner}/{repo}/commits/{commit_sha}/comments
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/repos#create-a-commit-comment — API method documentation
 # operationId: repos/create-commit-comment
-export def "repos-commits-comments create" [
+export def "repos-create-commit-comment" [
   owner: string
   repo: string
   commit_sha: string
@@ -9631,7 +9631,7 @@ export def "repos-commits-comments create" [
 # GET /repos/{owner}/{repo}/commits/{commit_sha}/pulls
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/repos#list-pull-requests-associated-with-a-commit — API method documentation
 # operationId: repos/list-pull-requests-associated-with-commit
-export def "repos-commits-pulls list-requests-associated" [
+export def "repos-list-pull-requests-associated-with-commit" [
   owner: string
   repo: string
   commit_sha: string
@@ -9675,7 +9675,7 @@ export def "repos-commits-pulls list-requests-associated" [
 # GET /repos/{owner}/{repo}/commits/{ref}
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/repos#get-a-commit — API method documentation
 # operationId: repos/get-commit
-export def "repos-commits get" [
+export def "repos-get-commit" [
   owner: string
   repo: string
   ref: string
@@ -9719,7 +9719,7 @@ export def "repos-commits get" [
 # GET /repos/{owner}/{repo}/commits/{ref}/check-runs
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/checks#list-check-runs-for-a-git-reference — API method documentation
 # operationId: checks/list-for-ref
-export def "repos-commits-check-runs list" [
+export def "checks-list-for-ref" [
   owner: string
   repo: string
   ref: string
@@ -9767,7 +9767,7 @@ export def "repos-commits-check-runs list" [
 # GET /repos/{owner}/{repo}/commits/{ref}/check-suites
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/checks#list-check-suites-for-a-git-reference — API method documentation
 # operationId: checks/list-suites-for-ref
-export def "repos-commits-check-suites list" [
+export def "checks-list-suites-for-ref" [
   owner: string
   repo: string
   ref: string
@@ -9813,7 +9813,7 @@ export def "repos-commits-check-suites list" [
 # GET /repos/{owner}/{repo}/commits/{ref}/status
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/repos#get-the-combined-status-for-a-specific-reference — API method documentation
 # operationId: repos/get-combined-status-for-ref
-export def "repos-commits-status get-combined" [
+export def "repos-get-combined-status-for-ref" [
   owner: string
   repo: string
   ref: string
@@ -9857,7 +9857,7 @@ export def "repos-commits-status get-combined" [
 # GET /repos/{owner}/{repo}/commits/{ref}/statuses
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/repos#list-commit-statuses-for-a-reference — API method documentation
 # operationId: repos/list-commit-statuses-for-ref
-export def "repos-commits-statuses list" [
+export def "repos-list-commit-statuses-for-ref" [
   owner: string
   repo: string
   ref: string
@@ -9901,7 +9901,7 @@ export def "repos-commits-statuses list" [
 # GET /repos/{owner}/{repo}/compare/{basehead}
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/repos#compare-two-commits — API method documentation
 # operationId: repos/compare-commits
-export def "repos-compare get-commits" [
+export def "repos-compare-commits" [
   owner: string
   repo: string
   basehead: string
@@ -9942,7 +9942,7 @@ export def "repos-compare get-commits" [
 # POST /repos/{owner}/{repo}/content_references/{content_reference_id}/attachments
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/apps#create-a-content-attachment — API method documentation
 # operationId: apps/create-content-attachment
-export def "repos-content-references-attachments create-apps" [
+export def "apps-create-content-attachment" [
   owner: string
   repo: string
   content_reference_id: int
@@ -9990,7 +9990,7 @@ export def "repos-content-references-attachments create-apps" [
 # operationId: repos/delete-file
 # --author shape: {email?: string, name?: string}
 # --committer shape: {email?: string, name?: string}
-export def "repos-contents delete-file" [
+export def "repos-delete-file" [
   owner: string
   repo: string
   path: string
@@ -10039,7 +10039,7 @@ export def "repos-contents delete-file" [
 # GET /repos/{owner}/{repo}/contents/{path}
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/repos#get-repository-content — API method documentation
 # operationId: repos/get-content
-export def "repos-contents get" [
+export def "repos-get-content" [
   owner: string
   repo: string
   path: string
@@ -10085,7 +10085,7 @@ export def "repos-contents get" [
 # operationId: repos/create-or-update-file-contents
 # --author shape: {date?: string, email: string, name: string}
 # --committer shape: {date?: string, email: string, name: string}
-export def "repos-contents create-or-update-file" [
+export def "repos-create-or-update-file-contents" [
   owner: string
   repo: string
   path: string
@@ -10135,7 +10135,7 @@ export def "repos-contents create-or-update-file" [
 # GET /repos/{owner}/{repo}/contributors
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/repos#list-repository-contributors — API method documentation
 # operationId: repos/list-contributors
-export def "repos-contributors list" [
+export def "repos-list-contributors" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -10178,7 +10178,7 @@ export def "repos-contributors list" [
 # GET /repos/{owner}/{repo}/deployments
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/repos#list-deployments — API method documentation
 # operationId: repos/list-deployments
-export def "repos-deployments list" [
+export def "repos-list-deployments" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -10224,7 +10224,7 @@ export def "repos-deployments list" [
 # POST /repos/{owner}/{repo}/deployments
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/repos#create-a-deployment — API method documentation
 # operationId: repos/create-deployment
-export def "repos-deployments create" [
+export def "repos-create-deployment" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -10275,7 +10275,7 @@ export def "repos-deployments create" [
 # GET /repos/{owner}/{repo}/deployments/{deployment_id}
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/repos#get-a-deployment — API method documentation
 # operationId: repos/get-deployment
-export def "repos-deployments get" [
+export def "repos-get-deployment" [
   owner: string
   repo: string
   deployment_id: int
@@ -10316,7 +10316,7 @@ export def "repos-deployments get" [
 # GET /repos/{owner}/{repo}/deployments/{deployment_id}/statuses
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/repos#list-deployment-statuses — API method documentation
 # operationId: repos/list-deployment-statuses
-export def "repos-deployments-statuses list" [
+export def "repos-list-deployment-statuses" [
   owner: string
   repo: string
   deployment_id: int
@@ -10360,7 +10360,7 @@ export def "repos-deployments-statuses list" [
 # POST /repos/{owner}/{repo}/deployments/{deployment_id}/statuses
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/repos#create-a-deployment-status — API method documentation
 # operationId: repos/create-deployment-status
-export def "repos-deployments-statuses create-status" [
+export def "repos-create-deployment-status" [
   owner: string
   repo: string
   deployment_id: int
@@ -10411,7 +10411,7 @@ export def "repos-deployments-statuses create-status" [
 # GET /repos/{owner}/{repo}/deployments/{deployment_id}/statuses/{status_id}
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/repos#get-a-deployment-status — API method documentation
 # operationId: repos/get-deployment-status
-export def "repos-deployments-statuses get" [
+export def "repos-get-deployment-status" [
   owner: string
   repo: string
   deployment_id: int
@@ -10454,7 +10454,7 @@ export def "repos-deployments-statuses get" [
 # GET /repos/{owner}/{repo}/events
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/activity#list-repository-events — API method documentation
 # operationId: activity/list-repo-events
-export def "repos-events list-activity" [
+export def "activity-list-repo-events" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -10496,7 +10496,7 @@ export def "repos-events list-activity" [
 # GET /repos/{owner}/{repo}/forks
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/repos#list-forks — API method documentation
 # operationId: repos/list-forks
-export def "repos-forks list" [
+export def "repos-list-forks" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -10539,7 +10539,7 @@ export def "repos-forks list" [
 # POST /repos/{owner}/{repo}/forks
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/repos#create-a-fork — API method documentation
 # operationId: repos/create-fork
-export def "repos-forks create" [
+export def "repos-create-fork" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -10582,7 +10582,7 @@ export def "repos-forks create" [
 # POST /repos/{owner}/{repo}/git/blobs
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/git#create-a-blob — API method documentation
 # operationId: git/create-blob
-export def "repos-git-blobs create" [
+export def "git-create-blob" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -10626,7 +10626,7 @@ export def "repos-git-blobs create" [
 # GET /repos/{owner}/{repo}/git/blobs/{file_sha}
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/git#get-a-blob — API method documentation
 # operationId: git/get-blob
-export def "repos-git-blobs get" [
+export def "git-get-blob" [
   owner: string
   repo: string
   file_sha: string
@@ -10669,7 +10669,7 @@ export def "repos-git-blobs get" [
 # operationId: git/create-commit
 # --author shape: {date?: string, email: string, name: string}
 # --committer shape: {date?: string, email?: string, name?: string}
-export def "repos-git-commits create" [
+export def "git-create-commit" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -10717,7 +10717,7 @@ export def "repos-git-commits create" [
 # GET /repos/{owner}/{repo}/git/commits/{commit_sha}
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/git#get-a-commit — API method documentation
 # operationId: git/get-commit
-export def "repos-git-commits get" [
+export def "git-get-commit" [
   owner: string
   repo: string
   commit_sha: string
@@ -10758,7 +10758,7 @@ export def "repos-git-commits get" [
 # GET /repos/{owner}/{repo}/git/matching-refs/{ref}
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/git#list-matching-references — API method documentation
 # operationId: git/list-matching-refs
-export def "repos-git-matching-refs list" [
+export def "git-list-matching-refs" [
   owner: string
   repo: string
   ref: string
@@ -10802,7 +10802,7 @@ export def "repos-git-matching-refs list" [
 # GET /repos/{owner}/{repo}/git/ref/{ref}
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/git#get-a-reference — API method documentation
 # operationId: git/get-ref
-export def "repos-git-ref get" [
+export def "git-get-ref" [
   owner: string
   repo: string
   ref: string
@@ -10843,7 +10843,7 @@ export def "repos-git-ref get" [
 # POST /repos/{owner}/{repo}/git/refs
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/git#create-a-reference — API method documentation
 # operationId: git/create-ref
-export def "repos-git-refs create" [
+export def "git-create-ref" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -10888,7 +10888,7 @@ export def "repos-git-refs create" [
 # DELETE /repos/{owner}/{repo}/git/refs/{ref}
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/git#delete-a-reference — API method documentation
 # operationId: git/delete-ref
-export def "repos-git-refs delete" [
+export def "git-delete-ref" [
   owner: string
   repo: string
   ref: string
@@ -10929,7 +10929,7 @@ export def "repos-git-refs delete" [
 # PATCH /repos/{owner}/{repo}/git/refs/{ref}
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/git#update-a-reference — API method documentation
 # operationId: git/update-ref
-export def "repos-git-refs update" [
+export def "git-update-ref" [
   owner: string
   repo: string
   ref: string
@@ -10976,7 +10976,7 @@ export def "repos-git-refs update" [
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/git#create-a-tag-object — API method documentation
 # operationId: git/create-tag
 # --tagger shape: {date?: string, email: string, name: string}
-export def "repos-git-tags create" [
+export def "git-create-tag" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -11023,7 +11023,7 @@ export def "repos-git-tags create" [
 # GET /repos/{owner}/{repo}/git/tags/{tag_sha}
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/git#get-a-tag — API method documentation
 # operationId: git/get-tag
-export def "repos-git-tags get" [
+export def "git-get-tag" [
   owner: string
   repo: string
   tag_sha: string
@@ -11065,7 +11065,7 @@ export def "repos-git-tags get" [
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/git#create-a-tree — API method documentation
 # operationId: git/create-tree
 # --tree item shape: {content?: string, mode?: "100644"|"100755"|"040000"|"160000"|"120000", path?: string, sha?: string, type?: "blob"|"tree"|"commit"}
-export def "repos-git-trees create" [
+export def "git-create-tree" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -11109,7 +11109,7 @@ export def "repos-git-trees create" [
 # GET /repos/{owner}/{repo}/git/trees/{tree_sha}
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/git#get-a-tree — API method documentation
 # operationId: git/get-tree
-export def "repos-git-trees get" [
+export def "git-get-tree" [
   owner: string
   repo: string
   tree_sha: string
@@ -11152,7 +11152,7 @@ export def "repos-git-trees get" [
 # GET /repos/{owner}/{repo}/hooks
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/repos#list-repository-webhooks — API method documentation
 # operationId: repos/list-webhooks
-export def "repos-hooks list-webhooks" [
+export def "repos-list-webhooks" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -11195,7 +11195,7 @@ export def "repos-hooks list-webhooks" [
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/repos#create-a-repository-webhook — API method documentation
 # operationId: repos/create-webhook
 # --config shape: {content_type?: string, digest?: string, insecure_ssl?: any, secret?: string, token?: string, url?: string}
-export def "repos-hooks create-webhook" [
+export def "repos-create-webhook" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -11241,7 +11241,7 @@ export def "repos-hooks create-webhook" [
 # DELETE /repos/{owner}/{repo}/hooks/{hook_id}
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/repos#delete-a-repository-webhook — API method documentation
 # operationId: repos/delete-webhook
-export def "repos-hooks delete-webhook" [
+export def "repos-delete-webhook" [
   owner: string
   repo: string
   hook_id: int
@@ -11282,7 +11282,7 @@ export def "repos-hooks delete-webhook" [
 # GET /repos/{owner}/{repo}/hooks/{hook_id}
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/repos#get-a-repository-webhook — API method documentation
 # operationId: repos/get-webhook
-export def "repos-hooks get-webhook" [
+export def "repos-get-webhook" [
   owner: string
   repo: string
   hook_id: int
@@ -11324,7 +11324,7 @@ export def "repos-hooks get-webhook" [
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/repos#update-a-repository-webhook — API method documentation
 # operationId: repos/update-webhook
 # --config shape: {address?: string, content_type?: string, insecure_ssl?: any, room?: string, secret?: string, url: string}
-export def "repos-hooks update-webhook" [
+export def "repos-update-webhook" [
   owner: string
   repo: string
   hook_id: int
@@ -11373,7 +11373,7 @@ export def "repos-hooks update-webhook" [
 # POST /repos/{owner}/{repo}/hooks/{hook_id}/pings
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/repos#ping-a-repository-webhook — API method documentation
 # operationId: repos/ping-webhook
-export def "repos-hooks-pings ping-webhook" [
+export def "repos-ping-webhook" [
   owner: string
   repo: string
   hook_id: int
@@ -11414,7 +11414,7 @@ export def "repos-hooks-pings ping-webhook" [
 # POST /repos/{owner}/{repo}/hooks/{hook_id}/tests
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/repos#test-the-push-repository-webhook — API method documentation
 # operationId: repos/test-push-webhook
-export def "repos-hooks-tests push-webhook" [
+export def "repos-test-push-webhook" [
   owner: string
   repo: string
   hook_id: int
@@ -11455,7 +11455,7 @@ export def "repos-hooks-tests push-webhook" [
 # GET /repos/{owner}/{repo}/installation
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/apps#get-a-repository-installation-for-the-authenticated-app — API method documentation
 # operationId: apps/get-repo-installation
-export def "repos-installation get-apps" [
+export def "apps-get-repo-installation" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -11497,7 +11497,7 @@ export def "repos-installation get-apps" [
 # GET /repos/{owner}/{repo}/invitations
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/repos#list-repository-invitations — API method documentation
 # operationId: repos/list-invitations
-export def "repos-invitations list" [
+export def "repos-list-invitations" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -11539,7 +11539,7 @@ export def "repos-invitations list" [
 # DELETE /repos/{owner}/{repo}/invitations/{invitation_id}
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/repos#delete-a-repository-invitation — API method documentation
 # operationId: repos/delete-invitation
-export def "repos-invitations delete" [
+export def "repos-delete-invitation" [
   owner: string
   repo: string
   invitation_id: int
@@ -11580,7 +11580,7 @@ export def "repos-invitations delete" [
 # PATCH /repos/{owner}/{repo}/invitations/{invitation_id}
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/repos#update-a-repository-invitation — API method documentation
 # operationId: repos/update-invitation
-export def "repos-invitations update" [
+export def "repos-update-invitation" [
   owner: string
   repo: string
   invitation_id: int
@@ -11625,7 +11625,7 @@ export def "repos-invitations update" [
 # GET /repos/{owner}/{repo}/issues
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/issues#list-repository-issues — API method documentation
 # operationId: issues/list-for-repo
-export def "repos-issues list" [
+export def "issues-list-for-repo" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -11676,7 +11676,7 @@ export def "repos-issues list" [
 # POST /repos/{owner}/{repo}/issues
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/issues#create-an-issue — API method documentation
 # operationId: issues/create
-export def "repos-issues create" [
+export def "issues-create" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -11724,7 +11724,7 @@ export def "repos-issues create" [
 # GET /repos/{owner}/{repo}/issues/comments
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/issues#list-issue-comments-for-a-repository — API method documentation
 # operationId: issues/list-comments-for-repo
-export def "repos-issues-comments list" [
+export def "issues-list-comments-for-repo" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -11769,7 +11769,7 @@ export def "repos-issues-comments list" [
 # DELETE /repos/{owner}/{repo}/issues/comments/{comment_id}
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/issues#delete-an-issue-comment — API method documentation
 # operationId: issues/delete-comment
-export def "repos-issues-comments delete" [
+export def "issues-delete-comment" [
   owner: string
   repo: string
   comment_id: int
@@ -11810,7 +11810,7 @@ export def "repos-issues-comments delete" [
 # GET /repos/{owner}/{repo}/issues/comments/{comment_id}
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/issues#get-an-issue-comment — API method documentation
 # operationId: issues/get-comment
-export def "repos-issues-comments get" [
+export def "issues-get-comment" [
   owner: string
   repo: string
   comment_id: int
@@ -11851,7 +11851,7 @@ export def "repos-issues-comments get" [
 # PATCH /repos/{owner}/{repo}/issues/comments/{comment_id}
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/issues#update-an-issue-comment — API method documentation
 # operationId: issues/update-comment
-export def "repos-issues-comments update" [
+export def "issues-update-comment" [
   owner: string
   repo: string
   comment_id: int
@@ -11896,7 +11896,7 @@ export def "repos-issues-comments update" [
 # GET /repos/{owner}/{repo}/issues/comments/{comment_id}/reactions
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/reactions#list-reactions-for-an-issue-comment — API method documentation
 # operationId: reactions/list-for-issue-comment
-export def "repos-issues-comments-reactions list" [
+export def "reactions-list-for-issue-comment" [
   owner: string
   repo: string
   comment_id: int
@@ -11941,7 +11941,7 @@ export def "repos-issues-comments-reactions list" [
 # POST /repos/{owner}/{repo}/issues/comments/{comment_id}/reactions
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/reactions#create-reaction-for-an-issue-comment — API method documentation
 # operationId: reactions/create-for-issue-comment
-export def "repos-issues-comments-reactions create" [
+export def "reactions-create-for-issue-comment" [
   owner: string
   repo: string
   comment_id: int
@@ -11986,7 +11986,7 @@ export def "repos-issues-comments-reactions create" [
 # GET /repos/{owner}/{repo}/issues/events
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/issues#list-issue-events-for-a-repository — API method documentation
 # operationId: issues/list-events-for-repo
-export def "repos-issues-events list" [
+export def "issues-list-events-for-repo" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -12028,7 +12028,7 @@ export def "repos-issues-events list" [
 # GET /repos/{owner}/{repo}/issues/events/{event_id}
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/issues#get-an-issue-event — API method documentation
 # operationId: issues/get-event
-export def "repos-issues-events get" [
+export def "issues-get-event" [
   owner: string
   repo: string
   event_id: int
@@ -12069,7 +12069,7 @@ export def "repos-issues-events get" [
 # GET /repos/{owner}/{repo}/issues/{issue_number}
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/issues#get-an-issue — API method documentation
 # operationId: issues/get
-export def "repos-issues get" [
+export def "issues-get" [
   owner: string
   repo: string
   issue_number: int
@@ -12110,7 +12110,7 @@ export def "repos-issues get" [
 # PATCH /repos/{owner}/{repo}/issues/{issue_number}
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/issues/#update-an-issue — API method documentation
 # operationId: issues/update
-export def "repos-issues update" [
+export def "issues-update" [
   owner: string
   repo: string
   issue_number: int
@@ -12161,7 +12161,7 @@ export def "repos-issues update" [
 # DELETE /repos/{owner}/{repo}/issues/{issue_number}/assignees
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/issues#remove-assignees-from-an-issue — API method documentation
 # operationId: issues/remove-assignees
-export def "repos-issues-assignees delete" [
+export def "issues-remove-assignees" [
   owner: string
   repo: string
   issue_number: int
@@ -12206,7 +12206,7 @@ export def "repos-issues-assignees delete" [
 # POST /repos/{owner}/{repo}/issues/{issue_number}/assignees
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/issues#add-assignees-to-an-issue — API method documentation
 # operationId: issues/add-assignees
-export def "repos-issues-assignees create" [
+export def "issues-add-assignees" [
   owner: string
   repo: string
   issue_number: int
@@ -12251,7 +12251,7 @@ export def "repos-issues-assignees create" [
 # GET /repos/{owner}/{repo}/issues/{issue_number}/comments
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/issues#list-issue-comments — API method documentation
 # operationId: issues/list-comments
-export def "repos-issues-comments list-1" [
+export def "issues-list-comments" [
   owner: string
   repo: string
   issue_number: int
@@ -12296,7 +12296,7 @@ export def "repos-issues-comments list-1" [
 # POST /repos/{owner}/{repo}/issues/{issue_number}/comments
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/issues#create-an-issue-comment — API method documentation
 # operationId: issues/create-comment
-export def "repos-issues-comments create" [
+export def "issues-create-comment" [
   owner: string
   repo: string
   issue_number: int
@@ -12341,7 +12341,7 @@ export def "repos-issues-comments create" [
 # GET /repos/{owner}/{repo}/issues/{issue_number}/events
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/issues#list-issue-events — API method documentation
 # operationId: issues/list-events
-export def "repos-issues-events list-1" [
+export def "issues-list-events" [
   owner: string
   repo: string
   issue_number: int
@@ -12385,7 +12385,7 @@ export def "repos-issues-events list-1" [
 # DELETE /repos/{owner}/{repo}/issues/{issue_number}/labels
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/issues#remove-all-labels-from-an-issue — API method documentation
 # operationId: issues/remove-all-labels
-export def "repos-issues-labels delete-list" [
+export def "issues-remove-all-labels" [
   owner: string
   repo: string
   issue_number: int
@@ -12426,7 +12426,7 @@ export def "repos-issues-labels delete-list" [
 # GET /repos/{owner}/{repo}/issues/{issue_number}/labels
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/issues#list-labels-for-an-issue — API method documentation
 # operationId: issues/list-labels-on-issue
-export def "repos-issues-labels list" [
+export def "issues-list-labels-on-issue" [
   owner: string
   repo: string
   issue_number: int
@@ -12470,7 +12470,7 @@ export def "repos-issues-labels list" [
 # POST /repos/{owner}/{repo}/issues/{issue_number}/labels
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/issues#add-labels-to-an-issue — API method documentation
 # operationId: issues/add-labels
-export def "repos-issues-labels create" [
+export def "issues-add-labels" [
   owner: string
   repo: string
   issue_number: int
@@ -12515,7 +12515,7 @@ export def "repos-issues-labels create" [
 # PUT /repos/{owner}/{repo}/issues/{issue_number}/labels
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/issues#set-labels-for-an-issue — API method documentation
 # operationId: issues/set-labels
-export def "repos-issues-labels update" [
+export def "issues-set-labels" [
   owner: string
   repo: string
   issue_number: int
@@ -12560,7 +12560,7 @@ export def "repos-issues-labels update" [
 # DELETE /repos/{owner}/{repo}/issues/{issue_number}/labels/{name}
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/issues#remove-a-label-from-an-issue — API method documentation
 # operationId: issues/remove-label
-export def "repos-issues-labels delete" [
+export def "issues-remove-label" [
   owner: string
   repo: string
   issue_number: int
@@ -12603,7 +12603,7 @@ export def "repos-issues-labels delete" [
 # DELETE /repos/{owner}/{repo}/issues/{issue_number}/lock
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/issues#unlock-an-issue — API method documentation
 # operationId: issues/unlock
-export def "repos-issues-lock unlock" [
+export def "issues-unlock" [
   owner: string
   repo: string
   issue_number: int
@@ -12644,7 +12644,7 @@ export def "repos-issues-lock unlock" [
 # PUT /repos/{owner}/{repo}/issues/{issue_number}/lock
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/issues#lock-an-issue — API method documentation
 # operationId: issues/lock
-export def "repos-issues-lock lock" [
+export def "issues-lock" [
   owner: string
   repo: string
   issue_number: int
@@ -12689,7 +12689,7 @@ export def "repos-issues-lock lock" [
 # GET /repos/{owner}/{repo}/issues/{issue_number}/reactions
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/reactions#list-reactions-for-an-issue — API method documentation
 # operationId: reactions/list-for-issue
-export def "repos-issues-reactions list" [
+export def "reactions-list-for-issue" [
   owner: string
   repo: string
   issue_number: int
@@ -12734,7 +12734,7 @@ export def "repos-issues-reactions list" [
 # POST /repos/{owner}/{repo}/issues/{issue_number}/reactions
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/reactions#create-reaction-for-an-issue — API method documentation
 # operationId: reactions/create-for-issue
-export def "repos-issues-reactions create" [
+export def "reactions-create-for-issue" [
   owner: string
   repo: string
   issue_number: int
@@ -12779,7 +12779,7 @@ export def "repos-issues-reactions create" [
 # GET /repos/{owner}/{repo}/issues/{issue_number}/timeline
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/issues#list-timeline-events-for-an-issue — API method documentation
 # operationId: issues/list-events-for-timeline
-export def "repos-issues-timeline list-events" [
+export def "issues-list-events-for-timeline" [
   owner: string
   repo: string
   issue_number: int
@@ -12823,7 +12823,7 @@ export def "repos-issues-timeline list-events" [
 # GET /repos/{owner}/{repo}/keys
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/repos#list-deploy-keys — API method documentation
 # operationId: repos/list-deploy-keys
-export def "repos-keys list-deploy" [
+export def "repos-list-deploy-keys" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -12865,7 +12865,7 @@ export def "repos-keys list-deploy" [
 # POST /repos/{owner}/{repo}/keys
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/repos#create-a-deploy-key — API method documentation
 # operationId: repos/create-deploy-key
-export def "repos-keys create-deploy" [
+export def "repos-create-deploy-key" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -12910,7 +12910,7 @@ export def "repos-keys create-deploy" [
 # DELETE /repos/{owner}/{repo}/keys/{key_id}
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/repos#delete-a-deploy-key — API method documentation
 # operationId: repos/delete-deploy-key
-export def "repos-keys delete-deploy" [
+export def "repos-delete-deploy-key" [
   owner: string
   repo: string
   key_id: int
@@ -12951,7 +12951,7 @@ export def "repos-keys delete-deploy" [
 # GET /repos/{owner}/{repo}/keys/{key_id}
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/repos#get-a-deploy-key — API method documentation
 # operationId: repos/get-deploy-key
-export def "repos-keys get-deploy" [
+export def "repos-get-deploy-key" [
   owner: string
   repo: string
   key_id: int
@@ -12992,7 +12992,7 @@ export def "repos-keys get-deploy" [
 # GET /repos/{owner}/{repo}/labels
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/issues#list-labels-for-a-repository — API method documentation
 # operationId: issues/list-labels-for-repo
-export def "repos-labels list-issues" [
+export def "issues-list-labels-for-repo" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -13034,7 +13034,7 @@ export def "repos-labels list-issues" [
 # POST /repos/{owner}/{repo}/labels
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/issues#create-a-label — API method documentation
 # operationId: issues/create-label
-export def "repos-labels create-issues" [
+export def "issues-create-label" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -13079,7 +13079,7 @@ export def "repos-labels create-issues" [
 # DELETE /repos/{owner}/{repo}/labels/{name}
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/issues#delete-a-label — API method documentation
 # operationId: issues/delete-label
-export def "repos-labels delete-issues" [
+export def "issues-delete-label" [
   owner: string
   repo: string
   name: string
@@ -13120,7 +13120,7 @@ export def "repos-labels delete-issues" [
 # GET /repos/{owner}/{repo}/labels/{name}
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/issues#get-a-label — API method documentation
 # operationId: issues/get-label
-export def "repos-labels get-issues" [
+export def "issues-get-label" [
   owner: string
   repo: string
   name: string
@@ -13161,7 +13161,7 @@ export def "repos-labels get-issues" [
 # PATCH /repos/{owner}/{repo}/labels/{name}
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/issues#update-a-label — API method documentation
 # operationId: issues/update-label
-export def "repos-labels update-issues" [
+export def "issues-update-label" [
   owner: string
   repo: string
   name: string
@@ -13208,7 +13208,7 @@ export def "repos-labels update-issues" [
 # GET /repos/{owner}/{repo}/languages
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/repos#list-repository-languages — API method documentation
 # operationId: repos/list-languages
-export def "repos-languages list" [
+export def "repos-list-languages" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -13247,7 +13247,7 @@ export def "repos-languages list" [
 # GET /repos/{owner}/{repo}/license
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/licenses/#get-the-license-for-a-repository — API method documentation
 # operationId: licenses/get-for-repo
-export def "repos-license get" [
+export def "licenses-get-for-repo" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -13286,7 +13286,7 @@ export def "repos-license get" [
 # POST /repos/{owner}/{repo}/merges
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/repos#merge-a-branch — API method documentation
 # operationId: repos/merge
-export def "repos-merges create" [
+export def "repos-merge" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -13331,7 +13331,7 @@ export def "repos-merges create" [
 # GET /repos/{owner}/{repo}/milestones
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/issues#list-milestones — API method documentation
 # operationId: issues/list-milestones
-export def "repos-milestones list-issues" [
+export def "issues-list-milestones" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -13376,7 +13376,7 @@ export def "repos-milestones list-issues" [
 # POST /repos/{owner}/{repo}/milestones
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/issues#create-a-milestone — API method documentation
 # operationId: issues/create-milestone
-export def "repos-milestones create-issues" [
+export def "issues-create-milestone" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -13422,7 +13422,7 @@ export def "repos-milestones create-issues" [
 # DELETE /repos/{owner}/{repo}/milestones/{milestone_number}
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/issues#delete-a-milestone — API method documentation
 # operationId: issues/delete-milestone
-export def "repos-milestones delete-issues" [
+export def "issues-delete-milestone" [
   owner: string
   repo: string
   milestone_number: int
@@ -13463,7 +13463,7 @@ export def "repos-milestones delete-issues" [
 # GET /repos/{owner}/{repo}/milestones/{milestone_number}
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/issues#get-a-milestone — API method documentation
 # operationId: issues/get-milestone
-export def "repos-milestones get-issues" [
+export def "issues-get-milestone" [
   owner: string
   repo: string
   milestone_number: int
@@ -13504,7 +13504,7 @@ export def "repos-milestones get-issues" [
 # PATCH /repos/{owner}/{repo}/milestones/{milestone_number}
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/issues#update-a-milestone — API method documentation
 # operationId: issues/update-milestone
-export def "repos-milestones update-issues" [
+export def "issues-update-milestone" [
   owner: string
   repo: string
   milestone_number: int
@@ -13552,7 +13552,7 @@ export def "repos-milestones update-issues" [
 # GET /repos/{owner}/{repo}/milestones/{milestone_number}/labels
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/issues#list-labels-for-issues-in-a-milestone — API method documentation
 # operationId: issues/list-labels-for-milestone
-export def "repos-milestones-labels list-issues" [
+export def "issues-list-labels-for-milestone" [
   owner: string
   repo: string
   milestone_number: int
@@ -13596,7 +13596,7 @@ export def "repos-milestones-labels list-issues" [
 # GET /repos/{owner}/{repo}/notifications
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/activity#list-repository-notifications-for-the-authenticated-user — API method documentation
 # operationId: activity/list-repo-notifications-for-authenticated-user
-export def "repos-notifications list-activity-for-authenticated-user" [
+export def "activity-list-repo-notifications-for-authenticated-user" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -13642,7 +13642,7 @@ export def "repos-notifications list-activity-for-authenticated-user" [
 # PUT /repos/{owner}/{repo}/notifications
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/activity#mark-repository-notifications-as-read — API method documentation
 # operationId: activity/mark-repo-notifications-as-read
-export def "repos-notifications get-activity-mark-as" [
+export def "activity-mark-repo-notifications-as-read" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -13685,7 +13685,7 @@ export def "repos-notifications get-activity-mark-as" [
 # DELETE /repos/{owner}/{repo}/pages
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/repos#delete-a-github-pages-site — API method documentation
 # operationId: repos/delete-pages-site
-export def "repos-pages delete-site" [
+export def "repos-delete-pages-site" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -13724,7 +13724,7 @@ export def "repos-pages delete-site" [
 # GET /repos/{owner}/{repo}/pages
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/repos#get-a-github-pages-site — API method documentation
 # operationId: repos/get-pages
-export def "repos-pages get" [
+export def "repos-get-pages" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -13764,7 +13764,7 @@ export def "repos-pages get" [
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/repos#create-a-github-pages-site — API method documentation
 # operationId: repos/create-pages-site
 # --source shape: {branch: "master"|"gh-pages", path?: "/"|"/docs"}
-export def "repos-pages create-site" [
+export def "repos-create-pages-site" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -13807,7 +13807,7 @@ export def "repos-pages create-site" [
 # PUT /repos/{owner}/{repo}/pages
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/repos#update-information-about-a-github-pages-site — API method documentation
 # operationId: repos/update-information-about-pages-site
-export def "repos-pages update-information-about-site" [
+export def "repos-update-information-about-pages-site" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -13852,7 +13852,7 @@ export def "repos-pages update-information-about-site" [
 # GET /repos/{owner}/{repo}/pages/builds
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/repos#list-github-pages-builds — API method documentation
 # operationId: repos/list-pages-builds
-export def "repos-pages-builds list" [
+export def "repos-list-pages-builds" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -13894,7 +13894,7 @@ export def "repos-pages-builds list" [
 # POST /repos/{owner}/{repo}/pages/builds
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/repos#request-a-github-pages-build — API method documentation
 # operationId: repos/request-pages-build
-export def "repos-pages-builds request" [
+export def "repos-request-pages-build" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -13933,7 +13933,7 @@ export def "repos-pages-builds request" [
 # GET /repos/{owner}/{repo}/pages/builds/latest
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/repos#get-latest-pages-build — API method documentation
 # operationId: repos/get-latest-pages-build
-export def "repos-pages-builds-latest get" [
+export def "repos-get-latest-pages-build" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -13972,7 +13972,7 @@ export def "repos-pages-builds-latest get" [
 # GET /repos/{owner}/{repo}/pages/builds/{build_id}
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/repos#get-github-pages-build — API method documentation
 # operationId: repos/get-pages-build
-export def "repos-pages-builds get" [
+export def "repos-get-pages-build" [
   owner: string
   repo: string
   build_id: int
@@ -14013,7 +14013,7 @@ export def "repos-pages-builds get" [
 # GET /repos/{owner}/{repo}/pre-receive-hooks
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/enterprise-admin#list-pre-receive-hooks-for-a-repository — API method documentation
 # operationId: enterprise-admin/list-pre-receive-hooks-for-repo
-export def "repos-pre-receive-hooks list-enterprise-admin" [
+export def "enterprise-admin-list-pre-receive-hooks-for-repo" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -14057,7 +14057,7 @@ export def "repos-pre-receive-hooks list-enterprise-admin" [
 # DELETE /repos/{owner}/{repo}/pre-receive-hooks/{pre_receive_hook_id}
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/enterprise-admin#remove-pre-receive-hook-enforcement-for-a-repository — API method documentation
 # operationId: enterprise-admin/remove-pre-receive-hook-enforcement-for-repo
-export def "repos-pre-receive-hooks delete-enterprise-admin-enforcement" [
+export def "enterprise-admin-remove-pre-receive-hook-enforcement-for-repo" [
   owner: string
   repo: string
   pre_receive_hook_id: int
@@ -14098,7 +14098,7 @@ export def "repos-pre-receive-hooks delete-enterprise-admin-enforcement" [
 # GET /repos/{owner}/{repo}/pre-receive-hooks/{pre_receive_hook_id}
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/enterprise-admin#get-a-pre-receive-hook-for-a-repository — API method documentation
 # operationId: enterprise-admin/get-pre-receive-hook-for-repo
-export def "repos-pre-receive-hooks get-enterprise-admin" [
+export def "enterprise-admin-get-pre-receive-hook-for-repo" [
   owner: string
   repo: string
   pre_receive_hook_id: int
@@ -14139,7 +14139,7 @@ export def "repos-pre-receive-hooks get-enterprise-admin" [
 # PATCH /repos/{owner}/{repo}/pre-receive-hooks/{pre_receive_hook_id}
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/enterprise-admin#update-pre-receive-hook-enforcement-for-a-repository — API method documentation
 # operationId: enterprise-admin/update-pre-receive-hook-enforcement-for-repo
-export def "repos-pre-receive-hooks update-enterprise-admin-enforcement" [
+export def "enterprise-admin-update-pre-receive-hook-enforcement-for-repo" [
   owner: string
   repo: string
   pre_receive_hook_id: int
@@ -14184,7 +14184,7 @@ export def "repos-pre-receive-hooks update-enterprise-admin-enforcement" [
 # GET /repos/{owner}/{repo}/projects
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/projects#list-repository-projects — API method documentation
 # operationId: projects/list-for-repo
-export def "repos-projects list" [
+export def "projects-list-for-repo" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -14227,7 +14227,7 @@ export def "repos-projects list" [
 # POST /repos/{owner}/{repo}/projects
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/projects#create-a-repository-project — API method documentation
 # operationId: projects/create-for-repo
-export def "repos-projects create" [
+export def "projects-create-for-repo" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -14271,7 +14271,7 @@ export def "repos-projects create" [
 # GET /repos/{owner}/{repo}/pulls
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/pulls#list-pull-requests — API method documentation
 # operationId: pulls/list
-export def "repos-pulls list" [
+export def "pulls-list" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -14318,7 +14318,7 @@ export def "repos-pulls list" [
 # POST /repos/{owner}/{repo}/pulls
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/pulls#create-a-pull-request — API method documentation
 # operationId: pulls/create
-export def "repos-pulls create" [
+export def "pulls-create" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -14367,7 +14367,7 @@ export def "repos-pulls create" [
 # GET /repos/{owner}/{repo}/pulls/comments
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/pulls#list-review-comments-in-a-repository — API method documentation
 # operationId: pulls/list-review-comments-for-repo
-export def "repos-pulls-comments list" [
+export def "pulls-list-review-comments-for-repo" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -14412,7 +14412,7 @@ export def "repos-pulls-comments list" [
 # DELETE /repos/{owner}/{repo}/pulls/comments/{comment_id}
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/pulls#delete-a-review-comment-for-a-pull-request — API method documentation
 # operationId: pulls/delete-review-comment
-export def "repos-pulls-comments delete-review" [
+export def "pulls-delete-review-comment" [
   owner: string
   repo: string
   comment_id: int
@@ -14453,7 +14453,7 @@ export def "repos-pulls-comments delete-review" [
 # GET /repos/{owner}/{repo}/pulls/comments/{comment_id}
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/pulls#get-a-review-comment-for-a-pull-request — API method documentation
 # operationId: pulls/get-review-comment
-export def "repos-pulls-comments get-review" [
+export def "pulls-get-review-comment" [
   owner: string
   repo: string
   comment_id: int
@@ -14494,7 +14494,7 @@ export def "repos-pulls-comments get-review" [
 # PATCH /repos/{owner}/{repo}/pulls/comments/{comment_id}
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/pulls#update-a-review-comment-for-a-pull-request — API method documentation
 # operationId: pulls/update-review-comment
-export def "repos-pulls-comments update-review" [
+export def "pulls-update-review-comment" [
   owner: string
   repo: string
   comment_id: int
@@ -14539,7 +14539,7 @@ export def "repos-pulls-comments update-review" [
 # GET /repos/{owner}/{repo}/pulls/comments/{comment_id}/reactions
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/reactions#list-reactions-for-a-pull-request-review-comment — API method documentation
 # operationId: reactions/list-for-pull-request-review-comment
-export def "repos-pulls-comments-reactions list-for-request-review" [
+export def "reactions-list-for-pull-request-review-comment" [
   owner: string
   repo: string
   comment_id: int
@@ -14584,7 +14584,7 @@ export def "repos-pulls-comments-reactions list-for-request-review" [
 # POST /repos/{owner}/{repo}/pulls/comments/{comment_id}/reactions
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/reactions#create-reaction-for-a-pull-request-review-comment — API method documentation
 # operationId: reactions/create-for-pull-request-review-comment
-export def "repos-pulls-comments-reactions create-for-request-review" [
+export def "reactions-create-for-pull-request-review-comment" [
   owner: string
   repo: string
   comment_id: int
@@ -14629,7 +14629,7 @@ export def "repos-pulls-comments-reactions create-for-request-review" [
 # GET /repos/{owner}/{repo}/pulls/{pull_number}
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/pulls#get-a-pull-request — API method documentation
 # operationId: pulls/get
-export def "repos-pulls get" [
+export def "pulls-get" [
   owner: string
   repo: string
   pull_number: int
@@ -14670,7 +14670,7 @@ export def "repos-pulls get" [
 # PATCH /repos/{owner}/{repo}/pulls/{pull_number}
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/pulls/#update-a-pull-request — API method documentation
 # operationId: pulls/update
-export def "repos-pulls update" [
+export def "pulls-update" [
   owner: string
   repo: string
   pull_number: int
@@ -14719,7 +14719,7 @@ export def "repos-pulls update" [
 # GET /repos/{owner}/{repo}/pulls/{pull_number}/comments
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/pulls#list-review-comments-on-a-pull-request — API method documentation
 # operationId: pulls/list-review-comments
-export def "repos-pulls-comments list-review" [
+export def "pulls-list-review-comments" [
   owner: string
   repo: string
   pull_number: int
@@ -14766,7 +14766,7 @@ export def "repos-pulls-comments list-review" [
 # POST /repos/{owner}/{repo}/pulls/{pull_number}/comments
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/pulls#create-a-review-comment-for-a-pull-request — API method documentation
 # operationId: pulls/create-review-comment-alternative
-export def "repos-pulls-comments create-review-alternative" [
+export def "pulls-create-review-comment-alternative" [
   owner: string
   repo: string
   pull_number: int
@@ -14812,7 +14812,7 @@ export def "repos-pulls-comments create-review-alternative" [
 # POST /repos/{owner}/{repo}/pulls/{pull_number}/comments/{comment_id}/replies
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/pulls#create-a-reply-for-a-review-comment — API method documentation
 # operationId: pulls/create-reply-for-review-comment
-export def "repos-pulls-comments-replies create-reply-for-review" [
+export def "pulls-create-reply-for-review-comment" [
   owner: string
   repo: string
   pull_number: int
@@ -14859,7 +14859,7 @@ export def "repos-pulls-comments-replies create-reply-for-review" [
 # GET /repos/{owner}/{repo}/pulls/{pull_number}/commits
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/pulls#list-commits-on-a-pull-request — API method documentation
 # operationId: pulls/list-commits
-export def "repos-pulls-commits list" [
+export def "pulls-list-commits" [
   owner: string
   repo: string
   pull_number: int
@@ -14903,7 +14903,7 @@ export def "repos-pulls-commits list" [
 # GET /repos/{owner}/{repo}/pulls/{pull_number}/files
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/pulls#list-pull-requests-files — API method documentation
 # operationId: pulls/list-files
-export def "repos-pulls-files list" [
+export def "pulls-list-files" [
   owner: string
   repo: string
   pull_number: int
@@ -14947,7 +14947,7 @@ export def "repos-pulls-files list" [
 # GET /repos/{owner}/{repo}/pulls/{pull_number}/merge
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/pulls#check-if-a-pull-request-has-been-merged — API method documentation
 # operationId: pulls/check-if-merged
-export def "repos-pulls-merge check-if-merged" [
+export def "pulls-check-if-merged" [
   owner: string
   repo: string
   pull_number: int
@@ -14988,7 +14988,7 @@ export def "repos-pulls-merge check-if-merged" [
 # PUT /repos/{owner}/{repo}/pulls/{pull_number}/merge
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/pulls#merge-a-pull-request — API method documentation
 # operationId: pulls/merge
-export def "repos-pulls-merge update" [
+export def "pulls-merge" [
   owner: string
   repo: string
   pull_number: int
@@ -15036,7 +15036,7 @@ export def "repos-pulls-merge update" [
 # DELETE /repos/{owner}/{repo}/pulls/{pull_number}/requested_reviewers
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/pulls#remove-requested-reviewers-from-a-pull-request — API method documentation
 # operationId: pulls/remove-requested-reviewers
-export def "repos-pulls-requested-reviewers delete" [
+export def "pulls-remove-requested-reviewers" [
   owner: string
   repo: string
   pull_number: int
@@ -15082,7 +15082,7 @@ export def "repos-pulls-requested-reviewers delete" [
 # GET /repos/{owner}/{repo}/pulls/{pull_number}/requested_reviewers
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/pulls#list-requested-reviewers-for-a-pull-request — API method documentation
 # operationId: pulls/list-requested-reviewers
-export def "repos-pulls-requested-reviewers list" [
+export def "pulls-list-requested-reviewers" [
   owner: string
   repo: string
   pull_number: int
@@ -15126,7 +15126,7 @@ export def "repos-pulls-requested-reviewers list" [
 # POST /repos/{owner}/{repo}/pulls/{pull_number}/requested_reviewers
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/pulls#request-reviewers-for-a-pull-request — API method documentation
 # operationId: pulls/request-reviewers
-export def "repos-pulls-requested-reviewers request" [
+export def "pulls-request-reviewers" [
   owner: string
   repo: string
   pull_number: int
@@ -15172,7 +15172,7 @@ export def "repos-pulls-requested-reviewers request" [
 # GET /repos/{owner}/{repo}/pulls/{pull_number}/reviews
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/pulls#list-reviews-for-a-pull-request — API method documentation
 # operationId: pulls/list-reviews
-export def "repos-pulls-reviews list" [
+export def "pulls-list-reviews" [
   owner: string
   repo: string
   pull_number: int
@@ -15217,7 +15217,7 @@ export def "repos-pulls-reviews list" [
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/pulls#create-a-review-for-a-pull-request — API method documentation
 # operationId: pulls/create-review
 # --comments item shape: {body: string, line?: int, path: string, position?: int, side?: string, start_line?: int, start_side?: string}
-export def "repos-pulls-reviews create" [
+export def "pulls-create-review" [
   owner: string
   repo: string
   pull_number: int
@@ -15265,7 +15265,7 @@ export def "repos-pulls-reviews create" [
 # DELETE /repos/{owner}/{repo}/pulls/{pull_number}/reviews/{review_id}
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/pulls#delete-a-pending-review-for-a-pull-request — API method documentation
 # operationId: pulls/delete-pending-review
-export def "repos-pulls-reviews delete-pending" [
+export def "pulls-delete-pending-review" [
   owner: string
   repo: string
   pull_number: int
@@ -15308,7 +15308,7 @@ export def "repos-pulls-reviews delete-pending" [
 # GET /repos/{owner}/{repo}/pulls/{pull_number}/reviews/{review_id}
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/pulls#get-a-review-for-a-pull-request — API method documentation
 # operationId: pulls/get-review
-export def "repos-pulls-reviews get" [
+export def "pulls-get-review" [
   owner: string
   repo: string
   pull_number: int
@@ -15351,7 +15351,7 @@ export def "repos-pulls-reviews get" [
 # PUT /repos/{owner}/{repo}/pulls/{pull_number}/reviews/{review_id}
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/pulls#update-a-review-for-a-pull-request — API method documentation
 # operationId: pulls/update-review
-export def "repos-pulls-reviews update" [
+export def "pulls-update-review" [
   owner: string
   repo: string
   pull_number: int
@@ -15398,7 +15398,7 @@ export def "repos-pulls-reviews update" [
 # GET /repos/{owner}/{repo}/pulls/{pull_number}/reviews/{review_id}/comments
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/pulls#list-comments-for-a-pull-request-review — API method documentation
 # operationId: pulls/list-comments-for-review
-export def "repos-pulls-reviews-comments list" [
+export def "pulls-list-comments-for-review" [
   owner: string
   repo: string
   pull_number: int
@@ -15444,7 +15444,7 @@ export def "repos-pulls-reviews-comments list" [
 # PUT /repos/{owner}/{repo}/pulls/{pull_number}/reviews/{review_id}/dismissals
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/pulls#dismiss-a-review-for-a-pull-request — API method documentation
 # operationId: pulls/dismiss-review
-export def "repos-pulls-reviews-dismissals update-dismiss" [
+export def "pulls-dismiss-review" [
   owner: string
   repo: string
   pull_number: int
@@ -15492,7 +15492,7 @@ export def "repos-pulls-reviews-dismissals update-dismiss" [
 # POST /repos/{owner}/{repo}/pulls/{pull_number}/reviews/{review_id}/events
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/pulls#submit-a-review-for-a-pull-request — API method documentation
 # operationId: pulls/submit-review
-export def "repos-pulls-reviews-events submit" [
+export def "pulls-submit-review" [
   owner: string
   repo: string
   pull_number: int
@@ -15540,7 +15540,7 @@ export def "repos-pulls-reviews-events submit" [
 # PUT /repos/{owner}/{repo}/pulls/{pull_number}/update-branch
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/pulls#update-a-pull-request-branch — API method documentation
 # operationId: pulls/update-branch
-export def "repos-pulls-update-branch update" [
+export def "pulls-update-branch" [
   owner: string
   repo: string
   pull_number: int
@@ -15585,7 +15585,7 @@ export def "repos-pulls-update-branch update" [
 # GET /repos/{owner}/{repo}/readme
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/repos#get-a-repository-readme — API method documentation
 # operationId: repos/get-readme
-export def "repos-readme get" [
+export def "repos-get-readme" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -15626,7 +15626,7 @@ export def "repos-readme get" [
 # GET /repos/{owner}/{repo}/readme/{dir}
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/repos#get-a-repository-directory-readme — API method documentation
 # operationId: repos/get-readme-in-directory
-export def "repos-readme get-in-directory" [
+export def "repos-get-readme-in-directory" [
   owner: string
   repo: string
   dir: string
@@ -15669,7 +15669,7 @@ export def "repos-readme get-in-directory" [
 # GET /repos/{owner}/{repo}/releases
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/repos#list-releases — API method documentation
 # operationId: repos/list-releases
-export def "repos-releases list" [
+export def "repos-list-releases" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -15711,7 +15711,7 @@ export def "repos-releases list" [
 # POST /repos/{owner}/{repo}/releases
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/repos#create-a-release — API method documentation
 # operationId: repos/create-release
-export def "repos-releases create" [
+export def "repos-create-release" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -15759,7 +15759,7 @@ export def "repos-releases create" [
 # DELETE /repos/{owner}/{repo}/releases/assets/{asset_id}
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/repos#delete-a-release-asset — API method documentation
 # operationId: repos/delete-release-asset
-export def "repos-releases-assets delete" [
+export def "repos-delete-release-asset" [
   owner: string
   repo: string
   asset_id: int
@@ -15800,7 +15800,7 @@ export def "repos-releases-assets delete" [
 # GET /repos/{owner}/{repo}/releases/assets/{asset_id}
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/repos#get-a-release-asset — API method documentation
 # operationId: repos/get-release-asset
-export def "repos-releases-assets get" [
+export def "repos-get-release-asset" [
   owner: string
   repo: string
   asset_id: int
@@ -15841,7 +15841,7 @@ export def "repos-releases-assets get" [
 # PATCH /repos/{owner}/{repo}/releases/assets/{asset_id}
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/repos#update-a-release-asset — API method documentation
 # operationId: repos/update-release-asset
-export def "repos-releases-assets update" [
+export def "repos-update-release-asset" [
   owner: string
   repo: string
   asset_id: int
@@ -15888,7 +15888,7 @@ export def "repos-releases-assets update" [
 # GET /repos/{owner}/{repo}/releases/latest
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/repos#get-the-latest-release — API method documentation
 # operationId: repos/get-latest-release
-export def "repos-releases-latest get" [
+export def "repos-get-latest-release" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -15927,7 +15927,7 @@ export def "repos-releases-latest get" [
 # GET /repos/{owner}/{repo}/releases/tags/{tag}
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/repos#get-a-release-by-tag-name — API method documentation
 # operationId: repos/get-release-by-tag
-export def "repos-releases-tags get" [
+export def "repos-get-release-by-tag" [
   owner: string
   repo: string
   tag: string
@@ -15968,7 +15968,7 @@ export def "repos-releases-tags get" [
 # DELETE /repos/{owner}/{repo}/releases/{release_id}
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/repos#delete-a-release — API method documentation
 # operationId: repos/delete-release
-export def "repos-releases delete" [
+export def "repos-delete-release" [
   owner: string
   repo: string
   release_id: int
@@ -16009,7 +16009,7 @@ export def "repos-releases delete" [
 # GET /repos/{owner}/{repo}/releases/{release_id}
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/repos#get-a-release — API method documentation
 # operationId: repos/get-release
-export def "repos-releases get" [
+export def "repos-get-release" [
   owner: string
   repo: string
   release_id: int
@@ -16050,7 +16050,7 @@ export def "repos-releases get" [
 # PATCH /repos/{owner}/{repo}/releases/{release_id}
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/repos#update-a-release — API method documentation
 # operationId: repos/update-release
-export def "repos-releases update" [
+export def "repos-update-release" [
   owner: string
   repo: string
   release_id: int
@@ -16100,7 +16100,7 @@ export def "repos-releases update" [
 # GET /repos/{owner}/{repo}/releases/{release_id}/assets
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/repos#list-release-assets — API method documentation
 # operationId: repos/list-release-assets
-export def "repos-releases-assets list" [
+export def "repos-list-release-assets" [
   owner: string
   repo: string
   release_id: int
@@ -16144,7 +16144,7 @@ export def "repos-releases-assets list" [
 # POST /repos/{owner}/{repo}/releases/{release_id}/assets
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/repos#upload-a-release-asset — API method documentation
 # operationId: repos/upload-release-asset
-export def "repos-releases-assets upload" [
+export def "repos-upload-release-asset" [
   owner: string
   repo: string
   release_id: int
@@ -16192,7 +16192,7 @@ export def "repos-releases-assets upload" [
 # GET /repos/{owner}/{repo}/stargazers
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/activity#list-stargazers — API method documentation
 # operationId: activity/list-stargazers-for-repo
-export def "repos-stargazers list-activity" [
+export def "activity-list-stargazers-for-repo" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -16234,7 +16234,7 @@ export def "repos-stargazers list-activity" [
 # GET /repos/{owner}/{repo}/stats/code_frequency
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/repos#get-the-weekly-commit-activity — API method documentation
 # operationId: repos/get-code-frequency-stats
-export def "repos-stats-code-frequency get" [
+export def "repos-get-code-frequency-stats" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -16273,7 +16273,7 @@ export def "repos-stats-code-frequency get" [
 # GET /repos/{owner}/{repo}/stats/commit_activity
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/repos#get-the-last-year-of-commit-activity — API method documentation
 # operationId: repos/get-commit-activity-stats
-export def "repos-stats-commit-activity get" [
+export def "repos-get-commit-activity-stats" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -16312,7 +16312,7 @@ export def "repos-stats-commit-activity get" [
 # GET /repos/{owner}/{repo}/stats/contributors
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/repos#get-all-contributor-commit-activity — API method documentation
 # operationId: repos/get-contributors-stats
-export def "repos-stats-contributors get" [
+export def "repos-get-contributors-stats" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -16351,7 +16351,7 @@ export def "repos-stats-contributors get" [
 # GET /repos/{owner}/{repo}/stats/participation
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/repos#get-the-weekly-commit-count — API method documentation
 # operationId: repos/get-participation-stats
-export def "repos-stats-participation get" [
+export def "repos-get-participation-stats" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -16390,7 +16390,7 @@ export def "repos-stats-participation get" [
 # GET /repos/{owner}/{repo}/stats/punch_card
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/repos#get-the-hourly-commit-count-for-each-day — API method documentation
 # operationId: repos/get-punch-card-stats
-export def "repos-stats-punch-card get" [
+export def "repos-get-punch-card-stats" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -16429,7 +16429,7 @@ export def "repos-stats-punch-card get" [
 # POST /repos/{owner}/{repo}/statuses/{sha}
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/repos#create-a-commit-status — API method documentation
 # operationId: repos/create-commit-status
-export def "repos-statuses create-commit-status" [
+export def "repos-create-commit-status" [
   owner: string
   repo: string
   sha: string
@@ -16477,7 +16477,7 @@ export def "repos-statuses create-commit-status" [
 # GET /repos/{owner}/{repo}/subscribers
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/activity#list-watchers — API method documentation
 # operationId: activity/list-watchers-for-repo
-export def "repos-subscribers list-activity-watchers" [
+export def "activity-list-watchers-for-repo" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -16519,7 +16519,7 @@ export def "repos-subscribers list-activity-watchers" [
 # DELETE /repos/{owner}/{repo}/subscription
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/activity#delete-a-repository-subscription — API method documentation
 # operationId: activity/delete-repo-subscription
-export def "repos-subscription delete-activity" [
+export def "activity-delete-repo-subscription" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -16558,7 +16558,7 @@ export def "repos-subscription delete-activity" [
 # GET /repos/{owner}/{repo}/subscription
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/activity#get-a-repository-subscription — API method documentation
 # operationId: activity/get-repo-subscription
-export def "repos-subscription get-activity" [
+export def "activity-get-repo-subscription" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -16597,7 +16597,7 @@ export def "repos-subscription get-activity" [
 # PUT /repos/{owner}/{repo}/subscription
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/activity#set-a-repository-subscription — API method documentation
 # operationId: activity/set-repo-subscription
-export def "repos-subscription update-activity" [
+export def "activity-set-repo-subscription" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -16641,7 +16641,7 @@ export def "repos-subscription update-activity" [
 # GET /repos/{owner}/{repo}/tags
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/repos#list-repository-tags — API method documentation
 # operationId: repos/list-tags
-export def "repos-tags list" [
+export def "repos-list-tags" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -16683,7 +16683,7 @@ export def "repos-tags list" [
 # GET /repos/{owner}/{repo}/tarball/{ref}
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/repos#download-a-repository-archive — API method documentation
 # operationId: repos/download-tarball-archive
-export def "repos-tarball download-archive" [
+export def "repos-download-tarball-archive" [
   owner: string
   repo: string
   ref: string
@@ -16724,7 +16724,7 @@ export def "repos-tarball download-archive" [
 # GET /repos/{owner}/{repo}/teams
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/repos#list-repository-teams — API method documentation
 # operationId: repos/list-teams
-export def "repos-teams list" [
+export def "repos-list-teams" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -16766,7 +16766,7 @@ export def "repos-teams list" [
 # GET /repos/{owner}/{repo}/topics
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/repos#get-all-repository-topics — API method documentation
 # operationId: repos/get-all-topics
-export def "repos-topics get-list" [
+export def "repos-get-all-topics" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -16808,7 +16808,7 @@ export def "repos-topics get-list" [
 # PUT /repos/{owner}/{repo}/topics
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/repos#replace-all-repository-topics — API method documentation
 # operationId: repos/replace-all-topics
-export def "repos-topics update-list" [
+export def "repos-replace-all-topics" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -16851,7 +16851,7 @@ export def "repos-topics update-list" [
 # POST /repos/{owner}/{repo}/transfer
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/repos#transfer-a-repository — API method documentation
 # operationId: repos/transfer
-export def "repos-transfer create" [
+export def "repos-transfer" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -16895,7 +16895,7 @@ export def "repos-transfer create" [
 # GET /repos/{owner}/{repo}/zipball/{ref}
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/repos#download-a-repository-archive — API method documentation
 # operationId: repos/download-zipball-archive
-export def "repos-zipball download-archive" [
+export def "repos-download-zipball-archive" [
   owner: string
   repo: string
   ref: string
@@ -16936,7 +16936,7 @@ export def "repos-zipball download-archive" [
 # POST /repos/{template_owner}/{template_repo}/generate
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/repos#create-a-repository-using-a-template — API method documentation
 # operationId: repos/create-using-template
-export def "repos-generate create" [
+export def "repos-create-using-template" [
   template_owner: string
   template_repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -16983,7 +16983,7 @@ export def "repos-generate create" [
 # GET /repositories
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/repos#list-public-repositories — API method documentation
 # operationId: repos/list-public
-export def "repositories list-repos-public" [
+export def "repos-list-public" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -17021,7 +17021,7 @@ export def "repositories list-repos-public" [
 # GET /search/code
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/search#search-code — API method documentation
 # operationId: search/code
-export def "search-code list" [
+export def "search-code" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -17062,7 +17062,7 @@ export def "search-code list" [
 # GET /search/commits
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/search#search-commits — API method documentation
 # operationId: search/commits
-export def "search-commits list" [
+export def "search-commits" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -17103,7 +17103,7 @@ export def "search-commits list" [
 # GET /search/issues
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/search#search-issues-and-pull-requests — API method documentation
 # operationId: search/issues-and-pull-requests
-export def "search-issues pull-and-requests" [
+export def "search-issues-and-pull-requests" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -17144,7 +17144,7 @@ export def "search-issues pull-and-requests" [
 # GET /search/labels
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/search#search-labels — API method documentation
 # operationId: search/labels
-export def "search-labels list" [
+export def "search-labels" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -17186,7 +17186,7 @@ export def "search-labels list" [
 # GET /search/repositories
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/search#search-repositories — API method documentation
 # operationId: search/repos
-export def "search-repositories list-repos" [
+export def "search-repos" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -17227,7 +17227,7 @@ export def "search-repositories list-repos" [
 # GET /search/topics
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/search#search-topics — API method documentation
 # operationId: search/topics
-export def "search-topics list" [
+export def "search-topics" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -17266,7 +17266,7 @@ export def "search-topics list" [
 # GET /search/users
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/search#search-users — API method documentation
 # operationId: search/users
-export def "search-users list" [
+export def "search-users" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -17307,7 +17307,7 @@ export def "search-users list" [
 # GET /setup/api/configcheck
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/enterprise-admin#get-the-configuration-status — API method documentation
 # operationId: enterprise-admin/get-configuration-status
-export def "setup-configcheck get-enterprise-admin-configuration-status" [
+export def "enterprise-admin-get-configuration-status" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -17342,7 +17342,7 @@ export def "setup-configcheck get-enterprise-admin-configuration-status" [
 # POST /setup/api/configure
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/enterprise-admin#start-a-configuration-process — API method documentation
 # operationId: enterprise-admin/start-configuration-process
-export def "setup-configure start-enterprise-admin-configuration-process" [
+export def "enterprise-admin-start-configuration-process" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -17377,7 +17377,7 @@ export def "setup-configure start-enterprise-admin-configuration-process" [
 # GET /setup/api/maintenance
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/enterprise-admin#get-the-maintenance-status — API method documentation
 # operationId: enterprise-admin/get-maintenance-status
-export def "setup-maintenance get-enterprise-admin-status" [
+export def "enterprise-admin-get-maintenance-status" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -17412,7 +17412,7 @@ export def "setup-maintenance get-enterprise-admin-status" [
 # POST /setup/api/maintenance
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/enterprise-admin#enable-or-disable-maintenance-mode — API method documentation
 # operationId: enterprise-admin/enable-or-disable-maintenance-mode
-export def "setup-maintenance enable-enterprise-admin-or-disable-mode" [
+export def "enterprise-admin-enable-or-disable-maintenance-mode" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -17452,7 +17452,7 @@ export def "setup-maintenance enable-enterprise-admin-or-disable-mode" [
 # GET /setup/api/settings
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/enterprise-admin#get-settings — API method documentation
 # operationId: enterprise-admin/get-settings
-export def "setup-settings get-enterprise-admin" [
+export def "enterprise-admin-get-settings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -17487,7 +17487,7 @@ export def "setup-settings get-enterprise-admin" [
 # PUT /setup/api/settings
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/enterprise-admin#set-settings — API method documentation
 # operationId: enterprise-admin/set-settings
-export def "setup-settings update-enterprise-admin" [
+export def "enterprise-admin-set-settings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -17527,7 +17527,7 @@ export def "setup-settings update-enterprise-admin" [
 # DELETE /setup/api/settings/authorized-keys
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/enterprise-admin#remove-an-authorized-ssh-key — API method documentation
 # operationId: enterprise-admin/remove-authorized-ssh-key
-export def "setup-settings-authorized-keys delete-enterprise-admin-ssh" [
+export def "enterprise-admin-remove-authorized-ssh-key" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -17567,7 +17567,7 @@ export def "setup-settings-authorized-keys delete-enterprise-admin-ssh" [
 # GET /setup/api/settings/authorized-keys
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/enterprise-admin#get-all-authorized-ssh-keys — API method documentation
 # operationId: enterprise-admin/get-all-authorized-ssh-keys
-export def "setup-settings-authorized-keys get-enterprise-admin-list-ssh" [
+export def "enterprise-admin-get-all-authorized-ssh-keys" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -17602,7 +17602,7 @@ export def "setup-settings-authorized-keys get-enterprise-admin-list-ssh" [
 # POST /setup/api/settings/authorized-keys
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/enterprise-admin#add-an-authorized-ssh-key — API method documentation
 # operationId: enterprise-admin/add-authorized-ssh-key
-export def "setup-settings-authorized-keys create-enterprise-admin-ssh" [
+export def "enterprise-admin-add-authorized-ssh-key" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -17642,7 +17642,7 @@ export def "setup-settings-authorized-keys create-enterprise-admin-ssh" [
 # POST /setup/api/start
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/enterprise-admin#create-a-github-enterprise-server-license — API method documentation
 # operationId: enterprise-admin/create-enterprise-server-license
-export def "setup-start create-enterprise-admin-enterprise-server-license" [
+export def "enterprise-admin-create-enterprise-server-license" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -17684,7 +17684,7 @@ export def "setup-start create-enterprise-admin-enterprise-server-license" [
 # POST /setup/api/upgrade
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/enterprise-admin#upgrade-a-license — API method documentation
 # operationId: enterprise-admin/upgrade-license
-export def "setup-upgrade create-enterprise-admin-license" [
+export def "enterprise-admin-upgrade-license" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -17724,7 +17724,7 @@ export def "setup-upgrade create-enterprise-admin-license" [
 # DELETE /teams/{team_id}
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/teams/#delete-a-team — API method documentation
 # operationId: teams/delete
-export def "teams delete" [
+export def "teams-delete" [
   team_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -17761,7 +17761,7 @@ export def "teams delete" [
 # GET /teams/{team_id}
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/teams/#get-a-team — API method documentation
 # operationId: teams/get
-export def "teams get" [
+export def "teams-get" [
   team_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -17798,7 +17798,7 @@ export def "teams get" [
 # PATCH /teams/{team_id}
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/teams/#update-a-team — API method documentation
 # operationId: teams/update
-export def "teams update" [
+export def "teams-update" [
   team_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -17843,7 +17843,7 @@ export def "teams update" [
 # GET /teams/{team_id}/discussions
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/teams#list-discussions — API method documentation
 # operationId: teams/list-discussions
-export def "teams-discussions list" [
+export def "teams-list-discussions" [
   team_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -17884,7 +17884,7 @@ export def "teams-discussions list" [
 # POST /teams/{team_id}/discussions
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/teams#create-a-discussion — API method documentation
 # operationId: teams/create-discussion
-export def "teams-discussions create" [
+export def "teams-create-discussion" [
   team_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -17927,7 +17927,7 @@ export def "teams-discussions create" [
 # DELETE /teams/{team_id}/discussions/{discussion_number}
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/teams#delete-a-discussion — API method documentation
 # operationId: teams/delete-discussion
-export def "teams-discussions delete" [
+export def "teams-delete-discussion" [
   team_id: int
   discussion_number: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -17966,7 +17966,7 @@ export def "teams-discussions delete" [
 # GET /teams/{team_id}/discussions/{discussion_number}
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/teams#get-a-discussion — API method documentation
 # operationId: teams/get-discussion
-export def "teams-discussions get" [
+export def "teams-get-discussion" [
   team_id: int
   discussion_number: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -18005,7 +18005,7 @@ export def "teams-discussions get" [
 # PATCH /teams/{team_id}/discussions/{discussion_number}
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/teams#update-a-discussion — API method documentation
 # operationId: teams/update-discussion
-export def "teams-discussions update" [
+export def "teams-update-discussion" [
   team_id: int
   discussion_number: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -18049,7 +18049,7 @@ export def "teams-discussions update" [
 # GET /teams/{team_id}/discussions/{discussion_number}/comments
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/teams#list-discussion-comments — API method documentation
 # operationId: teams/list-discussion-comments
-export def "teams-discussions-comments list" [
+export def "teams-list-discussion-comments" [
   team_id: int
   discussion_number: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -18092,7 +18092,7 @@ export def "teams-discussions-comments list" [
 # POST /teams/{team_id}/discussions/{discussion_number}/comments
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/teams#create-a-discussion-comment — API method documentation
 # operationId: teams/create-discussion-comment
-export def "teams-discussions-comments create" [
+export def "teams-create-discussion-comment" [
   team_id: int
   discussion_number: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -18135,7 +18135,7 @@ export def "teams-discussions-comments create" [
 # DELETE /teams/{team_id}/discussions/{discussion_number}/comments/{comment_number}
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/teams#delete-a-discussion-comment — API method documentation
 # operationId: teams/delete-discussion-comment
-export def "teams-discussions-comments delete" [
+export def "teams-delete-discussion-comment" [
   team_id: int
   discussion_number: int
   comment_number: int
@@ -18176,7 +18176,7 @@ export def "teams-discussions-comments delete" [
 # GET /teams/{team_id}/discussions/{discussion_number}/comments/{comment_number}
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/teams#get-a-discussion-comment — API method documentation
 # operationId: teams/get-discussion-comment
-export def "teams-discussions-comments get" [
+export def "teams-get-discussion-comment" [
   team_id: int
   discussion_number: int
   comment_number: int
@@ -18217,7 +18217,7 @@ export def "teams-discussions-comments get" [
 # PATCH /teams/{team_id}/discussions/{discussion_number}/comments/{comment_number}
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/teams#update-a-discussion-comment — API method documentation
 # operationId: teams/update-discussion-comment
-export def "teams-discussions-comments update" [
+export def "teams-update-discussion-comment" [
   team_id: int
   discussion_number: int
   comment_number: int
@@ -18262,7 +18262,7 @@ export def "teams-discussions-comments update" [
 # GET /teams/{team_id}/discussions/{discussion_number}/comments/{comment_number}/reactions
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/reactions/#list-reactions-for-a-team-discussion-comment — API method documentation
 # operationId: reactions/list-for-team-discussion-comment
-export def "teams-discussions-comments-reactions list" [
+export def "reactions-list-for-team-discussion-comment" [
   team_id: int
   discussion_number: int
   comment_number: int
@@ -18310,7 +18310,7 @@ export def "teams-discussions-comments-reactions list" [
 # POST /teams/{team_id}/discussions/{discussion_number}/comments/{comment_number}/reactions
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/reactions/#create-reaction-for-a-team-discussion-comment — API method documentation
 # operationId: reactions/create-for-team-discussion-comment
-export def "teams-discussions-comments-reactions create" [
+export def "reactions-create-for-team-discussion-comment" [
   team_id: int
   discussion_number: int
   comment_number: int
@@ -18358,7 +18358,7 @@ export def "teams-discussions-comments-reactions create" [
 # GET /teams/{team_id}/discussions/{discussion_number}/reactions
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/reactions/#list-reactions-for-a-team-discussion — API method documentation
 # operationId: reactions/list-for-team-discussion
-export def "teams-discussions-reactions list" [
+export def "reactions-list-for-team-discussion" [
   team_id: int
   discussion_number: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -18404,7 +18404,7 @@ export def "teams-discussions-reactions list" [
 # POST /teams/{team_id}/discussions/{discussion_number}/reactions
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/reactions/#create-reaction-for-a-team-discussion — API method documentation
 # operationId: reactions/create-for-team-discussion
-export def "teams-discussions-reactions create" [
+export def "reactions-create-for-team-discussion" [
   team_id: int
   discussion_number: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -18450,7 +18450,7 @@ export def "teams-discussions-reactions create" [
 # GET /teams/{team_id}/members
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/teams#list-team-members — API method documentation
 # operationId: teams/list-members
-export def "teams-members list" [
+export def "teams-list-members" [
   team_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -18493,7 +18493,7 @@ export def "teams-members list" [
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/teams#remove-team-member-legacy — API method documentation
 # operationId: teams/remove-member-legacy
 @deprecated
-export def "teams-members delete-legacy" [
+export def "teams-remove-member-legacy" [
   team_id: int
   username: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -18534,7 +18534,7 @@ export def "teams-members delete-legacy" [
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/teams#get-team-member-legacy — API method documentation
 # operationId: teams/get-member-legacy
 @deprecated
-export def "teams-members get-legacy" [
+export def "teams-get-member-legacy" [
   team_id: int
   username: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -18575,7 +18575,7 @@ export def "teams-members get-legacy" [
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/teams#add-team-member-legacy — API method documentation
 # operationId: teams/add-member-legacy
 @deprecated
-export def "teams-members create-legacy" [
+export def "teams-add-member-legacy" [
   team_id: int
   username: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -18614,7 +18614,7 @@ export def "teams-members create-legacy" [
 # DELETE /teams/{team_id}/memberships/{username}
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/teams#remove-team-membership-for-a-user — API method documentation
 # operationId: teams/remove-membership-for-user
-export def "teams-memberships delete-for-user" [
+export def "teams-remove-membership-for-user" [
   team_id: int
   username: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -18653,7 +18653,7 @@ export def "teams-memberships delete-for-user" [
 # GET /teams/{team_id}/memberships/{username}
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/teams#get-team-membership-for-a-user — API method documentation
 # operationId: teams/get-membership-for-user
-export def "teams-memberships get-for-user" [
+export def "teams-get-membership-for-user" [
   team_id: int
   username: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -18692,7 +18692,7 @@ export def "teams-memberships get-for-user" [
 # PUT /teams/{team_id}/memberships/{username}
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/teams#add-or-update-team-membership-for-a-user — API method documentation
 # operationId: teams/add-or-update-membership-for-user
-export def "teams-memberships create-or-update-for-user" [
+export def "teams-add-or-update-membership-for-user" [
   team_id: int
   username: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -18735,7 +18735,7 @@ export def "teams-memberships create-or-update-for-user" [
 # GET /teams/{team_id}/projects
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/teams/#list-team-projects — API method documentation
 # operationId: teams/list-projects
-export def "teams-projects list" [
+export def "teams-list-projects" [
   team_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -18778,7 +18778,7 @@ export def "teams-projects list" [
 # DELETE /teams/{team_id}/projects/{project_id}
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/teams/#remove-a-project-from-a-team — API method documentation
 # operationId: teams/remove-project
-export def "teams-projects delete" [
+export def "teams-remove-project" [
   team_id: int
   project_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -18817,7 +18817,7 @@ export def "teams-projects delete" [
 # GET /teams/{team_id}/projects/{project_id}
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/teams/#check-team-permissions-for-a-project — API method documentation
 # operationId: teams/check-permissions-for-project
-export def "teams-projects check-permissions" [
+export def "teams-check-permissions-for-project" [
   team_id: int
   project_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -18859,7 +18859,7 @@ export def "teams-projects check-permissions" [
 # PUT /teams/{team_id}/projects/{project_id}
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/teams/#add-or-update-team-project-permissions — API method documentation
 # operationId: teams/add-or-update-project-permissions
-export def "teams-projects create-or-update-permissions" [
+export def "teams-add-or-update-project-permissions" [
   team_id: int
   project_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -18905,7 +18905,7 @@ export def "teams-projects create-or-update-permissions" [
 # GET /teams/{team_id}/repos
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/teams/#list-team-repositories — API method documentation
 # operationId: teams/list-repos
-export def "teams-repos list" [
+export def "teams-list-repos" [
   team_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -18945,7 +18945,7 @@ export def "teams-repos list" [
 # DELETE /teams/{team_id}/repos/{owner}/{repo}
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/teams/#remove-a-repository-from-a-team — API method documentation
 # operationId: teams/remove-repo
-export def "teams-repos delete" [
+export def "teams-remove-repo" [
   team_id: int
   owner: string
   repo: string
@@ -18986,7 +18986,7 @@ export def "teams-repos delete" [
 # GET /teams/{team_id}/repos/{owner}/{repo}
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/teams/#check-team-permissions-for-a-repository — API method documentation
 # operationId: teams/check-permissions-for-repo
-export def "teams-repos check-permissions" [
+export def "teams-check-permissions-for-repo" [
   team_id: int
   owner: string
   repo: string
@@ -19028,7 +19028,7 @@ export def "teams-repos check-permissions" [
 # PUT /teams/{team_id}/repos/{owner}/{repo}
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/teams/#add-or-update-team-repository-permissions — API method documentation
 # operationId: teams/add-or-update-repo-permissions
-export def "teams-repos create-or-update-permissions" [
+export def "teams-add-or-update-repo-permissions" [
   team_id: int
   owner: string
   repo: string
@@ -19073,7 +19073,7 @@ export def "teams-repos create-or-update-permissions" [
 # GET /teams/{team_id}/teams
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/teams/#list-child-teams — API method documentation
 # operationId: teams/list-child
-export def "teams-teams list-child" [
+export def "teams-list-child" [
   team_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -19113,7 +19113,7 @@ export def "teams-teams list-child" [
 # GET /user
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/users#get-the-authenticated-user — API method documentation
 # operationId: users/get-authenticated
-export def "user get-authenticated" [
+export def "users-get-authenticated" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -19148,7 +19148,7 @@ export def "user get-authenticated" [
 # PATCH /user
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/users/#update-the-authenticated-user — API method documentation
 # operationId: users/update-authenticated
-export def "user update-authenticated" [
+export def "users-update-authenticated" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -19194,7 +19194,7 @@ export def "user update-authenticated" [
 # DELETE /user/emails
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/users#delete-an-email-address-for-the-authenticated-user — API method documentation
 # operationId: users/delete-email-for-authenticated
-export def "user-emails delete-for-authenticated" [
+export def "users-delete-email-for-authenticated" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -19233,7 +19233,7 @@ export def "user-emails delete-for-authenticated" [
 # GET /user/emails
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/users#list-email-addresses-for-the-authenticated-user — API method documentation
 # operationId: users/list-emails-for-authenticated
-export def "user-emails list-for-authenticated" [
+export def "users-list-emails-for-authenticated" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -19271,7 +19271,7 @@ export def "user-emails list-for-authenticated" [
 # POST /user/emails
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/users#add-an-email-address-for-the-authenticated-user — API method documentation
 # operationId: users/add-email-for-authenticated
-export def "user-emails create-for-authenticated" [
+export def "users-add-email-for-authenticated" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -19310,7 +19310,7 @@ export def "user-emails create-for-authenticated" [
 # GET /user/followers
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/users#list-followers-of-the-authenticated-user — API method documentation
 # operationId: users/list-followers-for-authenticated-user
-export def "user-followers list-for-authenticated" [
+export def "users-list-followers-for-authenticated-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -19348,7 +19348,7 @@ export def "user-followers list-for-authenticated" [
 # GET /user/following
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/users#list-the-people-the-authenticated-user-follows — API method documentation
 # operationId: users/list-followed-by-authenticated
-export def "user-following list-followed-by-authenticated" [
+export def "users-list-followed-by-authenticated" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -19386,7 +19386,7 @@ export def "user-following list-followed-by-authenticated" [
 # DELETE /user/following/{username}
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/users#unfollow-a-user — API method documentation
 # operationId: users/unfollow
-export def "user-following delete-unfollow" [
+export def "users-unfollow" [
   username: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -19423,7 +19423,7 @@ export def "user-following delete-unfollow" [
 # GET /user/following/{username}
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/users#check-if-a-person-is-followed-by-the-authenticated-user — API method documentation
 # operationId: users/check-person-is-followed-by-authenticated
-export def "user-following check-person-is-followed-by-authenticated" [
+export def "users-check-person-is-followed-by-authenticated" [
   username: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -19460,7 +19460,7 @@ export def "user-following check-person-is-followed-by-authenticated" [
 # PUT /user/following/{username}
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/users#follow-a-user — API method documentation
 # operationId: users/follow
-export def "user-following update-follow" [
+export def "users-follow" [
   username: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -19497,7 +19497,7 @@ export def "user-following update-follow" [
 # GET /user/gpg_keys
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/users#list-gpg-keys-for-the-authenticated-user — API method documentation
 # operationId: users/list-gpg-keys-for-authenticated
-export def "user-gpg-keys list-for-authenticated" [
+export def "users-list-gpg-keys-for-authenticated" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -19535,7 +19535,7 @@ export def "user-gpg-keys list-for-authenticated" [
 # POST /user/gpg_keys
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/users#create-a-gpg-key-for-the-authenticated-user — API method documentation
 # operationId: users/create-gpg-key-for-authenticated
-export def "user-gpg-keys create-for-authenticated" [
+export def "users-create-gpg-key-for-authenticated" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -19574,7 +19574,7 @@ export def "user-gpg-keys create-for-authenticated" [
 # DELETE /user/gpg_keys/{gpg_key_id}
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/users#delete-a-gpg-key-for-the-authenticated-user — API method documentation
 # operationId: users/delete-gpg-key-for-authenticated
-export def "user-gpg-keys delete-for-authenticated" [
+export def "users-delete-gpg-key-for-authenticated" [
   gpg_key_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -19611,7 +19611,7 @@ export def "user-gpg-keys delete-for-authenticated" [
 # GET /user/gpg_keys/{gpg_key_id}
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/users#get-a-gpg-key-for-the-authenticated-user — API method documentation
 # operationId: users/get-gpg-key-for-authenticated
-export def "user-gpg-keys get-for-authenticated" [
+export def "users-get-gpg-key-for-authenticated" [
   gpg_key_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -19648,7 +19648,7 @@ export def "user-gpg-keys get-for-authenticated" [
 # GET /user/installations
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/apps#list-app-installations-accessible-to-the-user-access-token — API method documentation
 # operationId: apps/list-installations-for-authenticated-user
-export def "user-installations list-apps-for-authenticated" [
+export def "apps-list-installations-for-authenticated-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -19689,7 +19689,7 @@ export def "user-installations list-apps-for-authenticated" [
 # GET /user/installations/{installation_id}/repositories
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/apps#list-repositories-accessible-to-the-user-access-token — API method documentation
 # operationId: apps/list-installation-repos-for-authenticated-user
-export def "user-installations-repositories list-apps-repos-for-authenticated" [
+export def "apps-list-installation-repos-for-authenticated-user" [
   installation_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -19732,7 +19732,7 @@ export def "user-installations-repositories list-apps-repos-for-authenticated" [
 # DELETE /user/installations/{installation_id}/repositories/{repository_id}
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/apps#remove-a-repository-from-an-app-installation — API method documentation
 # operationId: apps/remove-repo-from-installation
-export def "user-installations-repositories delete-apps-repo" [
+export def "apps-remove-repo-from-installation" [
   installation_id: int
   repository_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -19771,7 +19771,7 @@ export def "user-installations-repositories delete-apps-repo" [
 # PUT /user/installations/{installation_id}/repositories/{repository_id}
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/apps#add-a-repository-to-an-app-installation — API method documentation
 # operationId: apps/add-repo-to-installation
-export def "user-installations-repositories create-apps-repo" [
+export def "apps-add-repo-to-installation" [
   installation_id: int
   repository_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -19810,7 +19810,7 @@ export def "user-installations-repositories create-apps-repo" [
 # GET /user/issues
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/issues#list-user-account-issues-assigned-to-the-authenticated-user — API method documentation
 # operationId: issues/list-for-authenticated-user
-export def "user-issues list-for-authenticated" [
+export def "issues-list-for-authenticated-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -19854,7 +19854,7 @@ export def "user-issues list-for-authenticated" [
 # GET /user/keys
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/users#list-public-ssh-keys-for-the-authenticated-user — API method documentation
 # operationId: users/list-public-ssh-keys-for-authenticated
-export def "user-keys list-public-ssh-for-authenticated" [
+export def "users-list-public-ssh-keys-for-authenticated" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -19892,7 +19892,7 @@ export def "user-keys list-public-ssh-for-authenticated" [
 # POST /user/keys
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/users#create-a-public-ssh-key-for-the-authenticated-user — API method documentation
 # operationId: users/create-public-ssh-key-for-authenticated
-export def "user-keys create-public-ssh-for-authenticated" [
+export def "users-create-public-ssh-key-for-authenticated" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -19932,7 +19932,7 @@ export def "user-keys create-public-ssh-for-authenticated" [
 # DELETE /user/keys/{key_id}
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/users#delete-a-public-ssh-key-for-the-authenticated-user — API method documentation
 # operationId: users/delete-public-ssh-key-for-authenticated
-export def "user-keys delete-public-ssh-for-authenticated" [
+export def "users-delete-public-ssh-key-for-authenticated" [
   key_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -19969,7 +19969,7 @@ export def "user-keys delete-public-ssh-for-authenticated" [
 # GET /user/keys/{key_id}
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/users#get-a-public-ssh-key-for-the-authenticated-user — API method documentation
 # operationId: users/get-public-ssh-key-for-authenticated
-export def "user-keys get-public-ssh-for-authenticated" [
+export def "users-get-public-ssh-key-for-authenticated" [
   key_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -20006,7 +20006,7 @@ export def "user-keys get-public-ssh-for-authenticated" [
 # GET /user/memberships/orgs
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/orgs#list-organization-memberships-for-the-authenticated-user — API method documentation
 # operationId: orgs/list-memberships-for-authenticated-user
-export def "user-memberships-orgs list-for-authenticated" [
+export def "orgs-list-memberships-for-authenticated-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -20045,7 +20045,7 @@ export def "user-memberships-orgs list-for-authenticated" [
 # GET /user/memberships/orgs/{org}
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/orgs#get-an-organization-membership-for-the-authenticated-user — API method documentation
 # operationId: orgs/get-membership-for-authenticated-user
-export def "user-memberships-orgs get-for-authenticated" [
+export def "orgs-get-membership-for-authenticated-user" [
   org: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -20082,7 +20082,7 @@ export def "user-memberships-orgs get-for-authenticated" [
 # PATCH /user/memberships/orgs/{org}
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/orgs#update-an-organization-membership-for-the-authenticated-user — API method documentation
 # operationId: orgs/update-membership-for-authenticated-user
-export def "user-memberships-orgs update-for-authenticated" [
+export def "orgs-update-membership-for-authenticated-user" [
   org: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -20123,7 +20123,7 @@ export def "user-memberships-orgs update-for-authenticated" [
 # GET /user/orgs
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/orgs#list-organizations-for-the-authenticated-user — API method documentation
 # operationId: orgs/list-for-authenticated-user
-export def "user-orgs list-for-authenticated" [
+export def "orgs-list-for-authenticated-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -20161,7 +20161,7 @@ export def "user-orgs list-for-authenticated" [
 # POST /user/projects
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/projects#create-a-user-project — API method documentation
 # operationId: projects/create-for-authenticated-user
-export def "user-projects create-for-authenticated" [
+export def "projects-create-for-authenticated-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -20201,7 +20201,7 @@ export def "user-projects create-for-authenticated" [
 # GET /user/public_emails
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/users#list-public-email-addresses-for-the-authenticated-user — API method documentation
 # operationId: users/list-public-emails-for-authenticated
-export def "user-public-emails list-for-authenticated" [
+export def "users-list-public-emails-for-authenticated" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -20239,7 +20239,7 @@ export def "user-public-emails list-for-authenticated" [
 # GET /user/repos
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/repos#list-repositories-for-the-authenticated-user — API method documentation
 # operationId: repos/list-for-authenticated-user
-export def "user-repos list-for-authenticated" [
+export def "repos-list-for-authenticated-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -20284,7 +20284,7 @@ export def "user-repos list-for-authenticated" [
 # POST /user/repos
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/repos#create-a-repository-for-the-authenticated-user — API method documentation
 # operationId: repos/create-for-authenticated-user
-export def "user-repos create-for-authenticated" [
+export def "repos-create-for-authenticated-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -20339,7 +20339,7 @@ export def "user-repos create-for-authenticated" [
 # GET /user/repository_invitations
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/repos#list-repository-invitations-for-the-authenticated-user — API method documentation
 # operationId: repos/list-invitations-for-authenticated-user
-export def "user-repository-invitations list-repos-for-authenticated" [
+export def "repos-list-invitations-for-authenticated-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -20377,7 +20377,7 @@ export def "user-repository-invitations list-repos-for-authenticated" [
 # DELETE /user/repository_invitations/{invitation_id}
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/repos#decline-a-repository-invitation — API method documentation
 # operationId: repos/decline-invitation
-export def "user-repository-invitations delete-repos-decline" [
+export def "repos-decline-invitation" [
   invitation_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -20414,7 +20414,7 @@ export def "user-repository-invitations delete-repos-decline" [
 # PATCH /user/repository_invitations/{invitation_id}
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/repos#accept-a-repository-invitation — API method documentation
 # operationId: repos/accept-invitation
-export def "user-repository-invitations update-repos-accept" [
+export def "repos-accept-invitation" [
   invitation_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -20451,7 +20451,7 @@ export def "user-repository-invitations update-repos-accept" [
 # GET /user/starred
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/activity#list-repositories-starred-by-the-authenticated-user — API method documentation
 # operationId: activity/list-repos-starred-by-authenticated-user
-export def "user-starred list-activity-repos-by-authenticated" [
+export def "activity-list-repos-starred-by-authenticated-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -20492,7 +20492,7 @@ export def "user-starred list-activity-repos-by-authenticated" [
 # DELETE /user/starred/{owner}/{repo}
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/activity#unstar-a-repository-for-the-authenticated-user — API method documentation
 # operationId: activity/unstar-repo-for-authenticated-user
-export def "user-starred delete-activity-unstar-for-authenticated" [
+export def "activity-unstar-repo-for-authenticated-user" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -20531,7 +20531,7 @@ export def "user-starred delete-activity-unstar-for-authenticated" [
 # GET /user/starred/{owner}/{repo}
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/activity#check-if-a-repository-is-starred-by-the-authenticated-user — API method documentation
 # operationId: activity/check-repo-is-starred-by-authenticated-user
-export def "user-starred check-activity-is-by-authenticated" [
+export def "activity-check-repo-is-starred-by-authenticated-user" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -20570,7 +20570,7 @@ export def "user-starred check-activity-is-by-authenticated" [
 # PUT /user/starred/{owner}/{repo}
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/activity#star-a-repository-for-the-authenticated-user — API method documentation
 # operationId: activity/star-repo-for-authenticated-user
-export def "user-starred update-activity-star-for-authenticated" [
+export def "activity-star-repo-for-authenticated-user" [
   owner: string
   repo: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -20609,7 +20609,7 @@ export def "user-starred update-activity-star-for-authenticated" [
 # GET /user/subscriptions
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/activity#list-repositories-watched-by-the-authenticated-user — API method documentation
 # operationId: activity/list-watched-repos-for-authenticated-user
-export def "user-subscriptions list-activity-watched-repos-for-authenticated" [
+export def "activity-list-watched-repos-for-authenticated-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -20647,7 +20647,7 @@ export def "user-subscriptions list-activity-watched-repos-for-authenticated" [
 # GET /user/teams
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/teams#list-teams-for-the-authenticated-user — API method documentation
 # operationId: teams/list-for-authenticated-user
-export def "user-teams list-for-authenticated" [
+export def "teams-list-for-authenticated-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -20685,7 +20685,7 @@ export def "user-teams list-for-authenticated" [
 # GET /users
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/users#list-users — API method documentation
 # operationId: users/list
-export def "users list" [
+export def "users-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -20723,7 +20723,7 @@ export def "users list" [
 # GET /users/{username}
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/users#get-a-user — API method documentation
 # operationId: users/get-by-username
-export def "users get" [
+export def "users-get-by-username" [
   username: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -20760,7 +20760,7 @@ export def "users get" [
 # GET /users/{username}/events
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/activity#list-events-for-the-authenticated-user — API method documentation
 # operationId: activity/list-events-for-authenticated-user
-export def "users-events list-activity-for-authenticated" [
+export def "activity-list-events-for-authenticated-user" [
   username: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -20800,7 +20800,7 @@ export def "users-events list-activity-for-authenticated" [
 # GET /users/{username}/events/orgs/{org}
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/activity#list-organization-events-for-the-authenticated-user — API method documentation
 # operationId: activity/list-org-events-for-authenticated-user
-export def "users-events-orgs list-activity-for-authenticated" [
+export def "activity-list-org-events-for-authenticated-user" [
   username: string
   org: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -20842,7 +20842,7 @@ export def "users-events-orgs list-activity-for-authenticated" [
 # GET /users/{username}/events/public
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/activity#list-public-events-for-a-user — API method documentation
 # operationId: activity/list-public-events-for-user
-export def "users-events-public list-activity" [
+export def "activity-list-public-events-for-user" [
   username: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -20882,7 +20882,7 @@ export def "users-events-public list-activity" [
 # GET /users/{username}/followers
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/users#list-followers-of-a-user — API method documentation
 # operationId: users/list-followers-for-user
-export def "users-followers list" [
+export def "users-list-followers-for-user" [
   username: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -20922,7 +20922,7 @@ export def "users-followers list" [
 # GET /users/{username}/following
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/users#list-the-people-a-user-follows — API method documentation
 # operationId: users/list-following-for-user
-export def "users-following list" [
+export def "users-list-following-for-user" [
   username: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -20962,7 +20962,7 @@ export def "users-following list" [
 # GET /users/{username}/following/{target_user}
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/users#check-if-a-user-follows-another-user — API method documentation
 # operationId: users/check-following-for-user
-export def "users-following check" [
+export def "users-check-following-for-user" [
   username: string
   target_user: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -21001,7 +21001,7 @@ export def "users-following check" [
 # GET /users/{username}/gists
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/gists#list-gists-for-a-user — API method documentation
 # operationId: gists/list-for-user
-export def "users-gists list" [
+export def "gists-list-for-user" [
   username: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -21042,7 +21042,7 @@ export def "users-gists list" [
 # GET /users/{username}/gpg_keys
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/users#list-gpg-keys-for-a-user — API method documentation
 # operationId: users/list-gpg-keys-for-user
-export def "users-gpg-keys list" [
+export def "users-list-gpg-keys-for-user" [
   username: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -21082,7 +21082,7 @@ export def "users-gpg-keys list" [
 # GET /users/{username}/hovercard
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/users#get-contextual-information-for-a-user — API method documentation
 # operationId: users/get-context-for-user
-export def "users-hovercard get-context" [
+export def "users-get-context-for-user" [
   username: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -21122,7 +21122,7 @@ export def "users-hovercard get-context" [
 # GET /users/{username}/installation
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/apps#get-a-user-installation-for-the-authenticated-app — API method documentation
 # operationId: apps/get-user-installation
-export def "users-installation get-apps" [
+export def "apps-get-user-installation" [
   username: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -21162,7 +21162,7 @@ export def "users-installation get-apps" [
 # GET /users/{username}/keys
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/users#list-public-keys-for-a-user — API method documentation
 # operationId: users/list-public-keys-for-user
-export def "users-keys list-public" [
+export def "users-list-public-keys-for-user" [
   username: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -21202,7 +21202,7 @@ export def "users-keys list-public" [
 # GET /users/{username}/orgs
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/orgs#list-organizations-for-a-user — API method documentation
 # operationId: orgs/list-for-user
-export def "users-orgs list" [
+export def "orgs-list-for-user" [
   username: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -21242,7 +21242,7 @@ export def "users-orgs list" [
 # GET /users/{username}/projects
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/projects#list-user-projects — API method documentation
 # operationId: projects/list-for-user
-export def "users-projects list" [
+export def "projects-list-for-user" [
   username: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -21283,7 +21283,7 @@ export def "users-projects list" [
 # GET /users/{username}/received_events
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/activity#list-events-received-by-the-authenticated-user — API method documentation
 # operationId: activity/list-received-events-for-user
-export def "users-received-events list-activity" [
+export def "activity-list-received-events-for-user" [
   username: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -21323,7 +21323,7 @@ export def "users-received-events list-activity" [
 # GET /users/{username}/received_events/public
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/activity#list-public-events-received-by-a-user — API method documentation
 # operationId: activity/list-received-public-events-for-user
-export def "users-received-events-public list-activity" [
+export def "activity-list-received-public-events-for-user" [
   username: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -21363,7 +21363,7 @@ export def "users-received-events-public list-activity" [
 # GET /users/{username}/repos
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/repos#list-repositories-for-a-user — API method documentation
 # operationId: repos/list-for-user
-export def "users-repos list" [
+export def "repos-list-for-user" [
   username: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -21406,7 +21406,7 @@ export def "users-repos list" [
 # DELETE /users/{username}/site_admin
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/enterprise-admin#demote-a-site-administrator — API method documentation
 # operationId: enterprise-admin/demote-site-administrator
-export def "users-site-admin delete-enterprise-demote-administrator" [
+export def "enterprise-admin-demote-site-administrator" [
   username: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -21443,7 +21443,7 @@ export def "users-site-admin delete-enterprise-demote-administrator" [
 # PUT /users/{username}/site_admin
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/enterprise-admin#promote-a-user-to-be-a-site-administrator — API method documentation
 # operationId: enterprise-admin/promote-user-to-be-site-administrator
-export def "users-site-admin update-enterprise-promote-to-be-administrator" [
+export def "enterprise-admin-promote-user-to-be-site-administrator" [
   username: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -21480,7 +21480,7 @@ export def "users-site-admin update-enterprise-promote-to-be-administrator" [
 # GET /users/{username}/starred
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/activity#list-repositories-starred-by-a-user — API method documentation
 # operationId: activity/list-repos-starred-by-user
-export def "users-starred list-activity-repos" [
+export def "activity-list-repos-starred-by-user" [
   username: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -21522,7 +21522,7 @@ export def "users-starred list-activity-repos" [
 # GET /users/{username}/subscriptions
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/activity#list-repositories-watched-by-a-user — API method documentation
 # operationId: activity/list-repos-watched-by-user
-export def "users-subscriptions list-activity-repos-watched" [
+export def "activity-list-repos-watched-by-user" [
   username: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -21562,7 +21562,7 @@ export def "users-subscriptions list-activity-repos-watched" [
 # DELETE /users/{username}/suspended
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/enterprise-admin#unsuspend-a-user — API method documentation
 # operationId: enterprise-admin/unsuspend-user
-export def "users-suspended delete-enterprise-admin-unsuspend" [
+export def "enterprise-admin-unsuspend-user" [
   username: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -21603,7 +21603,7 @@ export def "users-suspended delete-enterprise-admin-unsuspend" [
 # PUT /users/{username}/suspended
 # Docs: https://docs.github.com/enterprise-server@2.19/rest/reference/enterprise-admin#suspend-a-user — API method documentation
 # operationId: enterprise-admin/suspend-user
-export def "users-suspended update-enterprise-admin-suspend" [
+export def "enterprise-admin-suspend-user" [
   username: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -21643,7 +21643,7 @@ export def "users-suspended update-enterprise-admin-suspend" [
 #
 # GET /zen
 # operationId: meta/get-zen
-export def "zen get-meta" [
+export def "meta-get-zen" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

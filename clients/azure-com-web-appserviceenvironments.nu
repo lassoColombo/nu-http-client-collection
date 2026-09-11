@@ -122,7 +122,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-providers-microsoft-web-hosting-environments list-app-service" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "app-service-environments-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -146,7 +146,7 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Web/hostingEnvironments
 # operationId: AppServiceEnvironments_List
-export def "subscriptions-providers-microsoft-web-hosting-environments list-app-service" [
+export def "app-service-environments-list" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -184,7 +184,7 @@ export def "subscriptions-providers-microsoft-web-hosting-environments list-app-
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/hostingEnvironments
 # operationId: AppServiceEnvironments_ListByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-web-hosting-environments list-app-service" [
+export def "app-service-environments-list-by-resource-group" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -224,7 +224,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-hosting-enviro
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/hostingEnvironments/{name}
 # operationId: AppServiceEnvironments_Delete
-export def "subscriptions-resource-groups-providers-microsoft-web-hosting-environments delete-app-service" [
+export def "app-service-environments-delete" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -267,7 +267,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-hosting-enviro
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/hostingEnvironments/{name}
 # operationId: AppServiceEnvironments_Get
-export def "subscriptions-resource-groups-providers-microsoft-web-hosting-environments get-app-service" [
+export def "app-service-environments-get" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -310,7 +310,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-hosting-enviro
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/hostingEnvironments/{name}
 # operationId: AppServiceEnvironments_Update
 # --properties shape: {apiManagementAccountId?: string, clusterSettings?: list, dnsSuffix?: string, dynamicCacheEnabled?: bool, frontEndScaleFactor?: int, hasLinuxWorkers?: bool, internalLoadBalancingMode?: "None"|"Web"|"Publishing", ipsslAddressCount?: int, location: string, multiRoleCount?: int, multiSize?: string, name: string, networkAccessControlList?: list, sslCertKeyVaultId?: string, sslCertKeyVaultSecretName?: string, suspended?: bool, userWhitelistedIpRanges?: list<string>, virtualNetwork: record, ... (4 more fields)}
-export def "subscriptions-resource-groups-providers-microsoft-web-hosting-environments update-app-service" [
+export def "app-service-environments-update" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -358,7 +358,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-hosting-enviro
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/hostingEnvironments/{name}
 # operationId: AppServiceEnvironments_CreateOrUpdate
 # --properties shape: {apiManagementAccountId?: string, clusterSettings?: list, dnsSuffix?: string, dynamicCacheEnabled?: bool, frontEndScaleFactor?: int, hasLinuxWorkers?: bool, internalLoadBalancingMode?: "None"|"Web"|"Publishing", ipsslAddressCount?: int, location: string, multiRoleCount?: int, multiSize?: string, name: string, networkAccessControlList?: list, sslCertKeyVaultId?: string, sslCertKeyVaultSecretName?: string, suspended?: bool, userWhitelistedIpRanges?: list<string>, virtualNetwork: record, ... (4 more fields)}
-export def "subscriptions-resource-groups-providers-microsoft-web-hosting-environments create-app-service-or-update" [
+export def "app-service-environments-create-or-update" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -407,7 +407,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-hosting-enviro
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/hostingEnvironments/{name}/capacities/compute
 # operationId: AppServiceEnvironments_ListCapacities
-export def "subscriptions-resource-groups-providers-microsoft-web-hosting-environments-capacities-compute list-app-service" [
+export def "app-service-environments-list-capacities" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -449,7 +449,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-hosting-enviro
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/hostingEnvironments/{name}/capacities/virtualip
 # operationId: AppServiceEnvironments_ListVips
-export def "subscriptions-resource-groups-providers-microsoft-web-hosting-environments-capacities-virtualip list-app-service-vips" [
+export def "app-service-environments-list-vips" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -491,7 +491,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-hosting-enviro
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/hostingEnvironments/{name}/changeVirtualNetwork
 # operationId: AppServiceEnvironments_ChangeVnet
-export def "subscriptions-resource-groups-providers-microsoft-web-hosting-environments-change-virtual-network create-app-service-vnet" [
+export def "app-service-environments-change-vnet" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -538,7 +538,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-hosting-enviro
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/hostingEnvironments/{name}/diagnostics
 # operationId: AppServiceEnvironments_ListDiagnostics
-export def "subscriptions-resource-groups-providers-microsoft-web-hosting-environments-diagnostics list-app-service" [
+export def "app-service-environments-list-diagnostics" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -580,7 +580,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-hosting-enviro
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/hostingEnvironments/{name}/diagnostics/{diagnosticsName}
 # operationId: AppServiceEnvironments_GetDiagnosticsItem
-export def "subscriptions-resource-groups-providers-microsoft-web-hosting-environments-diagnostics get-app-service-item" [
+export def "app-service-environments-get-diagnostics-item" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -624,7 +624,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-hosting-enviro
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/hostingEnvironments/{name}/inboundNetworkDependenciesEndpoints
 # operationId: AppServiceEnvironments_GetInboundNetworkDependenciesEndpoints
-export def "subscriptions-resource-groups-providers-microsoft-web-hosting-environments-inbound-network-dependencies-endpoints get-app-service" [
+export def "app-service-environments-get-inbound-network-dependencies-endpoints" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -666,7 +666,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-hosting-enviro
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/hostingEnvironments/{name}/metricdefinitions
 # operationId: AppServiceEnvironments_ListMetricDefinitions
-export def "subscriptions-resource-groups-providers-microsoft-web-hosting-environments-metricdefinitions list-app-service-metric-definitions" [
+export def "app-service-environments-list-metric-definitions" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -708,7 +708,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-hosting-enviro
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/hostingEnvironments/{name}/metrics
 # operationId: AppServiceEnvironments_ListMetrics
-export def "subscriptions-resource-groups-providers-microsoft-web-hosting-environments-metrics list-app-service" [
+export def "app-service-environments-list-metrics" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -752,7 +752,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-hosting-enviro
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/hostingEnvironments/{name}/multiRolePools
 # operationId: AppServiceEnvironments_ListMultiRolePools
-export def "subscriptions-resource-groups-providers-microsoft-web-hosting-environments-multi-role-pools list-app-service" [
+export def "app-service-environments-list-multi-role-pools" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -794,7 +794,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-hosting-enviro
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/hostingEnvironments/{name}/multiRolePools/default
 # operationId: AppServiceEnvironments_GetMultiRolePool
-export def "subscriptions-resource-groups-providers-microsoft-web-hosting-environments-multi-role-pools-default get-app-service" [
+export def "app-service-environments-get-multi-role-pool" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -838,7 +838,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-hosting-enviro
 # operationId: AppServiceEnvironments_UpdateMultiRolePool
 # --properties shape: {computeMode?: "Shared"|"Dedicated"|"Dynamic", workerCount?: int, workerSize?: string, workerSizeId?: int}
 # --sku shape: {capabilities?: list, capacity?: int, family?: string, locations?: list<string>, name?: string, size?: string, skuCapacity?: record, tier?: string}
-export def "subscriptions-resource-groups-providers-microsoft-web-hosting-environments-multi-role-pools-default update-app-service" [
+export def "app-service-environments-update-multi-role-pool" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -888,7 +888,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-hosting-enviro
 # operationId: AppServiceEnvironments_CreateOrUpdateMultiRolePool
 # --properties shape: {computeMode?: "Shared"|"Dedicated"|"Dynamic", workerCount?: int, workerSize?: string, workerSizeId?: int}
 # --sku shape: {capabilities?: list, capacity?: int, family?: string, locations?: list<string>, name?: string, size?: string, skuCapacity?: record, tier?: string}
-export def "subscriptions-resource-groups-providers-microsoft-web-hosting-environments-multi-role-pools-default create-app-service-or-update" [
+export def "app-service-environments-create-or-update-multi-role-pool" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -936,7 +936,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-hosting-enviro
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/hostingEnvironments/{name}/multiRolePools/default/instances/{instance}/metricdefinitions
 # operationId: AppServiceEnvironments_ListMultiRolePoolInstanceMetricDefinitions
-export def "subscriptions-resource-groups-providers-microsoft-web-hosting-environments-multi-role-pools-default-instances-metricdefinitions list-app-service-metric-definitions" [
+export def "app-service-environments-list-multi-role-pool-instance-metric-definitions" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -980,7 +980,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-hosting-enviro
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/hostingEnvironments/{name}/multiRolePools/default/instances/{instance}/metrics
 # operationId: AppServiceEnvironments_ListMultiRolePoolInstanceMetrics
-export def "subscriptions-resource-groups-providers-microsoft-web-hosting-environments-multi-role-pools-default-instances-metrics list-app-service" [
+export def "app-service-environments-list-multi-role-pool-instance-metrics" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -1025,7 +1025,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-hosting-enviro
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/hostingEnvironments/{name}/multiRolePools/default/metricdefinitions
 # operationId: AppServiceEnvironments_ListMultiRoleMetricDefinitions
-export def "subscriptions-resource-groups-providers-microsoft-web-hosting-environments-multi-role-pools-default-metricdefinitions list-app-service-metric-definitions" [
+export def "app-service-environments-list-multi-role-metric-definitions" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -1067,7 +1067,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-hosting-enviro
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/hostingEnvironments/{name}/multiRolePools/default/metrics
 # operationId: AppServiceEnvironments_ListMultiRoleMetrics
-export def "subscriptions-resource-groups-providers-microsoft-web-hosting-environments-multi-role-pools-default-metrics list-app-service" [
+export def "app-service-environments-list-multi-role-metrics" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -1114,7 +1114,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-hosting-enviro
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/hostingEnvironments/{name}/multiRolePools/default/skus
 # operationId: AppServiceEnvironments_ListMultiRolePoolSkus
-export def "subscriptions-resource-groups-providers-microsoft-web-hosting-environments-multi-role-pools-default-skus list-app-service" [
+export def "app-service-environments-list-multi-role-pool-skus" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -1156,7 +1156,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-hosting-enviro
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/hostingEnvironments/{name}/multiRolePools/default/usages
 # operationId: AppServiceEnvironments_ListMultiRoleUsages
-export def "subscriptions-resource-groups-providers-microsoft-web-hosting-environments-multi-role-pools-default-usages list-app-service" [
+export def "app-service-environments-list-multi-role-usages" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -1198,7 +1198,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-hosting-enviro
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/hostingEnvironments/{name}/operations
 # operationId: AppServiceEnvironments_ListOperations
-export def "subscriptions-resource-groups-providers-microsoft-web-hosting-environments-operations list-app-service" [
+export def "app-service-environments-list-operations" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -1240,7 +1240,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-hosting-enviro
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/hostingEnvironments/{name}/outboundNetworkDependenciesEndpoints
 # operationId: AppServiceEnvironments_GetOutboundNetworkDependenciesEndpoints
-export def "subscriptions-resource-groups-providers-microsoft-web-hosting-environments-outbound-network-dependencies-endpoints get-app-service" [
+export def "app-service-environments-get-outbound-network-dependencies-endpoints" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -1282,7 +1282,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-hosting-enviro
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/hostingEnvironments/{name}/reboot
 # operationId: AppServiceEnvironments_Reboot
-export def "subscriptions-resource-groups-providers-microsoft-web-hosting-environments-reboot create-app-service" [
+export def "app-service-environments-reboot" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -1324,7 +1324,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-hosting-enviro
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/hostingEnvironments/{name}/resume
 # operationId: AppServiceEnvironments_Resume
-export def "subscriptions-resource-groups-providers-microsoft-web-hosting-environments-resume create-app-service" [
+export def "app-service-environments-resume" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -1366,7 +1366,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-hosting-enviro
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/hostingEnvironments/{name}/serverfarms
 # operationId: AppServiceEnvironments_ListAppServicePlans
-export def "subscriptions-resource-groups-providers-microsoft-web-hosting-environments-serverfarms list-app-service-app-service-plans" [
+export def "app-service-environments-list-app-service-plans" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -1408,7 +1408,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-hosting-enviro
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/hostingEnvironments/{name}/sites
 # operationId: AppServiceEnvironments_ListWebApps
-export def "subscriptions-resource-groups-providers-microsoft-web-hosting-environments-sites list-app-service-apps" [
+export def "app-service-environments-list-web-apps" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -1451,7 +1451,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-hosting-enviro
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/hostingEnvironments/{name}/suspend
 # operationId: AppServiceEnvironments_Suspend
-export def "subscriptions-resource-groups-providers-microsoft-web-hosting-environments-suspend create-app-service" [
+export def "app-service-environments-suspend" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -1493,7 +1493,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-hosting-enviro
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/hostingEnvironments/{name}/usages
 # operationId: AppServiceEnvironments_ListUsages
-export def "subscriptions-resource-groups-providers-microsoft-web-hosting-environments-usages list-app-service" [
+export def "app-service-environments-list-usages" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -1536,7 +1536,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-hosting-enviro
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/hostingEnvironments/{name}/workerPools
 # operationId: AppServiceEnvironments_ListWorkerPools
-export def "subscriptions-resource-groups-providers-microsoft-web-hosting-environments-worker-pools list-app-service" [
+export def "app-service-environments-list-worker-pools" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -1578,7 +1578,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-hosting-enviro
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/hostingEnvironments/{name}/workerPools/{workerPoolName}
 # operationId: AppServiceEnvironments_GetWorkerPool
-export def "subscriptions-resource-groups-providers-microsoft-web-hosting-environments-worker-pools get-app-service" [
+export def "app-service-environments-get-worker-pool" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -1624,7 +1624,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-hosting-enviro
 # operationId: AppServiceEnvironments_UpdateWorkerPool
 # --properties shape: {computeMode?: "Shared"|"Dedicated"|"Dynamic", workerCount?: int, workerSize?: string, workerSizeId?: int}
 # --sku shape: {capabilities?: list, capacity?: int, family?: string, locations?: list<string>, name?: string, size?: string, skuCapacity?: record, tier?: string}
-export def "subscriptions-resource-groups-providers-microsoft-web-hosting-environments-worker-pools update-app-service" [
+export def "app-service-environments-update-worker-pool" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -1676,7 +1676,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-hosting-enviro
 # operationId: AppServiceEnvironments_CreateOrUpdateWorkerPool
 # --properties shape: {computeMode?: "Shared"|"Dedicated"|"Dynamic", workerCount?: int, workerSize?: string, workerSizeId?: int}
 # --sku shape: {capabilities?: list, capacity?: int, family?: string, locations?: list<string>, name?: string, size?: string, skuCapacity?: record, tier?: string}
-export def "subscriptions-resource-groups-providers-microsoft-web-hosting-environments-worker-pools create-app-service-or-update" [
+export def "app-service-environments-create-or-update-worker-pool" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -1726,7 +1726,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-hosting-enviro
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/hostingEnvironments/{name}/workerPools/{workerPoolName}/instances/{instance}/metricdefinitions
 # operationId: AppServiceEnvironments_ListWorkerPoolInstanceMetricDefinitions
-export def "subscriptions-resource-groups-providers-microsoft-web-hosting-environments-worker-pools-instances-metricdefinitions list-app-service-metric-definitions" [
+export def "app-service-environments-list-worker-pool-instance-metric-definitions" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -1772,7 +1772,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-hosting-enviro
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/hostingEnvironments/{name}/workerPools/{workerPoolName}/instances/{instance}/metrics
 # operationId: AppServiceEnvironments_ListWorkerPoolInstanceMetrics
-export def "subscriptions-resource-groups-providers-microsoft-web-hosting-environments-worker-pools-instances-metrics list-app-service" [
+export def "app-service-environments-list-worker-pool-instance-metrics" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -1820,7 +1820,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-hosting-enviro
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/hostingEnvironments/{name}/workerPools/{workerPoolName}/metricdefinitions
 # operationId: AppServiceEnvironments_ListWebWorkerMetricDefinitions
-export def "subscriptions-resource-groups-providers-microsoft-web-hosting-environments-worker-pools-metricdefinitions list-app-service-metric-definitions" [
+export def "app-service-environments-list-web-worker-metric-definitions" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -1864,7 +1864,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-hosting-enviro
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/hostingEnvironments/{name}/workerPools/{workerPoolName}/metrics
 # operationId: AppServiceEnvironments_ListWebWorkerMetrics
-export def "subscriptions-resource-groups-providers-microsoft-web-hosting-environments-worker-pools-metrics list-app-service" [
+export def "app-service-environments-list-web-worker-metrics" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -1910,7 +1910,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-hosting-enviro
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/hostingEnvironments/{name}/workerPools/{workerPoolName}/skus
 # operationId: AppServiceEnvironments_ListWorkerPoolSkus
-export def "subscriptions-resource-groups-providers-microsoft-web-hosting-environments-worker-pools-skus list-app-service" [
+export def "app-service-environments-list-worker-pool-skus" [
   subscription_id: string
   resource_group_name: string
   name: string
@@ -1954,7 +1954,7 @@ export def "subscriptions-resource-groups-providers-microsoft-web-hosting-enviro
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Web/hostingEnvironments/{name}/workerPools/{workerPoolName}/usages
 # operationId: AppServiceEnvironments_ListWebWorkerUsages
-export def "subscriptions-resource-groups-providers-microsoft-web-hosting-environments-worker-pools-usages list-app-service" [
+export def "app-service-environments-list-web-worker-usages" [
   subscription_id: string
   resource_group_name: string
   name: string

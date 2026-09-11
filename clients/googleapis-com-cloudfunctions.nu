@@ -130,7 +130,7 @@ def environment-completer [] { ["ENVIRONMENT_UNSPECIFIED" "GEN_1" "GEN_2"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "projects delete" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "cloudfunctions-projects-locations-functions-delete" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -154,7 +154,7 @@ export def commands []: nothing -> table {
 #
 # DELETE /v2/{name}
 # operationId: cloudfunctions.projects.locations.functions.delete
-export def "projects delete" [
+export def "cloudfunctions-projects-locations-functions-delete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -202,7 +202,7 @@ export def "projects delete" [
 #
 # GET /v2/{name}
 # operationId: cloudfunctions.projects.locations.operations.get
-export def "projects get" [
+export def "cloudfunctions-projects-locations-operations-get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -254,7 +254,7 @@ export def "projects get" [
 # --eventTrigger shape: {channel?: string, eventFilters?: list, eventType?: string, pubsubTopic?: string, retryPolicy?: "RETRY_POLICY_UNSPECIFIED"|"RETRY_POLICY_DO_NOT_RETRY"|"RETRY_POLICY_RETRY", serviceAccountEmail?: string, triggerRegion?: string}
 # --serviceConfig shape: {allTrafficOnLatestRevision?: bool, availableCpu?: string, availableMemory?: string, environmentVariables?: record, ingressSettings?: "INGRESS_SETTINGS_UNSPECIFIED"|"ALLOW_ALL"|"ALLOW_INTERNAL_ONLY"|"ALLOW_INTERNAL_AND_GCLB", maxInstanceCount?: int, maxInstanceRequestConcurrency?: int, minInstanceCount?: int, secretEnvironmentVariables?: list, secretVolumes?: list, securityLevel?: "SECURITY_LEVEL_UNSPECIFIED"|"SECURE_ALWAYS"|"SECURE_OPTIONAL", serviceAccountEmail?: string, timeoutSeconds?: int, ... (2 more fields)}
 # --stateMessages item shape: {message?: string, severity?: "SEVERITY_UNSPECIFIED"|"ERROR"|"WARNING"|"INFO", type?: string}
-export def "projects update" [
+export def "cloudfunctions-projects-locations-functions-patch" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -314,7 +314,7 @@ export def "projects update" [
 #
 # GET /v2/{name}/locations
 # operationId: cloudfunctions.projects.locations.list
-export def "locations list" [
+export def "cloudfunctions-projects-locations-list" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -365,7 +365,7 @@ export def "locations list" [
 #
 # GET /v2/{name}/operations
 # operationId: cloudfunctions.projects.locations.operations.list
-export def "operations list" [
+export def "cloudfunctions-projects-locations-operations-list" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -416,7 +416,7 @@ export def "operations list" [
 #
 # POST /v2/{name}:generateDownloadUrl
 # operationId: cloudfunctions.projects.locations.functions.generateDownloadUrl
-export def "projects generate-download-url" [
+export def "cloudfunctions-projects-locations-functions-generate-download-url" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -468,7 +468,7 @@ export def "projects generate-download-url" [
 #
 # GET /v2/{parent}/functions
 # operationId: cloudfunctions.projects.locations.functions.list
-export def "functions list" [
+export def "cloudfunctions-projects-locations-functions-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -524,7 +524,7 @@ export def "functions list" [
 # --eventTrigger shape: {channel?: string, eventFilters?: list, eventType?: string, pubsubTopic?: string, retryPolicy?: "RETRY_POLICY_UNSPECIFIED"|"RETRY_POLICY_DO_NOT_RETRY"|"RETRY_POLICY_RETRY", serviceAccountEmail?: string, triggerRegion?: string}
 # --serviceConfig shape: {allTrafficOnLatestRevision?: bool, availableCpu?: string, availableMemory?: string, environmentVariables?: record, ingressSettings?: "INGRESS_SETTINGS_UNSPECIFIED"|"ALLOW_ALL"|"ALLOW_INTERNAL_ONLY"|"ALLOW_INTERNAL_AND_GCLB", maxInstanceCount?: int, maxInstanceRequestConcurrency?: int, minInstanceCount?: int, secretEnvironmentVariables?: list, secretVolumes?: list, securityLevel?: "SECURITY_LEVEL_UNSPECIFIED"|"SECURE_ALWAYS"|"SECURE_OPTIONAL", serviceAccountEmail?: string, timeoutSeconds?: int, ... (2 more fields)}
 # --stateMessages item shape: {message?: string, severity?: "SEVERITY_UNSPECIFIED"|"ERROR"|"WARNING"|"INFO", type?: string}
-export def "functions create" [
+export def "cloudfunctions-projects-locations-functions-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -584,7 +584,7 @@ export def "functions create" [
 #
 # POST /v2/{parent}/functions:generateUploadUrl
 # operationId: cloudfunctions.projects.locations.functions.generateUploadUrl
-export def "functions-generate-upload-url generate" [
+export def "cloudfunctions-projects-locations-functions-generate-upload-url" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -636,7 +636,7 @@ export def "functions-generate-upload-url generate" [
 #
 # GET /v2/{parent}/runtimes
 # operationId: cloudfunctions.projects.locations.runtimes.list
-export def "runtimes list" [
+export def "cloudfunctions-projects-locations-runtimes-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -685,7 +685,7 @@ export def "runtimes list" [
 #
 # GET /v2/{resource}:getIamPolicy
 # operationId: cloudfunctions.projects.locations.functions.getIamPolicy
-export def "projects get-iam-policy" [
+export def "cloudfunctions-projects-locations-functions-get-iam-policy" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -735,7 +735,7 @@ export def "projects get-iam-policy" [
 # POST /v2/{resource}:setIamPolicy
 # operationId: cloudfunctions.projects.locations.functions.setIamPolicy
 # --policy shape: {auditConfigs?: list, bindings?: list, etag?: string, version?: int}
-export def "projects update-iam-policy" [
+export def "cloudfunctions-projects-locations-functions-set-iam-policy" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -788,7 +788,7 @@ export def "projects update-iam-policy" [
 #
 # POST /v2/{resource}:testIamPermissions
 # operationId: cloudfunctions.projects.locations.functions.testIamPermissions
-export def "projects test-iam-permissions" [
+export def "cloudfunctions-projects-locations-functions-test-iam-permissions" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)

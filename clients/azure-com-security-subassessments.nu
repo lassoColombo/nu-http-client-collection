@@ -98,7 +98,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-security-assessments-sub-assessments list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "sub-assessments-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -122,7 +122,7 @@ export def commands []: nothing -> table {
 #
 # GET /{scope}/providers/Microsoft.Security/assessments/{assessmentName}/subAssessments
 # operationId: SubAssessments_List
-export def "providers-microsoft-security-assessments-sub-assessments list" [
+export def "sub-assessments-list" [
   scope: string
   assessment_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -162,7 +162,7 @@ export def "providers-microsoft-security-assessments-sub-assessments list" [
 #
 # GET /{scope}/providers/Microsoft.Security/assessments/{assessmentName}/subAssessments/{subAssessmentName}
 # operationId: SubAssessments_Get
-export def "providers-microsoft-security-assessments-sub-assessments get" [
+export def "sub-assessments-get" [
   scope: string
   assessment_name: string
   sub_assessment_name: string
@@ -204,7 +204,7 @@ export def "providers-microsoft-security-assessments-sub-assessments get" [
 #
 # GET /{scope}/providers/Microsoft.Security/subAssessments
 # operationId: SubAssessments_ListAll
-export def "providers-microsoft-security-sub-assessments list" [
+export def "sub-assessments-list-all" [
   scope: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

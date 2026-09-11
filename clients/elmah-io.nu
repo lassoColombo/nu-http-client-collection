@@ -140,7 +140,7 @@ def accept-completer [] { ["application/json" "text/json" "text/plain"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "deployments get-list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "deployments-get-all" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -164,7 +164,7 @@ export def commands []: nothing -> table {
 #
 # GET /v3/deployments
 # operationId: Deployments_GetAll
-export def "deployments get-list" [
+export def "deployments-get-all" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -199,7 +199,7 @@ export def "deployments get-list" [
 #
 # POST /v3/deployments
 # operationId: Deployments_Create
-export def "deployments create" [
+export def "deployments-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -243,7 +243,7 @@ export def "deployments create" [
 #
 # DELETE /v3/deployments/{id}
 # operationId: Deployments_Delete
-export def "deployments delete" [
+export def "deployments-delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -279,7 +279,7 @@ export def "deployments delete" [
 #
 # GET /v3/deployments/{id}
 # operationId: Deployments_Get
-export def "deployments get" [
+export def "deployments-get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -316,7 +316,7 @@ export def "deployments get" [
 #
 # POST /v3/heartbeats/{logId}/{id}
 # operationId: Heartbeats_Create
-export def "heartbeats create" [
+export def "heartbeats-create" [
   log_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -362,7 +362,7 @@ export def "heartbeats create" [
 #
 # GET /v3/logs
 # operationId: Logs_GetAll
-export def "logs get-list" [
+export def "logs-get-all" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -397,7 +397,7 @@ export def "logs get-list" [
 #
 # POST /v3/logs
 # operationId: Logs_Create
-export def "logs create" [
+export def "logs-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -436,7 +436,7 @@ export def "logs create" [
 #
 # GET /v3/logs/{id}
 # operationId: Logs_Get
-export def "logs get" [
+export def "logs-get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -473,7 +473,7 @@ export def "logs get" [
 #
 # GET /v3/logs/{id}/_diagnose
 # operationId: Logs_Diagnose
-export def "logs-diagnose logs" [
+export def "logs-diagnose" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -510,7 +510,7 @@ export def "logs-diagnose logs" [
 #
 # POST /v3/logs/{id}/_disable
 # operationId: Logs_Disable
-export def "logs-disable logs" [
+export def "logs-disable" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -546,7 +546,7 @@ export def "logs-disable logs" [
 #
 # POST /v3/logs/{id}/_enable
 # operationId: Logs_Enable
-export def "logs-enable logs" [
+export def "logs-enable" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -582,7 +582,7 @@ export def "logs-enable logs" [
 #
 # DELETE /v3/messages/{logId}
 # operationId: Messages_DeleteAll
-export def "messages delete-list" [
+export def "messages-delete-all" [
   log_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -624,7 +624,7 @@ export def "messages delete-list" [
 #
 # GET /v3/messages/{logId}
 # operationId: Messages_GetAll
-export def "messages get-list" [
+export def "messages-get-all" [
   log_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -674,7 +674,7 @@ export def "messages get-list" [
 # --form item shape: {key?: string, value?: string}
 # --queryString item shape: {key?: string, value?: string}
 # --serverVariables item shape: {key?: string, value?: string}
-export def "messages create" [
+export def "messages-create" [
   log_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -737,7 +737,7 @@ export def "messages create" [
 #
 # POST /v3/messages/{logId}/_bulk
 # operationId: Messages_CreateBulk
-export def "messages-bulk create" [
+export def "messages-create-bulk" [
   log_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -778,7 +778,7 @@ export def "messages-bulk create" [
 #
 # POST /v3/messages/{logId}/_fix
 # operationId: Messages_FixAll
-export def "messages-fix list" [
+export def "messages-fix-all" [
   log_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -820,7 +820,7 @@ export def "messages-fix list" [
 #
 # DELETE /v3/messages/{logId}/{id}
 # operationId: Messages_Delete
-export def "messages delete" [
+export def "messages-delete" [
   log_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -858,7 +858,7 @@ export def "messages delete" [
 #
 # GET /v3/messages/{logId}/{id}
 # operationId: Messages_Get
-export def "messages get" [
+export def "messages-get" [
   log_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -897,7 +897,7 @@ export def "messages get" [
 #
 # POST /v3/messages/{logId}/{id}/_fix
 # operationId: Messages_Fix
-export def "messages-fix create" [
+export def "messages-fix" [
   log_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -937,7 +937,7 @@ export def "messages-fix create" [
 #
 # POST /v3/messages/{logId}/{id}/_hide
 # operationId: Messages_Hide
-export def "messages-hide create" [
+export def "messages-hide" [
   log_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -975,7 +975,7 @@ export def "messages-hide create" [
 #
 # POST /v3/sourcemaps/{logId}
 # operationId: SourceMaps_CreateOrUpdate
-export def "sourcemaps create-source-maps-or-update" [
+export def "source-maps-create-or-update" [
   log_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1019,7 +1019,7 @@ export def "sourcemaps create-source-maps-or-update" [
 #
 # GET /v3/uptimechecks
 # operationId: UptimeChecks_GetAll
-export def "uptimechecks get-uptime-checks-list" [
+export def "uptime-checks-get-all" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

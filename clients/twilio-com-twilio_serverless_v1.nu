@@ -111,7 +111,7 @@ def auth-scheme-completer [] { ["basic" "basic-credentials"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "services list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "list-service" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -135,7 +135,7 @@ export def commands []: nothing -> table {
 #
 # GET /v1/Services
 # operationId: ListService
-export def "services list" [
+export def "list-service" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -173,7 +173,7 @@ export def "services list" [
 #
 # POST /v1/Services
 # operationId: CreateService
-export def "services create" [
+export def "create-service" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -215,7 +215,7 @@ export def "services create" [
 #
 # GET /v1/Services/{ServiceSid}/Assets
 # operationId: ListAsset
-export def "services-assets list" [
+export def "list-asset" [
   service_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -255,7 +255,7 @@ export def "services-assets list" [
 #
 # POST /v1/Services/{ServiceSid}/Assets
 # operationId: CreateAsset
-export def "services-assets create" [
+export def "create-asset" [
   service_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -296,7 +296,7 @@ export def "services-assets create" [
 #
 # GET /v1/Services/{ServiceSid}/Assets/{AssetSid}/Versions
 # operationId: ListAssetVersion
-export def "services-assets-versions list" [
+export def "list-asset-version" [
   service_sid: string
   asset_sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -338,7 +338,7 @@ export def "services-assets-versions list" [
 #
 # GET /v1/Services/{ServiceSid}/Assets/{AssetSid}/Versions/{Sid}
 # operationId: FetchAssetVersion
-export def "services-assets-versions get" [
+export def "fetch-asset-version" [
   service_sid: string
   asset_sid: string
   sid: string
@@ -378,7 +378,7 @@ export def "services-assets-versions get" [
 #
 # DELETE /v1/Services/{ServiceSid}/Assets/{Sid}
 # operationId: DeleteAsset
-export def "services-assets delete" [
+export def "delete-asset" [
   service_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -416,7 +416,7 @@ export def "services-assets delete" [
 #
 # GET /v1/Services/{ServiceSid}/Assets/{Sid}
 # operationId: FetchAsset
-export def "services-assets get" [
+export def "fetch-asset" [
   service_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -454,7 +454,7 @@ export def "services-assets get" [
 #
 # POST /v1/Services/{ServiceSid}/Assets/{Sid}
 # operationId: UpdateAsset
-export def "services-assets update" [
+export def "update-asset" [
   service_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -497,7 +497,7 @@ export def "services-assets update" [
 #
 # GET /v1/Services/{ServiceSid}/Builds
 # operationId: ListBuild
-export def "services-builds list" [
+export def "list-build" [
   service_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -537,7 +537,7 @@ export def "services-builds list" [
 #
 # POST /v1/Services/{ServiceSid}/Builds
 # operationId: CreateBuild
-export def "services-builds create" [
+export def "create-build" [
   service_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -581,7 +581,7 @@ export def "services-builds create" [
 #
 # DELETE /v1/Services/{ServiceSid}/Builds/{Sid}
 # operationId: DeleteBuild
-export def "services-builds delete" [
+export def "delete-build" [
   service_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -619,7 +619,7 @@ export def "services-builds delete" [
 #
 # GET /v1/Services/{ServiceSid}/Builds/{Sid}
 # operationId: FetchBuild
-export def "services-builds get" [
+export def "fetch-build" [
   service_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -657,7 +657,7 @@ export def "services-builds get" [
 #
 # GET /v1/Services/{ServiceSid}/Builds/{Sid}/Status
 # operationId: FetchBuildStatus
-export def "services-builds-status get" [
+export def "fetch-build-status" [
   service_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -695,7 +695,7 @@ export def "services-builds-status get" [
 #
 # GET /v1/Services/{ServiceSid}/Environments
 # operationId: ListEnvironment
-export def "services-environments list" [
+export def "list-environment" [
   service_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -735,7 +735,7 @@ export def "services-environments list" [
 #
 # POST /v1/Services/{ServiceSid}/Environments
 # operationId: CreateEnvironment
-export def "services-environments create" [
+export def "create-environment" [
   service_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -777,7 +777,7 @@ export def "services-environments create" [
 #
 # GET /v1/Services/{ServiceSid}/Environments/{EnvironmentSid}/Deployments
 # operationId: ListDeployment
-export def "services-environments-deployments list" [
+export def "list-deployment" [
   service_sid: string
   environment_sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -819,7 +819,7 @@ export def "services-environments-deployments list" [
 #
 # POST /v1/Services/{ServiceSid}/Environments/{EnvironmentSid}/Deployments
 # operationId: CreateDeployment
-export def "services-environments-deployments create" [
+export def "create-deployment" [
   service_sid: string
   environment_sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -862,7 +862,7 @@ export def "services-environments-deployments create" [
 #
 # GET /v1/Services/{ServiceSid}/Environments/{EnvironmentSid}/Deployments/{Sid}
 # operationId: FetchDeployment
-export def "services-environments-deployments get" [
+export def "fetch-deployment" [
   service_sid: string
   environment_sid: string
   sid: string
@@ -902,7 +902,7 @@ export def "services-environments-deployments get" [
 #
 # GET /v1/Services/{ServiceSid}/Environments/{EnvironmentSid}/Logs
 # operationId: ListLog
-export def "services-environments-logs list" [
+export def "list-log" [
   service_sid: string
   environment_sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -947,7 +947,7 @@ export def "services-environments-logs list" [
 #
 # GET /v1/Services/{ServiceSid}/Environments/{EnvironmentSid}/Logs/{Sid}
 # operationId: FetchLog
-export def "services-environments-logs get" [
+export def "fetch-log" [
   service_sid: string
   environment_sid: string
   sid: string
@@ -987,7 +987,7 @@ export def "services-environments-logs get" [
 #
 # GET /v1/Services/{ServiceSid}/Environments/{EnvironmentSid}/Variables
 # operationId: ListVariable
-export def "services-environments-variables list" [
+export def "list-variable" [
   service_sid: string
   environment_sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1029,7 +1029,7 @@ export def "services-environments-variables list" [
 #
 # POST /v1/Services/{ServiceSid}/Environments/{EnvironmentSid}/Variables
 # operationId: CreateVariable
-export def "services-environments-variables create" [
+export def "create-variable" [
   service_sid: string
   environment_sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1073,7 +1073,7 @@ export def "services-environments-variables create" [
 #
 # DELETE /v1/Services/{ServiceSid}/Environments/{EnvironmentSid}/Variables/{Sid}
 # operationId: DeleteVariable
-export def "services-environments-variables delete" [
+export def "delete-variable" [
   service_sid: string
   environment_sid: string
   sid: string
@@ -1113,7 +1113,7 @@ export def "services-environments-variables delete" [
 #
 # GET /v1/Services/{ServiceSid}/Environments/{EnvironmentSid}/Variables/{Sid}
 # operationId: FetchVariable
-export def "services-environments-variables get" [
+export def "fetch-variable" [
   service_sid: string
   environment_sid: string
   sid: string
@@ -1153,7 +1153,7 @@ export def "services-environments-variables get" [
 #
 # POST /v1/Services/{ServiceSid}/Environments/{EnvironmentSid}/Variables/{Sid}
 # operationId: UpdateVariable
-export def "services-environments-variables update" [
+export def "update-variable" [
   service_sid: string
   environment_sid: string
   sid: string
@@ -1199,7 +1199,7 @@ export def "services-environments-variables update" [
 #
 # DELETE /v1/Services/{ServiceSid}/Environments/{Sid}
 # operationId: DeleteEnvironment
-export def "services-environments delete" [
+export def "delete-environment" [
   service_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1237,7 +1237,7 @@ export def "services-environments delete" [
 #
 # GET /v1/Services/{ServiceSid}/Environments/{Sid}
 # operationId: FetchEnvironment
-export def "services-environments get" [
+export def "fetch-environment" [
   service_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1275,7 +1275,7 @@ export def "services-environments get" [
 #
 # GET /v1/Services/{ServiceSid}/Functions
 # operationId: ListFunction
-export def "services-functions list" [
+export def "list-function" [
   service_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1315,7 +1315,7 @@ export def "services-functions list" [
 #
 # POST /v1/Services/{ServiceSid}/Functions
 # operationId: CreateFunction
-export def "services-functions create" [
+export def "create-function" [
   service_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1356,7 +1356,7 @@ export def "services-functions create" [
 #
 # GET /v1/Services/{ServiceSid}/Functions/{FunctionSid}/Versions
 # operationId: ListFunctionVersion
-export def "services-functions-versions list" [
+export def "list-function-version" [
   service_sid: string
   function_sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1398,7 +1398,7 @@ export def "services-functions-versions list" [
 #
 # GET /v1/Services/{ServiceSid}/Functions/{FunctionSid}/Versions/{Sid}
 # operationId: FetchFunctionVersion
-export def "services-functions-versions get" [
+export def "fetch-function-version" [
   service_sid: string
   function_sid: string
   sid: string
@@ -1438,7 +1438,7 @@ export def "services-functions-versions get" [
 #
 # GET /v1/Services/{ServiceSid}/Functions/{FunctionSid}/Versions/{Sid}/Content
 # operationId: FetchFunctionVersionContent
-export def "services-functions-versions-content get" [
+export def "fetch-function-version-content" [
   service_sid: string
   function_sid: string
   sid: string
@@ -1478,7 +1478,7 @@ export def "services-functions-versions-content get" [
 #
 # DELETE /v1/Services/{ServiceSid}/Functions/{Sid}
 # operationId: DeleteFunction
-export def "services-functions delete" [
+export def "delete-function" [
   service_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1516,7 +1516,7 @@ export def "services-functions delete" [
 #
 # GET /v1/Services/{ServiceSid}/Functions/{Sid}
 # operationId: FetchFunction
-export def "services-functions get" [
+export def "fetch-function" [
   service_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1554,7 +1554,7 @@ export def "services-functions get" [
 #
 # POST /v1/Services/{ServiceSid}/Functions/{Sid}
 # operationId: UpdateFunction
-export def "services-functions update" [
+export def "update-function" [
   service_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1597,7 +1597,7 @@ export def "services-functions update" [
 #
 # DELETE /v1/Services/{Sid}
 # operationId: DeleteService
-export def "services delete" [
+export def "delete-service" [
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1633,7 +1633,7 @@ export def "services delete" [
 #
 # GET /v1/Services/{Sid}
 # operationId: FetchService
-export def "services get" [
+export def "fetch-service" [
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1669,7 +1669,7 @@ export def "services get" [
 #
 # POST /v1/Services/{Sid}
 # operationId: UpdateService
-export def "services update" [
+export def "update-service" [
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

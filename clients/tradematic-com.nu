@@ -116,7 +116,7 @@ def auth-scheme-completer [] { ["x-api-key"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "autofollow-strategies list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-autofollow-strategies" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -139,7 +139,7 @@ export def commands []: nothing -> table {
 # Get autofollow strategies list
 #
 # GET /autofollow/strategies
-export def "autofollow-strategies list" [
+export def "get-autofollow-strategies" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -173,7 +173,7 @@ export def "autofollow-strategies list" [
 #
 # POST /autofollow/strategies
 # --strategy shape: {apr?: string, author?: string, content?: string, description?: string, drawdown?: string, guid?: string, limitorder?: string, marketname?: string, multiposition?: string, name?: string, positionsize?: string, strategytypeid?: string, symbols?: string, timeframe?: string}
-export def "autofollow-strategies create" [
+export def "post-autofollow-strategies" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -210,7 +210,7 @@ export def "autofollow-strategies create" [
 # Get autofollow strategy by ID
 #
 # GET /autofollow/strategies/{strategyid}
-export def "autofollow-strategies get" [
+export def "get-autofollow-strategies-strategyid" [
   strategyid: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -246,7 +246,7 @@ export def "autofollow-strategies get" [
 #
 # PUT /autofollow/strategies/{strategyid}
 # --strategy shape: {author?: string, description?: string, limitorder?: string, marketname?: string, multiposition?: string, name?: string, symbols?: string}
-export def "autofollow-strategies update" [
+export def "put-autofollow-strategies-strategyid" [
   strategyid: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -286,7 +286,7 @@ export def "autofollow-strategies update" [
 #
 # PUT /autofollow/strategies/{strategyid}/content
 # --strategy shape: {rules?: record}
-export def "autofollow-strategies-content update" [
+export def "put-autofollow-strategies-strategyid-content" [
   strategyid: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -325,7 +325,7 @@ export def "autofollow-strategies-content update" [
 # Get positions for strategy
 #
 # GET /autofollow/strategies/{strategyid}/positions
-export def "autofollow-strategies-positions get" [
+export def "get-autofollow-strategies-strategyid-positions" [
   strategyid: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -360,7 +360,7 @@ export def "autofollow-strategies-positions get" [
 # Get trading signals for strategy
 #
 # GET /autofollow/strategies/{strategyid}/signals
-export def "autofollow-strategies-signals get" [
+export def "get-autofollow-strategies-strategyid-signals" [
   strategyid: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -398,7 +398,7 @@ export def "autofollow-strategies-signals get" [
 #
 # POST /autofollow/strategies/{strategyid}/signals
 # --signal shape: {position?: string, price?: string, shares?: string, size?: string, symbol?: string, timestamp?: string, type?: string}
-export def "autofollow-strategies-signals create" [
+export def "post-autofollow-strategies-strategyid-signals" [
   strategyid: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -437,7 +437,7 @@ export def "autofollow-strategies-signals create" [
 # Get strategy builder rules list
 #
 # GET /builder/rules
-export def "builder-rules list" [
+export def "get-builder-rules" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -470,7 +470,7 @@ export def "builder-rules list" [
 # Get strategy builder rules by ID
 #
 # GET /builder/rules/{ruleid}
-export def "builder-rules get" [
+export def "get-builder-rules-ruleid" [
   ruleid: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -505,7 +505,7 @@ export def "builder-rules get" [
 # Get API keys
 #
 # GET /client/apikeys
-export def "client-apikeys get" [
+export def "get-client-apikeys" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -538,7 +538,7 @@ export def "client-apikeys get" [
 # Create new API key
 #
 # POST /client/apikeys
-export def "client-apikeys create" [
+export def "post-client-apikeys" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -571,7 +571,7 @@ export def "client-apikeys create" [
 # Delete API key
 #
 # DELETE /client/apikeys/{keyid}
-export def "client-apikeys delete" [
+export def "delete-client-apikeys-keyid" [
   keyid: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -606,7 +606,7 @@ export def "client-apikeys delete" [
 # Get users list
 #
 # GET /client/users
-export def "client-users list" [
+export def "get-client-users" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -639,7 +639,7 @@ export def "client-users list" [
 # Logs user into the system
 #
 # POST /client/users/login
-export def "client-users-login create" [
+export def "post-client-users-login" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -673,7 +673,7 @@ export def "client-users-login create" [
 #
 # POST /client/users/register
 # --user shape: {name?: string, password?: string, username?: string}
-export def "client-users-register create" [
+export def "post-client-users-register" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -710,7 +710,7 @@ export def "client-users-register create" [
 # Get user by ID
 #
 # GET /client/users/{userid}
-export def "client-users get" [
+export def "get-client-users-userid" [
   userid: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -745,7 +745,7 @@ export def "client-users get" [
 # Get trading accounts list
 #
 # GET /cloud/accounts
-export def "cloud-accounts list" [
+export def "get-cloud-accounts" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -778,7 +778,7 @@ export def "cloud-accounts list" [
 # Get trading account by ID
 #
 # GET /cloud/accounts/{accountid}
-export def "cloud-accounts get" [
+export def "get-cloud-accounts-accountid" [
   accountid: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -813,7 +813,7 @@ export def "cloud-accounts get" [
 # Close all positions by account
 #
 # POST /cloud/accounts/{accountid}/closeall
-export def "cloud-accounts-closeall create" [
+export def "post-cloud-accounts-accountid-closeall" [
   accountid: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -848,7 +848,7 @@ export def "cloud-accounts-closeall create" [
 # Get orders list by account
 #
 # GET /cloud/accounts/{accountid}/orders
-export def "cloud-accounts-orders get" [
+export def "get-cloud-accounts-accountid-orders" [
   accountid: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -884,7 +884,7 @@ export def "cloud-accounts-orders get" [
 #
 # POST /cloud/accounts/{accountid}/orders
 # --order shape: {buy?: string, price?: string, shares?: string, symbol?: string, type?: string}
-export def "cloud-accounts-orders create" [
+export def "post-cloud-accounts-accountid-orders" [
   accountid: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -923,7 +923,7 @@ export def "cloud-accounts-orders create" [
 # Cancel an order by ID
 #
 # DELETE /cloud/accounts/{accountid}/orders/{orderid}
-export def "cloud-accounts-orders delete" [
+export def "delete-cloud-accounts-accountid-orders-orderid" [
   accountid: int
   orderid: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -960,7 +960,7 @@ export def "cloud-accounts-orders delete" [
 # Get account equity and cash snapshots
 #
 # GET /cloud/accounts/{accountid}/snapshots
-export def "cloud-accounts-snapshots get" [
+export def "get-cloud-accounts-accountid-snapshots" [
   accountid: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -995,7 +995,7 @@ export def "cloud-accounts-snapshots get" [
 # Syhchronize an account with account active strategies
 #
 # POST /cloud/accounts/{accountid}/sync
-export def "cloud-accounts-sync create" [
+export def "post-cloud-accounts-accountid-sync" [
   accountid: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1030,7 +1030,7 @@ export def "cloud-accounts-sync create" [
 # Get trades list by account
 #
 # GET /cloud/accounts/{accountid}/trades
-export def "cloud-accounts-trades get" [
+export def "get-cloud-accounts-accountid-trades" [
   accountid: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1065,7 +1065,7 @@ export def "cloud-accounts-trades get" [
 # Get commands list
 #
 # GET /cloud/commands
-export def "cloud-commands list" [
+export def "get-cloud-commands" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1098,7 +1098,7 @@ export def "cloud-commands list" [
 # Get command by ID
 #
 # GET /cloud/commands/{commandid}
-export def "cloud-commands get" [
+export def "get-cloud-commands-commandid" [
   commandid: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1133,7 +1133,7 @@ export def "cloud-commands get" [
 # Get connections list
 #
 # GET /cloud/connections
-export def "cloud-connections list" [
+export def "get-cloud-connections" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1167,7 +1167,7 @@ export def "cloud-connections list" [
 #
 # POST /cloud/connections
 # --connection shape: {active?: string, connectorid?: string, host?: string, login?: string, password?: string, port?: string}
-export def "cloud-connections create" [
+export def "post-cloud-connections" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1204,7 +1204,7 @@ export def "cloud-connections create" [
 # Delete connection by ID
 #
 # DELETE /cloud/connections/{connectionid}
-export def "cloud-connections delete" [
+export def "delete-cloud-connections-connectionid" [
   connectionid: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1239,7 +1239,7 @@ export def "cloud-connections delete" [
 # Get connection by ID
 #
 # GET /cloud/connections/{connectionid}
-export def "cloud-connections get" [
+export def "get-cloud-connections-connectionid" [
   connectionid: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1275,7 +1275,7 @@ export def "cloud-connections get" [
 #
 # PUT /cloud/connections/{connectionid}
 # --connection shape: {active?: string, connectorid?: string, host?: string, login?: string, password?: string, port?: string}
-export def "cloud-connections update" [
+export def "put-cloud-connections-connectionid" [
   connectionid: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1314,7 +1314,7 @@ export def "cloud-connections update" [
 # Get available connectors list
 #
 # GET /cloud/connectors
-export def "cloud-connectors list" [
+export def "get-cloud-connectors" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1347,7 +1347,7 @@ export def "cloud-connectors list" [
 # Get connector by ID
 #
 # GET /cloud/connectors/{connectorid}
-export def "cloud-connectors get" [
+export def "get-cloud-connectors-connectorid" [
   connectorid: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1382,7 +1382,7 @@ export def "cloud-connectors get" [
 # Get sessions list
 #
 # GET /cloud/sessions
-export def "cloud-sessions list" [
+export def "get-cloud-sessions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1415,7 +1415,7 @@ export def "cloud-sessions list" [
 # Get session by ID
 #
 # GET /cloud/sessions/{sessionid}
-export def "cloud-sessions get" [
+export def "get-cloud-sessions-sessionid" [
   sessionid: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1450,7 +1450,7 @@ export def "cloud-sessions get" [
 # Get list of active (executing) strategies
 #
 # GET /cloud/strategies
-export def "cloud-strategies list" [
+export def "get-cloud-strategies" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1484,7 +1484,7 @@ export def "cloud-strategies list" [
 #
 # POST /cloud/strategies/start
 # --data shape: {accountid?: string, strategyid?: string}
-export def "cloud-strategies-start create" [
+export def "post-cloud-strategies-start" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1521,7 +1521,7 @@ export def "cloud-strategies-start create" [
 # Get active (executing) strategy by ID
 #
 # GET /cloud/strategies/{strategyid}
-export def "cloud-strategies get" [
+export def "get-cloud-strategies-strategyid" [
   strategyid: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1556,7 +1556,7 @@ export def "cloud-strategies get" [
 # Stop a strategy execution by ID
 #
 # POST /cloud/strategies/{strategyid}/stop
-export def "cloud-strategies-stop create" [
+export def "post-cloud-strategies-strategyid-stop" [
   strategyid: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1591,7 +1591,7 @@ export def "cloud-strategies-stop create" [
 # Get markets list
 #
 # GET /marketdata/markets
-export def "marketdata-markets list" [
+export def "get-marketdata-markets" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1624,7 +1624,7 @@ export def "marketdata-markets list" [
 # Get market by ID
 #
 # GET /marketdata/markets/{marketid}
-export def "marketdata-markets get" [
+export def "get-marketdata-markets-marketid" [
   marketid: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1659,7 +1659,7 @@ export def "marketdata-markets get" [
 # Get symbols list
 #
 # GET /marketdata/symbols
-export def "marketdata-symbols list" [
+export def "get-marketdata-symbols" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1695,7 +1695,7 @@ export def "marketdata-symbols list" [
 # Get symbol by ID
 #
 # GET /marketdata/symbols/{symbolid}
-export def "marketdata-symbols get" [
+export def "get-marketdata-symbols-symbolid" [
   symbolid: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1730,7 +1730,7 @@ export def "marketdata-symbols get" [
 # Get historical data for instrument
 #
 # GET /marketdata/symbols/{symbolid}/histdata
-export def "marketdata-symbols-histdata get" [
+export def "get-marketdata-symbols-symbolid-histdata" [
   symbolid: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1769,7 +1769,7 @@ export def "marketdata-symbols-histdata get" [
 # Get news list
 #
 # GET /news/news
-export def "news-news list" [
+export def "get-news-news" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1802,7 +1802,7 @@ export def "news-news list" [
 # Get news by ID
 #
 # GET /news/news/{newsid}
-export def "news-news get" [
+export def "get-news-news-newsid" [
   newsid: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1837,7 +1837,7 @@ export def "news-news get" [
 # Ping
 #
 # GET /ping
-export def "ping get" [
+export def "get-ping" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1870,7 +1870,7 @@ export def "ping get" [
 # Get tasks list
 #
 # GET /taskmanager/tasks
-export def "taskmanager-tasks list" [
+export def "get-taskmanager-tasks" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1904,7 +1904,7 @@ export def "taskmanager-tasks list" [
 #
 # POST /taskmanager/tasks
 # --task shape: {isbenchmark?: string, strategyid?: string, tasktypeid?: string, userid2?: string}
-export def "taskmanager-tasks create" [
+export def "post-taskmanager-tasks" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1941,7 +1941,7 @@ export def "taskmanager-tasks create" [
 # Get task by ID
 #
 # GET /taskmanager/tasks/{taskid}
-export def "taskmanager-tasks get" [
+export def "get-taskmanager-tasks-taskid" [
   taskid: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1976,7 +1976,7 @@ export def "taskmanager-tasks get" [
 # Get backtest data for equity chart, grouped by months
 #
 # GET /taskmanager/tasks/{taskid}/bymonths
-export def "taskmanager-tasks-bymonths get" [
+export def "get-taskmanager-tasks-taskid-bymonths" [
   taskid: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2011,7 +2011,7 @@ export def "taskmanager-tasks-bymonths get" [
 # Get backtest data for equity chart, grouped by quarters
 #
 # GET /taskmanager/tasks/{taskid}/byquarters
-export def "taskmanager-tasks-byquarters get" [
+export def "get-taskmanager-tasks-taskid-byquarters" [
   taskid: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2046,7 +2046,7 @@ export def "taskmanager-tasks-byquarters get" [
 # Get backtest data for equity chart, grouped by years
 #
 # GET /taskmanager/tasks/{taskid}/byyears
-export def "taskmanager-tasks-byyears get" [
+export def "get-taskmanager-tasks-taskid-byyears" [
   taskid: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2081,7 +2081,7 @@ export def "taskmanager-tasks-byyears get" [
 # Get backtest symbol contribution data
 #
 # GET /taskmanager/tasks/{taskid}/contribution
-export def "taskmanager-tasks-contribution get" [
+export def "get-taskmanager-tasks-taskid-contribution" [
   taskid: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2116,7 +2116,7 @@ export def "taskmanager-tasks-contribution get" [
 # Get data for drawdown chart
 #
 # GET /taskmanager/tasks/{taskid}/drawdown
-export def "taskmanager-tasks-drawdown get" [
+export def "get-taskmanager-tasks-taskid-drawdown" [
   taskid: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2151,7 +2151,7 @@ export def "taskmanager-tasks-drawdown get" [
 # Get data for equity chart
 #
 # GET /taskmanager/tasks/{taskid}/equity
-export def "taskmanager-tasks-equity get" [
+export def "get-taskmanager-tasks-taskid-equity" [
   taskid: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2186,7 +2186,7 @@ export def "taskmanager-tasks-equity get" [
 # Get data for equity chart (%)
 #
 # GET /taskmanager/tasks/{taskid}/equitypct
-export def "taskmanager-tasks-equitypct get" [
+export def "get-taskmanager-tasks-taskid-equitypct" [
   taskid: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2221,7 +2221,7 @@ export def "taskmanager-tasks-equitypct get" [
 # Get spared data for equity chart (%)
 #
 # GET /taskmanager/tasks/{taskid}/equitypctsm
-export def "taskmanager-tasks-equitypctsm get" [
+export def "get-taskmanager-tasks-taskid-equitypctsm" [
   taskid: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2256,7 +2256,7 @@ export def "taskmanager-tasks-equitypctsm get" [
 # Get task result folder name
 #
 # GET /taskmanager/tasks/{taskid}/folder
-export def "taskmanager-tasks-folder get" [
+export def "get-taskmanager-tasks-taskid-folder" [
   taskid: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2291,7 +2291,7 @@ export def "taskmanager-tasks-folder get" [
 # Get backtest statistics
 #
 # GET /taskmanager/tasks/{taskid}/performance
-export def "taskmanager-tasks-performance get" [
+export def "get-taskmanager-tasks-taskid-performance" [
   taskid: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2326,7 +2326,7 @@ export def "taskmanager-tasks-performance get" [
 # Get task result
 #
 # GET /taskmanager/tasks/{taskid}/result
-export def "taskmanager-tasks-result get" [
+export def "get-taskmanager-tasks-taskid-result" [
   taskid: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2361,7 +2361,7 @@ export def "taskmanager-tasks-result get" [
 # Get task result (version 2)
 #
 # GET /taskmanager/tasks/{taskid}/result2
-export def "taskmanager-tasks-result2 get" [
+export def "get-taskmanager-tasks-taskid-result2" [
   taskid: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2396,7 +2396,7 @@ export def "taskmanager-tasks-result2 get" [
 # Get task status
 #
 # GET /taskmanager/tasks/{taskid}/status
-export def "taskmanager-tasks-status get" [
+export def "get-taskmanager-tasks-taskid-status" [
   taskid: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2431,7 +2431,7 @@ export def "taskmanager-tasks-status get" [
 # Get backtest trades list
 #
 # GET /taskmanager/tasks/{taskid}/trades
-export def "taskmanager-tasks-trades get" [
+export def "get-taskmanager-tasks-taskid-trades" [
   taskid: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2466,7 +2466,7 @@ export def "taskmanager-tasks-trades get" [
 # Get current server time
 #
 # GET /time
-export def "time get" [
+export def "get-time" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

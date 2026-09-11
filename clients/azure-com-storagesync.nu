@@ -125,7 +125,7 @@ def change-detection-mode-completer [] { ["Default" "Recursive"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-storage-sync-operations list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "operations-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -149,7 +149,7 @@ export def commands []: nothing -> table {
 #
 # GET /providers/Microsoft.StorageSync/operations
 # operationId: Operations_List
-export def "providers-microsoft-storage-sync-operations list" [
+export def "operations-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -185,7 +185,7 @@ export def "providers-microsoft-storage-sync-operations list" [
 #
 # POST /subscriptions/{subscriptionId}/providers/Microsoft.StorageSync/locations/{locationName}/checkNameAvailability
 # operationId: StorageSyncServices_CheckNameAvailability
-export def "subscriptions-providers-microsoft-storage-sync-locations-check-name-availability sync-services" [
+export def "storage-sync-services-check-name-availability" [
   subscription_id: string
   location_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -230,7 +230,7 @@ export def "subscriptions-providers-microsoft-storage-sync-locations-check-name-
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.StorageSync/storageSyncServices
 # operationId: StorageSyncServices_ListBySubscription
-export def "subscriptions-providers-microsoft-storage-sync-storage-sync-services list" [
+export def "storage-sync-services-list-by-subscription" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -268,7 +268,7 @@ export def "subscriptions-providers-microsoft-storage-sync-storage-sync-services
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorageSync/locations/{locationName}/workflows/{workflowId}/operations/{operationId}
 # operationId: OperationStatus_Get
-export def "subscriptions-resource-groups-providers-microsoft-storage-sync-locations-workflows-operations get-status" [
+export def "operation-status-get" [
   subscription_id: string
   resource_group_name: string
   location_name: string
@@ -314,7 +314,7 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-sync-locat
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorageSync/storageSyncServices
 # operationId: StorageSyncServices_ListByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-storage-sync-storage-sync-services list" [
+export def "storage-sync-services-list-by-resource-group" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -354,7 +354,7 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-sync-stora
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorageSync/storageSyncServices/{storageSyncServiceName}
 # operationId: StorageSyncServices_Delete
-export def "subscriptions-resource-groups-providers-microsoft-storage-sync-storage-sync-services delete" [
+export def "storage-sync-services-delete" [
   subscription_id: string
   resource_group_name: string
   storage_sync_service_name: string
@@ -396,7 +396,7 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-sync-stora
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorageSync/storageSyncServices/{storageSyncServiceName}
 # operationId: StorageSyncServices_Get
-export def "subscriptions-resource-groups-providers-microsoft-storage-sync-storage-sync-services get" [
+export def "storage-sync-services-get" [
   subscription_id: string
   resource_group_name: string
   storage_sync_service_name: string
@@ -438,7 +438,7 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-sync-stora
 #
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorageSync/storageSyncServices/{storageSyncServiceName}
 # operationId: StorageSyncServices_Update
-export def "subscriptions-resource-groups-providers-microsoft-storage-sync-storage-sync-services update" [
+export def "storage-sync-services-update" [
   subscription_id: string
   resource_group_name: string
   storage_sync_service_name: string
@@ -485,7 +485,7 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-sync-stora
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorageSync/storageSyncServices/{storageSyncServiceName}
 # operationId: StorageSyncServices_Create
-export def "subscriptions-resource-groups-providers-microsoft-storage-sync-storage-sync-services create" [
+export def "storage-sync-services-create" [
   subscription_id: string
   resource_group_name: string
   storage_sync_service_name: string
@@ -533,7 +533,7 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-sync-stora
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorageSync/storageSyncServices/{storageSyncServiceName}/registeredServers
 # operationId: RegisteredServers_ListByStorageSyncService
-export def "subscriptions-resource-groups-providers-microsoft-storage-sync-storage-sync-services-registered-servers list" [
+export def "registered-servers-list-by-storage-sync-service" [
   subscription_id: string
   resource_group_name: string
   storage_sync_service_name: string
@@ -575,7 +575,7 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-sync-stora
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorageSync/storageSyncServices/{storageSyncServiceName}/registeredServers/{serverId}
 # operationId: RegisteredServers_Delete
-export def "subscriptions-resource-groups-providers-microsoft-storage-sync-storage-sync-services-registered-servers delete" [
+export def "registered-servers-delete" [
   subscription_id: string
   resource_group_name: string
   storage_sync_service_name: string
@@ -619,7 +619,7 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-sync-stora
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorageSync/storageSyncServices/{storageSyncServiceName}/registeredServers/{serverId}
 # operationId: RegisteredServers_Get
-export def "subscriptions-resource-groups-providers-microsoft-storage-sync-storage-sync-services-registered-servers get" [
+export def "registered-servers-get" [
   subscription_id: string
   resource_group_name: string
   storage_sync_service_name: string
@@ -664,7 +664,7 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-sync-stora
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorageSync/storageSyncServices/{storageSyncServiceName}/registeredServers/{serverId}
 # operationId: RegisteredServers_Create
 # --properties shape: {agentVersion?: string, clusterId?: string, clusterName?: string, friendlyName?: string, lastHeartBeat?: string, serverCertificate?: string, serverId?: string, serverOSVersion?: string, serverRole?: string}
-export def "subscriptions-resource-groups-providers-microsoft-storage-sync-storage-sync-services-registered-servers create" [
+export def "registered-servers-create" [
   subscription_id: string
   resource_group_name: string
   storage_sync_service_name: string
@@ -712,7 +712,7 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-sync-stora
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorageSync/storageSyncServices/{storageSyncServiceName}/registeredServers/{serverId}/triggerRollover
 # operationId: RegisteredServers_triggerRollover
-export def "subscriptions-resource-groups-providers-microsoft-storage-sync-storage-sync-services-registered-servers-trigger-rollover trigger" [
+export def "registered-servers-trigger-rollover" [
   subscription_id: string
   resource_group_name: string
   storage_sync_service_name: string
@@ -760,7 +760,7 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-sync-stora
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorageSync/storageSyncServices/{storageSyncServiceName}/syncGroups
 # operationId: SyncGroups_ListByStorageSyncService
-export def "subscriptions-resource-groups-providers-microsoft-storage-sync-storage-sync-services-sync-groups list" [
+export def "sync-groups-list-by-storage-sync-service" [
   subscription_id: string
   resource_group_name: string
   storage_sync_service_name: string
@@ -802,7 +802,7 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-sync-stora
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorageSync/storageSyncServices/{storageSyncServiceName}/syncGroups/{syncGroupName}
 # operationId: SyncGroups_Delete
-export def "subscriptions-resource-groups-providers-microsoft-storage-sync-storage-sync-services-sync-groups delete" [
+export def "sync-groups-delete" [
   subscription_id: string
   resource_group_name: string
   storage_sync_service_name: string
@@ -846,7 +846,7 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-sync-stora
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorageSync/storageSyncServices/{storageSyncServiceName}/syncGroups/{syncGroupName}
 # operationId: SyncGroups_Get
-export def "subscriptions-resource-groups-providers-microsoft-storage-sync-storage-sync-services-sync-groups get" [
+export def "sync-groups-get" [
   subscription_id: string
   resource_group_name: string
   storage_sync_service_name: string
@@ -890,7 +890,7 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-sync-stora
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorageSync/storageSyncServices/{storageSyncServiceName}/syncGroups/{syncGroupName}
 # operationId: SyncGroups_Create
-export def "subscriptions-resource-groups-providers-microsoft-storage-sync-storage-sync-services-sync-groups create" [
+export def "sync-groups-create" [
   subscription_id: string
   resource_group_name: string
   storage_sync_service_name: string
@@ -938,7 +938,7 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-sync-stora
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorageSync/storageSyncServices/{storageSyncServiceName}/syncGroups/{syncGroupName}/cloudEndpoints
 # operationId: CloudEndpoints_ListBySyncGroup
-export def "subscriptions-resource-groups-providers-microsoft-storage-sync-storage-sync-services-sync-groups-cloud-endpoints list" [
+export def "cloud-endpoints-list-by-sync-group" [
   subscription_id: string
   resource_group_name: string
   storage_sync_service_name: string
@@ -982,7 +982,7 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-sync-stora
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorageSync/storageSyncServices/{storageSyncServiceName}/syncGroups/{syncGroupName}/cloudEndpoints/{cloudEndpointName}
 # operationId: CloudEndpoints_Delete
-export def "subscriptions-resource-groups-providers-microsoft-storage-sync-storage-sync-services-sync-groups-cloud-endpoints delete" [
+export def "cloud-endpoints-delete" [
   subscription_id: string
   resource_group_name: string
   storage_sync_service_name: string
@@ -1028,7 +1028,7 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-sync-stora
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorageSync/storageSyncServices/{storageSyncServiceName}/syncGroups/{syncGroupName}/cloudEndpoints/{cloudEndpointName}
 # operationId: CloudEndpoints_Get
-export def "subscriptions-resource-groups-providers-microsoft-storage-sync-storage-sync-services-sync-groups-cloud-endpoints get" [
+export def "cloud-endpoints-get" [
   subscription_id: string
   resource_group_name: string
   storage_sync_service_name: string
@@ -1075,7 +1075,7 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-sync-stora
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorageSync/storageSyncServices/{storageSyncServiceName}/syncGroups/{syncGroupName}/cloudEndpoints/{cloudEndpointName}
 # operationId: CloudEndpoints_Create
 # --properties shape: {azureFileShareName?: string, friendlyName?: string, storageAccountResourceId?: string, storageAccountTenantId?: string}
-export def "subscriptions-resource-groups-providers-microsoft-storage-sync-storage-sync-services-sync-groups-cloud-endpoints create" [
+export def "cloud-endpoints-create" [
   subscription_id: string
   resource_group_name: string
   storage_sync_service_name: string
@@ -1125,7 +1125,7 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-sync-stora
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorageSync/storageSyncServices/{storageSyncServiceName}/syncGroups/{syncGroupName}/cloudEndpoints/{cloudEndpointName}/postbackup
 # operationId: CloudEndpoints_PostBackup
-export def "subscriptions-resource-groups-providers-microsoft-storage-sync-storage-sync-services-sync-groups-cloud-endpoints-post-backup create" [
+export def "cloud-endpoints-post-backup" [
   subscription_id: string
   resource_group_name: string
   storage_sync_service_name: string
@@ -1176,7 +1176,7 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-sync-stora
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorageSync/storageSyncServices/{storageSyncServiceName}/syncGroups/{syncGroupName}/cloudEndpoints/{cloudEndpointName}/postrestore
 # operationId: CloudEndpoints_PostRestore
 # --restoreFileSpec item shape: {path?: string}
-export def "subscriptions-resource-groups-providers-microsoft-storage-sync-storage-sync-services-sync-groups-cloud-endpoints-post-restore create" [
+export def "cloud-endpoints-post-restore" [
   subscription_id: string
   resource_group_name: string
   storage_sync_service_name: string
@@ -1233,7 +1233,7 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-sync-stora
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorageSync/storageSyncServices/{storageSyncServiceName}/syncGroups/{syncGroupName}/cloudEndpoints/{cloudEndpointName}/prebackup
 # operationId: CloudEndpoints_PreBackup
-export def "subscriptions-resource-groups-providers-microsoft-storage-sync-storage-sync-services-sync-groups-cloud-endpoints-prebackup create-pre-backup" [
+export def "cloud-endpoints-pre-backup" [
   subscription_id: string
   resource_group_name: string
   storage_sync_service_name: string
@@ -1284,7 +1284,7 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-sync-stora
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorageSync/storageSyncServices/{storageSyncServiceName}/syncGroups/{syncGroupName}/cloudEndpoints/{cloudEndpointName}/prerestore
 # operationId: CloudEndpoints_PreRestore
 # --restoreFileSpec item shape: {path?: string}
-export def "subscriptions-resource-groups-providers-microsoft-storage-sync-storage-sync-services-sync-groups-cloud-endpoints-prerestore create-pre-restore" [
+export def "cloud-endpoints-pre-restore" [
   subscription_id: string
   resource_group_name: string
   storage_sync_service_name: string
@@ -1342,7 +1342,7 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-sync-stora
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorageSync/storageSyncServices/{storageSyncServiceName}/syncGroups/{syncGroupName}/cloudEndpoints/{cloudEndpointName}/restoreheartbeat
 # operationId: CloudEndpoints_restoreheartbeat
-export def "subscriptions-resource-groups-providers-microsoft-storage-sync-storage-sync-services-sync-groups-cloud-endpoints-restoreheartbeat create" [
+export def "cloud-endpoints-restoreheartbeat" [
   subscription_id: string
   resource_group_name: string
   storage_sync_service_name: string
@@ -1388,7 +1388,7 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-sync-stora
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorageSync/storageSyncServices/{storageSyncServiceName}/syncGroups/{syncGroupName}/cloudEndpoints/{cloudEndpointName}/triggerChangeDetection
 # operationId: CloudEndpoints_TriggerChangeDetection
-export def "subscriptions-resource-groups-providers-microsoft-storage-sync-storage-sync-services-sync-groups-cloud-endpoints-trigger-change-detection trigger" [
+export def "cloud-endpoints-trigger-change-detection" [
   subscription_id: string
   resource_group_name: string
   storage_sync_service_name: string
@@ -1440,7 +1440,7 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-sync-stora
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorageSync/storageSyncServices/{storageSyncServiceName}/syncGroups/{syncGroupName}/serverEndpoints
 # operationId: ServerEndpoints_ListBySyncGroup
-export def "subscriptions-resource-groups-providers-microsoft-storage-sync-storage-sync-services-sync-groups-server-endpoints list" [
+export def "server-endpoints-list-by-sync-group" [
   subscription_id: string
   resource_group_name: string
   storage_sync_service_name: string
@@ -1484,7 +1484,7 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-sync-stora
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorageSync/storageSyncServices/{storageSyncServiceName}/syncGroups/{syncGroupName}/serverEndpoints/{serverEndpointName}
 # operationId: ServerEndpoints_Delete
-export def "subscriptions-resource-groups-providers-microsoft-storage-sync-storage-sync-services-sync-groups-server-endpoints delete" [
+export def "server-endpoints-delete" [
   subscription_id: string
   resource_group_name: string
   storage_sync_service_name: string
@@ -1530,7 +1530,7 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-sync-stora
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorageSync/storageSyncServices/{storageSyncServiceName}/syncGroups/{syncGroupName}/serverEndpoints/{serverEndpointName}
 # operationId: ServerEndpoints_Get
-export def "subscriptions-resource-groups-providers-microsoft-storage-sync-storage-sync-services-sync-groups-server-endpoints get" [
+export def "server-endpoints-get" [
   subscription_id: string
   resource_group_name: string
   storage_sync_service_name: string
@@ -1577,7 +1577,7 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-sync-stora
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorageSync/storageSyncServices/{storageSyncServiceName}/syncGroups/{syncGroupName}/serverEndpoints/{serverEndpointName}
 # operationId: ServerEndpoints_Update
 # --properties shape: {cloudTiering?: "on"|"off", offlineDataTransfer?: "on"|"off", offlineDataTransferShareName?: string, tierFilesOlderThanDays?: int, volumeFreeSpacePercent?: int}
-export def "subscriptions-resource-groups-providers-microsoft-storage-sync-storage-sync-services-sync-groups-server-endpoints update" [
+export def "server-endpoints-update" [
   subscription_id: string
   resource_group_name: string
   storage_sync_service_name: string
@@ -1628,7 +1628,7 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-sync-stora
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorageSync/storageSyncServices/{storageSyncServiceName}/syncGroups/{syncGroupName}/serverEndpoints/{serverEndpointName}
 # operationId: ServerEndpoints_Create
 # --properties shape: {cloudTiering?: "on"|"off", friendlyName?: string, offlineDataTransfer?: "on"|"off", offlineDataTransferShareName?: string, serverLocalPath?: string, serverResourceId?: string, tierFilesOlderThanDays?: int, volumeFreeSpacePercent?: int}
-export def "subscriptions-resource-groups-providers-microsoft-storage-sync-storage-sync-services-sync-groups-server-endpoints create" [
+export def "server-endpoints-create" [
   subscription_id: string
   resource_group_name: string
   storage_sync_service_name: string
@@ -1678,7 +1678,7 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-sync-stora
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorageSync/storageSyncServices/{storageSyncServiceName}/syncGroups/{syncGroupName}/serverEndpoints/{serverEndpointName}/recallAction
 # operationId: ServerEndpoints_recallAction
-export def "subscriptions-resource-groups-providers-microsoft-storage-sync-storage-sync-services-sync-groups-server-endpoints-recall-action create" [
+export def "server-endpoints-recall-action" [
   subscription_id: string
   resource_group_name: string
   storage_sync_service_name: string
@@ -1729,7 +1729,7 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-sync-stora
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorageSync/storageSyncServices/{storageSyncServiceName}/workflows
 # operationId: Workflows_ListByStorageSyncService
-export def "subscriptions-resource-groups-providers-microsoft-storage-sync-storage-sync-services-workflows list" [
+export def "workflows-list-by-storage-sync-service" [
   subscription_id: string
   resource_group_name: string
   storage_sync_service_name: string
@@ -1771,7 +1771,7 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-sync-stora
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorageSync/storageSyncServices/{storageSyncServiceName}/workflows/{workflowId}
 # operationId: Workflows_Get
-export def "subscriptions-resource-groups-providers-microsoft-storage-sync-storage-sync-services-workflows get" [
+export def "workflows-get" [
   subscription_id: string
   resource_group_name: string
   storage_sync_service_name: string
@@ -1815,7 +1815,7 @@ export def "subscriptions-resource-groups-providers-microsoft-storage-sync-stora
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.StorageSync/storageSyncServices/{storageSyncServiceName}/workflows/{workflowId}/abort
 # operationId: Workflows_Abort
-export def "subscriptions-resource-groups-providers-microsoft-storage-sync-storage-sync-services-workflows-abort abort" [
+export def "workflows-abort" [
   subscription_id: string
   resource_group_name: string
   storage_sync_service_name: string

@@ -99,7 +99,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resource-groups-providers-microsoft-compute-virtual-machines-providers-microsoft-guest-configuration-guest-configuration-assignments delete" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "guest-configuration-assignments-delete" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -123,7 +123,7 @@ export def commands []: nothing -> table {
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/virtualMachines/{vmName}/providers/Microsoft.GuestConfiguration/guestConfigurationAssignments/{guestConfigurationAssignmentName}
 # operationId: GuestConfigurationAssignments_Delete
-export def "subscriptions-resource-groups-providers-microsoft-compute-virtual-machines-providers-microsoft-guest-configuration-guest-configuration-assignments delete" [
+export def "guest-configuration-assignments-delete" [
   subscription_id: string
   resource_group_name: string
   vm_name: string

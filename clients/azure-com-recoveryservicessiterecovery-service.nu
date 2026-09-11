@@ -122,7 +122,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resource-groups-providers-microsoft-compute-virtual-machines-providers-microsoft-recovery-services-replication-eligibility-results list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "replication-eligibility-results-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -146,7 +146,7 @@ export def commands []: nothing -> table {
 #
 # GET /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/virtualMachines/{virtualMachineName}/providers/Microsoft.RecoveryServices/replicationEligibilityResults
 # operationId: ReplicationEligibilityResults_List
-export def "subscriptions-resource-groups-providers-microsoft-compute-virtual-machines-providers-microsoft-recovery-services-replication-eligibility-results list" [
+export def "replication-eligibility-results-list" [
   subscription_id: string
   resource_group_name: string
   virtual_machine_name: string
@@ -188,7 +188,7 @@ export def "subscriptions-resource-groups-providers-microsoft-compute-virtual-ma
 #
 # GET /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Compute/virtualMachines/{virtualMachineName}/providers/Microsoft.RecoveryServices/replicationEligibilityResults/default
 # operationId: ReplicationEligibilityResults_Get
-export def "subscriptions-resource-groups-providers-microsoft-compute-virtual-machines-providers-microsoft-recovery-services-replication-eligibility-results-default get" [
+export def "replication-eligibility-results-get" [
   subscription_id: string
   resource_group_name: string
   virtual_machine_name: string
@@ -230,7 +230,7 @@ export def "subscriptions-resource-groups-providers-microsoft-compute-virtual-ma
 #
 # GET /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/operations
 # operationId: Operations_List
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-operations list" [
+export def "operations-list" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -270,7 +270,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 #
 # GET /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationAlertSettings
 # operationId: ReplicationAlertSettings_List
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-alert-settings list" [
+export def "replication-alert-settings-list" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -312,7 +312,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 #
 # GET /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationAlertSettings/{alertSettingName}
 # operationId: ReplicationAlertSettings_Get
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-alert-settings get" [
+export def "replication-alert-settings-get" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -357,7 +357,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 # PUT /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationAlertSettings/{alertSettingName}
 # operationId: ReplicationAlertSettings_Create
 # --properties shape: {customEmailAddresses?: list<string>, locale?: string, sendToOwners?: string}
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-alert-settings create" [
+export def "replication-alert-settings-create" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -405,7 +405,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 #
 # GET /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationEvents
 # operationId: ReplicationEvents_List
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-events list" [
+export def "replication-events-list" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -448,7 +448,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 #
 # GET /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationEvents/{eventName}
 # operationId: ReplicationEvents_Get
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-events get" [
+export def "replication-events-get" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -492,7 +492,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 #
 # GET /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationFabrics
 # operationId: ReplicationFabrics_List
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics list" [
+export def "replication-fabrics-list" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -534,7 +534,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 #
 # DELETE /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationFabrics/{fabricName}
 # operationId: ReplicationFabrics_Purge
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics delete-purge" [
+export def "replication-fabrics-purge" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -578,7 +578,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 #
 # GET /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationFabrics/{fabricName}
 # operationId: ReplicationFabrics_Get
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics get" [
+export def "replication-fabrics-get" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -623,7 +623,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 # PUT /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationFabrics/{fabricName}
 # operationId: ReplicationFabrics_Create
 # --properties shape: {customDetails?: record}
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics create" [
+export def "replication-fabrics-create" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -671,7 +671,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 #
 # POST /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationFabrics/{fabricName}/checkConsistency
 # operationId: ReplicationFabrics_CheckConsistency
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-check-consistency check" [
+export def "replication-fabrics-check-consistency" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -715,7 +715,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 #
 # POST /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationFabrics/{fabricName}/migratetoaad
 # operationId: ReplicationFabrics_MigrateToAad
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-migratetoaad create-migrate-to-aad" [
+export def "replication-fabrics-migrate-to-aad" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -760,7 +760,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 # POST /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationFabrics/{fabricName}/reassociateGateway
 # operationId: ReplicationFabrics_ReassociateGateway
 # --properties shape: {containerName?: string, sourceProcessServerId?: string, targetProcessServerId?: string, updateType?: string, vmsToMigrate?: list<string>}
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-reassociate-gateway create" [
+export def "replication-fabrics-reassociate-gateway" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -808,7 +808,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 #
 # POST /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationFabrics/{fabricName}/remove
 # operationId: ReplicationFabrics_Delete
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-remove delete" [
+export def "replication-fabrics-delete" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -853,7 +853,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 # POST /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationFabrics/{fabricName}/renewCertificate
 # operationId: ReplicationFabrics_RenewCertificate
 # --properties shape: {renewCertificateType?: string}
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-renew-certificate create" [
+export def "replication-fabrics-renew-certificate" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -901,7 +901,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 #
 # GET /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationFabrics/{fabricName}/replicationLogicalNetworks
 # operationId: ReplicationLogicalNetworks_ListByReplicationFabrics
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replication-logical-networks list" [
+export def "replication-logical-networks-list-by-replication-fabrics" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -945,7 +945,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 #
 # GET /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationFabrics/{fabricName}/replicationLogicalNetworks/{logicalNetworkName}
 # operationId: ReplicationLogicalNetworks_Get
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replication-logical-networks get" [
+export def "replication-logical-networks-get" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -991,7 +991,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 #
 # GET /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationFabrics/{fabricName}/replicationNetworks
 # operationId: ReplicationNetworks_ListByReplicationFabrics
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replication-networks list" [
+export def "replication-networks-list-by-replication-fabrics" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -1035,7 +1035,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 #
 # GET /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationFabrics/{fabricName}/replicationNetworks/{networkName}
 # operationId: ReplicationNetworks_Get
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replication-networks get" [
+export def "replication-networks-get" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -1081,7 +1081,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 #
 # GET /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationFabrics/{fabricName}/replicationNetworks/{networkName}/replicationNetworkMappings
 # operationId: ReplicationNetworkMappings_ListByReplicationNetworks
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replication-networks-replication-network-mappings list" [
+export def "replication-network-mappings-list-by-replication-networks" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -1127,7 +1127,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 #
 # DELETE /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationFabrics/{fabricName}/replicationNetworks/{networkName}/replicationNetworkMappings/{networkMappingName}
 # operationId: ReplicationNetworkMappings_Delete
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replication-networks-replication-network-mappings delete" [
+export def "replication-network-mappings-delete" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -1175,7 +1175,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 #
 # GET /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationFabrics/{fabricName}/replicationNetworks/{networkName}/replicationNetworkMappings/{networkMappingName}
 # operationId: ReplicationNetworkMappings_Get
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replication-networks-replication-network-mappings get" [
+export def "replication-network-mappings-get" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -1224,7 +1224,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 # PATCH /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationFabrics/{fabricName}/replicationNetworks/{networkName}/replicationNetworkMappings/{networkMappingName}
 # operationId: ReplicationNetworkMappings_Update
 # --properties shape: {fabricSpecificDetails?: record, recoveryFabricName?: string, recoveryNetworkId?: string}
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replication-networks-replication-network-mappings update" [
+export def "replication-network-mappings-update" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -1277,7 +1277,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 # PUT /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationFabrics/{fabricName}/replicationNetworks/{networkName}/replicationNetworkMappings/{networkMappingName}
 # operationId: ReplicationNetworkMappings_Create
 # --properties shape: {fabricSpecificDetails?: record, recoveryFabricName?: string, recoveryNetworkId?: string}
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replication-networks-replication-network-mappings create" [
+export def "replication-network-mappings-create" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -1329,7 +1329,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 #
 # GET /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationFabrics/{fabricName}/replicationProtectionContainers
 # operationId: ReplicationProtectionContainers_ListByReplicationFabrics
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replication-protection-containers list" [
+export def "replication-protection-containers-list-by-replication-fabrics" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -1373,7 +1373,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 #
 # GET /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationFabrics/{fabricName}/replicationProtectionContainers/{protectionContainerName}
 # operationId: ReplicationProtectionContainers_Get
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replication-protection-containers get" [
+export def "replication-protection-containers-get" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -1420,7 +1420,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 # PUT /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationFabrics/{fabricName}/replicationProtectionContainers/{protectionContainerName}
 # operationId: ReplicationProtectionContainers_Create
 # --properties shape: {providerSpecificInput?: list}
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replication-protection-containers create" [
+export def "replication-protection-containers-create" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -1471,7 +1471,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 # POST /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationFabrics/{fabricName}/replicationProtectionContainers/{protectionContainerName}/discoverProtectableItem
 # operationId: ReplicationProtectionContainers_DiscoverProtectableItem
 # --properties shape: {friendlyName?: string, ipAddress?: string, osType?: string}
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replication-protection-containers-discover-protectable-item create" [
+export def "replication-protection-containers-discover-protectable-item" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -1521,7 +1521,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 #
 # POST /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationFabrics/{fabricName}/replicationProtectionContainers/{protectionContainerName}/remove
 # operationId: ReplicationProtectionContainers_Delete
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replication-protection-containers-remove delete" [
+export def "replication-protection-containers-delete" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -1567,7 +1567,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 #
 # GET /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationFabrics/{fabricName}/replicationProtectionContainers/{protectionContainerName}/replicationMigrationItems
 # operationId: ReplicationMigrationItems_ListByReplicationProtectionContainers
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replication-protection-containers-replication-migration-items list" [
+export def "replication-migration-items-list-by-replication-protection-containers" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -1613,7 +1613,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 #
 # DELETE /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationFabrics/{fabricName}/replicationProtectionContainers/{protectionContainerName}/replicationMigrationItems/{migrationItemName}
 # operationId: ReplicationMigrationItems_Delete
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replication-protection-containers-replication-migration-items delete" [
+export def "replication-migration-items-delete" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -1662,7 +1662,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 #
 # GET /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationFabrics/{fabricName}/replicationProtectionContainers/{protectionContainerName}/replicationMigrationItems/{migrationItemName}
 # operationId: ReplicationMigrationItems_Get
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replication-protection-containers-replication-migration-items get" [
+export def "replication-migration-items-get" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -1711,7 +1711,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 # PATCH /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationFabrics/{fabricName}/replicationProtectionContainers/{protectionContainerName}/replicationMigrationItems/{migrationItemName}
 # operationId: ReplicationMigrationItems_Update
 # --properties shape: {providerSpecificDetails: record}
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replication-protection-containers-replication-migration-items update" [
+export def "replication-migration-items-update" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -1764,7 +1764,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 # PUT /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationFabrics/{fabricName}/replicationProtectionContainers/{protectionContainerName}/replicationMigrationItems/{migrationItemName}
 # operationId: ReplicationMigrationItems_Create
 # --properties shape: {policyId: string, providerSpecificDetails: record}
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replication-protection-containers-replication-migration-items create" [
+export def "replication-migration-items-create" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -1817,7 +1817,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 # POST /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationFabrics/{fabricName}/replicationProtectionContainers/{protectionContainerName}/replicationMigrationItems/{migrationItemName}/migrate
 # operationId: ReplicationMigrationItems_Migrate
 # --properties shape: {providerSpecificDetails: record}
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replication-protection-containers-replication-migration-items-migrate create" [
+export def "replication-migration-items-migrate" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -1869,7 +1869,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 #
 # GET /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationFabrics/{fabricName}/replicationProtectionContainers/{protectionContainerName}/replicationMigrationItems/{migrationItemName}/migrationRecoveryPoints
 # operationId: MigrationRecoveryPoints_ListByReplicationMigrationItems
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replication-protection-containers-replication-migration-items-migration-recovery-points list" [
+export def "migration-recovery-points-list-by-replication-migration-items" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -1917,7 +1917,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 #
 # GET /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationFabrics/{fabricName}/replicationProtectionContainers/{protectionContainerName}/replicationMigrationItems/{migrationItemName}/migrationRecoveryPoints/{migrationRecoveryPointName}
 # operationId: MigrationRecoveryPoints_Get
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replication-protection-containers-replication-migration-items-migration-recovery-points get" [
+export def "migration-recovery-points-get" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -1968,7 +1968,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 # POST /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationFabrics/{fabricName}/replicationProtectionContainers/{protectionContainerName}/replicationMigrationItems/{migrationItemName}/testMigrate
 # operationId: ReplicationMigrationItems_TestMigrate
 # --properties shape: {providerSpecificDetails: record}
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replication-protection-containers-replication-migration-items-test-migrate test" [
+export def "replication-migration-items-test-migrate" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -2021,7 +2021,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 # POST /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationFabrics/{fabricName}/replicationProtectionContainers/{protectionContainerName}/replicationMigrationItems/{migrationItemName}/testMigrateCleanup
 # operationId: ReplicationMigrationItems_TestMigrateCleanup
 # --properties shape: {comments?: string}
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replication-protection-containers-replication-migration-items-test-migrate-cleanup test" [
+export def "replication-migration-items-test-migrate-cleanup" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -2073,7 +2073,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 #
 # GET /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationFabrics/{fabricName}/replicationProtectionContainers/{protectionContainerName}/replicationProtectableItems
 # operationId: ReplicationProtectableItems_ListByReplicationProtectionContainers
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replication-protection-containers-replication-protectable-items list" [
+export def "replication-protectable-items-list-by-replication-protection-containers" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -2120,7 +2120,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 #
 # GET /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationFabrics/{fabricName}/replicationProtectionContainers/{protectionContainerName}/replicationProtectableItems/{protectableItemName}
 # operationId: ReplicationProtectableItems_Get
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replication-protection-containers-replication-protectable-items get" [
+export def "replication-protectable-items-get" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -2168,7 +2168,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 #
 # GET /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationFabrics/{fabricName}/replicationProtectionContainers/{protectionContainerName}/replicationProtectedItems
 # operationId: ReplicationProtectedItems_ListByReplicationProtectionContainers
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replication-protection-containers-replication-protected-items list" [
+export def "replication-protected-items-list-by-replication-protection-containers" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -2214,7 +2214,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 #
 # DELETE /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationFabrics/{fabricName}/replicationProtectionContainers/{protectionContainerName}/replicationProtectedItems/{replicatedProtectedItemName}
 # operationId: ReplicationProtectedItems_Purge
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replication-protection-containers-replication-protected-items delete-purge" [
+export def "replication-protected-items-purge" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -2262,7 +2262,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 #
 # GET /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationFabrics/{fabricName}/replicationProtectionContainers/{protectionContainerName}/replicationProtectedItems/{replicatedProtectedItemName}
 # operationId: ReplicationProtectedItems_Get
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replication-protection-containers-replication-protected-items get" [
+export def "replication-protected-items-get" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -2311,7 +2311,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 # PATCH /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationFabrics/{fabricName}/replicationProtectionContainers/{protectionContainerName}/replicationProtectedItems/{replicatedProtectedItemName}
 # operationId: ReplicationProtectedItems_Update
 # --properties shape: {enableRdpOnTargetOption?: string, licenseType?: "NotSpecified"|"NoLicenseType"|"WindowsServer", providerSpecificDetails?: record, recoveryAvailabilitySetId?: string, recoveryAzureVMName?: string, recoveryAzureVMSize?: string, selectedRecoveryAzureNetworkId?: string, selectedSourceNicId?: string, selectedTfoAzureNetworkId?: string, vmNics?: list}
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replication-protection-containers-replication-protected-items update" [
+export def "replication-protected-items-update" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -2364,7 +2364,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 # PUT /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationFabrics/{fabricName}/replicationProtectionContainers/{protectionContainerName}/replicationProtectedItems/{replicatedProtectedItemName}
 # operationId: ReplicationProtectedItems_Create
 # --properties shape: {policyId?: string, protectableItemId?: string, providerSpecificDetails?: record}
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replication-protection-containers-replication-protected-items create" [
+export def "replication-protected-items-create" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -2417,7 +2417,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 # POST /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationFabrics/{fabricName}/replicationProtectionContainers/{protectionContainerName}/replicationProtectedItems/{replicatedProtectedItemName}/ResolveHealthErrors
 # operationId: ReplicationProtectedItems_ResolveHealthErrors
 # --properties shape: {healthErrors?: list}
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replication-protection-containers-replication-protected-items-resolve-health-errors create" [
+export def "replication-protected-items-resolve-health-errors" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -2470,7 +2470,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 # POST /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationFabrics/{fabricName}/replicationProtectionContainers/{protectionContainerName}/replicationProtectedItems/{replicatedProtectedItemName}/addDisks
 # operationId: ReplicationProtectedItems_AddDisks
 # --properties shape: {providerSpecificDetails?: record}
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replication-protection-containers-replication-protected-items-add-disks create" [
+export def "replication-protected-items-add-disks" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -2523,7 +2523,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 # POST /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationFabrics/{fabricName}/replicationProtectionContainers/{protectionContainerName}/replicationProtectedItems/{replicatedProtectedItemName}/applyRecoveryPoint
 # operationId: ReplicationProtectedItems_ApplyRecoveryPoint
 # --properties shape: {providerSpecificDetails?: record, recoveryPointId?: string}
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replication-protection-containers-replication-protected-items-apply-recovery-point create" [
+export def "replication-protected-items-apply-recovery-point" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -2575,7 +2575,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 #
 # POST /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationFabrics/{fabricName}/replicationProtectionContainers/{protectionContainerName}/replicationProtectedItems/{replicatedProtectedItemName}/failoverCommit
 # operationId: ReplicationProtectedItems_FailoverCommit
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replication-protection-containers-replication-protected-items-failover-commit commit" [
+export def "replication-protected-items-failover-commit" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -2624,7 +2624,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 # POST /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationFabrics/{fabricName}/replicationProtectionContainers/{protectionContainerName}/replicationProtectedItems/{replicatedProtectedItemName}/plannedFailover
 # operationId: ReplicationProtectedItems_PlannedFailover
 # --properties shape: {failoverDirection?: string, providerSpecificDetails?: record}
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replication-protection-containers-replication-protected-items-planned-failover create" [
+export def "replication-protected-items-planned-failover" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -2677,7 +2677,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 # POST /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationFabrics/{fabricName}/replicationProtectionContainers/{protectionContainerName}/replicationProtectedItems/{replicatedProtectedItemName}/reProtect
 # operationId: ReplicationProtectedItems_Reprotect
 # --properties shape: {failoverDirection?: string, providerSpecificDetails?: record}
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replication-protection-containers-replication-protected-items-re-protect create-reprotect" [
+export def "replication-protected-items-reprotect" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -2729,7 +2729,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 #
 # GET /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationFabrics/{fabricName}/replicationProtectionContainers/{protectionContainerName}/replicationProtectedItems/{replicatedProtectedItemName}/recoveryPoints
 # operationId: RecoveryPoints_ListByReplicationProtectedItems
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replication-protection-containers-replication-protected-items-recovery-points list" [
+export def "recovery-points-list-by-replication-protected-items" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -2777,7 +2777,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 #
 # GET /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationFabrics/{fabricName}/replicationProtectionContainers/{protectionContainerName}/replicationProtectedItems/{replicatedProtectedItemName}/recoveryPoints/{recoveryPointName}
 # operationId: RecoveryPoints_Get
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replication-protection-containers-replication-protected-items-recovery-points get" [
+export def "recovery-points-get" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -2828,7 +2828,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 # POST /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationFabrics/{fabricName}/replicationProtectionContainers/{protectionContainerName}/replicationProtectedItems/{replicatedProtectedItemName}/remove
 # operationId: ReplicationProtectedItems_Delete
 # --properties shape: {disableProtectionReason?: "NotSpecified"|"MigrationComplete", replicationProviderInput?: record}
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replication-protection-containers-replication-protected-items-remove delete" [
+export def "replication-protected-items-delete" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -2881,7 +2881,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 # POST /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationFabrics/{fabricName}/replicationProtectionContainers/{protectionContainerName}/replicationProtectedItems/{replicatedProtectedItemName}/removeDisks
 # operationId: ReplicationProtectedItems_RemoveDisks
 # --properties shape: {providerSpecificDetails?: record}
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replication-protection-containers-replication-protected-items-remove-disks delete" [
+export def "replication-protected-items-remove-disks" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -2933,7 +2933,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 #
 # POST /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationFabrics/{fabricName}/replicationProtectionContainers/{protectionContainerName}/replicationProtectedItems/{replicatedProtectedItemName}/repairReplication
 # operationId: ReplicationProtectedItems_RepairReplication
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replication-protection-containers-replication-protected-items-repair-replication create" [
+export def "replication-protected-items-repair-replication" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -2981,7 +2981,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 #
 # GET /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationFabrics/{fabricName}/replicationProtectionContainers/{protectionContainerName}/replicationProtectedItems/{replicatedProtectedItemName}/targetComputeSizes
 # operationId: TargetComputeSizes_ListByReplicationProtectedItems
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replication-protection-containers-replication-protected-items-target-compute-sizes list" [
+export def "target-compute-sizes-list-by-replication-protected-items" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -3030,7 +3030,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 # POST /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationFabrics/{fabricName}/replicationProtectionContainers/{protectionContainerName}/replicationProtectedItems/{replicatedProtectedItemName}/testFailover
 # operationId: ReplicationProtectedItems_TestFailover
 # --properties shape: {failoverDirection?: string, networkId?: string, networkType?: string, providerSpecificDetails?: record, skipTestFailoverCleanup?: string}
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replication-protection-containers-replication-protected-items-test-failover test" [
+export def "replication-protected-items-test-failover" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -3083,7 +3083,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 # POST /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationFabrics/{fabricName}/replicationProtectionContainers/{protectionContainerName}/replicationProtectedItems/{replicatedProtectedItemName}/testFailoverCleanup
 # operationId: ReplicationProtectedItems_TestFailoverCleanup
 # --properties shape: {comments?: string}
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replication-protection-containers-replication-protected-items-test-failover-cleanup test" [
+export def "replication-protected-items-test-failover-cleanup" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -3136,7 +3136,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 # POST /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationFabrics/{fabricName}/replicationProtectionContainers/{protectionContainerName}/replicationProtectedItems/{replicatedProtectedItemName}/unplannedFailover
 # operationId: ReplicationProtectedItems_UnplannedFailover
 # --properties shape: {failoverDirection?: string, providerSpecificDetails?: record, sourceSiteOperations?: string}
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replication-protection-containers-replication-protected-items-unplanned-failover create" [
+export def "replication-protected-items-unplanned-failover" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -3189,7 +3189,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 # POST /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationFabrics/{fabricName}/replicationProtectionContainers/{protectionContainerName}/replicationProtectedItems/{replicationProtectedItemName}/updateMobilityService
 # operationId: ReplicationProtectedItems_UpdateMobilityService
 # --properties shape: {runAsAccountId?: string}
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replication-protection-containers-replication-protected-items-update-mobility-service update" [
+export def "replication-protected-items-update-mobility-service" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -3241,7 +3241,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 #
 # GET /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationFabrics/{fabricName}/replicationProtectionContainers/{protectionContainerName}/replicationProtectionContainerMappings
 # operationId: ReplicationProtectionContainerMappings_ListByReplicationProtectionContainers
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replication-protection-containers-replication-protection-container-mappings list" [
+export def "replication-protection-container-mappings-list-by-replication-protection-containers" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -3287,7 +3287,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 #
 # DELETE /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationFabrics/{fabricName}/replicationProtectionContainers/{protectionContainerName}/replicationProtectionContainerMappings/{mappingName}
 # operationId: ReplicationProtectionContainerMappings_Purge
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replication-protection-containers-replication-protection-container-mappings delete-purge" [
+export def "replication-protection-container-mappings-purge" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -3335,7 +3335,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 #
 # GET /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationFabrics/{fabricName}/replicationProtectionContainers/{protectionContainerName}/replicationProtectionContainerMappings/{mappingName}
 # operationId: ReplicationProtectionContainerMappings_Get
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replication-protection-containers-replication-protection-container-mappings get" [
+export def "replication-protection-container-mappings-get" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -3384,7 +3384,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 # PATCH /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationFabrics/{fabricName}/replicationProtectionContainers/{protectionContainerName}/replicationProtectionContainerMappings/{mappingName}
 # operationId: ReplicationProtectionContainerMappings_Update
 # --properties shape: {providerSpecificInput?: record}
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replication-protection-containers-replication-protection-container-mappings update" [
+export def "replication-protection-container-mappings-update" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -3437,7 +3437,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 # PUT /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationFabrics/{fabricName}/replicationProtectionContainers/{protectionContainerName}/replicationProtectionContainerMappings/{mappingName}
 # operationId: ReplicationProtectionContainerMappings_Create
 # --properties shape: {policyId?: string, providerSpecificInput?: record, targetProtectionContainerId?: string}
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replication-protection-containers-replication-protection-container-mappings create" [
+export def "replication-protection-container-mappings-create" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -3490,7 +3490,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 # POST /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationFabrics/{fabricName}/replicationProtectionContainers/{protectionContainerName}/replicationProtectionContainerMappings/{mappingName}/remove
 # operationId: ReplicationProtectionContainerMappings_Delete
 # --properties shape: {providerSpecificInput?: record}
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replication-protection-containers-replication-protection-container-mappings-remove delete" [
+export def "replication-protection-container-mappings-delete" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -3543,7 +3543,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 # POST /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationFabrics/{fabricName}/replicationProtectionContainers/{protectionContainerName}/switchprotection
 # operationId: ReplicationProtectionContainers_SwitchProtection
 # --properties shape: {providerSpecificDetails?: record, replicationProtectedItemName?: string}
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replication-protection-containers-switchprotection create-switch" [
+export def "replication-protection-containers-switch-protection" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -3593,7 +3593,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 #
 # GET /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationFabrics/{fabricName}/replicationRecoveryServicesProviders
 # operationId: ReplicationRecoveryServicesProviders_ListByReplicationFabrics
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replication-recovery-services-providers list" [
+export def "replication-recovery-services-providers-list-by-replication-fabrics" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -3637,7 +3637,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 #
 # DELETE /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationFabrics/{fabricName}/replicationRecoveryServicesProviders/{providerName}
 # operationId: ReplicationRecoveryServicesProviders_Purge
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replication-recovery-services-providers delete-purge" [
+export def "replication-recovery-services-providers-purge" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -3683,7 +3683,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 #
 # GET /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationFabrics/{fabricName}/replicationRecoveryServicesProviders/{providerName}
 # operationId: ReplicationRecoveryServicesProviders_Get
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replication-recovery-services-providers get" [
+export def "replication-recovery-services-providers-get" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -3730,7 +3730,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 # PUT /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationFabrics/{fabricName}/replicationRecoveryServicesProviders/{providerName}
 # operationId: ReplicationRecoveryServicesProviders_Create
 # --properties shape: {authenticationIdentityInput: record, machineName: string, resourceAccessIdentityInput: record}
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replication-recovery-services-providers create" [
+export def "replication-recovery-services-providers-create" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -3780,7 +3780,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 #
 # POST /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationFabrics/{fabricName}/replicationRecoveryServicesProviders/{providerName}/refreshProvider
 # operationId: ReplicationRecoveryServicesProviders_RefreshProvider
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replication-recovery-services-providers-refresh-provider refresh" [
+export def "replication-recovery-services-providers-refresh-provider" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -3826,7 +3826,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 #
 # POST /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationFabrics/{fabricName}/replicationRecoveryServicesProviders/{providerName}/remove
 # operationId: ReplicationRecoveryServicesProviders_Delete
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replication-recovery-services-providers-remove delete" [
+export def "replication-recovery-services-providers-delete" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -3872,7 +3872,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 #
 # GET /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationFabrics/{fabricName}/replicationStorageClassifications
 # operationId: ReplicationStorageClassifications_ListByReplicationFabrics
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replication-storage-classifications list" [
+export def "replication-storage-classifications-list-by-replication-fabrics" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -3916,7 +3916,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 #
 # GET /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationFabrics/{fabricName}/replicationStorageClassifications/{storageClassificationName}
 # operationId: ReplicationStorageClassifications_Get
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replication-storage-classifications get" [
+export def "replication-storage-classifications-get" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -3962,7 +3962,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 #
 # GET /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationFabrics/{fabricName}/replicationStorageClassifications/{storageClassificationName}/replicationStorageClassificationMappings
 # operationId: ReplicationStorageClassificationMappings_ListByReplicationStorageClassifications
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replication-storage-classifications-replication-storage-classification-mappings list" [
+export def "replication-storage-classification-mappings-list-by-replication-storage-classifications" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -4008,7 +4008,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 #
 # DELETE /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationFabrics/{fabricName}/replicationStorageClassifications/{storageClassificationName}/replicationStorageClassificationMappings/{storageClassificationMappingName}
 # operationId: ReplicationStorageClassificationMappings_Delete
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replication-storage-classifications-replication-storage-classification-mappings delete" [
+export def "replication-storage-classification-mappings-delete" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -4056,7 +4056,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 #
 # GET /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationFabrics/{fabricName}/replicationStorageClassifications/{storageClassificationName}/replicationStorageClassificationMappings/{storageClassificationMappingName}
 # operationId: ReplicationStorageClassificationMappings_Get
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replication-storage-classifications-replication-storage-classification-mappings get" [
+export def "replication-storage-classification-mappings-get" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -4105,7 +4105,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 # PUT /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationFabrics/{fabricName}/replicationStorageClassifications/{storageClassificationName}/replicationStorageClassificationMappings/{storageClassificationMappingName}
 # operationId: ReplicationStorageClassificationMappings_Create
 # --properties shape: {targetStorageClassificationId?: string}
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replication-storage-classifications-replication-storage-classification-mappings create" [
+export def "replication-storage-classification-mappings-create" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -4157,7 +4157,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 #
 # GET /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationFabrics/{fabricName}/replicationvCenters
 # operationId: ReplicationvCenters_ListByReplicationFabrics
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replicationv-centers list" [
+export def "replicationv-centers-list-by-replication-fabrics" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -4201,7 +4201,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 #
 # DELETE /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationFabrics/{fabricName}/replicationvCenters/{vCenterName}
 # operationId: ReplicationvCenters_Delete
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replicationv-centers delete" [
+export def "replicationv-centers-delete" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -4247,7 +4247,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 #
 # GET /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationFabrics/{fabricName}/replicationvCenters/{vCenterName}
 # operationId: ReplicationvCenters_Get
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replicationv-centers get" [
+export def "replicationv-centers-get" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -4294,7 +4294,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 # PATCH /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationFabrics/{fabricName}/replicationvCenters/{vCenterName}
 # operationId: ReplicationvCenters_Update
 # --properties shape: {friendlyName?: string, ipAddress?: string, port?: string, processServerId?: string, runAsAccountId?: string}
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replicationv-centers update" [
+export def "replicationv-centers-update" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -4345,7 +4345,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 # PUT /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationFabrics/{fabricName}/replicationvCenters/{vCenterName}
 # operationId: ReplicationvCenters_Create
 # --properties shape: {friendlyName?: string, ipAddress?: string, port?: string, processServerId?: string, runAsAccountId?: string}
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-fabrics-replicationv-centers create" [
+export def "replicationv-centers-create" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -4395,7 +4395,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 #
 # GET /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationJobs
 # operationId: ReplicationJobs_List
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-jobs list" [
+export def "replication-jobs-list" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -4438,7 +4438,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 #
 # POST /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationJobs/export
 # operationId: ReplicationJobs_Export
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-jobs-export export" [
+export def "replication-jobs-export" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -4488,7 +4488,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 #
 # GET /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationJobs/{jobName}
 # operationId: ReplicationJobs_Get
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-jobs get" [
+export def "replication-jobs-get" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -4532,7 +4532,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 #
 # POST /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationJobs/{jobName}/cancel
 # operationId: ReplicationJobs_Cancel
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-jobs-cancel cancel" [
+export def "replication-jobs-cancel" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -4576,7 +4576,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 #
 # POST /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationJobs/{jobName}/restart
 # operationId: ReplicationJobs_Restart
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-jobs-restart restart" [
+export def "replication-jobs-restart" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -4621,7 +4621,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 # POST /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationJobs/{jobName}/resume
 # operationId: ReplicationJobs_Resume
 # --properties shape: {comments?: string}
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-jobs-resume create" [
+export def "replication-jobs-resume" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -4669,7 +4669,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 #
 # GET /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationMigrationItems
 # operationId: ReplicationMigrationItems_List
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-migration-items list" [
+export def "replication-migration-items-list" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -4713,7 +4713,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 #
 # GET /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationNetworkMappings
 # operationId: ReplicationNetworkMappings_List
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-network-mappings list" [
+export def "replication-network-mappings-list" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -4755,7 +4755,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 #
 # GET /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationNetworks
 # operationId: ReplicationNetworks_List
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-networks list" [
+export def "replication-networks-list" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -4797,7 +4797,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 #
 # GET /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationPolicies
 # operationId: ReplicationPolicies_List
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-policies list" [
+export def "replication-policies-list" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -4839,7 +4839,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 #
 # DELETE /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationPolicies/{policyName}
 # operationId: ReplicationPolicies_Delete
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-policies delete" [
+export def "replication-policies-delete" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -4883,7 +4883,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 #
 # GET /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationPolicies/{policyName}
 # operationId: ReplicationPolicies_Get
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-policies get" [
+export def "replication-policies-get" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -4928,7 +4928,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 # PATCH /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationPolicies/{policyName}
 # operationId: ReplicationPolicies_Update
 # --properties shape: {replicationProviderSettings?: record}
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-policies update" [
+export def "replication-policies-update" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -4977,7 +4977,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 # PUT /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationPolicies/{policyName}
 # operationId: ReplicationPolicies_Create
 # --properties shape: {providerSpecificInput?: record}
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-policies create" [
+export def "replication-policies-create" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -5025,7 +5025,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 #
 # GET /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationProtectedItems
 # operationId: ReplicationProtectedItems_List
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-protected-items list" [
+export def "replication-protected-items-list" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -5069,7 +5069,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 #
 # GET /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationProtectionContainerMappings
 # operationId: ReplicationProtectionContainerMappings_List
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-protection-container-mappings list" [
+export def "replication-protection-container-mappings-list" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -5111,7 +5111,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 #
 # GET /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationProtectionContainers
 # operationId: ReplicationProtectionContainers_List
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-protection-containers list" [
+export def "replication-protection-containers-list" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -5153,7 +5153,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 #
 # GET /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationRecoveryPlans
 # operationId: ReplicationRecoveryPlans_List
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-recovery-plans list" [
+export def "replication-recovery-plans-list" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -5195,7 +5195,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 #
 # DELETE /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationRecoveryPlans/{recoveryPlanName}
 # operationId: ReplicationRecoveryPlans_Delete
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-recovery-plans delete" [
+export def "replication-recovery-plans-delete" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -5239,7 +5239,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 #
 # GET /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationRecoveryPlans/{recoveryPlanName}
 # operationId: ReplicationRecoveryPlans_Get
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-recovery-plans get" [
+export def "replication-recovery-plans-get" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -5284,7 +5284,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 # PATCH /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationRecoveryPlans/{recoveryPlanName}
 # operationId: ReplicationRecoveryPlans_Update
 # --properties shape: {groups?: list}
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-recovery-plans update" [
+export def "replication-recovery-plans-update" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -5333,7 +5333,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 # PUT /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationRecoveryPlans/{recoveryPlanName}
 # operationId: ReplicationRecoveryPlans_Create
 # --properties shape: {failoverDeploymentModel?: "NotApplicable"|"Classic"|"ResourceManager", groups: list, primaryFabricId: string, recoveryFabricId: string}
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-recovery-plans create" [
+export def "replication-recovery-plans-create" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -5381,7 +5381,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 #
 # POST /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationRecoveryPlans/{recoveryPlanName}/failoverCommit
 # operationId: ReplicationRecoveryPlans_FailoverCommit
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-recovery-plans-failover-commit commit" [
+export def "replication-recovery-plans-failover-commit" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -5426,7 +5426,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 # POST /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationRecoveryPlans/{recoveryPlanName}/plannedFailover
 # operationId: ReplicationRecoveryPlans_PlannedFailover
 # --properties shape: {failoverDirection: "PrimaryToRecovery"|"RecoveryToPrimary", providerSpecificDetails?: list}
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-recovery-plans-planned-failover create" [
+export def "replication-recovery-plans-planned-failover" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -5474,7 +5474,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 #
 # POST /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationRecoveryPlans/{recoveryPlanName}/reProtect
 # operationId: ReplicationRecoveryPlans_Reprotect
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-recovery-plans-re-protect create-reprotect" [
+export def "replication-recovery-plans-reprotect" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -5519,7 +5519,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 # POST /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationRecoveryPlans/{recoveryPlanName}/testFailover
 # operationId: ReplicationRecoveryPlans_TestFailover
 # --properties shape: {failoverDirection: "PrimaryToRecovery"|"RecoveryToPrimary", networkId?: string, networkType: string, providerSpecificDetails?: list, skipTestFailoverCleanup?: string}
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-recovery-plans-test-failover test" [
+export def "replication-recovery-plans-test-failover" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -5568,7 +5568,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 # POST /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationRecoveryPlans/{recoveryPlanName}/testFailoverCleanup
 # operationId: ReplicationRecoveryPlans_TestFailoverCleanup
 # --properties shape: {comments?: string}
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-recovery-plans-test-failover-cleanup test" [
+export def "replication-recovery-plans-test-failover-cleanup" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -5617,7 +5617,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 # POST /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationRecoveryPlans/{recoveryPlanName}/unplannedFailover
 # operationId: ReplicationRecoveryPlans_UnplannedFailover
 # --properties shape: {failoverDirection: "PrimaryToRecovery"|"RecoveryToPrimary", providerSpecificDetails?: list, sourceSiteOperations: "Required"|"NotRequired"}
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-recovery-plans-unplanned-failover create" [
+export def "replication-recovery-plans-unplanned-failover" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -5665,7 +5665,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 #
 # GET /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationRecoveryServicesProviders
 # operationId: ReplicationRecoveryServicesProviders_List
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-recovery-services-providers list" [
+export def "replication-recovery-services-providers-list" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -5707,7 +5707,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 #
 # GET /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationStorageClassificationMappings
 # operationId: ReplicationStorageClassificationMappings_List
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-storage-classification-mappings list" [
+export def "replication-storage-classification-mappings-list" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -5749,7 +5749,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 #
 # GET /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationStorageClassifications
 # operationId: ReplicationStorageClassifications_List
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-storage-classifications list" [
+export def "replication-storage-classifications-list" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -5791,7 +5791,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 #
 # GET /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationSupportedOperatingSystems
 # operationId: SupportedOperatingSystems_Get
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-supported-operating-systems get" [
+export def "supported-operating-systems-get" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -5833,7 +5833,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 #
 # GET /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationVaultHealth
 # operationId: ReplicationVaultHealth_Get
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-vault-health get" [
+export def "replication-vault-health-get" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -5875,7 +5875,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 #
 # POST /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationVaultHealth/default/refresh
 # operationId: ReplicationVaultHealth_Refresh
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-vault-health-default-refresh refresh" [
+export def "replication-vault-health-refresh" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -5917,7 +5917,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 #
 # GET /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationVaultSettings
 # operationId: ReplicationVaultSetting_List
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-vault-settings list" [
+export def "replication-vault-setting-list" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -5959,7 +5959,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 #
 # GET /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationVaultSettings/{vaultSettingName}
 # operationId: ReplicationVaultSetting_Get
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-vault-settings get" [
+export def "replication-vault-setting-get" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -6004,7 +6004,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 # PUT /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationVaultSettings/{vaultSettingName}
 # operationId: ReplicationVaultSetting_Create
 # --properties shape: {migrationSolutionId: string}
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replication-vault-settings create" [
+export def "replication-vault-setting-create" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -6052,7 +6052,7 @@ export def "subscriptions-resource-groups-providers-microsoft-recovery-services-
 #
 # GET /Subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.RecoveryServices/vaults/{resourceName}/replicationvCenters
 # operationId: ReplicationvCenters_List
-export def "subscriptions-resource-groups-providers-microsoft-recovery-services-vaults-replicationv-centers list" [
+export def "replicationv-centers-list" [
   subscription_id: string
   resource_group_name: string
   resource_name: string

@@ -133,7 +133,7 @@ def feature-completer-2 [] { ["CLASSIFICATION" "EVENT" "FEATURE_UNSPECIFIED" "OB
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "v1beta1 delete" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "datalabeling-projects-operations-delete" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -157,7 +157,7 @@ export def commands []: nothing -> table {
 #
 # DELETE /v1beta1/{name}
 # operationId: datalabeling.projects.operations.delete
-export def "v1beta1 delete" [
+export def "datalabeling-projects-operations-delete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -205,7 +205,7 @@ export def "v1beta1 delete" [
 #
 # GET /v1beta1/{name}
 # operationId: datalabeling.projects.operations.get
-export def "v1beta1 get" [
+export def "datalabeling-projects-operations-get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -256,7 +256,7 @@ export def "v1beta1 get" [
 # operationId: datalabeling.projects.evaluationJobs.patch
 # --attempts item shape: {attemptTime?: string, partialFailures?: list}
 # --evaluationJobConfig shape: {bigqueryImportKeys?: record, boundingPolyConfig?: record, evaluationConfig?: record, evaluationJobAlertConfig?: record, exampleCount?: int, exampleSamplePercentage?: float, humanAnnotationConfig?: record, imageClassificationConfig?: record, inputConfig?: record, textClassificationConfig?: record}
-export def "v1beta1 update" [
+export def "datalabeling-projects-evaluation-jobs-patch" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -318,7 +318,7 @@ export def "v1beta1 update" [
 #
 # GET /v1beta1/{name}/operations
 # operationId: datalabeling.projects.operations.list
-export def "v1beta1-operations list" [
+export def "datalabeling-projects-operations-list" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -369,7 +369,7 @@ export def "v1beta1-operations list" [
 #
 # GET /v1beta1/{name}:cancel
 # operationId: datalabeling.projects.operations.cancel
-export def "v1beta1 cancel" [
+export def "datalabeling-projects-operations-cancel" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -418,7 +418,7 @@ export def "v1beta1 cancel" [
 # POST /v1beta1/{name}:exportData
 # operationId: datalabeling.projects.datasets.exportData
 # --outputConfig shape: {gcsDestination?: record, gcsFolderDestination?: record}
-export def "v1beta1 export-data" [
+export def "datalabeling-projects-datasets-export-data" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -474,7 +474,7 @@ export def "v1beta1 export-data" [
 # POST /v1beta1/{name}:importData
 # operationId: datalabeling.projects.datasets.importData
 # --inputConfig shape: {annotationType?: "ANNOTATION_TYPE_UNSPECIFIED"|"IMAGE_CLASSIFICATION_ANNOTATION"|"IMAGE_BOUNDING_BOX_ANNOTATION"|"IMAGE_ORIENTED_BOUNDING_BOX_ANNOTATION"|"IMAGE_BOUNDING_POLY_ANNOTATION"|"IMAGE_POLYLINE_ANNOTATION"|"IMAGE_SEGMENTATION_ANNOTATION"|"VIDEO_SHOTS_CLASSIFICATION_ANNOTATION"|"VIDEO_OBJECT_TRACKING_ANNOTATION"|"VIDEO_OBJECT_DETECTION_ANNOTATION"|"VIDEO_EVENT_ANNOTATION"|"TEXT_CLASSIFICATION_ANNOTATION"|"TEXT_ENTITY_EXTRACTION_ANNOTATION"|"GENERAL_CLASSIFICATION_ANNOTATION", ... (5 more fields)}
-export def "v1beta1 import-data" [
+export def "datalabeling-projects-datasets-import-data" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -527,7 +527,7 @@ export def "v1beta1 import-data" [
 #
 # POST /v1beta1/{name}:pause
 # operationId: datalabeling.projects.evaluationJobs.pause
-export def "v1beta1 pause" [
+export def "datalabeling-projects-evaluation-jobs-pause" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -579,7 +579,7 @@ export def "v1beta1 pause" [
 #
 # POST /v1beta1/{name}:resume
 # operationId: datalabeling.projects.evaluationJobs.resume
-export def "v1beta1 create-resume" [
+export def "datalabeling-projects-evaluation-jobs-resume" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -631,7 +631,7 @@ export def "v1beta1 create-resume" [
 #
 # GET /v1beta1/{parent}/annotatedDatasets
 # operationId: datalabeling.projects.datasets.annotatedDatasets.list
-export def "v1beta1-annotated-datasets list" [
+export def "datalabeling-projects-datasets-annotated-datasets-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -682,7 +682,7 @@ export def "v1beta1-annotated-datasets list" [
 #
 # GET /v1beta1/{parent}/annotationSpecSets
 # operationId: datalabeling.projects.annotationSpecSets.list
-export def "v1beta1-annotation-spec-sets list" [
+export def "datalabeling-projects-annotation-spec-sets-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -734,7 +734,7 @@ export def "v1beta1-annotation-spec-sets list" [
 # POST /v1beta1/{parent}/annotationSpecSets
 # operationId: datalabeling.projects.annotationSpecSets.create
 # --annotationSpecSet shape: {annotationSpecs?: list, blockingResources?: list<string>, description?: string, displayName?: string, name?: string}
-export def "v1beta1-annotation-spec-sets create" [
+export def "datalabeling-projects-annotation-spec-sets-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -786,7 +786,7 @@ export def "v1beta1-annotation-spec-sets create" [
 #
 # GET /v1beta1/{parent}/dataItems
 # operationId: datalabeling.projects.datasets.dataItems.list
-export def "v1beta1-data-items list" [
+export def "datalabeling-projects-datasets-data-items-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -837,7 +837,7 @@ export def "v1beta1-data-items list" [
 #
 # GET /v1beta1/{parent}/datasets
 # operationId: datalabeling.projects.datasets.list
-export def "v1beta1-datasets list" [
+export def "datalabeling-projects-datasets-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -889,7 +889,7 @@ export def "v1beta1-datasets list" [
 # POST /v1beta1/{parent}/datasets
 # operationId: datalabeling.projects.datasets.create
 # --dataset shape: {blockingResources?: list<string>, createTime?: string, dataItemCount?: string, description?: string, displayName?: string, inputConfigs?: list, lastMigrateTime?: string, name?: string}
-export def "v1beta1-datasets create" [
+export def "datalabeling-projects-datasets-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -941,7 +941,7 @@ export def "v1beta1-datasets create" [
 #
 # GET /v1beta1/{parent}/evaluationJobs
 # operationId: datalabeling.projects.evaluationJobs.list
-export def "v1beta1-evaluation-jobs list" [
+export def "datalabeling-projects-evaluation-jobs-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -993,7 +993,7 @@ export def "v1beta1-evaluation-jobs list" [
 # POST /v1beta1/{parent}/evaluationJobs
 # operationId: datalabeling.projects.evaluationJobs.create
 # --job shape: {annotationSpecSet?: string, attempts?: list, createTime?: string, description?: string, evaluationJobConfig?: record, labelMissingGroundTruth?: bool, modelVersion?: string, name?: string, schedule?: string, state?: "STATE_UNSPECIFIED"|"SCHEDULED"|"RUNNING"|"PAUSED"|"STOPPED"}
-export def "v1beta1-evaluation-jobs create" [
+export def "datalabeling-projects-evaluation-jobs-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1045,7 +1045,7 @@ export def "v1beta1-evaluation-jobs create" [
 #
 # GET /v1beta1/{parent}/evaluations:search
 # operationId: datalabeling.projects.evaluations.search
-export def "v1beta1-evaluations-search list" [
+export def "datalabeling-projects-evaluations-search" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1096,7 +1096,7 @@ export def "v1beta1-evaluations-search list" [
 #
 # POST /v1beta1/{parent}/exampleComparisons:search
 # operationId: datalabeling.projects.datasets.evaluations.exampleComparisons.search
-export def "v1beta1-example-comparisons-search list" [
+export def "datalabeling-projects-datasets-evaluations-example-comparisons-search" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1149,7 +1149,7 @@ export def "v1beta1-example-comparisons-search list" [
 #
 # GET /v1beta1/{parent}/examples
 # operationId: datalabeling.projects.datasets.annotatedDatasets.examples.list
-export def "v1beta1-examples list" [
+export def "datalabeling-projects-datasets-annotated-datasets-examples-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1200,7 +1200,7 @@ export def "v1beta1-examples list" [
 #
 # GET /v1beta1/{parent}/feedbackMessages
 # operationId: datalabeling.projects.datasets.annotatedDatasets.feedbackThreads.feedbackMessages.list
-export def "v1beta1-feedback-messages list" [
+export def "datalabeling-projects-datasets-annotated-datasets-feedback-threads-feedback-messages-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1250,7 +1250,7 @@ export def "v1beta1-feedback-messages list" [
 #
 # POST /v1beta1/{parent}/feedbackMessages
 # operationId: datalabeling.projects.datasets.annotatedDatasets.feedbackThreads.feedbackMessages.create
-export def "v1beta1-feedback-messages create" [
+export def "datalabeling-projects-datasets-annotated-datasets-feedback-threads-feedback-messages-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1307,7 +1307,7 @@ export def "v1beta1-feedback-messages create" [
 #
 # GET /v1beta1/{parent}/feedbackThreads
 # operationId: datalabeling.projects.datasets.annotatedDatasets.feedbackThreads.list
-export def "v1beta1-feedback-threads list" [
+export def "datalabeling-projects-datasets-annotated-datasets-feedback-threads-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1362,7 +1362,7 @@ export def "v1beta1-feedback-threads list" [
 # --imageClassificationConfig shape: {allowMultiLabel?: bool, annotationSpecSet?: string, answerAggregationType?: "STRING_AGGREGATION_TYPE_UNSPECIFIED"|"MAJORITY_VOTE"|"UNANIMOUS_VOTE"|"NO_AGGREGATION"}
 # --polylineConfig shape: {annotationSpecSet?: string, instructionMessage?: string}
 # --segmentationConfig shape: {annotationSpecSet?: string, instructionMessage?: string}
-export def "v1beta1-image-label create" [
+export def "datalabeling-projects-datasets-image-label" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1419,7 +1419,7 @@ export def "v1beta1-image-label create" [
 #
 # GET /v1beta1/{parent}/instructions
 # operationId: datalabeling.projects.instructions.list
-export def "v1beta1-instructions list" [
+export def "datalabeling-projects-instructions-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1471,7 +1471,7 @@ export def "v1beta1-instructions list" [
 # POST /v1beta1/{parent}/instructions
 # operationId: datalabeling.projects.instructions.create
 # --instruction shape: {blockingResources?: list<string>, createTime?: string, csvInstruction?: record, dataType?: "DATA_TYPE_UNSPECIFIED"|"IMAGE"|"VIDEO"|"TEXT"|"GENERAL_DATA", description?: string, displayName?: string, name?: string, pdfInstruction?: record, updateTime?: string}
-export def "v1beta1-instructions create" [
+export def "datalabeling-projects-instructions-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1526,7 +1526,7 @@ export def "v1beta1-instructions create" [
 # --basicConfig shape: {annotatedDatasetDescription?: string, annotatedDatasetDisplayName?: string, contributorEmails?: list<string>, instruction?: string, labelGroup?: string, languageCode?: string, questionDuration?: string, replicaCount?: int, userEmailAddress?: string}
 # --textClassificationConfig shape: {allowMultiLabel?: bool, annotationSpecSet?: string, sentimentConfig?: record}
 # --textEntityExtractionConfig shape: {annotationSpecSet?: string}
-export def "v1beta1-text-label create" [
+export def "datalabeling-projects-datasets-text-label" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1586,7 +1586,7 @@ export def "v1beta1-text-label create" [
 # --objectDetectionConfig shape: {annotationSpecSet?: string, extractionFrameRate?: float}
 # --objectTrackingConfig shape: {annotationSpecSet?: string, clipLength?: int, overlapLength?: int}
 # --videoClassificationConfig shape: {annotationSpecSetConfigs?: list, applyShotDetection?: bool}
-export def "v1beta1-video-label create" [
+export def "datalabeling-projects-datasets-video-label" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)

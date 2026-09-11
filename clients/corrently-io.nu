@@ -105,7 +105,7 @@ def variation-completer [] { ["baeume" "co2" "eigenstrom" "erzeugung" "gsb"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "alternative-easee-last-sessions get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "easee-sessions" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -129,7 +129,7 @@ export def commands []: nothing -> table {
 #
 # GET /alternative/easee/lastSessions
 # operationId: easeeSessions
-export def "alternative-easee-last-sessions get" [
+export def "easee-sessions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -166,7 +166,7 @@ export def "alternative-easee-last-sessions get" [
 #
 # GET /alternative/ocpp/lastSessions
 # operationId: ocppSessions
-export def "alternative-ocpp-last-sessions get" [
+export def "ocpp-sessions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -200,7 +200,7 @@ export def "alternative-ocpp-last-sessions get" [
 #
 # GET /alternative/openmeter/activities
 # operationId: omActivities
-export def "alternative-openmeter-activities get-om" [
+export def "om-activities" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -234,7 +234,7 @@ export def "alternative-openmeter-activities get-om" [
 #
 # GET /alternative/openmeter/meters
 # operationId: omMeters
-export def "alternative-openmeter-meters get-om" [
+export def "om-meters" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -268,7 +268,7 @@ export def "alternative-openmeter-meters get-om" [
 #
 # GET /alternative/openmeter/readings
 # operationId: omReadings
-export def "alternative-openmeter-readings get-om" [
+export def "om-readings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -302,7 +302,7 @@ export def "alternative-openmeter-readings get-om" [
 #
 # GET /gsi/bestHour
 # operationId: gsiBesthour
-export def "gsi-best-hour get-besthour" [
+export def "gsi-besthour" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -341,7 +341,7 @@ export def "gsi-best-hour get-besthour" [
 #
 # GET /gsi/dispatch
 # operationId: gsiDispatch
-export def "gsi-dispatch get" [
+export def "gsi-dispatch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -378,7 +378,7 @@ export def "gsi-dispatch get" [
 #
 # GET /gsi/marketdata
 # operationId: gsiMarketdata
-export def "gsi-marketdata get" [
+export def "gsi-marketdata" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -414,7 +414,7 @@ export def "gsi-marketdata get" [
 #
 # GET /gsi/prediction
 # operationId: gsiPrediction
-export def "gsi-prediction get" [
+export def "gsi-prediction" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -451,7 +451,7 @@ export def "gsi-prediction get" [
 #
 # GET /metering/reading
 # operationId: meteringGet
-export def "metering-reading get" [
+export def "metering-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -487,7 +487,7 @@ export def "metering-reading get" [
 #
 # POST /metering/reading
 # operationId: meteringPost
-export def "metering-reading create" [
+export def "metering-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -530,7 +530,7 @@ export def "metering-reading create" [
 #
 # POST /quittung/commit
 # operationId: quittungComit
-export def "quittung-commit create-comit" [
+export def "quittung-comit" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -568,7 +568,7 @@ export def "quittung-commit create-comit" [
 #
 # POST /quittung/create
 # operationId: quittungCreate
-export def "quittung-create create" [
+export def "quittung-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -606,7 +606,7 @@ export def "quittung-create create" [
 #
 # POST /quittung/prepare
 # operationId: quittungPrepare
-export def "quittung-prepare create" [
+export def "quittung-prepare" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -644,7 +644,7 @@ export def "quittung-prepare create" [
 #
 # POST /quittung/tse
 # operationId: quittungTSE
-export def "quittung-tse create" [
+export def "quittung-tse" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -680,7 +680,7 @@ export def "quittung-tse create" [
 #
 # POST /quittung/tsedata
 # operationId: quittungTSEData
-export def "quittung-tsedata create-tse-data" [
+export def "quittung-tse-data" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -716,7 +716,7 @@ export def "quittung-tsedata create-tse-data" [
 #
 # POST /quittung/tsesignature
 # operationId: quittungTSEsignature
-export def "quittung-tsesignature create-ts-esignature" [
+export def "quittung-ts-esignature" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -752,7 +752,7 @@ export def "quittung-tsesignature create-ts-esignature" [
 #
 # GET /quittung/zugferd
 # operationId: quittungZugferd
-export def "quittung-zugferd get" [
+export def "quittung-zugferd" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -788,7 +788,7 @@ export def "quittung-zugferd get" [
 #
 # GET /stromkonto/balances
 # operationId: stromkontoBalances
-export def "stromkonto-balances get" [
+export def "stromkonto-balances" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -824,7 +824,7 @@ export def "stromkonto-balances get" [
 #
 # GET /stromkonto/choices
 # operationId: stromkontoChoices
-export def "stromkonto-choices get" [
+export def "stromkonto-choices" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -860,7 +860,7 @@ export def "stromkonto-choices get" [
 #
 # POST /stromkonto/login
 # operationId: stromkontoLogin
-export def "stromkonto-login create" [
+export def "stromkonto-login" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -898,7 +898,7 @@ export def "stromkonto-login create" [
 #
 # POST /stromkonto/prepareTransaction
 # operationId: prepareTransaction
-export def "stromkonto-prepare-transaction create" [
+export def "prepare-transaction" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -940,7 +940,7 @@ export def "stromkonto-prepare-transaction create" [
 #
 # POST /stromkonto/register
 # operationId: stromkontoRegister
-export def "stromkonto-register create" [
+export def "stromkonto-register" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -981,7 +981,7 @@ export def "stromkonto-register create" [
 #
 # GET /tariff/components
 # operationId: tariffcomponents
-export def "tariff-components get-tariffcomponents" [
+export def "tariffcomponents" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1021,7 +1021,7 @@ export def "tariff-components get-tariffcomponents" [
 #
 # GET /tariff/slph0
 # operationId: tariffSLPH0
-export def "tariff-slph0 get" [
+export def "tariff-slph0" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1057,7 +1057,7 @@ export def "tariff-slph0 get" [
 #
 # GET /wim/status
 # operationId: wimstatus
-export def "wim-status get-wimstatus" [
+export def "wimstatus" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

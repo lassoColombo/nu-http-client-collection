@@ -122,7 +122,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-virtual-machine-images-operations list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "operations-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -146,7 +146,7 @@ export def commands []: nothing -> table {
 #
 # GET /providers/Microsoft.VirtualMachineImages/operations
 # operationId: Operations_List
-export def "providers-microsoft-virtual-machine-images-operations list" [
+export def "operations-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -182,7 +182,7 @@ export def "providers-microsoft-virtual-machine-images-operations list" [
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.VirtualMachineImages/imageTemplates
 # operationId: VirtualMachineImageTemplates_List
-export def "subscriptions-providers-microsoft-virtual-machine-images-image-templates list" [
+export def "virtual-machine-image-templates-list" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -220,7 +220,7 @@ export def "subscriptions-providers-microsoft-virtual-machine-images-image-templ
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.VirtualMachineImages/imageTemplates
 # operationId: VirtualMachineImageTemplates_ListByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-virtual-machine-images-image-templates list" [
+export def "virtual-machine-image-templates-list-by-resource-group" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -260,7 +260,7 @@ export def "subscriptions-resource-groups-providers-microsoft-virtual-machine-im
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.VirtualMachineImages/imageTemplates/{imageTemplateName}
 # operationId: VirtualMachineImageTemplates_Delete
-export def "subscriptions-resource-groups-providers-microsoft-virtual-machine-images-image-templates delete" [
+export def "virtual-machine-image-templates-delete" [
   subscription_id: string
   resource_group_name: string
   image_template_name: string
@@ -302,7 +302,7 @@ export def "subscriptions-resource-groups-providers-microsoft-virtual-machine-im
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.VirtualMachineImages/imageTemplates/{imageTemplateName}
 # operationId: VirtualMachineImageTemplates_Get
-export def "subscriptions-resource-groups-providers-microsoft-virtual-machine-images-image-templates get" [
+export def "virtual-machine-image-templates-get" [
   subscription_id: string
   resource_group_name: string
   image_template_name: string
@@ -345,7 +345,7 @@ export def "subscriptions-resource-groups-providers-microsoft-virtual-machine-im
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.VirtualMachineImages/imageTemplates/{imageTemplateName}
 # operationId: VirtualMachineImageTemplates_Update
 # --identity shape: {type?: "UserAssigned"|"None", userAssignedIdentities?: record}
-export def "subscriptions-resource-groups-providers-microsoft-virtual-machine-images-image-templates update" [
+export def "virtual-machine-image-templates-update" [
   subscription_id: string
   resource_group_name: string
   image_template_name: string
@@ -394,7 +394,7 @@ export def "subscriptions-resource-groups-providers-microsoft-virtual-machine-im
 # operationId: VirtualMachineImageTemplates_CreateOrUpdate
 # --identity shape: {type?: "UserAssigned"|"None", userAssignedIdentities?: record}
 # --properties shape: {buildTimeoutInMinutes?: int, customize?: list, distribute: list, lastRunStatus?: any, provisioningError?: any, provisioningState?: "Creating"|"Updating"|"Succeeded"|"Failed"|"Deleting", source: any, vmProfile?: any}
-export def "subscriptions-resource-groups-providers-microsoft-virtual-machine-images-image-templates create-or-update" [
+export def "virtual-machine-image-templates-create-or-update" [
   subscription_id: string
   resource_group_name: string
   image_template_name: string
@@ -443,7 +443,7 @@ export def "subscriptions-resource-groups-providers-microsoft-virtual-machine-im
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.VirtualMachineImages/imageTemplates/{imageTemplateName}/run
 # operationId: VirtualMachineImageTemplates_Run
-export def "subscriptions-resource-groups-providers-microsoft-virtual-machine-images-image-templates-run create" [
+export def "virtual-machine-image-templates-run" [
   subscription_id: string
   resource_group_name: string
   image_template_name: string
@@ -485,7 +485,7 @@ export def "subscriptions-resource-groups-providers-microsoft-virtual-machine-im
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.VirtualMachineImages/imageTemplates/{imageTemplateName}/runOutputs
 # operationId: VirtualMachineImageTemplates_ListRunOutputs
-export def "subscriptions-resource-groups-providers-microsoft-virtual-machine-images-image-templates-run-outputs list" [
+export def "virtual-machine-image-templates-list-run-outputs" [
   subscription_id: string
   resource_group_name: string
   image_template_name: string
@@ -527,7 +527,7 @@ export def "subscriptions-resource-groups-providers-microsoft-virtual-machine-im
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.VirtualMachineImages/imageTemplates/{imageTemplateName}/runOutputs/{runOutputName}
 # operationId: VirtualMachineImageTemplates_GetRunOutput
-export def "subscriptions-resource-groups-providers-microsoft-virtual-machine-images-image-templates-run-outputs get" [
+export def "virtual-machine-image-templates-get-run-output" [
   subscription_id: string
   resource_group_name: string
   image_template_name: string

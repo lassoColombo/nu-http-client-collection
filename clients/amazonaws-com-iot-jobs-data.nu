@@ -112,7 +112,7 @@ def status-completer [] { ["CANCELED" "FAILED" "IN_PROGRESS" "QUEUED" "REJECTED"
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "things-jobs get-execution" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "describe-job-execution" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -136,7 +136,7 @@ export def commands []: nothing -> table {
 #
 # GET /things/{thingName}/jobs/{jobId}
 # operationId: DescribeJobExecution
-export def "things-jobs get-execution" [
+export def "describe-job-execution" [
   thing_name: string
   job_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -186,7 +186,7 @@ export def "things-jobs get-execution" [
 #
 # POST /things/{thingName}/jobs/{jobId}
 # operationId: UpdateJobExecution
-export def "things-jobs update-execution" [
+export def "update-job-execution" [
   thing_name: string
   job_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -243,7 +243,7 @@ export def "things-jobs update-execution" [
 #
 # GET /things/{thingName}/jobs
 # operationId: GetPendingJobExecutions
-export def "things-jobs get-pending-executions" [
+export def "get-pending-job-executions" [
   thing_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -288,7 +288,7 @@ export def "things-jobs get-pending-executions" [
 #
 # PUT /things/{thingName}/jobs/$next
 # operationId: StartNextPendingJobExecution
-export def "things-jobs-next start-next-pending-execution" [
+export def "start-next-pending-job-execution" [
   thing_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

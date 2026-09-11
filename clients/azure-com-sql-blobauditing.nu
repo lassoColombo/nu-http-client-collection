@@ -104,7 +104,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resource-groups-providers-microsoft-sql-servers-auditing-settings list-blob-policies" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "server-blob-auditing-policies-list-by-server" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -128,7 +128,7 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/servers/{serverName}/auditingSettings
 # operationId: ServerBlobAuditingPolicies_ListByServer
-export def "subscriptions-resource-groups-providers-microsoft-sql-servers-auditing-settings list-blob-policies" [
+export def "server-blob-auditing-policies-list-by-server" [
   subscription_id: string
   resource_group_name: string
   server_name: string
@@ -170,7 +170,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-servers-auditi
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/servers/{serverName}/auditingSettings/{blobAuditingPolicyName}
 # operationId: ServerBlobAuditingPolicies_Get
-export def "subscriptions-resource-groups-providers-microsoft-sql-servers-auditing-settings get-blob-policies" [
+export def "server-blob-auditing-policies-get" [
   subscription_id: string
   resource_group_name: string
   server_name: string
@@ -215,7 +215,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-servers-auditi
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/servers/{serverName}/auditingSettings/{blobAuditingPolicyName}
 # operationId: ServerBlobAuditingPolicies_CreateOrUpdate
 # --properties shape: {auditActionsAndGroups?: list<string>, isAzureMonitorTargetEnabled?: bool, isStorageSecondaryKeyInUse?: bool, queueDelayMs?: int, retentionDays?: int, state: "Enabled"|"Disabled", storageAccountAccessKey?: string, storageAccountSubscriptionId?: string, storageEndpoint?: string}
-export def "subscriptions-resource-groups-providers-microsoft-sql-servers-auditing-settings create-blob-policies-or-update" [
+export def "server-blob-auditing-policies-create-or-update" [
   subscription_id: string
   resource_group_name: string
   server_name: string
@@ -263,7 +263,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-servers-auditi
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/servers/{serverName}/databases/{databaseName}/auditingSettings
 # operationId: DatabaseBlobAuditingPolicies_ListByDatabase
-export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databases-auditing-settings list-blob-policies" [
+export def "database-blob-auditing-policies-list-by-database" [
   subscription_id: string
   resource_group_name: string
   server_name: string
@@ -307,7 +307,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databa
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/servers/{serverName}/databases/{databaseName}/auditingSettings/{blobAuditingPolicyName}
 # operationId: DatabaseBlobAuditingPolicies_Get
-export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databases-auditing-settings get-blob-policies" [
+export def "database-blob-auditing-policies-get" [
   subscription_id: string
   resource_group_name: string
   server_name: string
@@ -354,7 +354,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databa
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/servers/{serverName}/databases/{databaseName}/auditingSettings/{blobAuditingPolicyName}
 # operationId: DatabaseBlobAuditingPolicies_CreateOrUpdate
 # --properties shape: {auditActionsAndGroups?: list<string>, isAzureMonitorTargetEnabled?: bool, isStorageSecondaryKeyInUse?: bool, queueDelayMs?: int, retentionDays?: int, state: "Enabled"|"Disabled", storageAccountAccessKey?: string, storageAccountSubscriptionId?: string, storageEndpoint?: string}
-export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databases-auditing-settings create-blob-policies-or-update" [
+export def "database-blob-auditing-policies-create-or-update" [
   subscription_id: string
   resource_group_name: string
   server_name: string
@@ -404,7 +404,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databa
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/servers/{serverName}/databases/{databaseName}/extendedAuditingSettings/{blobAuditingPolicyName}
 # operationId: ExtendedDatabaseBlobAuditingPolicies_Get
-export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databases-extended-auditing-settings get-blob-policies" [
+export def "extended-database-blob-auditing-policies-get" [
   subscription_id: string
   resource_group_name: string
   server_name: string
@@ -451,7 +451,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databa
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/servers/{serverName}/databases/{databaseName}/extendedAuditingSettings/{blobAuditingPolicyName}
 # operationId: ExtendedDatabaseBlobAuditingPolicies_CreateOrUpdate
 # --properties shape: {auditActionsAndGroups?: list<string>, isAzureMonitorTargetEnabled?: bool, isStorageSecondaryKeyInUse?: bool, predicateExpression?: string, queueDelayMs?: int, retentionDays?: int, state: "Enabled"|"Disabled", storageAccountAccessKey?: string, storageAccountSubscriptionId?: string, storageEndpoint?: string}
-export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databases-extended-auditing-settings create-blob-policies-or-update" [
+export def "extended-database-blob-auditing-policies-create-or-update" [
   subscription_id: string
   resource_group_name: string
   server_name: string
@@ -501,7 +501,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-servers-databa
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/servers/{serverName}/extendedAuditingSettings/{blobAuditingPolicyName}
 # operationId: ExtendedServerBlobAuditingPolicies_Get
-export def "subscriptions-resource-groups-providers-microsoft-sql-servers-extended-auditing-settings get-blob-policies" [
+export def "extended-server-blob-auditing-policies-get" [
   subscription_id: string
   resource_group_name: string
   server_name: string
@@ -546,7 +546,7 @@ export def "subscriptions-resource-groups-providers-microsoft-sql-servers-extend
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Sql/servers/{serverName}/extendedAuditingSettings/{blobAuditingPolicyName}
 # operationId: ExtendedServerBlobAuditingPolicies_CreateOrUpdate
 # --properties shape: {auditActionsAndGroups?: list<string>, isAzureMonitorTargetEnabled?: bool, isStorageSecondaryKeyInUse?: bool, predicateExpression?: string, queueDelayMs?: int, retentionDays?: int, state: "Enabled"|"Disabled", storageAccountAccessKey?: string, storageAccountSubscriptionId?: string, storageEndpoint?: string}
-export def "subscriptions-resource-groups-providers-microsoft-sql-servers-extended-auditing-settings create-blob-policies-or-update" [
+export def "extended-server-blob-auditing-policies-create-or-update" [
   subscription_id: string
   resource_group_name: string
   server_name: string

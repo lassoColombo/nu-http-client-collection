@@ -98,7 +98,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "accounts-extensions list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "extension-ctrl-get-account-extensions" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -122,7 +122,7 @@ export def commands []: nothing -> table {
 #
 # GET /api/accounts/{account_id}/extensions
 # operationId: ExtensionCtrl.getAccountExtensions
-export def "accounts-extensions list" [
+export def "extension-ctrl-get-account-extensions" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -165,7 +165,7 @@ export def "accounts-extensions list" [
 #
 # GET /api/accounts/{account_id}/extensions/{extension_number}
 # operationId: ExtensionCtrl.getAccountExtensionByID
-export def "accounts-extensions get" [
+export def "extension-ctrl-get-account-extension-by-id" [
   account_id: string
   extension_number: float
   --base-url(-b): string@base-url-completer # API base URL

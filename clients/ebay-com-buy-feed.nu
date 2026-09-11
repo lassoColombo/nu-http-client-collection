@@ -100,7 +100,7 @@ def accept-completer [] { ["application/json" "text/tab-separated-values"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "item get-feed" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-item-feed" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -124,7 +124,7 @@ export def commands []: nothing -> table {
 #
 # GET /item
 # operationId: getItemFeed
-export def "item get-feed" [
+export def "get-item-feed" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -168,7 +168,7 @@ export def "item get-feed" [
 #
 # GET /item_group
 # operationId: getItemGroupFeed
-export def "item-group get-feed" [
+export def "get-item-group-feed" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -212,7 +212,7 @@ export def "item-group get-feed" [
 #
 # GET /item_priority
 # operationId: getItemPriorityFeed
-export def "item-priority get-feed" [
+export def "get-item-priority-feed" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -255,7 +255,7 @@ export def "item-priority get-feed" [
 #
 # GET /item_snapshot
 # operationId: getItemSnapshotFeed
-export def "item-snapshot get-feed" [
+export def "get-item-snapshot-feed" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

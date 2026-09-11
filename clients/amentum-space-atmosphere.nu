@@ -97,7 +97,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "jb2008 get-sample-atmosphere" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "app-api-endpoints-jb2008-sample-atmosphere" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -121,7 +121,7 @@ export def commands []: nothing -> table {
 #
 # GET /jb2008
 # operationId: app.api.endpoints.JB2008.sample_atmosphere
-export def "jb2008 get-sample-atmosphere" [
+export def "app-api-endpoints-jb2008-sample-atmosphere" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -163,7 +163,7 @@ export def "jb2008 get-sample-atmosphere" [
 #
 # GET /nrlmsise00
 # operationId: app.api.endpoints.NRLMSISE00.sample_atmosphere
-export def "nrlmsise00 get-sample-atmosphere" [
+export def "app-api-endpoints-nrlmsise00-sample-atmosphere" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -208,7 +208,7 @@ export def "nrlmsise00 get-sample-atmosphere" [
 #
 # GET /wam-ipe
 # operationId: app.api_wfs.endpoints.WFS.get_values
-export def "wam-ipe get-values" [
+export def "app-api-wfs-endpoints-wfs-get-values" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

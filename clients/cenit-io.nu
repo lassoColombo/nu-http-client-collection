@@ -121,7 +121,7 @@ def auth-scheme-completer [] { ["x-user-access-key" "x-user-access-token"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "setup-connection list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-setup-connection" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -144,7 +144,7 @@ export def commands []: nothing -> table {
 # Returns a list of connections
 #
 # GET /setup/connection
-export def "setup-connection list" [
+export def "get-setup-connection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-xuseraccesskey: string # Auth token for X-User-Access-Key (X-User-Access-Key)
   --token-xuseraccesstoken: string # Auth token for X-User-Access-Token (X-User-Access-Token)
@@ -177,7 +177,7 @@ export def "setup-connection list" [
 # Create or update a connection
 #
 # POST /setup/connection
-export def "setup-connection create" [
+export def "post-setup-connection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-xuseraccesskey: string # Auth token for X-User-Access-Key (X-User-Access-Key)
   --token-xuseraccesstoken: string # Auth token for X-User-Access-Token (X-User-Access-Token)
@@ -210,7 +210,7 @@ export def "setup-connection create" [
 # Delete a connection
 #
 # DELETE /setup/connection/{id}
-export def "setup-connection delete" [
+export def "delete-setup-connection-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-xuseraccesskey: string # Auth token for X-User-Access-Key (X-User-Access-Key)
@@ -245,7 +245,7 @@ export def "setup-connection delete" [
 # Retrieve an existing connection
 #
 # GET /setup/connection/{id}
-export def "setup-connection get" [
+export def "get-setup-connection-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-xuseraccesskey: string # Auth token for X-User-Access-Key (X-User-Access-Key)
@@ -280,7 +280,7 @@ export def "setup-connection get" [
 # Returns a list of connection roles
 #
 # GET /setup/connection_role
-export def "setup-connection-role list" [
+export def "get-setup-connection-role" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-xuseraccesskey: string # Auth token for X-User-Access-Key (X-User-Access-Key)
   --token-xuseraccesstoken: string # Auth token for X-User-Access-Token (X-User-Access-Token)
@@ -313,7 +313,7 @@ export def "setup-connection-role list" [
 # Create or update a connection role
 #
 # POST /setup/connection_role
-export def "setup-connection-role create" [
+export def "post-setup-connection-role" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-xuseraccesskey: string # Auth token for X-User-Access-Key (X-User-Access-Key)
   --token-xuseraccesstoken: string # Auth token for X-User-Access-Token (X-User-Access-Token)
@@ -346,7 +346,7 @@ export def "setup-connection-role create" [
 # Delete a connection role.
 #
 # DELETE /setup/connection_role/{id}
-export def "setup-connection-role delete" [
+export def "delete-setup-connection-role-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-xuseraccesskey: string # Auth token for X-User-Access-Key (X-User-Access-Key)
@@ -381,7 +381,7 @@ export def "setup-connection-role delete" [
 # Return a connection role
 #
 # GET /setup/connection_role/{id}
-export def "setup-connection-role get" [
+export def "get-setup-connection-role-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-xuseraccesskey: string # Auth token for X-User-Access-Key (X-User-Access-Key)
@@ -416,7 +416,7 @@ export def "setup-connection-role get" [
 # Returns a list of data types
 #
 # GET /setup/data_type/
-export def "setup-data-type list" [
+export def "get-setup-data-type" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-xuseraccesskey: string # Auth token for X-User-Access-Key (X-User-Access-Key)
   --token-xuseraccesstoken: string # Auth token for X-User-Access-Token (X-User-Access-Token)
@@ -449,7 +449,7 @@ export def "setup-data-type list" [
 # Create or update a data type
 #
 # POST /setup/data_type/
-export def "setup-data-type create" [
+export def "post-setup-data-type" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-xuseraccesskey: string # Auth token for X-User-Access-Key (X-User-Access-Key)
   --token-xuseraccesstoken: string # Auth token for X-User-Access-Token (X-User-Access-Token)
@@ -482,7 +482,7 @@ export def "setup-data-type create" [
 # Delete a data type
 #
 # DELETE /setup/data_type/{id}
-export def "setup-data-type delete" [
+export def "delete-setup-data-type-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-xuseraccesskey: string # Auth token for X-User-Access-Key (X-User-Access-Key)
@@ -517,7 +517,7 @@ export def "setup-data-type delete" [
 # Retrieve a data type
 #
 # GET /setup/data_type/{id}
-export def "setup-data-type get" [
+export def "get-setup-data-type-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-xuseraccesskey: string # Auth token for X-User-Access-Key (X-User-Access-Key)
@@ -552,7 +552,7 @@ export def "setup-data-type get" [
 # Returns a list of flows
 #
 # GET /setup/flow/
-export def "setup-flow list" [
+export def "get-setup-flow" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-xuseraccesskey: string # Auth token for X-User-Access-Key (X-User-Access-Key)
   --token-xuseraccesstoken: string # Auth token for X-User-Access-Token (X-User-Access-Token)
@@ -585,7 +585,7 @@ export def "setup-flow list" [
 # Create or update a flow
 #
 # POST /setup/flow/
-export def "setup-flow create" [
+export def "post-setup-flow" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-xuseraccesskey: string # Auth token for X-User-Access-Key (X-User-Access-Key)
   --token-xuseraccesstoken: string # Auth token for X-User-Access-Token (X-User-Access-Token)
@@ -618,7 +618,7 @@ export def "setup-flow create" [
 # Delete a flow.
 #
 # DELETE /setup/flow/{id}
-export def "setup-flow delete" [
+export def "delete-setup-flow-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-xuseraccesskey: string # Auth token for X-User-Access-Key (X-User-Access-Key)
@@ -653,7 +653,7 @@ export def "setup-flow delete" [
 # Retrieve an existing flow
 #
 # GET /setup/flow/{id}
-export def "setup-flow get" [
+export def "get-setup-flow-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-xuseraccesskey: string # Auth token for X-User-Access-Key (X-User-Access-Key)
@@ -688,7 +688,7 @@ export def "setup-flow get" [
 # Returns a list of namespaces
 #
 # GET /setup/namespace/
-export def "setup-namespace list" [
+export def "get-setup-namespace" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-xuseraccesskey: string # Auth token for X-User-Access-Key (X-User-Access-Key)
   --token-xuseraccesstoken: string # Auth token for X-User-Access-Token (X-User-Access-Token)
@@ -721,7 +721,7 @@ export def "setup-namespace list" [
 # Create or update a namespace
 #
 # POST /setup/namespace/
-export def "setup-namespace create" [
+export def "post-setup-namespace" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-xuseraccesskey: string # Auth token for X-User-Access-Key (X-User-Access-Key)
   --token-xuseraccesstoken: string # Auth token for X-User-Access-Token (X-User-Access-Token)
@@ -754,7 +754,7 @@ export def "setup-namespace create" [
 # Delete a namespace
 #
 # DELETE /setup/namespace/{id}
-export def "setup-namespace delete" [
+export def "delete-setup-namespace-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-xuseraccesskey: string # Auth token for X-User-Access-Key (X-User-Access-Key)
@@ -789,7 +789,7 @@ export def "setup-namespace delete" [
 # Retrieve an existing namespace
 #
 # GET /setup/namespace/{id}
-export def "setup-namespace get" [
+export def "get-setup-namespace-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-xuseraccesskey: string # Auth token for X-User-Access-Key (X-User-Access-Key)
@@ -824,7 +824,7 @@ export def "setup-namespace get" [
 # Returns a list of events
 #
 # GET /setup/observer/
-export def "setup-observer list" [
+export def "get-setup-observer" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-xuseraccesskey: string # Auth token for X-User-Access-Key (X-User-Access-Key)
   --token-xuseraccesstoken: string # Auth token for X-User-Access-Token (X-User-Access-Token)
@@ -857,7 +857,7 @@ export def "setup-observer list" [
 # Create or update an event
 #
 # POST /setup/observer/
-export def "setup-observer create" [
+export def "post-setup-observer" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-xuseraccesskey: string # Auth token for X-User-Access-Key (X-User-Access-Key)
   --token-xuseraccesstoken: string # Auth token for X-User-Access-Token (X-User-Access-Token)
@@ -890,7 +890,7 @@ export def "setup-observer create" [
 # Delete an event
 #
 # DELETE /setup/observer/{id}
-export def "setup-observer delete" [
+export def "delete-setup-observer-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-xuseraccesskey: string # Auth token for X-User-Access-Key (X-User-Access-Key)
@@ -925,7 +925,7 @@ export def "setup-observer delete" [
 # Retrieve an existing event
 #
 # GET /setup/observer/{id}
-export def "setup-observer get" [
+export def "get-setup-observer-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-xuseraccesskey: string # Auth token for X-User-Access-Key (X-User-Access-Key)
@@ -960,7 +960,7 @@ export def "setup-observer get" [
 # Returns a list of schedulers
 #
 # GET /setup/scheduler/
-export def "setup-scheduler list" [
+export def "get-setup-scheduler" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-xuseraccesskey: string # Auth token for X-User-Access-Key (X-User-Access-Key)
   --token-xuseraccesstoken: string # Auth token for X-User-Access-Token (X-User-Access-Token)
@@ -993,7 +993,7 @@ export def "setup-scheduler list" [
 # Create or update an scheduler
 #
 # POST /setup/scheduler/
-export def "setup-scheduler create" [
+export def "post-setup-scheduler" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-xuseraccesskey: string # Auth token for X-User-Access-Key (X-User-Access-Key)
   --token-xuseraccesstoken: string # Auth token for X-User-Access-Token (X-User-Access-Token)
@@ -1026,7 +1026,7 @@ export def "setup-scheduler create" [
 # Delete an schedule
 #
 # DELETE /setup/scheduler/{id}
-export def "setup-scheduler delete" [
+export def "delete-setup-scheduler-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-xuseraccesskey: string # Auth token for X-User-Access-Key (X-User-Access-Key)
@@ -1061,7 +1061,7 @@ export def "setup-scheduler delete" [
 # Retrieve an existing schedule
 #
 # GET /setup/scheduler/{id}
-export def "setup-scheduler get" [
+export def "get-setup-scheduler-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-xuseraccesskey: string # Auth token for X-User-Access-Key (X-User-Access-Key)
@@ -1096,7 +1096,7 @@ export def "setup-scheduler get" [
 # Returns a list of schemas
 #
 # GET /setup/schema/
-export def "setup-schema list" [
+export def "get-setup-schema" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-xuseraccesskey: string # Auth token for X-User-Access-Key (X-User-Access-Key)
   --token-xuseraccesstoken: string # Auth token for X-User-Access-Token (X-User-Access-Token)
@@ -1129,7 +1129,7 @@ export def "setup-schema list" [
 # Create or update an schema
 #
 # POST /setup/schema/
-export def "setup-schema create" [
+export def "post-setup-schema" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-xuseraccesskey: string # Auth token for X-User-Access-Key (X-User-Access-Key)
   --token-xuseraccesstoken: string # Auth token for X-User-Access-Token (X-User-Access-Token)
@@ -1162,7 +1162,7 @@ export def "setup-schema create" [
 # Delete an schema.
 #
 # DELETE /setup/schema/{id}
-export def "setup-schema delete" [
+export def "delete-setup-schema-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-xuseraccesskey: string # Auth token for X-User-Access-Key (X-User-Access-Key)
@@ -1197,7 +1197,7 @@ export def "setup-schema delete" [
 # Retrieve an existing schema
 #
 # GET /setup/schema/{id}
-export def "setup-schema get" [
+export def "get-setup-schema-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-xuseraccesskey: string # Auth token for X-User-Access-Key (X-User-Access-Key)
@@ -1232,7 +1232,7 @@ export def "setup-schema get" [
 # Returns a list of translators
 #
 # GET /setup/translator/
-export def "setup-translator list" [
+export def "get-setup-translator" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-xuseraccesskey: string # Auth token for X-User-Access-Key (X-User-Access-Key)
   --token-xuseraccesstoken: string # Auth token for X-User-Access-Token (X-User-Access-Token)
@@ -1265,7 +1265,7 @@ export def "setup-translator list" [
 # Create or update a translator
 #
 # POST /setup/translator/
-export def "setup-translator create" [
+export def "post-setup-translator" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-xuseraccesskey: string # Auth token for X-User-Access-Key (X-User-Access-Key)
   --token-xuseraccesstoken: string # Auth token for X-User-Access-Token (X-User-Access-Token)
@@ -1298,7 +1298,7 @@ export def "setup-translator create" [
 # Delete a translator
 #
 # DELETE /setup/translator/{id}
-export def "setup-translator delete" [
+export def "delete-setup-translator-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-xuseraccesskey: string # Auth token for X-User-Access-Key (X-User-Access-Key)
@@ -1333,7 +1333,7 @@ export def "setup-translator delete" [
 # Retrieve an existing translator
 #
 # GET /setup/translator/{id}
-export def "setup-translator get" [
+export def "get-setup-translator-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-xuseraccesskey: string # Auth token for X-User-Access-Key (X-User-Access-Key)
@@ -1368,7 +1368,7 @@ export def "setup-translator get" [
 # Returns a list of webhooks
 #
 # GET /setup/webhook/
-export def "setup-webhook list" [
+export def "get-setup-webhook" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-xuseraccesskey: string # Auth token for X-User-Access-Key (X-User-Access-Key)
   --token-xuseraccesstoken: string # Auth token for X-User-Access-Token (X-User-Access-Token)
@@ -1401,7 +1401,7 @@ export def "setup-webhook list" [
 # Create or update a webhook
 #
 # POST /setup/webhook/
-export def "setup-webhook create" [
+export def "post-setup-webhook" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-xuseraccesskey: string # Auth token for X-User-Access-Key (X-User-Access-Key)
   --token-xuseraccesstoken: string # Auth token for X-User-Access-Token (X-User-Access-Token)
@@ -1434,7 +1434,7 @@ export def "setup-webhook create" [
 # Delete a webhook
 #
 # DELETE /setup/webhook/{id}
-export def "setup-webhook delete" [
+export def "delete-setup-webhook-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-xuseraccesskey: string # Auth token for X-User-Access-Key (X-User-Access-Key)
@@ -1469,7 +1469,7 @@ export def "setup-webhook delete" [
 # Retrieve an existing webhook
 #
 # GET /setup/webhook/{id}
-export def "setup-webhook get" [
+export def "get-setup-webhook-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-xuseraccesskey: string # Auth token for X-User-Access-Key (X-User-Access-Key)

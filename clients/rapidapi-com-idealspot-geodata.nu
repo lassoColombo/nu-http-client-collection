@@ -97,7 +97,7 @@ def auth-scheme-completer [] { ["none"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "data-insights get-available" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "fetch-available-insights" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -121,7 +121,7 @@ export def commands []: nothing -> table {
 #
 # GET /data/insights
 # operationId: FetchAvailableInsights
-export def "data-insights get-available" [
+export def "fetch-available-insights" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -159,7 +159,7 @@ export def "data-insights get-available" [
 #
 # GET /data/insights/{insight_id:}
 # operationId: FetchInsightQueryParameters
-export def "data-insights get-list-parameters" [
+export def "fetch-insight-query-parameters" [
   insight_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -199,7 +199,7 @@ export def "data-insights get-list-parameters" [
 #
 # GET /data/insights/{insight_id:}/query
 # operationId: QueryInsightatLocation
-export def "data-insights-query list-insightat-location" [
+export def "query-insightat-location" [
   insight_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -242,7 +242,7 @@ export def "data-insights-query list-insightat-location" [
 #
 # GET /geometries/geometry
 # operationId: FetchGeometries
-export def "geometries-geometry get" [
+export def "fetch-geometries" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -282,7 +282,7 @@ export def "geometries-geometry get" [
 #
 # GET /geometries/regions/intersecting/{latitude}/{longitude}
 # operationId: FetchAdministrativeRegionsusingLat/Lng
-export def "geometries-regions-intersecting get-administrative-regionsusing-lat-lng" [
+export def "fetch-administrative-regionsusing-lat-lng" [
   latitude: float
   longitude: float
   --base-url(-b): string@base-url-completer # API base URL
@@ -324,7 +324,7 @@ export def "geometries-regions-intersecting get-administrative-regionsusing-lat-
 #
 # GET /traffic/counts/{segment_id}
 # operationId: VehicleTrafficCountsforRoadSegment
-export def "traffic-counts get-vehicle-countsfor-road" [
+export def "vehicle-traffic-countsfor-road-segment" [
   segment_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -364,7 +364,7 @@ export def "traffic-counts get-vehicle-countsfor-road" [
 #
 # GET /traffic/roads/nearest/{latitude}/{longitude}
 # operationId: FetchNearestRoadSegments
-export def "traffic-roads-nearest get-segments" [
+export def "fetch-nearest-road-segments" [
   latitude: float
   longitude: float
   --base-url(-b): string@base-url-completer # API base URL

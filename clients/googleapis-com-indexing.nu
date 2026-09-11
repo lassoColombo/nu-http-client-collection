@@ -118,7 +118,7 @@ def type-completer [] { ["URL_DELETED" "URL_NOTIFICATION_TYPE_UNSPECIFIED" "URL_
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "url-notifications-metadata get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "indexing-url-notifications-get-metadata" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -142,7 +142,7 @@ export def commands []: nothing -> table {
 #
 # GET /v3/urlNotifications/metadata
 # operationId: indexing.urlNotifications.getMetadata
-export def "url-notifications-metadata get" [
+export def "indexing-url-notifications-get-metadata" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -189,7 +189,7 @@ export def "url-notifications-metadata get" [
 #
 # POST /v3/urlNotifications:publish
 # operationId: indexing.urlNotifications.publish
-export def "url-notifications-publish publish" [
+export def "indexing-url-notifications-publish" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)

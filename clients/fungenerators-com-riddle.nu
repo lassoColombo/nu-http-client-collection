@@ -116,7 +116,7 @@ def auth-scheme-completer [] { ["x-fungenerators-api-secret"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "riddle delete" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "delete-riddle" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -139,7 +139,7 @@ export def commands []: nothing -> table {
 # Create a random Riddle entry.
 #
 # DELETE /riddle
-export def "riddle delete" [
+export def "delete-riddle" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -174,7 +174,7 @@ export def "riddle delete" [
 # Get a Riddle entry for a given id. Retrieves a riddle question and answer based on the id.
 #
 # GET /riddle
-export def "riddle get" [
+export def "get-riddle" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -209,7 +209,7 @@ export def "riddle get" [
 # Create a random Riddle entry. Same as 'PUT' but can be used when some of the client libraries don't support 'PUT'.
 #
 # POST /riddle
-export def "riddle create" [
+export def "post-riddle" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -246,7 +246,7 @@ export def "riddle create" [
 # Create a random Riddle entry.
 #
 # PUT /riddle
-export def "riddle update" [
+export def "put-riddle" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -283,7 +283,7 @@ export def "riddle update" [
 # Get a random riddle for a given category(optional)
 #
 # GET /riddle/random
-export def "riddle-random get" [
+export def "get-riddle-random" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -318,7 +318,7 @@ export def "riddle-random get" [
 # Search for random riddle which has the text in the query, for a given category(optional).
 #
 # GET /riddle/search
-export def "riddle-search get" [
+export def "get-riddle-search" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

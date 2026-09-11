@@ -104,7 +104,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "item list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-items" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -128,7 +128,7 @@ export def commands []: nothing -> table {
 #
 # GET /item/
 # operationId: getItems
-export def "item list" [
+export def "get-items" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -165,7 +165,7 @@ export def "item list" [
 #
 # GET /item/get_item_by_legacy_id
 # operationId: getItemByLegacyId
-export def "item-get-item-by-legacy-id get" [
+export def "get-item-by-legacy-id" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -204,7 +204,7 @@ export def "item-get-item-by-legacy-id get" [
 #
 # GET /item/get_items_by_item_group
 # operationId: getItemsByItemGroup
-export def "item-get-items-by-item-group get" [
+export def "get-items-by-item-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -240,7 +240,7 @@ export def "item-get-items-by-item-group get" [
 #
 # GET /item/{item_id}
 # operationId: getItem
-export def "item get" [
+export def "get-item" [
   item_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -279,7 +279,7 @@ export def "item get" [
 # POST /item/{item_id}/check_compatibility
 # operationId: checkCompatibility
 # --compatibilityProperties item shape: {name?: string, value?: string}
-export def "item-check-compatibility check" [
+export def "check-compatibility" [
   item_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -322,7 +322,7 @@ export def "item-check-compatibility check" [
 #
 # GET /item_summary/search
 # operationId: search
-export def "item-summary-search list" [
+export def "search" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -370,7 +370,7 @@ export def "item-summary-search list" [
 #
 # POST /item_summary/search_by_image
 # operationId: searchByImage
-export def "item-summary-search-by-image list" [
+export def "search-by-image" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -417,7 +417,7 @@ export def "item-summary-search-by-image list" [
 #
 # GET /shopping_cart/
 # operationId: getShoppingCart
-export def "shopping-cart get" [
+export def "get-shopping-cart" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -451,7 +451,7 @@ export def "shopping-cart get" [
 #
 # POST /shopping_cart/add_item
 # operationId: addItem
-export def "shopping-cart-add-item create" [
+export def "add-item" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -490,7 +490,7 @@ export def "shopping-cart-add-item create" [
 #
 # POST /shopping_cart/remove_item
 # operationId: removeItem
-export def "shopping-cart-remove-item delete" [
+export def "remove-item" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -528,7 +528,7 @@ export def "shopping-cart-remove-item delete" [
 #
 # POST /shopping_cart/update_quantity
 # operationId: updateQuantity
-export def "shopping-cart-update-quantity update" [
+export def "update-quantity" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

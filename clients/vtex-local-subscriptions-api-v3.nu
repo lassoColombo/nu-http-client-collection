@@ -129,7 +129,7 @@ def accept-completer [] { ["application/json" "text/json" "text/plain"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "rns-pub-cycles list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-api-rns-pub-cycles" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -152,7 +152,7 @@ export def commands []: nothing -> table {
 # List cycles
 #
 # GET /api/rns/pub/cycles
-export def "rns-pub-cycles list" [
+export def "get-api-rns-pub-cycles" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
   --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
@@ -198,7 +198,7 @@ export def "rns-pub-cycles list" [
 # Get cycle details
 #
 # GET /api/rns/pub/cycles/{cycleId}
-export def "rns-pub-cycles get" [
+export def "get-api-rns-pub-cycles-cycle-id" [
   cycle_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -238,7 +238,7 @@ export def "rns-pub-cycles get" [
 # Retry cycle
 #
 # POST /api/rns/pub/cycles/{cycleId}/retry
-export def "rns-pub-cycles-retry create" [
+export def "post-api-rns-pub-cycles-cycle-id-retry" [
   cycle_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -277,7 +277,7 @@ export def "rns-pub-cycles-retry create" [
 # List subscriptions
 #
 # GET /api/rns/pub/subscriptions
-export def "rns-pub-subscriptions list" [
+export def "get-api-rns-pub-subscriptions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
   --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
@@ -329,7 +329,7 @@ export def "rns-pub-subscriptions list" [
 # --plan shape: {frequency: record, id: string, purchaseDay: string, validity?: record}
 # --purchaseSettings shape: {paymentMethod: record, salesChannel: string}
 # --shippingAddress shape: {addressId: string, addressType: string}
-export def "rns-pub-subscriptions create" [
+export def "post-api-rns-pub-subscriptions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
   --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
@@ -385,7 +385,7 @@ export def "rns-pub-subscriptions create" [
 # --plan shape: {frequency: record, id: string, purchaseDay: string, validity?: record}
 # --purchaseSettings shape: {paymentMethod: record, salesChannel: string}
 # --shippingAddress shape: {addressId: string, addressType: string}
-export def "rns-pub-subscriptions-simulate create" [
+export def "post-api-rns-pub-subscriptions-simulate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
   --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
@@ -437,7 +437,7 @@ export def "rns-pub-subscriptions-simulate create" [
 # Get subscription details
 #
 # GET /api/rns/pub/subscriptions/{id}
-export def "rns-pub-subscriptions get" [
+export def "get-api-rns-pub-subscriptions-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -480,7 +480,7 @@ export def "rns-pub-subscriptions get" [
 # --plan shape: {frequency: record, id: string, purchaseDay: string, validity?: record}
 # --purchaseSettings shape: {paymentMethod: record, salesChannel: string}
 # --shippingAddress shape: {addressId: string, addressType: string}
-export def "rns-pub-subscriptions update" [
+export def "patch-api-rns-pub-subscriptions-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -531,7 +531,7 @@ export def "rns-pub-subscriptions update" [
 # Add item to subscription
 #
 # POST /api/rns/pub/subscriptions/{id}/items
-export def "rns-pub-subscriptions-items create" [
+export def "post-api-rns-pub-subscriptions-id-items" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -579,7 +579,7 @@ export def "rns-pub-subscriptions-items create" [
 # Remove items from a subscription.
 #
 # DELETE /api/rns/pub/subscriptions/{id}/items/{itemId}
-export def "rns-pub-subscriptions-items delete" [
+export def "delete-api-rns-pub-subscriptions-id-items-item-id" [
   id: string
   item_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -620,7 +620,7 @@ export def "rns-pub-subscriptions-items delete" [
 # Edit items on a subscription.
 #
 # PATCH /api/rns/pub/subscriptions/{id}/items/{itemId}
-export def "rns-pub-subscriptions-items update" [
+export def "patch-api-rns-pub-subscriptions-id-items-item-id" [
   id: string
   item_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -671,7 +671,7 @@ export def "rns-pub-subscriptions-items update" [
 # Calculate the current prices for a specific subscription
 #
 # POST /api/rns/pub/subscriptions/{id}/simulate
-export def "rns-pub-subscriptions-simulate create-by-id" [
+export def "post-api-rns-pub-subscriptions-id-simulate" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -711,7 +711,7 @@ export def "rns-pub-subscriptions-simulate create-by-id" [
 # Get conversation messages
 #
 # GET /api/rns/pub/subscriptions/{subscriptionId}/conversation-message
-export def "rns-pub-subscriptions-conversation-message get" [
+export def "get-api-rns-pub-subscriptions-subscription-id-conversation-message" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -750,7 +750,7 @@ export def "rns-pub-subscriptions-conversation-message get" [
 # List plans
 #
 # GET /api/rns/pvt/plans
-export def "rns-pvt-plans list" [
+export def "get-api-rns-pvt-plans" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
   --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
@@ -793,7 +793,7 @@ export def "rns-pvt-plans list" [
 # Get plan details
 #
 # GET /api/rns/pvt/plans/{id}
-export def "rns-pvt-plans get" [
+export def "get-api-rns-pvt-plans-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -833,7 +833,7 @@ export def "rns-pvt-plans get" [
 # List report templates
 #
 # GET /api/rns/pvt/reports
-export def "rns-pvt-reports get" [
+export def "get-api-rns-pvt-reports" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
   --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
@@ -871,7 +871,7 @@ export def "rns-pvt-reports get" [
 # Generate report
 #
 # POST /api/rns/pvt/reports/{reportName}/documents
-export def "rns-pvt-reports-documents create" [
+export def "post-api-rns-pvt-reports-report-name-documents" [
   report_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -915,7 +915,7 @@ export def "rns-pvt-reports-documents create" [
 # Get report document details
 #
 # GET /api/rns/pvt/reports/{reportName}/documents/{documentId}
-export def "rns-pvt-reports-documents get" [
+export def "get-api-rns-pvt-reports-report-name-documents-document-id" [
   report_name: string
   document_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -958,7 +958,7 @@ export def "rns-pvt-reports-documents get" [
 #
 # GET /api/rns/settings
 # operationId: GetSettings
-export def "rns-settings get" [
+export def "get-settings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
   --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
@@ -996,7 +996,7 @@ export def "rns-settings get" [
 #
 # POST /api/rns/settings
 # operationId: EditSettings
-export def "rns-settings create-edit" [
+export def "edit-settings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
   --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)

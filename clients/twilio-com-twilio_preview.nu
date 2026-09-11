@@ -123,7 +123,7 @@ def voice-method-completer [] { ["DELETE" "GET" "HEAD" "PATCH" "POST" "PUT"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "deployed-devices-fleets list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "list-deployed-devices-fleet" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -147,7 +147,7 @@ export def commands []: nothing -> table {
 #
 # GET /DeployedDevices/Fleets
 # operationId: ListDeployedDevicesFleet
-export def "deployed-devices-fleets list" [
+export def "list-deployed-devices-fleet" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -185,7 +185,7 @@ export def "deployed-devices-fleets list" [
 #
 # POST /DeployedDevices/Fleets
 # operationId: CreateDeployedDevicesFleet
-export def "deployed-devices-fleets create" [
+export def "create-deployed-devices-fleet" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -224,7 +224,7 @@ export def "deployed-devices-fleets create" [
 #
 # GET /DeployedDevices/Fleets/{FleetSid}/Certificates
 # operationId: ListDeployedDevicesCertificate
-export def "deployed-devices-fleets-certificates list" [
+export def "list-deployed-devices-certificate" [
   fleet_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -265,7 +265,7 @@ export def "deployed-devices-fleets-certificates list" [
 #
 # POST /DeployedDevices/Fleets/{FleetSid}/Certificates
 # operationId: CreateDeployedDevicesCertificate
-export def "deployed-devices-fleets-certificates create" [
+export def "create-deployed-devices-certificate" [
   fleet_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -308,7 +308,7 @@ export def "deployed-devices-fleets-certificates create" [
 #
 # DELETE /DeployedDevices/Fleets/{FleetSid}/Certificates/{Sid}
 # operationId: DeleteDeployedDevicesCertificate
-export def "deployed-devices-fleets-certificates delete" [
+export def "delete-deployed-devices-certificate" [
   fleet_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -346,7 +346,7 @@ export def "deployed-devices-fleets-certificates delete" [
 #
 # GET /DeployedDevices/Fleets/{FleetSid}/Certificates/{Sid}
 # operationId: FetchDeployedDevicesCertificate
-export def "deployed-devices-fleets-certificates get" [
+export def "fetch-deployed-devices-certificate" [
   fleet_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -384,7 +384,7 @@ export def "deployed-devices-fleets-certificates get" [
 #
 # POST /DeployedDevices/Fleets/{FleetSid}/Certificates/{Sid}
 # operationId: UpdateDeployedDevicesCertificate
-export def "deployed-devices-fleets-certificates update" [
+export def "update-deployed-devices-certificate" [
   fleet_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -428,7 +428,7 @@ export def "deployed-devices-fleets-certificates update" [
 #
 # GET /DeployedDevices/Fleets/{FleetSid}/Deployments
 # operationId: ListDeployedDevicesDeployment
-export def "deployed-devices-fleets-deployments list" [
+export def "list-deployed-devices-deployment" [
   fleet_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -468,7 +468,7 @@ export def "deployed-devices-fleets-deployments list" [
 #
 # POST /DeployedDevices/Fleets/{FleetSid}/Deployments
 # operationId: CreateDeployedDevicesDeployment
-export def "deployed-devices-fleets-deployments create" [
+export def "create-deployed-devices-deployment" [
   fleet_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -510,7 +510,7 @@ export def "deployed-devices-fleets-deployments create" [
 #
 # DELETE /DeployedDevices/Fleets/{FleetSid}/Deployments/{Sid}
 # operationId: DeleteDeployedDevicesDeployment
-export def "deployed-devices-fleets-deployments delete" [
+export def "delete-deployed-devices-deployment" [
   fleet_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -548,7 +548,7 @@ export def "deployed-devices-fleets-deployments delete" [
 #
 # GET /DeployedDevices/Fleets/{FleetSid}/Deployments/{Sid}
 # operationId: FetchDeployedDevicesDeployment
-export def "deployed-devices-fleets-deployments get" [
+export def "fetch-deployed-devices-deployment" [
   fleet_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -586,7 +586,7 @@ export def "deployed-devices-fleets-deployments get" [
 #
 # POST /DeployedDevices/Fleets/{FleetSid}/Deployments/{Sid}
 # operationId: UpdateDeployedDevicesDeployment
-export def "deployed-devices-fleets-deployments update" [
+export def "update-deployed-devices-deployment" [
   fleet_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -630,7 +630,7 @@ export def "deployed-devices-fleets-deployments update" [
 #
 # GET /DeployedDevices/Fleets/{FleetSid}/Devices
 # operationId: ListDeployedDevicesDevice
-export def "deployed-devices-fleets-devices list" [
+export def "list-deployed-devices-device" [
   fleet_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -671,7 +671,7 @@ export def "deployed-devices-fleets-devices list" [
 #
 # POST /DeployedDevices/Fleets/{FleetSid}/Devices
 # operationId: CreateDeployedDevicesDevice
-export def "deployed-devices-fleets-devices create" [
+export def "create-deployed-devices-device" [
   fleet_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -716,7 +716,7 @@ export def "deployed-devices-fleets-devices create" [
 #
 # DELETE /DeployedDevices/Fleets/{FleetSid}/Devices/{Sid}
 # operationId: DeleteDeployedDevicesDevice
-export def "deployed-devices-fleets-devices delete" [
+export def "delete-deployed-devices-device" [
   fleet_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -754,7 +754,7 @@ export def "deployed-devices-fleets-devices delete" [
 #
 # GET /DeployedDevices/Fleets/{FleetSid}/Devices/{Sid}
 # operationId: FetchDeployedDevicesDevice
-export def "deployed-devices-fleets-devices get" [
+export def "fetch-deployed-devices-device" [
   fleet_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -792,7 +792,7 @@ export def "deployed-devices-fleets-devices get" [
 #
 # POST /DeployedDevices/Fleets/{FleetSid}/Devices/{Sid}
 # operationId: UpdateDeployedDevicesDevice
-export def "deployed-devices-fleets-devices update" [
+export def "update-deployed-devices-device" [
   fleet_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -838,7 +838,7 @@ export def "deployed-devices-fleets-devices update" [
 #
 # GET /DeployedDevices/Fleets/{FleetSid}/Keys
 # operationId: ListDeployedDevicesKey
-export def "deployed-devices-fleets-keys list" [
+export def "list-deployed-devices-key" [
   fleet_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -879,7 +879,7 @@ export def "deployed-devices-fleets-keys list" [
 #
 # POST /DeployedDevices/Fleets/{FleetSid}/Keys
 # operationId: CreateDeployedDevicesKey
-export def "deployed-devices-fleets-keys create" [
+export def "create-deployed-devices-key" [
   fleet_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -921,7 +921,7 @@ export def "deployed-devices-fleets-keys create" [
 #
 # DELETE /DeployedDevices/Fleets/{FleetSid}/Keys/{Sid}
 # operationId: DeleteDeployedDevicesKey
-export def "deployed-devices-fleets-keys delete" [
+export def "delete-deployed-devices-key" [
   fleet_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -959,7 +959,7 @@ export def "deployed-devices-fleets-keys delete" [
 #
 # GET /DeployedDevices/Fleets/{FleetSid}/Keys/{Sid}
 # operationId: FetchDeployedDevicesKey
-export def "deployed-devices-fleets-keys get" [
+export def "fetch-deployed-devices-key" [
   fleet_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -997,7 +997,7 @@ export def "deployed-devices-fleets-keys get" [
 #
 # POST /DeployedDevices/Fleets/{FleetSid}/Keys/{Sid}
 # operationId: UpdateDeployedDevicesKey
-export def "deployed-devices-fleets-keys update" [
+export def "update-deployed-devices-key" [
   fleet_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1041,7 +1041,7 @@ export def "deployed-devices-fleets-keys update" [
 #
 # DELETE /DeployedDevices/Fleets/{Sid}
 # operationId: DeleteDeployedDevicesFleet
-export def "deployed-devices-fleets delete" [
+export def "delete-deployed-devices-fleet" [
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1077,7 +1077,7 @@ export def "deployed-devices-fleets delete" [
 #
 # GET /DeployedDevices/Fleets/{Sid}
 # operationId: FetchDeployedDevicesFleet
-export def "deployed-devices-fleets get" [
+export def "fetch-deployed-devices-fleet" [
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1113,7 +1113,7 @@ export def "deployed-devices-fleets get" [
 #
 # POST /DeployedDevices/Fleets/{Sid}
 # operationId: UpdateDeployedDevicesFleet
-export def "deployed-devices-fleets update" [
+export def "update-deployed-devices-fleet" [
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1155,7 +1155,7 @@ export def "deployed-devices-fleets update" [
 #
 # GET /HostedNumbers/AuthorizationDocuments
 # operationId: ListHostedNumbersAuthorizationDocument
-export def "hosted-numbers-authorization-documents list" [
+export def "list-hosted-numbers-authorization-document" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1195,7 +1195,7 @@ export def "hosted-numbers-authorization-documents list" [
 #
 # POST /HostedNumbers/AuthorizationDocuments
 # operationId: CreateHostedNumbersAuthorizationDocument
-export def "hosted-numbers-authorization-documents create" [
+export def "create-hosted-numbers-authorization-document" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1239,7 +1239,7 @@ export def "hosted-numbers-authorization-documents create" [
 #
 # GET /HostedNumbers/AuthorizationDocuments/{Sid}
 # operationId: FetchHostedNumbersAuthorizationDocument
-export def "hosted-numbers-authorization-documents get" [
+export def "fetch-hosted-numbers-authorization-document" [
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1275,7 +1275,7 @@ export def "hosted-numbers-authorization-documents get" [
 #
 # POST /HostedNumbers/AuthorizationDocuments/{Sid}
 # operationId: UpdateHostedNumbersAuthorizationDocument
-export def "hosted-numbers-authorization-documents update" [
+export def "update-hosted-numbers-authorization-document" [
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1322,7 +1322,7 @@ export def "hosted-numbers-authorization-documents update" [
 #
 # GET /HostedNumbers/AuthorizationDocuments/{SigningDocumentSid}/DependentHostedNumberOrders
 # operationId: ListHostedNumbersDependentHostedNumberOrder
-export def "hosted-numbers-authorization-documents-dependent-hosted-number-orders list" [
+export def "list-hosted-numbers-dependent-hosted-number-order" [
   signing_document_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1367,7 +1367,7 @@ export def "hosted-numbers-authorization-documents-dependent-hosted-number-order
 #
 # GET /HostedNumbers/HostedNumberOrders
 # operationId: ListHostedNumbersHostedNumberOrder
-export def "hosted-numbers-hosted-number-orders list" [
+export def "list-hosted-numbers-hosted-number-order" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1410,7 +1410,7 @@ export def "hosted-numbers-hosted-number-orders list" [
 #
 # POST /HostedNumbers/HostedNumberOrders
 # operationId: CreateHostedNumbersHostedNumberOrder
-export def "hosted-numbers-hosted-number-orders create" [
+export def "create-hosted-numbers-hosted-number-order" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1465,7 +1465,7 @@ export def "hosted-numbers-hosted-number-orders create" [
 #
 # DELETE /HostedNumbers/HostedNumberOrders/{Sid}
 # operationId: DeleteHostedNumbersHostedNumberOrder
-export def "hosted-numbers-hosted-number-orders delete" [
+export def "delete-hosted-numbers-hosted-number-order" [
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1501,7 +1501,7 @@ export def "hosted-numbers-hosted-number-orders delete" [
 #
 # GET /HostedNumbers/HostedNumberOrders/{Sid}
 # operationId: FetchHostedNumbersHostedNumberOrder
-export def "hosted-numbers-hosted-number-orders get" [
+export def "fetch-hosted-numbers-hosted-number-order" [
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1537,7 +1537,7 @@ export def "hosted-numbers-hosted-number-orders get" [
 #
 # POST /HostedNumbers/HostedNumberOrders/{Sid}
 # operationId: UpdateHostedNumbersHostedNumberOrder
-export def "hosted-numbers-hosted-number-orders update" [
+export def "update-hosted-numbers-hosted-number-order" [
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1586,7 +1586,7 @@ export def "hosted-numbers-hosted-number-orders update" [
 # GET /Sync/Services
 #
 # operationId: ListSyncService
-export def "sync-services list" [
+export def "list-sync-service" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1623,7 +1623,7 @@ export def "sync-services list" [
 # POST /Sync/Services
 #
 # operationId: CreateSyncService
-export def "sync-services create" [
+export def "create-sync-service" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1664,7 +1664,7 @@ export def "sync-services create" [
 # GET /Sync/Services/{ServiceSid}/Documents
 #
 # operationId: ListSyncDocument
-export def "sync-services-documents list" [
+export def "list-sync-document" [
   service_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1703,7 +1703,7 @@ export def "sync-services-documents list" [
 # POST /Sync/Services/{ServiceSid}/Documents
 #
 # operationId: CreateSyncDocument
-export def "sync-services-documents create" [
+export def "create-sync-document" [
   service_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1745,7 +1745,7 @@ export def "sync-services-documents create" [
 #
 # GET /Sync/Services/{ServiceSid}/Documents/{DocumentSid}/Permissions
 # operationId: ListSyncDocumentPermission
-export def "sync-services-documents-permissions list" [
+export def "list-sync-document-permission" [
   service_sid: string
   document_sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1787,7 +1787,7 @@ export def "sync-services-documents-permissions list" [
 #
 # DELETE /Sync/Services/{ServiceSid}/Documents/{DocumentSid}/Permissions/{Identity}
 # operationId: DeleteSyncDocumentPermission
-export def "sync-services-documents-permissions delete" [
+export def "delete-sync-document-permission" [
   service_sid: string
   document_sid: string
   identity: string
@@ -1827,7 +1827,7 @@ export def "sync-services-documents-permissions delete" [
 #
 # GET /Sync/Services/{ServiceSid}/Documents/{DocumentSid}/Permissions/{Identity}
 # operationId: FetchSyncDocumentPermission
-export def "sync-services-documents-permissions get" [
+export def "fetch-sync-document-permission" [
   service_sid: string
   document_sid: string
   identity: string
@@ -1867,7 +1867,7 @@ export def "sync-services-documents-permissions get" [
 #
 # POST /Sync/Services/{ServiceSid}/Documents/{DocumentSid}/Permissions/{Identity}
 # operationId: UpdateSyncDocumentPermission
-export def "sync-services-documents-permissions update" [
+export def "update-sync-document-permission" [
   service_sid: string
   document_sid: string
   identity: string
@@ -1913,7 +1913,7 @@ export def "sync-services-documents-permissions update" [
 # DELETE /Sync/Services/{ServiceSid}/Documents/{Sid}
 #
 # operationId: DeleteSyncDocument
-export def "sync-services-documents delete" [
+export def "delete-sync-document" [
   service_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1950,7 +1950,7 @@ export def "sync-services-documents delete" [
 # GET /Sync/Services/{ServiceSid}/Documents/{Sid}
 #
 # operationId: FetchSyncDocument
-export def "sync-services-documents get" [
+export def "fetch-sync-document" [
   service_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1987,7 +1987,7 @@ export def "sync-services-documents get" [
 # POST /Sync/Services/{ServiceSid}/Documents/{Sid}
 #
 # operationId: UpdateSyncDocument
-export def "sync-services-documents update" [
+export def "update-sync-document" [
   service_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2032,7 +2032,7 @@ export def "sync-services-documents update" [
 # GET /Sync/Services/{ServiceSid}/Lists
 #
 # operationId: ListSyncSyncList
-export def "sync-services-lists list" [
+export def "list-sync-sync-list" [
   service_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2071,7 +2071,7 @@ export def "sync-services-lists list" [
 # POST /Sync/Services/{ServiceSid}/Lists
 #
 # operationId: CreateSyncSyncList
-export def "sync-services-lists create" [
+export def "create-sync-sync-list" [
   service_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2111,7 +2111,7 @@ export def "sync-services-lists create" [
 # GET /Sync/Services/{ServiceSid}/Lists/{ListSid}/Items
 #
 # operationId: ListSyncSyncListItem
-export def "sync-services-lists-items list" [
+export def "list-sync-sync-list-item" [
   service_sid: string
   list_sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2155,7 +2155,7 @@ export def "sync-services-lists-items list" [
 # POST /Sync/Services/{ServiceSid}/Lists/{ListSid}/Items
 #
 # operationId: CreateSyncSyncListItem
-export def "sync-services-lists-items create" [
+export def "create-sync-sync-list-item" [
   service_sid: string
   list_sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2197,7 +2197,7 @@ export def "sync-services-lists-items create" [
 # DELETE /Sync/Services/{ServiceSid}/Lists/{ListSid}/Items/{Index}
 #
 # operationId: DeleteSyncSyncListItem
-export def "sync-services-lists-items delete" [
+export def "delete-sync-sync-list-item" [
   service_sid: string
   list_sid: string
   index: int
@@ -2239,7 +2239,7 @@ export def "sync-services-lists-items delete" [
 # GET /Sync/Services/{ServiceSid}/Lists/{ListSid}/Items/{Index}
 #
 # operationId: FetchSyncSyncListItem
-export def "sync-services-lists-items get" [
+export def "fetch-sync-sync-list-item" [
   service_sid: string
   list_sid: string
   index: int
@@ -2278,7 +2278,7 @@ export def "sync-services-lists-items get" [
 # POST /Sync/Services/{ServiceSid}/Lists/{ListSid}/Items/{Index}
 #
 # operationId: UpdateSyncSyncListItem
-export def "sync-services-lists-items update" [
+export def "update-sync-sync-list-item" [
   service_sid: string
   list_sid: string
   index: int
@@ -2326,7 +2326,7 @@ export def "sync-services-lists-items update" [
 #
 # GET /Sync/Services/{ServiceSid}/Lists/{ListSid}/Permissions
 # operationId: ListSyncSyncListPermission
-export def "sync-services-lists-permissions list" [
+export def "list-sync-sync-list-permission" [
   service_sid: string
   list_sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2368,7 +2368,7 @@ export def "sync-services-lists-permissions list" [
 #
 # DELETE /Sync/Services/{ServiceSid}/Lists/{ListSid}/Permissions/{Identity}
 # operationId: DeleteSyncSyncListPermission
-export def "sync-services-lists-permissions delete" [
+export def "delete-sync-sync-list-permission" [
   service_sid: string
   list_sid: string
   identity: string
@@ -2408,7 +2408,7 @@ export def "sync-services-lists-permissions delete" [
 #
 # GET /Sync/Services/{ServiceSid}/Lists/{ListSid}/Permissions/{Identity}
 # operationId: FetchSyncSyncListPermission
-export def "sync-services-lists-permissions get" [
+export def "fetch-sync-sync-list-permission" [
   service_sid: string
   list_sid: string
   identity: string
@@ -2448,7 +2448,7 @@ export def "sync-services-lists-permissions get" [
 #
 # POST /Sync/Services/{ServiceSid}/Lists/{ListSid}/Permissions/{Identity}
 # operationId: UpdateSyncSyncListPermission
-export def "sync-services-lists-permissions update" [
+export def "update-sync-sync-list-permission" [
   service_sid: string
   list_sid: string
   identity: string
@@ -2494,7 +2494,7 @@ export def "sync-services-lists-permissions update" [
 # DELETE /Sync/Services/{ServiceSid}/Lists/{Sid}
 #
 # operationId: DeleteSyncSyncList
-export def "sync-services-lists delete" [
+export def "delete-sync-sync-list" [
   service_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2531,7 +2531,7 @@ export def "sync-services-lists delete" [
 # GET /Sync/Services/{ServiceSid}/Lists/{Sid}
 #
 # operationId: FetchSyncSyncList
-export def "sync-services-lists get" [
+export def "fetch-sync-sync-list" [
   service_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2568,7 +2568,7 @@ export def "sync-services-lists get" [
 # GET /Sync/Services/{ServiceSid}/Maps
 #
 # operationId: ListSyncSyncMap
-export def "sync-services-maps list" [
+export def "list-sync-sync-map" [
   service_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2607,7 +2607,7 @@ export def "sync-services-maps list" [
 # POST /Sync/Services/{ServiceSid}/Maps
 #
 # operationId: CreateSyncSyncMap
-export def "sync-services-maps create" [
+export def "create-sync-sync-map" [
   service_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2647,7 +2647,7 @@ export def "sync-services-maps create" [
 # GET /Sync/Services/{ServiceSid}/Maps/{MapSid}/Items
 #
 # operationId: ListSyncSyncMapItem
-export def "sync-services-maps-items list" [
+export def "list-sync-sync-map-item" [
   service_sid: string
   map_sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2691,7 +2691,7 @@ export def "sync-services-maps-items list" [
 # POST /Sync/Services/{ServiceSid}/Maps/{MapSid}/Items
 #
 # operationId: CreateSyncSyncMapItem
-export def "sync-services-maps-items create" [
+export def "create-sync-sync-map-item" [
   service_sid: string
   map_sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2734,7 +2734,7 @@ export def "sync-services-maps-items create" [
 # DELETE /Sync/Services/{ServiceSid}/Maps/{MapSid}/Items/{Key}
 #
 # operationId: DeleteSyncSyncMapItem
-export def "sync-services-maps-items delete" [
+export def "delete-sync-sync-map-item" [
   service_sid: string
   map_sid: string
   key: string
@@ -2776,7 +2776,7 @@ export def "sync-services-maps-items delete" [
 # GET /Sync/Services/{ServiceSid}/Maps/{MapSid}/Items/{Key}
 #
 # operationId: FetchSyncSyncMapItem
-export def "sync-services-maps-items get" [
+export def "fetch-sync-sync-map-item" [
   service_sid: string
   map_sid: string
   key: string
@@ -2815,7 +2815,7 @@ export def "sync-services-maps-items get" [
 # POST /Sync/Services/{ServiceSid}/Maps/{MapSid}/Items/{Key}
 #
 # operationId: UpdateSyncSyncMapItem
-export def "sync-services-maps-items update" [
+export def "update-sync-sync-map-item" [
   service_sid: string
   map_sid: string
   key: string
@@ -2863,7 +2863,7 @@ export def "sync-services-maps-items update" [
 #
 # GET /Sync/Services/{ServiceSid}/Maps/{MapSid}/Permissions
 # operationId: ListSyncSyncMapPermission
-export def "sync-services-maps-permissions list" [
+export def "list-sync-sync-map-permission" [
   service_sid: string
   map_sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2905,7 +2905,7 @@ export def "sync-services-maps-permissions list" [
 #
 # DELETE /Sync/Services/{ServiceSid}/Maps/{MapSid}/Permissions/{Identity}
 # operationId: DeleteSyncSyncMapPermission
-export def "sync-services-maps-permissions delete" [
+export def "delete-sync-sync-map-permission" [
   service_sid: string
   map_sid: string
   identity: string
@@ -2945,7 +2945,7 @@ export def "sync-services-maps-permissions delete" [
 #
 # GET /Sync/Services/{ServiceSid}/Maps/{MapSid}/Permissions/{Identity}
 # operationId: FetchSyncSyncMapPermission
-export def "sync-services-maps-permissions get" [
+export def "fetch-sync-sync-map-permission" [
   service_sid: string
   map_sid: string
   identity: string
@@ -2985,7 +2985,7 @@ export def "sync-services-maps-permissions get" [
 #
 # POST /Sync/Services/{ServiceSid}/Maps/{MapSid}/Permissions/{Identity}
 # operationId: UpdateSyncSyncMapPermission
-export def "sync-services-maps-permissions update" [
+export def "update-sync-sync-map-permission" [
   service_sid: string
   map_sid: string
   identity: string
@@ -3031,7 +3031,7 @@ export def "sync-services-maps-permissions update" [
 # DELETE /Sync/Services/{ServiceSid}/Maps/{Sid}
 #
 # operationId: DeleteSyncSyncMap
-export def "sync-services-maps delete" [
+export def "delete-sync-sync-map" [
   service_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3068,7 +3068,7 @@ export def "sync-services-maps delete" [
 # GET /Sync/Services/{ServiceSid}/Maps/{Sid}
 #
 # operationId: FetchSyncSyncMap
-export def "sync-services-maps get" [
+export def "fetch-sync-sync-map" [
   service_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3105,7 +3105,7 @@ export def "sync-services-maps get" [
 # DELETE /Sync/Services/{Sid}
 #
 # operationId: DeleteSyncService
-export def "sync-services delete" [
+export def "delete-sync-service" [
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3140,7 +3140,7 @@ export def "sync-services delete" [
 # GET /Sync/Services/{Sid}
 #
 # operationId: FetchSyncService
-export def "sync-services get" [
+export def "fetch-sync-service" [
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3175,7 +3175,7 @@ export def "sync-services get" [
 # POST /Sync/Services/{Sid}
 #
 # operationId: UpdateSyncService
-export def "sync-services update" [
+export def "update-sync-service" [
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3219,7 +3219,7 @@ export def "sync-services update" [
 #
 # GET /marketplace/AvailableAddOns
 # operationId: ListMarketplaceAvailableAddOn
-export def "marketplace-available-add-ons list" [
+export def "list-marketplace-available-add-on" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3257,7 +3257,7 @@ export def "marketplace-available-add-ons list" [
 #
 # GET /marketplace/AvailableAddOns/{AvailableAddOnSid}/Extensions
 # operationId: ListMarketplaceAvailableAddOnExtension
-export def "marketplace-available-add-ons-extensions list" [
+export def "list-marketplace-available-add-on-extension" [
   available_add_on_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3297,7 +3297,7 @@ export def "marketplace-available-add-ons-extensions list" [
 #
 # GET /marketplace/AvailableAddOns/{AvailableAddOnSid}/Extensions/{Sid}
 # operationId: FetchMarketplaceAvailableAddOnExtension
-export def "marketplace-available-add-ons-extensions get" [
+export def "fetch-marketplace-available-add-on-extension" [
   available_add_on_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3335,7 +3335,7 @@ export def "marketplace-available-add-ons-extensions get" [
 #
 # GET /marketplace/AvailableAddOns/{Sid}
 # operationId: FetchMarketplaceAvailableAddOn
-export def "marketplace-available-add-ons get" [
+export def "fetch-marketplace-available-add-on" [
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3371,7 +3371,7 @@ export def "marketplace-available-add-ons get" [
 #
 # GET /marketplace/InstalledAddOns
 # operationId: ListMarketplaceInstalledAddOn
-export def "marketplace-installed-add-ons list" [
+export def "list-marketplace-installed-add-on" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3409,7 +3409,7 @@ export def "marketplace-installed-add-ons list" [
 #
 # POST /marketplace/InstalledAddOns
 # operationId: CreateMarketplaceInstalledAddOn
-export def "marketplace-installed-add-ons create" [
+export def "create-marketplace-installed-add-on" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3451,7 +3451,7 @@ export def "marketplace-installed-add-ons create" [
 #
 # GET /marketplace/InstalledAddOns/{InstalledAddOnSid}/Extensions
 # operationId: ListMarketplaceInstalledAddOnExtension
-export def "marketplace-installed-add-ons-extensions list" [
+export def "list-marketplace-installed-add-on-extension" [
   installed_add_on_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3491,7 +3491,7 @@ export def "marketplace-installed-add-ons-extensions list" [
 #
 # GET /marketplace/InstalledAddOns/{InstalledAddOnSid}/Extensions/{Sid}
 # operationId: FetchMarketplaceInstalledAddOnExtension
-export def "marketplace-installed-add-ons-extensions get" [
+export def "fetch-marketplace-installed-add-on-extension" [
   installed_add_on_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3529,7 +3529,7 @@ export def "marketplace-installed-add-ons-extensions get" [
 #
 # POST /marketplace/InstalledAddOns/{InstalledAddOnSid}/Extensions/{Sid}
 # operationId: UpdateMarketplaceInstalledAddOnExtension
-export def "marketplace-installed-add-ons-extensions update" [
+export def "update-marketplace-installed-add-on-extension" [
   installed_add_on_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3572,7 +3572,7 @@ export def "marketplace-installed-add-ons-extensions update" [
 #
 # DELETE /marketplace/InstalledAddOns/{Sid}
 # operationId: DeleteMarketplaceInstalledAddOn
-export def "marketplace-installed-add-ons delete" [
+export def "delete-marketplace-installed-add-on" [
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3608,7 +3608,7 @@ export def "marketplace-installed-add-ons delete" [
 #
 # GET /marketplace/InstalledAddOns/{Sid}
 # operationId: FetchMarketplaceInstalledAddOn
-export def "marketplace-installed-add-ons get" [
+export def "fetch-marketplace-installed-add-on" [
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3644,7 +3644,7 @@ export def "marketplace-installed-add-ons get" [
 #
 # POST /marketplace/InstalledAddOns/{Sid}
 # operationId: UpdateMarketplaceInstalledAddOn
-export def "marketplace-installed-add-ons update" [
+export def "update-marketplace-installed-add-on" [
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3685,7 +3685,7 @@ export def "marketplace-installed-add-ons update" [
 # GET /understand/Assistants
 #
 # operationId: ListUnderstandAssistant
-export def "understand-assistants list" [
+export def "list-understand-assistant" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3722,7 +3722,7 @@ export def "understand-assistants list" [
 # POST /understand/Assistants
 #
 # operationId: CreateUnderstandAssistant
-export def "understand-assistants create" [
+export def "create-understand-assistant" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3767,7 +3767,7 @@ export def "understand-assistants create" [
 # GET /understand/Assistants/{AssistantSid}/Dialogues/{Sid}
 #
 # operationId: FetchUnderstandDialogue
-export def "understand-assistants-dialogues get" [
+export def "fetch-understand-dialogue" [
   assistant_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3804,7 +3804,7 @@ export def "understand-assistants-dialogues get" [
 # GET /understand/Assistants/{AssistantSid}/FallbackActions
 #
 # operationId: FetchUnderstandAssistantFallbackActions
-export def "understand-assistants-fallback-actions get" [
+export def "fetch-understand-assistant-fallback-actions" [
   assistant_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3839,7 +3839,7 @@ export def "understand-assistants-fallback-actions get" [
 # POST /understand/Assistants/{AssistantSid}/FallbackActions
 #
 # operationId: UpdateUnderstandAssistantFallbackActions
-export def "understand-assistants-fallback-actions update" [
+export def "update-understand-assistant-fallback-actions" [
   assistant_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3879,7 +3879,7 @@ export def "understand-assistants-fallback-actions update" [
 # GET /understand/Assistants/{AssistantSid}/FieldTypes
 #
 # operationId: ListUnderstandFieldType
-export def "understand-assistants-field-types list" [
+export def "list-understand-field-type" [
   assistant_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3918,7 +3918,7 @@ export def "understand-assistants-field-types list" [
 # POST /understand/Assistants/{AssistantSid}/FieldTypes
 #
 # operationId: CreateUnderstandFieldType
-export def "understand-assistants-field-types create" [
+export def "create-understand-field-type" [
   assistant_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3959,7 +3959,7 @@ export def "understand-assistants-field-types create" [
 # GET /understand/Assistants/{AssistantSid}/FieldTypes/{FieldTypeSid}/FieldValues
 #
 # operationId: ListUnderstandFieldValue
-export def "understand-assistants-field-types-field-values list" [
+export def "list-understand-field-value" [
   assistant_sid: string
   field_type_sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4001,7 +4001,7 @@ export def "understand-assistants-field-types-field-values list" [
 # POST /understand/Assistants/{AssistantSid}/FieldTypes/{FieldTypeSid}/FieldValues
 #
 # operationId: CreateUnderstandFieldValue
-export def "understand-assistants-field-types-field-values create" [
+export def "create-understand-field-value" [
   assistant_sid: string
   field_type_sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4045,7 +4045,7 @@ export def "understand-assistants-field-types-field-values create" [
 # DELETE /understand/Assistants/{AssistantSid}/FieldTypes/{FieldTypeSid}/FieldValues/{Sid}
 #
 # operationId: DeleteUnderstandFieldValue
-export def "understand-assistants-field-types-field-values delete" [
+export def "delete-understand-field-value" [
   assistant_sid: string
   field_type_sid: string
   sid: string
@@ -4084,7 +4084,7 @@ export def "understand-assistants-field-types-field-values delete" [
 # GET /understand/Assistants/{AssistantSid}/FieldTypes/{FieldTypeSid}/FieldValues/{Sid}
 #
 # operationId: FetchUnderstandFieldValue
-export def "understand-assistants-field-types-field-values get" [
+export def "fetch-understand-field-value" [
   assistant_sid: string
   field_type_sid: string
   sid: string
@@ -4123,7 +4123,7 @@ export def "understand-assistants-field-types-field-values get" [
 # DELETE /understand/Assistants/{AssistantSid}/FieldTypes/{Sid}
 #
 # operationId: DeleteUnderstandFieldType
-export def "understand-assistants-field-types delete" [
+export def "delete-understand-field-type" [
   assistant_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4160,7 +4160,7 @@ export def "understand-assistants-field-types delete" [
 # GET /understand/Assistants/{AssistantSid}/FieldTypes/{Sid}
 #
 # operationId: FetchUnderstandFieldType
-export def "understand-assistants-field-types get" [
+export def "fetch-understand-field-type" [
   assistant_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4197,7 +4197,7 @@ export def "understand-assistants-field-types get" [
 # POST /understand/Assistants/{AssistantSid}/FieldTypes/{Sid}
 #
 # operationId: UpdateUnderstandFieldType
-export def "understand-assistants-field-types update" [
+export def "update-understand-field-type" [
   assistant_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4240,7 +4240,7 @@ export def "understand-assistants-field-types update" [
 # GET /understand/Assistants/{AssistantSid}/InitiationActions
 #
 # operationId: FetchUnderstandAssistantInitiationActions
-export def "understand-assistants-initiation-actions get" [
+export def "fetch-understand-assistant-initiation-actions" [
   assistant_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4275,7 +4275,7 @@ export def "understand-assistants-initiation-actions get" [
 # POST /understand/Assistants/{AssistantSid}/InitiationActions
 #
 # operationId: UpdateUnderstandAssistantInitiationActions
-export def "understand-assistants-initiation-actions update" [
+export def "update-understand-assistant-initiation-actions" [
   assistant_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4315,7 +4315,7 @@ export def "understand-assistants-initiation-actions update" [
 # GET /understand/Assistants/{AssistantSid}/ModelBuilds
 #
 # operationId: ListUnderstandModelBuild
-export def "understand-assistants-model-builds list" [
+export def "list-understand-model-build" [
   assistant_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4354,7 +4354,7 @@ export def "understand-assistants-model-builds list" [
 # POST /understand/Assistants/{AssistantSid}/ModelBuilds
 #
 # operationId: CreateUnderstandModelBuild
-export def "understand-assistants-model-builds create" [
+export def "create-understand-model-build" [
   assistant_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4395,7 +4395,7 @@ export def "understand-assistants-model-builds create" [
 # DELETE /understand/Assistants/{AssistantSid}/ModelBuilds/{Sid}
 #
 # operationId: DeleteUnderstandModelBuild
-export def "understand-assistants-model-builds delete" [
+export def "delete-understand-model-build" [
   assistant_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4432,7 +4432,7 @@ export def "understand-assistants-model-builds delete" [
 # GET /understand/Assistants/{AssistantSid}/ModelBuilds/{Sid}
 #
 # operationId: FetchUnderstandModelBuild
-export def "understand-assistants-model-builds get" [
+export def "fetch-understand-model-build" [
   assistant_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4469,7 +4469,7 @@ export def "understand-assistants-model-builds get" [
 # POST /understand/Assistants/{AssistantSid}/ModelBuilds/{Sid}
 #
 # operationId: UpdateUnderstandModelBuild
-export def "understand-assistants-model-builds update" [
+export def "update-understand-model-build" [
   assistant_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4511,7 +4511,7 @@ export def "understand-assistants-model-builds update" [
 # GET /understand/Assistants/{AssistantSid}/Queries
 #
 # operationId: ListUnderstandQuery
-export def "understand-assistants-queries list" [
+export def "list-understand-query" [
   assistant_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4553,7 +4553,7 @@ export def "understand-assistants-queries list" [
 # POST /understand/Assistants/{AssistantSid}/Queries
 #
 # operationId: CreateUnderstandQuery
-export def "understand-assistants-queries create-list" [
+export def "create-understand-query" [
   assistant_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4597,7 +4597,7 @@ export def "understand-assistants-queries create-list" [
 # DELETE /understand/Assistants/{AssistantSid}/Queries/{Sid}
 #
 # operationId: DeleteUnderstandQuery
-export def "understand-assistants-queries delete-list" [
+export def "delete-understand-query" [
   assistant_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4634,7 +4634,7 @@ export def "understand-assistants-queries delete-list" [
 # GET /understand/Assistants/{AssistantSid}/Queries/{Sid}
 #
 # operationId: FetchUnderstandQuery
-export def "understand-assistants-queries get-list" [
+export def "fetch-understand-query" [
   assistant_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4671,7 +4671,7 @@ export def "understand-assistants-queries get-list" [
 # POST /understand/Assistants/{AssistantSid}/Queries/{Sid}
 #
 # operationId: UpdateUnderstandQuery
-export def "understand-assistants-queries update-list" [
+export def "update-understand-query" [
   assistant_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4715,7 +4715,7 @@ export def "understand-assistants-queries update-list" [
 #
 # GET /understand/Assistants/{AssistantSid}/StyleSheet
 # operationId: FetchUnderstandStyleSheet
-export def "understand-assistants-style-sheet get" [
+export def "fetch-understand-style-sheet" [
   assistant_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4751,7 +4751,7 @@ export def "understand-assistants-style-sheet get" [
 #
 # POST /understand/Assistants/{AssistantSid}/StyleSheet
 # operationId: UpdateUnderstandStyleSheet
-export def "understand-assistants-style-sheet update" [
+export def "update-understand-style-sheet" [
   assistant_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4791,7 +4791,7 @@ export def "understand-assistants-style-sheet update" [
 # GET /understand/Assistants/{AssistantSid}/Tasks
 #
 # operationId: ListUnderstandTask
-export def "understand-assistants-tasks list" [
+export def "list-understand-task" [
   assistant_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4830,7 +4830,7 @@ export def "understand-assistants-tasks list" [
 # POST /understand/Assistants/{AssistantSid}/Tasks
 #
 # operationId: CreateUnderstandTask
-export def "understand-assistants-tasks create" [
+export def "create-understand-task" [
   assistant_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4873,7 +4873,7 @@ export def "understand-assistants-tasks create" [
 # DELETE /understand/Assistants/{AssistantSid}/Tasks/{Sid}
 #
 # operationId: DeleteUnderstandTask
-export def "understand-assistants-tasks delete" [
+export def "delete-understand-task" [
   assistant_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4910,7 +4910,7 @@ export def "understand-assistants-tasks delete" [
 # GET /understand/Assistants/{AssistantSid}/Tasks/{Sid}
 #
 # operationId: FetchUnderstandTask
-export def "understand-assistants-tasks get" [
+export def "fetch-understand-task" [
   assistant_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4947,7 +4947,7 @@ export def "understand-assistants-tasks get" [
 # POST /understand/Assistants/{AssistantSid}/Tasks/{Sid}
 #
 # operationId: UpdateUnderstandTask
-export def "understand-assistants-tasks update" [
+export def "update-understand-task" [
   assistant_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4993,7 +4993,7 @@ export def "understand-assistants-tasks update" [
 #
 # GET /understand/Assistants/{AssistantSid}/Tasks/{TaskSid}/Actions
 # operationId: FetchUnderstandTaskActions
-export def "understand-assistants-tasks-actions get" [
+export def "fetch-understand-task-actions" [
   assistant_sid: string
   task_sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5031,7 +5031,7 @@ export def "understand-assistants-tasks-actions get" [
 #
 # POST /understand/Assistants/{AssistantSid}/Tasks/{TaskSid}/Actions
 # operationId: UpdateUnderstandTaskActions
-export def "understand-assistants-tasks-actions update" [
+export def "update-understand-task-actions" [
   assistant_sid: string
   task_sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5073,7 +5073,7 @@ export def "understand-assistants-tasks-actions update" [
 # GET /understand/Assistants/{AssistantSid}/Tasks/{TaskSid}/Fields
 #
 # operationId: ListUnderstandField
-export def "understand-assistants-tasks-fields list" [
+export def "list-understand-field" [
   assistant_sid: string
   task_sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5114,7 +5114,7 @@ export def "understand-assistants-tasks-fields list" [
 # POST /understand/Assistants/{AssistantSid}/Tasks/{TaskSid}/Fields
 #
 # operationId: CreateUnderstandField
-export def "understand-assistants-tasks-fields create" [
+export def "create-understand-field" [
   assistant_sid: string
   task_sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5157,7 +5157,7 @@ export def "understand-assistants-tasks-fields create" [
 # DELETE /understand/Assistants/{AssistantSid}/Tasks/{TaskSid}/Fields/{Sid}
 #
 # operationId: DeleteUnderstandField
-export def "understand-assistants-tasks-fields delete" [
+export def "delete-understand-field" [
   assistant_sid: string
   task_sid: string
   sid: string
@@ -5196,7 +5196,7 @@ export def "understand-assistants-tasks-fields delete" [
 # GET /understand/Assistants/{AssistantSid}/Tasks/{TaskSid}/Fields/{Sid}
 #
 # operationId: FetchUnderstandField
-export def "understand-assistants-tasks-fields get" [
+export def "fetch-understand-field" [
   assistant_sid: string
   task_sid: string
   sid: string
@@ -5235,7 +5235,7 @@ export def "understand-assistants-tasks-fields get" [
 # GET /understand/Assistants/{AssistantSid}/Tasks/{TaskSid}/Samples
 #
 # operationId: ListUnderstandSample
-export def "understand-assistants-tasks-samples list" [
+export def "list-understand-sample" [
   assistant_sid: string
   task_sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5277,7 +5277,7 @@ export def "understand-assistants-tasks-samples list" [
 # POST /understand/Assistants/{AssistantSid}/Tasks/{TaskSid}/Samples
 #
 # operationId: CreateUnderstandSample
-export def "understand-assistants-tasks-samples create" [
+export def "create-understand-sample" [
   assistant_sid: string
   task_sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5321,7 +5321,7 @@ export def "understand-assistants-tasks-samples create" [
 # DELETE /understand/Assistants/{AssistantSid}/Tasks/{TaskSid}/Samples/{Sid}
 #
 # operationId: DeleteUnderstandSample
-export def "understand-assistants-tasks-samples delete" [
+export def "delete-understand-sample" [
   assistant_sid: string
   task_sid: string
   sid: string
@@ -5360,7 +5360,7 @@ export def "understand-assistants-tasks-samples delete" [
 # GET /understand/Assistants/{AssistantSid}/Tasks/{TaskSid}/Samples/{Sid}
 #
 # operationId: FetchUnderstandSample
-export def "understand-assistants-tasks-samples get" [
+export def "fetch-understand-sample" [
   assistant_sid: string
   task_sid: string
   sid: string
@@ -5399,7 +5399,7 @@ export def "understand-assistants-tasks-samples get" [
 # POST /understand/Assistants/{AssistantSid}/Tasks/{TaskSid}/Samples/{Sid}
 #
 # operationId: UpdateUnderstandSample
-export def "understand-assistants-tasks-samples update" [
+export def "update-understand-sample" [
   assistant_sid: string
   task_sid: string
   sid: string
@@ -5445,7 +5445,7 @@ export def "understand-assistants-tasks-samples update" [
 # GET /understand/Assistants/{AssistantSid}/Tasks/{TaskSid}/Statistics
 #
 # operationId: FetchUnderstandTaskStatistics
-export def "understand-assistants-tasks-statistics get" [
+export def "fetch-understand-task-statistics" [
   assistant_sid: string
   task_sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5482,7 +5482,7 @@ export def "understand-assistants-tasks-statistics get" [
 # DELETE /understand/Assistants/{Sid}
 #
 # operationId: DeleteUnderstandAssistant
-export def "understand-assistants delete" [
+export def "delete-understand-assistant" [
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5517,7 +5517,7 @@ export def "understand-assistants delete" [
 # GET /understand/Assistants/{Sid}
 #
 # operationId: FetchUnderstandAssistant
-export def "understand-assistants get" [
+export def "fetch-understand-assistant" [
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5552,7 +5552,7 @@ export def "understand-assistants get" [
 # POST /understand/Assistants/{Sid}
 #
 # operationId: UpdateUnderstandAssistant
-export def "understand-assistants update" [
+export def "update-understand-assistant" [
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5599,7 +5599,7 @@ export def "understand-assistants update" [
 # GET /wireless/Commands
 #
 # operationId: ListWirelessCommand
-export def "wireless-commands list" [
+export def "list-wireless-command" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5640,7 +5640,7 @@ export def "wireless-commands list" [
 # POST /wireless/Commands
 #
 # operationId: CreateWirelessCommand
-export def "wireless-commands create" [
+export def "create-wireless-command" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5684,7 +5684,7 @@ export def "wireless-commands create" [
 # GET /wireless/Commands/{Sid}
 #
 # operationId: FetchWirelessCommand
-export def "wireless-commands get" [
+export def "fetch-wireless-command" [
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5719,7 +5719,7 @@ export def "wireless-commands get" [
 # GET /wireless/RatePlans
 #
 # operationId: ListWirelessRatePlan
-export def "wireless-rate-plans list" [
+export def "list-wireless-rate-plan" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5756,7 +5756,7 @@ export def "wireless-rate-plans list" [
 # POST /wireless/RatePlans
 #
 # operationId: CreateWirelessRatePlan
-export def "wireless-rate-plans create" [
+export def "create-wireless-rate-plan" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5803,7 +5803,7 @@ export def "wireless-rate-plans create" [
 # DELETE /wireless/RatePlans/{Sid}
 #
 # operationId: DeleteWirelessRatePlan
-export def "wireless-rate-plans delete" [
+export def "delete-wireless-rate-plan" [
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5838,7 +5838,7 @@ export def "wireless-rate-plans delete" [
 # GET /wireless/RatePlans/{Sid}
 #
 # operationId: FetchWirelessRatePlan
-export def "wireless-rate-plans get" [
+export def "fetch-wireless-rate-plan" [
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5873,7 +5873,7 @@ export def "wireless-rate-plans get" [
 # POST /wireless/RatePlans/{Sid}
 #
 # operationId: UpdateWirelessRatePlan
-export def "wireless-rate-plans update" [
+export def "update-wireless-rate-plan" [
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5914,7 +5914,7 @@ export def "wireless-rate-plans update" [
 # GET /wireless/Sims
 #
 # operationId: ListWirelessSim
-export def "wireless-sims list" [
+export def "list-wireless-sim" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5956,7 +5956,7 @@ export def "wireless-sims list" [
 # GET /wireless/Sims/{Sid}
 #
 # operationId: FetchWirelessSim
-export def "wireless-sims get" [
+export def "fetch-wireless-sim" [
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5991,7 +5991,7 @@ export def "wireless-sims get" [
 # POST /wireless/Sims/{Sid}
 #
 # operationId: UpdateWirelessSim
-export def "wireless-sims update" [
+export def "update-wireless-sim" [
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6046,7 +6046,7 @@ export def "wireless-sims update" [
 # GET /wireless/Sims/{SimSid}/Usage
 #
 # operationId: FetchWirelessUsage
-export def "wireless-sims-usage get" [
+export def "fetch-wireless-usage" [
   sim_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

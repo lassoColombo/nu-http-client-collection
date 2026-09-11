@@ -131,7 +131,7 @@ def angle-completer [] { ["-180" "-270" "-90" "0" "180" "270" "90"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "add-password create" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "add-password-v1" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -156,7 +156,7 @@ export def commands []: nothing -> table {
 # POST /v1/add_password
 # Docs: https://www.pdfblocks.com/docs/api/v1/add-password — Documentation and examples
 # operationId: addPasswordV1
-export def "add-password create" [
+export def "add-password-v1" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -199,7 +199,7 @@ export def "add-password create" [
 # POST /v1/add_restrictions
 # Docs: https://www.pdfblocks.com/docs/api/v1/add-restrictions — Documentation and examples
 # operationId: addRestrictionsV1
-export def "add-restrictions create" [
+export def "add-restrictions-v1" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -251,7 +251,7 @@ export def "add-restrictions create" [
 # POST /v1/add_watermark/image
 # Docs: https://www.pdfblocks.com/docs/api/v1/add-watermark-image — Documentation and examples
 # operationId: addImageWatermarkV1
-export def "add-watermark-image create" [
+export def "add-image-watermark-v1" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -295,7 +295,7 @@ export def "add-watermark-image create" [
 # POST /v1/add_watermark/text
 # Docs: https://www.pdfblocks.com/docs/api/v1/add-watermark-text — Documentation and examples
 # operationId: addTextWatermarkV1
-export def "add-watermark-text create" [
+export def "add-text-watermark-v1" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -343,7 +343,7 @@ export def "add-watermark-text create" [
 # POST /v1/extract_pages
 # Docs: https://www.pdfblocks.com/docs/api/v1/extract-pages — Documentation and examples
 # operationId: extractPagesV1
-export def "extract-pages create" [
+export def "extract-pages-v1" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -386,7 +386,7 @@ export def "extract-pages create" [
 # POST /v1/merge_documents
 # Docs: https://www.pdfblocks.com/docs/api/v1/merge-documents — Documentation and examples
 # operationId: mergeDocumentsV1
-export def "merge-documents create" [
+export def "merge-documents-v1" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -427,7 +427,7 @@ export def "merge-documents create" [
 # POST /v1/remove_pages
 # Docs: https://www.pdfblocks.com/docs/api/v1/remove-pages — Documentation and examples
 # operationId: removePagesV1
-export def "remove-pages delete" [
+export def "remove-pages-v1" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -470,7 +470,7 @@ export def "remove-pages delete" [
 # POST /v1/remove_password
 # Docs: https://www.pdfblocks.com/docs/api/v1/remove-password — Documentation and examples
 # operationId: removePasswordV1
-export def "remove-password delete" [
+export def "remove-password-v1" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -512,7 +512,7 @@ export def "remove-password delete" [
 # POST /v1/remove_restrictions
 # Docs: https://www.pdfblocks.com/docs/api/v1/remove-restrictions — Documentation and examples
 # operationId: removeRestrictionsV1
-export def "remove-restrictions delete" [
+export def "remove-restrictions-v1" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -553,7 +553,7 @@ export def "remove-restrictions delete" [
 # POST /v1/remove_signatures
 # Docs: https://www.pdfblocks.com/docs/api/v1/remove-signatures — Documentation and examples
 # operationId: removeSignaturesV1
-export def "remove-signatures delete" [
+export def "remove-signatures-v1" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -594,7 +594,7 @@ export def "remove-signatures delete" [
 # POST /v1/reverse_pages
 # Docs: https://www.pdfblocks.com/docs/api/v1/reverse-pages — Documentation and examples
 # operationId: reversePagesV1
-export def "reverse-pages create" [
+export def "reverse-pages-v1" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -635,7 +635,7 @@ export def "reverse-pages create" [
 # POST /v1/rotate_pages
 # Docs: https://www.pdfblocks.com/docs/api/v1/rotate-pages — Documentation and examples
 # operationId: rotatePagesV1
-export def "rotate-pages create" [
+export def "rotate-pages-v1" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

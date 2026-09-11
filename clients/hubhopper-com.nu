@@ -109,7 +109,7 @@ def auth-scheme-completer [] { ["x-api-key" "hhpartnerid"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "categories list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-categories" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -132,7 +132,7 @@ export def commands []: nothing -> table {
 # Get the list of all content categories.
 #
 # GET /categories
-export def "categories list" [
+export def "get-categories" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for api_key (x-api-key)
   --token-partnerid: string # Auth token for partner_id (hhPartnerId)
@@ -168,7 +168,7 @@ export def "categories list" [
 # Get specific content category.
 #
 # GET /categories/{categoryId}
-export def "categories get" [
+export def "get-categories-category-id" [
   category_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for api_key (x-api-key)
@@ -203,7 +203,7 @@ export def "categories get" [
 # Get a list of all podcasts under a category.
 #
 # GET /categories/{categoryId}/podcasts
-export def "categories-podcasts get" [
+export def "get-categories-category-id-podcasts" [
   category_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for api_key (x-api-key)
@@ -243,7 +243,7 @@ export def "categories-podcasts get" [
 # Get the list of all podcasts.
 #
 # GET /podcasts
-export def "podcasts list" [
+export def "get-podcasts" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for api_key (x-api-key)
   --token-partnerid: string # Auth token for partner_id (hhPartnerId)
@@ -281,7 +281,7 @@ export def "podcasts list" [
 # Get a single Podcast.
 #
 # GET /podcasts/{podcastId}
-export def "podcasts get" [
+export def "get-podcasts-podcast-id" [
   podcast_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for api_key (x-api-key)
@@ -316,7 +316,7 @@ export def "podcasts get" [
 # Get a list of all episodes under a podcast.
 #
 # GET /podcasts/{podcastId}/episodes
-export def "podcasts-episodes get" [
+export def "get-podcasts-podcast-id-episodes" [
   podcast_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for api_key (x-api-key)
@@ -354,7 +354,7 @@ export def "podcasts-episodes get" [
 }
 
 # GET /util/languages
-export def "util-languages get" [
+export def "get-util-languages" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-apikey: string # Auth token for api_key (x-api-key)
   --token-partnerid: string # Auth token for partner_id (hhPartnerId)

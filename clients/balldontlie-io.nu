@@ -97,7 +97,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "games list-example-parameters" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "all-games-example-parameters" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -121,7 +121,7 @@ export def commands []: nothing -> table {
 #
 # GET /api/v1/games
 # operationId: allGamesExampleParameters
-export def "games list-example-parameters" [
+export def "all-games-example-parameters" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -158,7 +158,7 @@ export def "games list-example-parameters" [
 #
 # GET /api/v1/games/32881
 # operationId: specificGame
-export def "games-32881 get-specific" [
+export def "specific-game" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -192,7 +192,7 @@ export def "games-32881 get-specific" [
 #
 # GET /api/v1/players
 # operationId: allPlayersSearch
-export def "players list" [
+export def "all-players-search" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -228,7 +228,7 @@ export def "players list" [
 #
 # GET /api/v1/players/237
 # operationId: specificPlayer
-export def "players-237 get-specific" [
+export def "specific-player" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -262,7 +262,7 @@ export def "players-237 get-specific" [
 #
 # GET /api/v1/stats
 # operationId: allStatsExampleParameters
-export def "stats list-example-parameters" [
+export def "all-stats-example-parameters" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -299,7 +299,7 @@ export def "stats list-example-parameters" [
 #
 # GET /api/v1/teams
 # operationId: allTeams
-export def "teams list" [
+export def "all-teams" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -333,7 +333,7 @@ export def "teams list" [
 #
 # GET /api/v1/teams/1
 # operationId: specificTeam
-export def "teams-1 get-specific" [
+export def "specific-team" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

@@ -127,7 +127,7 @@ def x-amz-target-completer-26 [] { ["EC2WindowsBarleyService.UpdateLogPattern"] 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "api create-application" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "create-application" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -151,7 +151,7 @@ export def commands []: nothing -> table {
 #
 # POST /
 # operationId: CreateApplication
-export def "api create-application" [
+export def "create-application" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -206,7 +206,7 @@ export def "api create-application" [
 #
 # POST /
 # operationId: CreateComponent
-export def "api create-component" [
+export def "create-component" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -256,7 +256,7 @@ export def "api create-component" [
 #
 # POST /
 # operationId: CreateLogPattern
-export def "api create-log-pattern" [
+export def "create-log-pattern" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -308,7 +308,7 @@ export def "api create-log-pattern" [
 #
 # POST /
 # operationId: DeleteApplication
-export def "api delete-application" [
+export def "delete-application" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -356,7 +356,7 @@ export def "api delete-application" [
 #
 # POST /
 # operationId: DeleteComponent
-export def "api delete-component" [
+export def "delete-component" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -405,7 +405,7 @@ export def "api delete-component" [
 #
 # POST /
 # operationId: DeleteLogPattern
-export def "api delete-log-pattern" [
+export def "delete-log-pattern" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -455,7 +455,7 @@ export def "api delete-log-pattern" [
 #
 # POST /
 # operationId: DescribeApplication
-export def "api get-application" [
+export def "describe-application" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -503,7 +503,7 @@ export def "api get-application" [
 #
 # POST /
 # operationId: DescribeComponent
-export def "api get-component" [
+export def "describe-component" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -552,7 +552,7 @@ export def "api get-component" [
 #
 # POST /
 # operationId: DescribeComponentConfiguration
-export def "api get-component-configuration" [
+export def "describe-component-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -601,7 +601,7 @@ export def "api get-component-configuration" [
 #
 # POST /
 # operationId: DescribeComponentConfigurationRecommendation
-export def "api get-component-configuration-recommendation" [
+export def "describe-component-configuration-recommendation" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -651,7 +651,7 @@ export def "api get-component-configuration-recommendation" [
 #
 # POST /
 # operationId: DescribeLogPattern
-export def "api get-log-pattern" [
+export def "describe-log-pattern" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -701,7 +701,7 @@ export def "api get-log-pattern" [
 #
 # POST /
 # operationId: DescribeObservation
-export def "api get-observation" [
+export def "describe-observation" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -749,7 +749,7 @@ export def "api get-observation" [
 #
 # POST /
 # operationId: DescribeProblem
-export def "api get-problem" [
+export def "describe-problem" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -797,7 +797,7 @@ export def "api get-problem" [
 #
 # POST /
 # operationId: DescribeProblemObservations
-export def "api get-problem-observations" [
+export def "describe-problem-observations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -845,7 +845,7 @@ export def "api get-problem-observations" [
 #
 # POST /
 # operationId: ListApplications
-export def "api list-applications" [
+export def "list-applications" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -897,7 +897,7 @@ export def "api list-applications" [
 #
 # POST /
 # operationId: ListComponents
-export def "api list-components" [
+export def "list-components" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -950,7 +950,7 @@ export def "api list-components" [
 #
 # POST /
 # operationId: ListConfigurationHistory
-export def "api list-configuration-history" [
+export def "list-configuration-history" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1006,7 +1006,7 @@ export def "api list-configuration-history" [
 #
 # POST /
 # operationId: ListLogPatternSets
-export def "api list-log-pattern-sets" [
+export def "list-log-pattern-sets" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1059,7 +1059,7 @@ export def "api list-log-pattern-sets" [
 #
 # POST /
 # operationId: ListLogPatterns
-export def "api list-log-patterns" [
+export def "list-log-patterns" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1113,7 +1113,7 @@ export def "api list-log-patterns" [
 #
 # POST /
 # operationId: ListProblems
-export def "api list-problems" [
+export def "list-problems" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1169,7 +1169,7 @@ export def "api list-problems" [
 #
 # POST /
 # operationId: ListTagsForResource
-export def "api list-tags-for-resource" [
+export def "list-tags-for-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1217,7 +1217,7 @@ export def "api list-tags-for-resource" [
 #
 # POST /
 # operationId: TagResource
-export def "api tag-resource" [
+export def "tag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1266,7 +1266,7 @@ export def "api tag-resource" [
 #
 # POST /
 # operationId: UntagResource
-export def "api untag-resource" [
+export def "untag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1315,7 +1315,7 @@ export def "api untag-resource" [
 #
 # POST /
 # operationId: UpdateApplication
-export def "api update-application" [
+export def "update-application" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1368,7 +1368,7 @@ export def "api update-application" [
 #
 # POST /
 # operationId: UpdateComponent
-export def "api update-component" [
+export def "update-component" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1419,7 +1419,7 @@ export def "api update-component" [
 #
 # POST /
 # operationId: UpdateComponentConfiguration
-export def "api update-component-configuration" [
+export def "update-component-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1472,7 +1472,7 @@ export def "api update-component-configuration" [
 #
 # POST /
 # operationId: UpdateLogPattern
-export def "api update-log-pattern" [
+export def "update-log-pattern" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

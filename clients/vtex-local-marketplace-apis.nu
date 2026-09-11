@@ -133,7 +133,7 @@ def auth-scheme-completer [] { ["x-vtex-api-appkey" "x-vtex-api-apptoken"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "notificator-changenotification-inventory create-notification" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "inventory-notification" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -157,7 +157,7 @@ export def commands []: nothing -> table {
 #
 # POST /notificator/{sellerId}/changenotification/{skuId}/inventory
 # operationId: InventoryNotification
-export def "notificator-changenotification-inventory create-notification" [
+export def "inventory-notification" [
   seller_id: string
   sku_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -202,7 +202,7 @@ export def "notificator-changenotification-inventory create-notification" [
 #
 # POST /notificator/{sellerId}/changenotification/{skuId}/price
 # operationId: PriceNotification
-export def "notificator-changenotification-price create-notification" [
+export def "price-notification" [
   seller_id: string
   sku_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -247,7 +247,7 @@ export def "notificator-changenotification-price create-notification" [
 #
 # GET /offer-manager/pvt/offers
 # operationId: Getofferslist
-export def "offer-manager-pvt-offers get-offerslist" [
+export def "getofferslist" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
   --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
@@ -292,7 +292,7 @@ export def "offer-manager-pvt-offers get-offerslist" [
 #
 # GET /offer-manager/pvt/product/{productId}
 # operationId: GetProductoffers
-export def "offer-manager-pvt-product get-productoffers" [
+export def "get-productoffers" [
   product_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -335,7 +335,7 @@ export def "offer-manager-pvt-product get-productoffers" [
 #
 # GET /offer-manager/pvt/product/{productId}/sku/{skuId}
 # operationId: GetSKUoffers
-export def "offer-manager-pvt-product-sku get-sk-uoffers" [
+export def "get-sk-uoffers" [
   product_id: string
   sku_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -380,7 +380,7 @@ export def "offer-manager-pvt-product-sku get-sk-uoffers" [
 #
 # GET /seller-register/pvt/seller-leads
 # operationId: ListSellerLeads
-export def "seller-register-pvt-seller-leads list" [
+export def "list-seller-leads" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
   --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
@@ -429,7 +429,7 @@ export def "seller-register-pvt-seller-leads list" [
 # operationId: CreateSellerLead
 # --accountable shape: {email: string, name: string, phone: string}
 # --address shape: {city: string, complement: string, neighborhood: string, number: string, postalcode: string, state: string, street: string}
-export def "seller-register-pvt-seller-leads create" [
+export def "create-seller-lead" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
   --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
@@ -486,7 +486,7 @@ export def "seller-register-pvt-seller-leads create" [
 #
 # DELETE /seller-register/pvt/seller-leads/{sellerLeadId}
 # operationId: RemoveSellerLead
-export def "seller-register-pvt-seller-leads delete" [
+export def "remove-seller-lead" [
   seller_lead_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -529,7 +529,7 @@ export def "seller-register-pvt-seller-leads delete" [
 #
 # GET /seller-register/pvt/seller-leads/{sellerLeadId}
 # operationId: RetrieveSellerLead
-export def "seller-register-pvt-seller-leads get" [
+export def "retrieve-seller-lead" [
   seller_lead_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -574,7 +574,7 @@ export def "seller-register-pvt-seller-leads get" [
 # operationId: AcceptSellerLead
 # --accountable shape: {email: string, name: string, phone: string}
 # --address shape: {city: string, complement: string, neighborhood: string, number: string, postalcode: string, state: string, street: string}
-export def "seller-register-pvt-seller-leads update-accept" [
+export def "accept-seller-lead" [
   seller_lead_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -633,7 +633,7 @@ export def "seller-register-pvt-seller-leads update-accept" [
 #
 # PUT /seller-register/pvt/seller-leads/{sellerLeadId}/seller
 # operationId: CreateSellerFromSellerLead
-export def "seller-register-pvt-seller-leads-seller create" [
+export def "create-seller-from-seller-lead" [
   seller_lead_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -677,7 +677,7 @@ export def "seller-register-pvt-seller-leads-seller create" [
 #
 # PUT /seller-register/pvt/seller-leads/{sellerLeadId}/status
 # operationId: ResendSellerLeadRequest
-export def "seller-register-pvt-seller-leads-status resend-request" [
+export def "resend-seller-lead-request" [
   seller_lead_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -726,7 +726,7 @@ export def "seller-register-pvt-seller-leads-status resend-request" [
 #
 # GET /seller-register/pvt/sellers
 # operationId: GetListSellers
-export def "seller-register-pvt-sellers get-list" [
+export def "get-list-sellers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
   --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
@@ -780,7 +780,7 @@ export def "seller-register-pvt-sellers get-list" [
 # operationId: UpsertSellerRequest
 # --availableSalesChannels item shape: {id: int, isSelected: bool, name: string}
 # --groups item shape: {id?: string, name?: string}
-export def "seller-register-pvt-sellers update-request" [
+export def "upsert-seller-request" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
   --token-apptoken: string # Auth token for appToken (X-VTEX-API-AppToken)
@@ -853,7 +853,7 @@ export def "seller-register-pvt-sellers update-request" [
 #
 # GET /seller-register/pvt/sellers/{sellerId}
 # operationId: GetRetrieveSeller
-export def "seller-register-pvt-sellers get" [
+export def "get-retrieve-seller" [
   seller_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -897,7 +897,7 @@ export def "seller-register-pvt-sellers get" [
 #
 # PATCH /seller-register/pvt/sellers/{sellerId}
 # operationId: UpdateSeller
-export def "seller-register-pvt-sellers update" [
+export def "update-seller" [
   seller_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -946,7 +946,7 @@ export def "seller-register-pvt-sellers update" [
 #
 # GET /seller-register/pvt/sellers/{sellerId}/commissions
 # operationId: ListSellerCommissions
-export def "seller-register-pvt-sellers-commissions list" [
+export def "list-seller-commissions" [
   seller_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -989,7 +989,7 @@ export def "seller-register-pvt-sellers-commissions list" [
 #
 # PUT /seller-register/pvt/sellers/{sellerId}/commissions/categories
 # operationId: BulkUpsertSellerCommissions
-export def "seller-register-pvt-sellers-commissions-categories update-bulk" [
+export def "bulk-upsert-seller-commissions" [
   seller_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -1038,7 +1038,7 @@ export def "seller-register-pvt-sellers-commissions-categories update-bulk" [
 #
 # DELETE /seller-register/pvt/sellers/{sellerId}/commissions/{categoryId}
 # operationId: RemoveSellerCommissions
-export def "seller-register-pvt-sellers-commissions delete" [
+export def "remove-seller-commissions" [
   seller_id: string
   category_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1083,7 +1083,7 @@ export def "seller-register-pvt-sellers-commissions delete" [
 #
 # GET /seller-register/pvt/sellers/{sellerId}/commissions/{categoryId}
 # operationId: RetrieveSellerCommissions
-export def "seller-register-pvt-sellers-commissions get" [
+export def "retrieve-seller-commissions" [
   seller_id: string
   category_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1128,7 +1128,7 @@ export def "seller-register-pvt-sellers-commissions get" [
 #
 # PUT /seller-register/pvt/sellers/{sellerId}/commissions/{categoryId}
 # operationId: UpsertSellerCommissions
-export def "seller-register-pvt-sellers-commissions update" [
+export def "upsert-seller-commissions" [
   seller_id: string
   category_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1182,7 +1182,7 @@ export def "seller-register-pvt-sellers-commissions update" [
 #
 # GET /seller-register/pvt/sellers/{sellerId}/sales-channel/mapping
 # operationId: RetrieveMapping
-export def "seller-register-pvt-sellers-sales-channel-mapping get" [
+export def "retrieve-mapping" [
   seller_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)
@@ -1226,7 +1226,7 @@ export def "seller-register-pvt-sellers-sales-channel-mapping get" [
 #
 # PUT /seller-register/pvt/sellers/{sellerId}/sales-channel/mapping
 # operationId: UpsertMapping
-export def "seller-register-pvt-sellers-sales-channel-mapping update" [
+export def "upsert-mapping" [
   seller_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-appkey: string # Auth token for appKey (X-VTEX-API-AppKey)

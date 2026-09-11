@@ -97,7 +97,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "cards get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "cards" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -121,7 +121,7 @@ export def commands []: nothing -> table {
 #
 # GET /cards
 # operationId: cards
-export def "cards get" [
+export def "cards" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -155,7 +155,7 @@ export def "cards get" [
 #
 # GET /cards/{cardId}
 # operationId: findPetsByTags
-export def "cards find-pets-by-tags" [
+export def "find-pets-by-tags" [
   card_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -188,7 +188,7 @@ export def "cards find-pets-by-tags" [
 }
 
 # GET /categories
-export def "categories list" [
+export def "get-categories" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -219,7 +219,7 @@ export def "categories list" [
 }
 
 # GET /categories/{category}
-export def "categories get" [
+export def "get-categories-category" [
   category: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -252,7 +252,7 @@ export def "categories get" [
 }
 
 # GET /dex-ids
-export def "dex-ids list" [
+export def "get-dex-ids" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -283,7 +283,7 @@ export def "dex-ids list" [
 }
 
 # GET /dex-ids/{dexId}
-export def "dex-ids get" [
+export def "get-dex-ids-dex-id" [
   dex_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -316,7 +316,7 @@ export def "dex-ids get" [
 }
 
 # GET /energy-types
-export def "energy-types list" [
+export def "get-energy-types" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -347,7 +347,7 @@ export def "energy-types list" [
 }
 
 # GET /energy-types/{energy-type}
-export def "energy-types get" [
+export def "get-energy-types-energy-type" [
   energy_type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -380,7 +380,7 @@ export def "energy-types get" [
 }
 
 # GET /hp
-export def "hp list" [
+export def "get-hp" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -411,7 +411,7 @@ export def "hp list" [
 }
 
 # GET /hp/{hp}
-export def "hp get" [
+export def "get-hp-hp" [
   hp: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -444,7 +444,7 @@ export def "hp get" [
 }
 
 # GET /illustrators
-export def "illustrators list" [
+export def "get-illustrators" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -475,7 +475,7 @@ export def "illustrators list" [
 }
 
 # GET /illustrators/{illustrator}
-export def "illustrators get" [
+export def "get-illustrators-illustrator" [
   illustrator: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -508,7 +508,7 @@ export def "illustrators get" [
 }
 
 # GET /rarities
-export def "rarities list" [
+export def "get-rarities" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -539,7 +539,7 @@ export def "rarities list" [
 }
 
 # GET /rarities/{rarity}
-export def "rarities get" [
+export def "get-rarities-rarity" [
   rarity: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -572,7 +572,7 @@ export def "rarities get" [
 }
 
 # GET /regulation-marks
-export def "regulation-marks list" [
+export def "get-regulation-marks" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -603,7 +603,7 @@ export def "regulation-marks list" [
 }
 
 # GET /regulation-marks/{regulation-mark}
-export def "regulation-marks get" [
+export def "get-regulation-marks-regulation-mark" [
   regulation_mark: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -636,7 +636,7 @@ export def "regulation-marks get" [
 }
 
 # GET /retreats
-export def "retreats list" [
+export def "get-retreats" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -667,7 +667,7 @@ export def "retreats list" [
 }
 
 # GET /retreats/{retreat}
-export def "retreats get" [
+export def "get-retreats-retreat" [
   retreat: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -700,7 +700,7 @@ export def "retreats get" [
 }
 
 # GET /series
-export def "series list" [
+export def "get-series" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -731,7 +731,7 @@ export def "series list" [
 }
 
 # GET /series/{serie}
-export def "series get" [
+export def "get-series-serie" [
   serie: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -764,7 +764,7 @@ export def "series get" [
 }
 
 # GET /sets
-export def "sets get" [
+export def "get-sets" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -795,7 +795,7 @@ export def "sets get" [
 }
 
 # GET /sets/{set}
-export def "sets get-by-set" [
+export def "get-sets-set" [
   set: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -828,7 +828,7 @@ export def "sets get-by-set" [
 }
 
 # GET /sets/{set}/{cardLocalId}
-export def "sets get-by-set-card-local-id" [
+export def "get-sets-set-card-local-id" [
   set: string
   card_local_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -863,7 +863,7 @@ export def "sets get-by-set-card-local-id" [
 }
 
 # GET /stages
-export def "stages list" [
+export def "get-stages" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -894,7 +894,7 @@ export def "stages list" [
 }
 
 # GET /stages/{stage}
-export def "stages get" [
+export def "get-stages-stage" [
   stage: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -927,7 +927,7 @@ export def "stages get" [
 }
 
 # GET /suffixes
-export def "suffixes list" [
+export def "get-suffixes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -958,7 +958,7 @@ export def "suffixes list" [
 }
 
 # GET /suffixes/{suffix}
-export def "suffixes get" [
+export def "get-suffixes-suffix" [
   suffix: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -991,7 +991,7 @@ export def "suffixes get" [
 }
 
 # GET /trainer-types
-export def "trainer-types list" [
+export def "get-trainer-types" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1022,7 +1022,7 @@ export def "trainer-types list" [
 }
 
 # GET /trainer-types/{trainer-type}
-export def "trainer-types get" [
+export def "get-trainer-types-trainer-type" [
   trainer_type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1055,7 +1055,7 @@ export def "trainer-types get" [
 }
 
 # GET /types
-export def "types list" [
+export def "get-types" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1086,7 +1086,7 @@ export def "types list" [
 }
 
 # GET /types/{type}
-export def "types get" [
+export def "get-types-type" [
   type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1119,7 +1119,7 @@ export def "types get" [
 }
 
 # GET /variants
-export def "variants list" [
+export def "get-variants" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1150,7 +1150,7 @@ export def "variants list" [
 }
 
 # GET /variants/{variant}
-export def "variants get" [
+export def "get-variants-variant" [
   variant: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

@@ -103,7 +103,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "agr-affected-genomic-models get-using" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-affected-genomic-models-using-get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -127,7 +127,7 @@ export def commands []: nothing -> table {
 #
 # GET /agr/affectedGenomicModels/{taxonId}
 # operationId: getAffectedGenomicModelsUsingGET
-export def "agr-affected-genomic-models get-using" [
+export def "get-affected-genomic-models-using-get" [
   taxon_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -163,7 +163,7 @@ export def "agr-affected-genomic-models get-using" [
 #
 # GET /agr/alleles/{taxonId}
 # operationId: getAllelesForTaxonUsingGET
-export def "agr-alleles get-for-taxon-using" [
+export def "get-alleles-for-taxon-using-get" [
   taxon_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -199,7 +199,7 @@ export def "agr-alleles get-for-taxon-using" [
 #
 # GET /agr/expression/{taxonId}
 # operationId: getExpressionForTaxonUsingGET
-export def "agr-expression get-for-taxon-using" [
+export def "get-expression-for-taxon-using-get" [
   taxon_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -235,7 +235,7 @@ export def "agr-expression get-for-taxon-using" [
 #
 # GET /agr/phenotypes/{taxonId}
 # operationId: getPhenotypesForTaxonUsingGET
-export def "agr-phenotypes get-for-taxon-using" [
+export def "get-phenotypes-for-taxon-using-get" [
   taxon_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -271,7 +271,7 @@ export def "agr-phenotypes get-for-taxon-using" [
 #
 # GET /agr/variants/{taxonId}
 # operationId: getVariantsForTaxonUsingGET
-export def "agr-variants get-for-taxon-using" [
+export def "get-variants-for-taxon-using-get" [
   taxon_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -307,7 +307,7 @@ export def "agr-variants get-for-taxon-using" [
 #
 # GET /agr/{taxonId}
 # operationId: getGenesForLatestAssemblyUsingGET
-export def "agr get-genes-for-latest-assembly-using" [
+export def "get-genes-for-latest-assembly-using-get" [
   taxon_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -343,7 +343,7 @@ export def "agr get-genes-for-latest-assembly-using" [
 #
 # POST /annotations/
 # operationId: getAnnotationsUsingPOST
-export def "annotations get-using-create" [
+export def "get-annotations-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -384,7 +384,7 @@ export def "annotations get-using-create" [
 #
 # GET /annotations/accId/{rgdId}
 # operationId: getTermAccIdsUsingGET
-export def "annotations-acc-id get-term-using" [
+export def "get-term-acc-ids-using-get" [
   rgd_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -420,7 +420,7 @@ export def "annotations-acc-id get-term-using" [
 #
 # GET /annotations/count/{accId}/{includeChildren}
 # operationId: getAnnotationCountByAccIdUsingGET
-export def "annotations-count get-by-acc-using" [
+export def "get-annotation-count-by-acc-id-using-get" [
   acc_id: string
   include_children: bool
   --base-url(-b): string@base-url-completer # API base URL
@@ -458,7 +458,7 @@ export def "annotations-count get-by-acc-using" [
 #
 # GET /annotations/count/{accId}/{speciesTypeKey}/{includeChildren}
 # operationId: getAnnotationCountByAccIdAndSpeciesUsingGET
-export def "annotations-count get-by-acc-and-species-using" [
+export def "get-annotation-count-by-acc-id-and-species-using-get" [
   acc_id: string
   species_type_key: int
   include_children: bool
@@ -498,7 +498,7 @@ export def "annotations-count get-by-acc-and-species-using" [
 #
 # GET /annotations/count/{accId}/{speciesTypeKey}/{includeChildren}/{objectType}
 # operationId: getAnnotationCountByAccIdAndObjectTypeUsingGET
-export def "annotations-count get-by-acc-and-object-type-using" [
+export def "get-annotation-count-by-acc-id-and-object-type-using-get" [
   acc_id: string
   species_type_key: int
   include_children: bool
@@ -540,7 +540,7 @@ export def "annotations-count get-by-acc-and-object-type-using" [
 #
 # GET /annotations/reference/{refRgdId}
 # operationId: getAnnotsByRefrerenceUsingGET
-export def "annotations-reference get-annots-by-refrerence-using" [
+export def "get-annots-by-refrerence-using-get" [
   ref_rgd_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -576,7 +576,7 @@ export def "annotations-reference get-annots-by-refrerence-using" [
 #
 # GET /annotations/rgdId/{rgdId}
 # operationId: getAnnotationsByRgdIdUsingGET
-export def "annotations-rgd-id get-by-using" [
+export def "get-annotations-by-rgd-id-using-get" [
   rgd_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -612,7 +612,7 @@ export def "annotations-rgd-id get-by-using" [
 #
 # GET /annotations/rgdId/{rgdId}/{ontologyPrefix}
 # operationId: getAnnotationsByRgdIdAndOntologyUsingGET
-export def "annotations-rgd-id get-by-and-ontology-using" [
+export def "get-annotations-by-rgd-id-and-ontology-using-get" [
   rgd_id: int
   ontology_prefix: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -650,7 +650,7 @@ export def "annotations-rgd-id get-by-and-ontology-using" [
 #
 # GET /annotations/{accId}/{rgdId}
 # operationId: getAnnotationsByAccIdAndRgdIdUsingGET
-export def "annotations get-by-acc-and-rgd-using" [
+export def "get-annotations-by-acc-id-and-rgd-id-using-get" [
   acc_id: string
   rgd_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -688,7 +688,7 @@ export def "annotations get-by-acc-and-rgd-using" [
 #
 # GET /annotations/{accId}/{speciesTypeKey}/{includeChildren}
 # operationId: getAnnotationsUsingGET
-export def "annotations get-using" [
+export def "get-annotations-using-get" [
   acc_id: string
   species_type_key: int
   include_children: bool
@@ -728,7 +728,7 @@ export def "annotations get-using" [
 #
 # POST /enrichment/annotatedGenes
 # operationId: getEnrichmentDataUsingPOST
-export def "enrichment-annotated-genes get-data-using-create" [
+export def "get-enrichment-data-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -768,7 +768,7 @@ export def "enrichment-annotated-genes get-data-using-create" [
 #
 # POST /enrichment/data
 # operationId: getEnrichmentDataUsingPOST_1
-export def "enrichment-data get-using-create" [
+export def "get-enrichment-data-using-post-1" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -808,7 +808,7 @@ export def "enrichment-data get-using-create" [
 #
 # GET /genes/affyId/{affyId}/{speciesTypeKey}
 # operationId: getGenesByAffyIdUsingGET
-export def "genes-affy-id get-by-using" [
+export def "get-genes-by-affy-id-using-get" [
   affy_id: string
   species_type_key: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -846,7 +846,7 @@ export def "genes-affy-id get-by-using" [
 #
 # GET /genes/alias/{aliasSymbol}/{speciesTypeKey}
 # operationId: getGenesByAliasSymbolUsingGET
-export def "genes-alias get-by-symbol-using" [
+export def "get-genes-by-alias-symbol-using-get" [
   alias_symbol: string
   species_type_key: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -884,7 +884,7 @@ export def "genes-alias get-by-symbol-using" [
 #
 # GET /genes/allele/{rgdId}
 # operationId: getGeneAllelesUsingGET
-export def "genes-allele get-using" [
+export def "get-gene-alleles-using-get" [
   rgd_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -920,7 +920,7 @@ export def "genes-allele get-using" [
 #
 # POST /genes/annotation
 # operationId: getAnnotatedGenesUsingPOST
-export def "genes-annotation get-annotated-using-create" [
+export def "get-annotated-genes-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -960,7 +960,7 @@ export def "genes-annotation get-annotated-using-create" [
 #
 # GET /genes/annotation/{accId}
 # operationId: getAllAnnotatedGenesUsingGET
-export def "genes-annotation get-list-annotated-using" [
+export def "get-all-annotated-genes-using-get" [
   acc_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -996,7 +996,7 @@ export def "genes-annotation get-list-annotated-using" [
 #
 # GET /genes/annotation/{accId}/{speciesTypeKey}
 # operationId: getGenesAnnotatedUsingGET
-export def "genes-annotation get-annotated-using" [
+export def "get-genes-annotated-using-get" [
   acc_id: string
   species_type_key: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -1034,7 +1034,7 @@ export def "genes-annotation get-annotated-using" [
 #
 # GET /genes/keyword/{keyword}/{speciesTypeKey}
 # operationId: getGenesByKeywordUsingGET
-export def "genes-keyword get-by-using" [
+export def "get-genes-by-keyword-using-get" [
   keyword: string
   species_type_key: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -1072,7 +1072,7 @@ export def "genes-keyword get-by-using" [
 #
 # GET /genes/map/{mapKey}
 # operationId: getGeneByMapKeyUsingGET
-export def "genes-map get-by-key-using" [
+export def "get-gene-by-map-key-using-get" [
   map_key: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1108,7 +1108,7 @@ export def "genes-map get-by-key-using" [
 #
 # GET /genes/mapped/{chr}/{start}/{stop}/{mapKey}
 # operationId: getMappedGenesByPositionUsingGET
-export def "genes-mapped get-by-position-using" [
+export def "get-mapped-genes-by-position-using-get" [
   chr: string
   start: int
   stop: int
@@ -1150,7 +1150,7 @@ export def "genes-mapped get-by-position-using" [
 #
 # POST /genes/orthologs
 # operationId: getOrthologsByListUsingPOST
-export def "genes-orthologs get-by-list-using-create" [
+export def "get-orthologs-by-list-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1189,7 +1189,7 @@ export def "genes-orthologs get-by-list-using-create" [
 #
 # GET /genes/orthologs/{rgdId}
 # operationId: getGeneOrthologsUsingGET
-export def "genes-orthologs get-using" [
+export def "get-gene-orthologs-using-get" [
   rgd_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1225,7 +1225,7 @@ export def "genes-orthologs get-using" [
 #
 # GET /genes/region/{chr}/{start}/{stop}/{mapKey}
 # operationId: getGenesInRegionUsingGET
-export def "genes-region get-in-using" [
+export def "get-genes-in-region-using-get" [
   chr: string
   start: int
   stop: int
@@ -1267,7 +1267,7 @@ export def "genes-region get-in-using" [
 #
 # GET /genes/species/{speciesTypeKey}
 # operationId: getGenesBySpeciesUsingGET
-export def "genes-species get-by-using" [
+export def "get-genes-by-species-using-get" [
   species_type_key: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1303,7 +1303,7 @@ export def "genes-species get-by-using" [
 #
 # GET /genes/{chr}/{start}/{stop}/{mapKey}
 # operationId: getGenesByPositionUsingGET
-export def "genes get-by-position-using" [
+export def "get-genes-by-position-using-get" [
   chr: string
   start: int
   stop: int
@@ -1345,7 +1345,7 @@ export def "genes get-by-position-using" [
 #
 # GET /genes/{rgdId}
 # operationId: getGeneByRgdIdUsingGET
-export def "genes get-by-rgd-using" [
+export def "get-gene-by-rgd-id-using-get" [
   rgd_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1381,7 +1381,7 @@ export def "genes get-by-rgd-using" [
 #
 # GET /genes/{symbol}/{speciesTypeKey}
 # operationId: getGeneBySymbolUsingGET
-export def "genes get-by-using" [
+export def "get-gene-by-symbol-using-get" [
   symbol: string
   species_type_key: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -1419,7 +1419,7 @@ export def "genes get-by-using" [
 #
 # GET /lookup/geneTypes
 # operationId: getGeneTypesUsingGET
-export def "lookup-gene-types get-using" [
+export def "get-gene-types-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1453,7 +1453,7 @@ export def "lookup-gene-types get-using" [
 #
 # POST /lookup/id/map/EnsemblGene
 # operationId: getEnsemblGeneMappingUsingPOST
-export def "lookup-id-map-ensembl-gene get-mapping-using-create" [
+export def "get-ensembl-gene-mapping-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1491,7 +1491,7 @@ export def "lookup-id-map-ensembl-gene get-mapping-using-create" [
 #
 # GET /lookup/id/map/EnsemblGene/{rgdId}
 # operationId: getEnsemblGeneMappingUsingGET
-export def "lookup-id-map-ensembl-gene get-mapping-using" [
+export def "get-ensembl-gene-mapping-using-get" [
   rgd_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1527,7 +1527,7 @@ export def "lookup-id-map-ensembl-gene get-mapping-using" [
 #
 # POST /lookup/id/map/EnsemblProtein
 # operationId: getEnsemblProteinMappingUsingPOST
-export def "lookup-id-map-ensembl-protein get-mapping-using-create" [
+export def "get-ensembl-protein-mapping-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1565,7 +1565,7 @@ export def "lookup-id-map-ensembl-protein get-mapping-using-create" [
 #
 # GET /lookup/id/map/EnsemblProtein/{rgdId}
 # operationId: getEnsemblProteinMappingUsingGET
-export def "lookup-id-map-ensembl-protein get-mapping-using" [
+export def "get-ensembl-protein-mapping-using-get" [
   rgd_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1601,7 +1601,7 @@ export def "lookup-id-map-ensembl-protein get-mapping-using" [
 #
 # POST /lookup/id/map/EnsemblTranscript
 # operationId: getEnsemblTranscriptMappingUsingPOST
-export def "lookup-id-map-ensembl-transcript get-mapping-using-create" [
+export def "get-ensembl-transcript-mapping-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1639,7 +1639,7 @@ export def "lookup-id-map-ensembl-transcript get-mapping-using-create" [
 #
 # GET /lookup/id/map/EnsemblTranscript/{rgdId}
 # operationId: getEnsemblTranscriptMappingUsingGET
-export def "lookup-id-map-ensembl-transcript get-mapping-using" [
+export def "get-ensembl-transcript-mapping-using-get" [
   rgd_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1675,7 +1675,7 @@ export def "lookup-id-map-ensembl-transcript get-mapping-using" [
 #
 # POST /lookup/id/map/GTEx
 # operationId: getGTEXMappingUsingPOST
-export def "lookup-id-map-gt-ex get-gtex-mapping-using-create" [
+export def "get-gtex-mapping-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1713,7 +1713,7 @@ export def "lookup-id-map-gt-ex get-gtex-mapping-using-create" [
 #
 # GET /lookup/id/map/GTEx/{rgdId}
 # operationId: getGTEXMappingUsingGET
-export def "lookup-id-map-gt-ex get-gtex-mapping-using" [
+export def "get-gtex-mapping-using-get" [
   rgd_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1749,7 +1749,7 @@ export def "lookup-id-map-gt-ex get-gtex-mapping-using" [
 #
 # POST /lookup/id/map/GenBankNucleotide
 # operationId: getGenBankNucleotideMappingUsingPOST
-export def "lookup-id-map-gen-bank-nucleotide get-mapping-using-create" [
+export def "get-gen-bank-nucleotide-mapping-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1787,7 +1787,7 @@ export def "lookup-id-map-gen-bank-nucleotide get-mapping-using-create" [
 #
 # GET /lookup/id/map/GenBankNucleotide/{rgdId}
 # operationId: getGenBankNucleotideMappingUsingGET
-export def "lookup-id-map-gen-bank-nucleotide get-mapping-using" [
+export def "get-gen-bank-nucleotide-mapping-using-get" [
   rgd_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1823,7 +1823,7 @@ export def "lookup-id-map-gen-bank-nucleotide get-mapping-using" [
 #
 # POST /lookup/id/map/GenBankProtein
 # operationId: getGenBankProteinMappingUsingPOST
-export def "lookup-id-map-gen-bank-protein get-mapping-using-create" [
+export def "get-gen-bank-protein-mapping-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1861,7 +1861,7 @@ export def "lookup-id-map-gen-bank-protein get-mapping-using-create" [
 #
 # GET /lookup/id/map/GenBankProtein/{rgdId}
 # operationId: getGenBankProteinMappingUsingGET
-export def "lookup-id-map-gen-bank-protein get-mapping-using" [
+export def "get-gen-bank-protein-mapping-using-get" [
   rgd_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1897,7 +1897,7 @@ export def "lookup-id-map-gen-bank-protein get-mapping-using" [
 #
 # POST /lookup/id/map/HGNC
 # operationId: getHGNCMappingUsingPOST
-export def "lookup-id-map-hgnc get-mapping-using-create" [
+export def "get-hgnc-mapping-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1935,7 +1935,7 @@ export def "lookup-id-map-hgnc get-mapping-using-create" [
 #
 # GET /lookup/id/map/HGNC/{rgdId}
 # operationId: getHGNCMappingUsingGET
-export def "lookup-id-map-hgnc get-mapping-using" [
+export def "get-hgnc-mapping-using-get" [
   rgd_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1971,7 +1971,7 @@ export def "lookup-id-map-hgnc get-mapping-using" [
 #
 # POST /lookup/id/map/MGI
 # operationId: getMGIMappingUsingPOST
-export def "lookup-id-map-mgi get-mapping-using-create" [
+export def "get-mgi-mapping-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2009,7 +2009,7 @@ export def "lookup-id-map-mgi get-mapping-using-create" [
 #
 # GET /lookup/id/map/MGI/{rgdId}
 # operationId: getMGIMappingUsingGET
-export def "lookup-id-map-mgi get-mapping-using" [
+export def "get-mgi-mapping-using-get" [
   rgd_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2045,7 +2045,7 @@ export def "lookup-id-map-mgi get-mapping-using" [
 #
 # POST /lookup/id/map/NCBIGene
 # operationId: getNCBIGeneMappingUsingPOST
-export def "lookup-id-map-ncbi-gene get-mapping-using-create" [
+export def "get-ncbi-gene-mapping-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2083,7 +2083,7 @@ export def "lookup-id-map-ncbi-gene get-mapping-using-create" [
 #
 # GET /lookup/id/map/NCBIGene/{rgdId}
 # operationId: getNCBIGeneMappingUsingGET
-export def "lookup-id-map-ncbi-gene get-mapping-using" [
+export def "get-ncbi-gene-mapping-using-get" [
   rgd_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2119,7 +2119,7 @@ export def "lookup-id-map-ncbi-gene get-mapping-using" [
 #
 # POST /lookup/id/map/UniProt
 # operationId: getUniProtMappingUsingPOST
-export def "lookup-id-map-uni-prot get-mapping-using-create" [
+export def "get-uni-prot-mapping-using-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2157,7 +2157,7 @@ export def "lookup-id-map-uni-prot get-mapping-using-create" [
 #
 # GET /lookup/id/map/UniProt/{rgdId}
 # operationId: getUniProtMappingUsingGET
-export def "lookup-id-map-uni-prot get-mapping-using" [
+export def "get-uni-prot-mapping-using-get" [
   rgd_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2193,7 +2193,7 @@ export def "lookup-id-map-uni-prot get-mapping-using" [
 #
 # GET /lookup/maps/{speciesTypeKey}
 # operationId: getMapsUsingGET
-export def "lookup-maps get-using" [
+export def "get-maps-using-get" [
   species_type_key: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2229,7 +2229,7 @@ export def "lookup-maps get-using" [
 #
 # GET /lookup/speciesTypeKeys
 # operationId: getSpeciesTypesUsingGET
-export def "lookup-species-type-keys get-using" [
+export def "get-species-types-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2263,7 +2263,7 @@ export def "lookup-species-type-keys get-using" [
 #
 # GET /lookup/standardUnit/{accId}
 # operationId: getMapsUsingGET_1
-export def "lookup-standard-unit get-maps-using-by-acc-id" [
+export def "get-maps-using-get-1" [
   acc_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2299,7 +2299,7 @@ export def "lookup-standard-unit get-maps-using-by-acc-id" [
 #
 # GET /maps/chr/{chromosome}/{mapKey}
 # operationId: getChromosomeByAssemblyUsingGET
-export def "maps-chr get-by-assembly-using" [
+export def "get-chromosome-by-assembly-using-get" [
   chromosome: string
   map_key: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -2337,7 +2337,7 @@ export def "maps-chr get-by-assembly-using" [
 #
 # GET /maps/chr/{mapKey}
 # operationId: getChromosomesByAssemblyUsingGET
-export def "maps-chr get-chromosomes-by-assembly-using" [
+export def "get-chromosomes-by-assembly-using-get" [
   map_key: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2373,7 +2373,7 @@ export def "maps-chr get-chromosomes-by-assembly-using" [
 #
 # GET /maps/{speciesTypeKey}
 # operationId: getMapsBySpeciesUsingGET
-export def "maps get-by-species-using" [
+export def "get-maps-by-species-using-get" [
   species_type_key: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2409,7 +2409,7 @@ export def "maps get-by-species-using" [
 #
 # GET /ontology/ont/{accId}
 # operationId: getOntDagsUsingGET
-export def "ontology-ont get-dags-using" [
+export def "get-ont-dags-using-get" [
   acc_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2445,7 +2445,7 @@ export def "ontology-ont get-dags-using" [
 #
 # GET /ontology/term/{accId1}/{accId2}
 # operationId: isDescendantOfUsingGET
-export def "ontology-term get-is-descendant-of-using" [
+export def "is-descendant-of-using-get" [
   acc_id1: string
   acc_id2: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2483,7 +2483,7 @@ export def "ontology-term get-is-descendant-of-using" [
 #
 # GET /ontology/term/{accId}
 # operationId: getTermUsingGET
-export def "ontology-term get-using" [
+export def "get-term-using-get" [
   acc_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2519,7 +2519,7 @@ export def "ontology-term get-using" [
 #
 # GET /pathways/diagrams/search/{searchString}
 # operationId: searchPathwaysUsingGET
-export def "pathways-diagrams-search get-using" [
+export def "search-pathways-using-get" [
   search_string: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2555,7 +2555,7 @@ export def "pathways-diagrams-search get-using" [
 #
 # GET /pathways/diagramsForCategory/{category}
 # operationId: getPathwaysWithDiagramsForCategoryUsingGET
-export def "pathways-diagrams-for-category get-with-using" [
+export def "get-pathways-with-diagrams-for-category-using-get" [
   category: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2591,7 +2591,7 @@ export def "pathways-diagrams-for-category get-with-using" [
 #
 # GET /phenotype/phenominer/chart/{speciesTypeKey}/{refRgdId}/{termString}
 # operationId: getChartInfoUsingGET
-export def "phenotype-phenominer-chart get-using" [
+export def "get-chart-info-using-get" [
   species_type_key: int
   ref_rgd_id: int
   term_string: string
@@ -2631,7 +2631,7 @@ export def "phenotype-phenominer-chart get-using" [
 #
 # GET /phenotype/phenominer/chart/{speciesTypeKey}/{termString}
 # operationId: getChartInfoUsingGET_1
-export def "phenotype-phenominer-chart get-using-by-species-type-key-term-string" [
+export def "get-chart-info-using-get-1" [
   species_type_key: int
   term_string: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2669,7 +2669,7 @@ export def "phenotype-phenominer-chart get-using-by-species-type-key-term-string
 #
 # GET /qtls/mapped/{chr}/{start}/{stop}/{mapKey}
 # operationId: getMappedQTLByPositionUsingGET
-export def "qtls-mapped get-by-position-using" [
+export def "get-mapped-qtl-by-position-using-get" [
   chr: string
   start: int
   stop: int
@@ -2711,7 +2711,7 @@ export def "qtls-mapped get-by-position-using" [
 #
 # GET /qtls/{chr}/{start}/{stop}/{mapKey}
 # operationId: getQtlListByPositionUsingGET
-export def "qtls get-list-by-position-using" [
+export def "get-qtl-list-by-position-using-get" [
   chr: string
   start: int
   stop: int
@@ -2753,7 +2753,7 @@ export def "qtls get-list-by-position-using" [
 #
 # GET /qtls/{rgdId}
 # operationId: getQTLByRgdIdUsingGET
-export def "qtls get-by-rgd-using" [
+export def "get-qtl-by-rgd-id-using-get" [
   rgd_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2789,7 +2789,7 @@ export def "qtls get-by-rgd-using" [
 #
 # GET /sslps/mapped/{chr}/{start}/{stop}/{mapKey}
 # operationId: getMappedSSLPByPositionUsingGET
-export def "sslps-mapped get-by-position-using" [
+export def "get-mapped-sslp-by-position-using-get" [
   chr: string
   start: int
   stop: int
@@ -2831,7 +2831,7 @@ export def "sslps-mapped get-by-position-using" [
 #
 # GET /stats/count/activeObject/{speciesTypeKey}/{dateYYYYMMDD}
 # operationId: getActiveObjectCountUsingGET
-export def "stats-count-active-object get-using" [
+export def "get-active-object-count-using-get" [
   species_type_key: int
   date_yyyymmdd: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2869,7 +2869,7 @@ export def "stats-count-active-object get-using" [
 #
 # GET /stats/count/geneType/{speciesTypeKey}/{dateYYYYMMDD}
 # operationId: getGeneTypeCountUsingGET
-export def "stats-count-gene-type get-using" [
+export def "get-gene-type-count-using-get" [
   species_type_key: int
   date_yyyymmdd: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2907,7 +2907,7 @@ export def "stats-count-gene-type get-using" [
 #
 # GET /stats/count/objectStatus/{speciesTypeKey}/{dateYYYYMMDD}
 # operationId: getObjectStatusCountUsingGET
-export def "stats-count-object-status get-using" [
+export def "get-object-status-count-using-get" [
   species_type_key: int
   date_yyyymmdd: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2945,7 +2945,7 @@ export def "stats-count-object-status get-using" [
 #
 # GET /stats/count/objectWithRefSeq/{speciesTypeKey}/{dateYYYYMMDD}
 # operationId: getObjectsWithRefSeqCountUsingGET
-export def "stats-count-object-with-ref-seq get-using" [
+export def "get-objects-with-ref-seq-count-using-get" [
   species_type_key: int
   date_yyyymmdd: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2983,7 +2983,7 @@ export def "stats-count-object-with-ref-seq get-using" [
 #
 # GET /stats/count/objectWithReference/{speciesTypeKey}/{dateYYYYMMDD}
 # operationId: getObjectsWithReferenceCountUsingGET
-export def "stats-count-object-with-reference get-using" [
+export def "get-objects-with-reference-count-using-get" [
   species_type_key: int
   date_yyyymmdd: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3021,7 +3021,7 @@ export def "stats-count-object-with-reference get-using" [
 #
 # GET /stats/count/objectWithXdb/{speciesTypeKey}/{objectKey}/{dateYYYYMMDD}
 # operationId: getObjectsWithXDBsCountUsingGET
-export def "stats-count-object-with-xdb get-xd-bs-using" [
+export def "get-objects-with-xd-bs-count-using-get" [
   species_type_key: int
   object_key: int
   date_yyyymmdd: string
@@ -3061,7 +3061,7 @@ export def "stats-count-object-with-xdb get-xd-bs-using" [
 #
 # GET /stats/count/proteinInteraction/{speciesTypeKey}/{dateYYYYMMDD}
 # operationId: getProteinInteractionCountUsingGET
-export def "stats-count-protein-interaction get-using" [
+export def "get-protein-interaction-count-using-get" [
   species_type_key: int
   date_yyyymmdd: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3099,7 +3099,7 @@ export def "stats-count-protein-interaction get-using" [
 #
 # GET /stats/count/qtlInheritanceType/{speciesTypeKey}/{dateYYYYMMDD}
 # operationId: getQtlInheritanceTypeCountUsingGET
-export def "stats-count-qtl-inheritance-type get-using" [
+export def "get-qtl-inheritance-type-count-using-get" [
   species_type_key: int
   date_yyyymmdd: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3137,7 +3137,7 @@ export def "stats-count-qtl-inheritance-type get-using" [
 #
 # GET /stats/count/retiredObject/{speciesTypeKey}/{dateYYYYMMDD}
 # operationId: getRetiredObjectCountUsingGET
-export def "stats-count-retired-object get-using" [
+export def "get-retired-object-count-using-get" [
   species_type_key: int
   date_yyyymmdd: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3175,7 +3175,7 @@ export def "stats-count-retired-object get-using" [
 #
 # GET /stats/count/strainType/{speciesTypeKey}/{dateYYYYMMDD}
 # operationId: getStrainTypeCountUsingGET
-export def "stats-count-strain-type get-using" [
+export def "get-strain-type-count-using-get" [
   species_type_key: int
   date_yyyymmdd: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3213,7 +3213,7 @@ export def "stats-count-strain-type get-using" [
 #
 # GET /stats/count/withdrawnObject/{speciesTypeKey}/{dateYYYYMMDD}
 # operationId: getWithdrawnObjectCountUsingGET
-export def "stats-count-withdrawn-object get-using" [
+export def "get-withdrawn-object-count-using-get" [
   species_type_key: int
   date_yyyymmdd: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3251,7 +3251,7 @@ export def "stats-count-withdrawn-object get-using" [
 #
 # GET /stats/count/xdb/{speciesTypeKey}/{dateYYYYMMDD}
 # operationId: getXdbsCountUsingGET
-export def "stats-count-xdb get-using" [
+export def "get-xdbs-count-using-get" [
   species_type_key: int
   date_yyyymmdd: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3289,7 +3289,7 @@ export def "stats-count-xdb get-using" [
 #
 # GET /stats/diff/activeObject/{speciesTypeKey}/{dateFromYYYYMMDD}/{dateToYYYYMMDD}
 # operationId: getActiveObjectDiffUsingGET
-export def "stats-diff-active-object get-using" [
+export def "get-active-object-diff-using-get" [
   species_type_key: int
   date_from_yyyymmdd: string
   date_to_yyyymmdd: string
@@ -3329,7 +3329,7 @@ export def "stats-diff-active-object get-using" [
 #
 # GET /stats/diff/geneType/{speciesTypeKey}/{dateFromYYYYMMDD}/{dateToYYYYMMDD}
 # operationId: getGeneTypeDiffUsingGET
-export def "stats-diff-gene-type get-using" [
+export def "get-gene-type-diff-using-get" [
   species_type_key: int
   date_from_yyyymmdd: string
   date_to_yyyymmdd: string
@@ -3369,7 +3369,7 @@ export def "stats-diff-gene-type get-using" [
 #
 # GET /stats/diff/objectStatus/{speciesTypeKey}/{dateFromYYYYMMDD}/{dateToYYYYMMDD}
 # operationId: getObjectStatusDiffUsingGET
-export def "stats-diff-object-status get-using" [
+export def "get-object-status-diff-using-get" [
   species_type_key: int
   date_from_yyyymmdd: string
   date_to_yyyymmdd: string
@@ -3409,7 +3409,7 @@ export def "stats-diff-object-status get-using" [
 #
 # GET /stats/diff/objectWithRefSeq/{speciesTypeKey}/{dateFromYYYYMMDD}/{dateToYYYYMMDD}
 # operationId: getObjectsWithRefSeqDiffUsingGET
-export def "stats-diff-object-with-ref-seq get-using" [
+export def "get-objects-with-ref-seq-diff-using-get" [
   species_type_key: int
   date_from_yyyymmdd: string
   date_to_yyyymmdd: string
@@ -3449,7 +3449,7 @@ export def "stats-diff-object-with-ref-seq get-using" [
 #
 # GET /stats/diff/objectWithReference/{speciesTypeKey}/{dateFromYYYYMMDD}/{dateToYYYYMMDD}
 # operationId: getObjectsWithReferenceDiffUsingGET
-export def "stats-diff-object-with-reference get-using" [
+export def "get-objects-with-reference-diff-using-get" [
   species_type_key: int
   date_from_yyyymmdd: string
   date_to_yyyymmdd: string
@@ -3489,7 +3489,7 @@ export def "stats-diff-object-with-reference get-using" [
 #
 # GET /stats/diff/objectWithXdb/{speciesTypeKey}/{objectKey}/{dateFromYYYYMMDD}/{dateToYYYYMMDD}
 # operationId: getObjectsWithXDBsDiffUsingGET
-export def "stats-diff-object-with-xdb get-xd-bs-using" [
+export def "get-objects-with-xd-bs-diff-using-get" [
   species_type_key: int
   object_key: int
   date_from_yyyymmdd: string
@@ -3531,7 +3531,7 @@ export def "stats-diff-object-with-xdb get-xd-bs-using" [
 #
 # GET /stats/diff/proteinInteraction/{speciesTypeKey}/{dateFromYYYYMMDD}/{dateToYYYYMMDD}
 # operationId: getProteinInteractionDiffUsingGET
-export def "stats-diff-protein-interaction get-using" [
+export def "get-protein-interaction-diff-using-get" [
   species_type_key: int
   date_from_yyyymmdd: string
   date_to_yyyymmdd: string
@@ -3571,7 +3571,7 @@ export def "stats-diff-protein-interaction get-using" [
 #
 # GET /stats/diff/qtlInheritanceType/{speciesTypeKey}/{dateFromYYYYMMDD}/{dateToYYYYMMDD}
 # operationId: getQtlInheritanceTypeDiffUsingGET
-export def "stats-diff-qtl-inheritance-type get-using" [
+export def "get-qtl-inheritance-type-diff-using-get" [
   species_type_key: int
   date_from_yyyymmdd: string
   date_to_yyyymmdd: string
@@ -3611,7 +3611,7 @@ export def "stats-diff-qtl-inheritance-type get-using" [
 #
 # GET /stats/diff/retiredObject/{speciesTypeKey}/{dateFromYYYYMMDD}/{dateToYYYYMMDD}
 # operationId: getRetiredObjectDiffUsingGET
-export def "stats-diff-retired-object get-using" [
+export def "get-retired-object-diff-using-get" [
   species_type_key: int
   date_from_yyyymmdd: string
   date_to_yyyymmdd: string
@@ -3651,7 +3651,7 @@ export def "stats-diff-retired-object get-using" [
 #
 # GET /stats/diff/strainType/{speciesTypeKey}/{dateFromYYYYMMDD}/{dateToYYYYMMDD}
 # operationId: getStrainTypeDiffUsingGET
-export def "stats-diff-strain-type get-using" [
+export def "get-strain-type-diff-using-get" [
   species_type_key: int
   date_from_yyyymmdd: string
   date_to_yyyymmdd: string
@@ -3691,7 +3691,7 @@ export def "stats-diff-strain-type get-using" [
 #
 # GET /stats/diff/withdrawnObject/{speciesTypeKey}/{dateFromYYYYMMDD}/{dateToYYYYMMDD}
 # operationId: getWithdrawnObjectDiffUsingGET
-export def "stats-diff-withdrawn-object get-using" [
+export def "get-withdrawn-object-diff-using-get" [
   species_type_key: int
   date_from_yyyymmdd: string
   date_to_yyyymmdd: string
@@ -3731,7 +3731,7 @@ export def "stats-diff-withdrawn-object get-using" [
 #
 # GET /stats/diff/xdb/{speciesTypeKey}/{dateFromYYYYMMDD}/{dateToYYYYMMDD}
 # operationId: getXdbsDiffUsingGET
-export def "stats-diff-xdb get-using" [
+export def "get-xdbs-diff-using-get" [
   species_type_key: int
   date_from_yyyymmdd: string
   date_to_yyyymmdd: string
@@ -3771,7 +3771,7 @@ export def "stats-diff-xdb get-using" [
 #
 # GET /stats/term/{accId}/{filterAccId}
 # operationId: getTermStatsUsingGET
-export def "stats-term get-using" [
+export def "get-term-stats-using-get" [
   acc_id: string
   filter_acc_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3809,7 +3809,7 @@ export def "stats-term get-using" [
 #
 # GET /strains/all
 # operationId: getAllStrainsUsingGET
-export def "strains-all get-using" [
+export def "get-all-strains-using-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3843,7 +3843,7 @@ export def "strains-all get-using" [
 #
 # GET /strains/{chr}/{start}/{stop}/{mapKey}
 # operationId: getStrainsByPositionUsingGET
-export def "strains get-by-position-using" [
+export def "get-strains-by-position-using-get" [
   chr: string
   start: int
   stop: int
@@ -3885,7 +3885,7 @@ export def "strains get-by-position-using" [
 #
 # GET /strains/{rgdId}
 # operationId: getStrainByRgdIdUsingGET
-export def "strains get-by-rgd-using" [
+export def "get-strain-by-rgd-id-using-get" [
   rgd_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

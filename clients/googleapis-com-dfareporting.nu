@@ -176,7 +176,7 @@ def type-completer-5 [] { ["CROSS_DIMENSION_REACH" "FLOODLIGHT" "PATH" "PATH_ATT
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "reports-files get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "dfareporting-files-get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -200,7 +200,7 @@ export def commands []: nothing -> table {
 #
 # GET /reports/{reportId}/files/{fileId}
 # operationId: dfareporting.files.get
-export def "reports-files get" [
+export def "dfareporting-files-get" [
   report_id: string
   file_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -250,7 +250,7 @@ export def "reports-files get" [
 #
 # GET /userprofiles
 # operationId: dfareporting.userProfiles.list
-export def "userprofiles list" [
+export def "dfareporting-user-profiles-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -296,7 +296,7 @@ export def "userprofiles list" [
 #
 # GET /userprofiles/{profileId}
 # operationId: dfareporting.userProfiles.get
-export def "userprofiles get" [
+export def "dfareporting-user-profiles-get" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -344,7 +344,7 @@ export def "userprofiles get" [
 #
 # GET /userprofiles/{profileId}/accountActiveAdSummaries/{summaryAccountId}
 # operationId: dfareporting.accountActiveAdSummaries.get
-export def "userprofiles-account-active-ad-summaries get" [
+export def "dfareporting-account-active-ad-summaries-get" [
   profile_id: string
   summary_account_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -394,7 +394,7 @@ export def "userprofiles-account-active-ad-summaries get" [
 #
 # GET /userprofiles/{profileId}/accountPermissionGroups
 # operationId: dfareporting.accountPermissionGroups.list
-export def "userprofiles-account-permission-groups list" [
+export def "dfareporting-account-permission-groups-list" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -442,7 +442,7 @@ export def "userprofiles-account-permission-groups list" [
 #
 # GET /userprofiles/{profileId}/accountPermissionGroups/{id}
 # operationId: dfareporting.accountPermissionGroups.get
-export def "userprofiles-account-permission-groups get" [
+export def "dfareporting-account-permission-groups-get" [
   profile_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -492,7 +492,7 @@ export def "userprofiles-account-permission-groups get" [
 #
 # GET /userprofiles/{profileId}/accountPermissions
 # operationId: dfareporting.accountPermissions.list
-export def "userprofiles-account-permissions list" [
+export def "dfareporting-account-permissions-list" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -540,7 +540,7 @@ export def "userprofiles-account-permissions list" [
 #
 # GET /userprofiles/{profileId}/accountPermissions/{id}
 # operationId: dfareporting.accountPermissions.get
-export def "userprofiles-account-permissions get" [
+export def "dfareporting-account-permissions-get" [
   profile_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -590,7 +590,7 @@ export def "userprofiles-account-permissions get" [
 #
 # GET /userprofiles/{profileId}/accountUserProfiles
 # operationId: dfareporting.accountUserProfiles.list
-export def "userprofiles-account-user-profiles list" [
+export def "dfareporting-account-user-profiles-list" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -651,7 +651,7 @@ export def "userprofiles-account-user-profiles list" [
 # --campaignFilter shape: {kind?: string, objectIds?: list<string>, status?: "NONE"|"ASSIGNED"|"ALL"}
 # --siteFilter shape: {kind?: string, objectIds?: list<string>, status?: "NONE"|"ASSIGNED"|"ALL"}
 # --userRoleFilter shape: {kind?: string, objectIds?: list<string>, status?: "NONE"|"ASSIGNED"|"ALL"}
-export def "userprofiles-account-user-profiles update-by-profile-id" [
+export def "dfareporting-account-user-profiles-patch" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -723,7 +723,7 @@ export def "userprofiles-account-user-profiles update-by-profile-id" [
 # --campaignFilter shape: {kind?: string, objectIds?: list<string>, status?: "NONE"|"ASSIGNED"|"ALL"}
 # --siteFilter shape: {kind?: string, objectIds?: list<string>, status?: "NONE"|"ASSIGNED"|"ALL"}
 # --userRoleFilter shape: {kind?: string, objectIds?: list<string>, status?: "NONE"|"ASSIGNED"|"ALL"}
-export def "userprofiles-account-user-profiles create" [
+export def "dfareporting-account-user-profiles-insert" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -794,7 +794,7 @@ export def "userprofiles-account-user-profiles create" [
 # --campaignFilter shape: {kind?: string, objectIds?: list<string>, status?: "NONE"|"ASSIGNED"|"ALL"}
 # --siteFilter shape: {kind?: string, objectIds?: list<string>, status?: "NONE"|"ASSIGNED"|"ALL"}
 # --userRoleFilter shape: {kind?: string, objectIds?: list<string>, status?: "NONE"|"ASSIGNED"|"ALL"}
-export def "userprofiles-account-user-profiles update-by-profile-id-1" [
+export def "dfareporting-account-user-profiles-update" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -861,7 +861,7 @@ export def "userprofiles-account-user-profiles update-by-profile-id-1" [
 #
 # GET /userprofiles/{profileId}/accountUserProfiles/{id}
 # operationId: dfareporting.accountUserProfiles.get
-export def "userprofiles-account-user-profiles get" [
+export def "dfareporting-account-user-profiles-get" [
   profile_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -911,7 +911,7 @@ export def "userprofiles-account-user-profiles get" [
 #
 # GET /userprofiles/{profileId}/accounts
 # operationId: dfareporting.accounts.list
-export def "userprofiles-accounts list" [
+export def "dfareporting-accounts-list" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -967,7 +967,7 @@ export def "userprofiles-accounts list" [
 # PATCH /userprofiles/{profileId}/accounts
 # operationId: dfareporting.accounts.patch
 # --reportsConfiguration shape: {exposureToConversionEnabled?: bool, lookbackConfiguration?: record, reportGenerationTimeZoneId?: string}
-export def "userprofiles-accounts update-by-profile-id" [
+export def "dfareporting-accounts-patch" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1039,7 +1039,7 @@ export def "userprofiles-accounts update-by-profile-id" [
 # PUT /userprofiles/{profileId}/accounts
 # operationId: dfareporting.accounts.update
 # --reportsConfiguration shape: {exposureToConversionEnabled?: bool, lookbackConfiguration?: record, reportGenerationTimeZoneId?: string}
-export def "userprofiles-accounts update-by-profile-id-1" [
+export def "dfareporting-accounts-update" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1109,7 +1109,7 @@ export def "userprofiles-accounts update-by-profile-id-1" [
 #
 # GET /userprofiles/{profileId}/accounts/{id}
 # operationId: dfareporting.accounts.get
-export def "userprofiles-accounts get" [
+export def "dfareporting-accounts-get" [
   profile_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1159,7 +1159,7 @@ export def "userprofiles-accounts get" [
 #
 # GET /userprofiles/{profileId}/ads
 # operationId: dfareporting.ads.list
-export def "userprofiles-ads list" [
+export def "dfareporting-ads-list" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1250,7 +1250,7 @@ export def "userprofiles-ads list" [
 # --remarketingListExpression shape: {expression?: string}
 # --size shape: {height?: int, iab?: bool, id?: string, kind?: string, width?: int}
 # --technologyTargeting shape: {browsers?: list, connectionTypes?: list, mobileCarriers?: list, operatingSystemVersions?: list, operatingSystems?: list, platformTypes?: list}
-export def "userprofiles-ads update-by-profile-id" [
+export def "dfareporting-ads-patch" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1361,7 +1361,7 @@ export def "userprofiles-ads update-by-profile-id" [
 # --remarketingListExpression shape: {expression?: string}
 # --size shape: {height?: int, iab?: bool, id?: string, kind?: string, width?: int}
 # --technologyTargeting shape: {browsers?: list, connectionTypes?: list, mobileCarriers?: list, operatingSystemVersions?: list, operatingSystems?: list, platformTypes?: list}
-export def "userprofiles-ads create" [
+export def "dfareporting-ads-insert" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1471,7 +1471,7 @@ export def "userprofiles-ads create" [
 # --remarketingListExpression shape: {expression?: string}
 # --size shape: {height?: int, iab?: bool, id?: string, kind?: string, width?: int}
 # --technologyTargeting shape: {browsers?: list, connectionTypes?: list, mobileCarriers?: list, operatingSystemVersions?: list, operatingSystems?: list, platformTypes?: list}
-export def "userprofiles-ads update-by-profile-id-1" [
+export def "dfareporting-ads-update" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1561,7 +1561,7 @@ export def "userprofiles-ads update-by-profile-id-1" [
 #
 # GET /userprofiles/{profileId}/ads/{id}
 # operationId: dfareporting.ads.get
-export def "userprofiles-ads get" [
+export def "dfareporting-ads-get" [
   profile_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1611,7 +1611,7 @@ export def "userprofiles-ads get" [
 #
 # GET /userprofiles/{profileId}/advertiserGroups
 # operationId: dfareporting.advertiserGroups.list
-export def "userprofiles-advertiser-groups list" [
+export def "dfareporting-advertiser-groups-list" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1665,7 +1665,7 @@ export def "userprofiles-advertiser-groups list" [
 #
 # PATCH /userprofiles/{profileId}/advertiserGroups
 # operationId: dfareporting.advertiserGroups.patch
-export def "userprofiles-advertiser-groups update-by-profile-id" [
+export def "dfareporting-advertiser-groups-patch" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1721,7 +1721,7 @@ export def "userprofiles-advertiser-groups update-by-profile-id" [
 #
 # POST /userprofiles/{profileId}/advertiserGroups
 # operationId: dfareporting.advertiserGroups.insert
-export def "userprofiles-advertiser-groups create" [
+export def "dfareporting-advertiser-groups-insert" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1776,7 +1776,7 @@ export def "userprofiles-advertiser-groups create" [
 #
 # PUT /userprofiles/{profileId}/advertiserGroups
 # operationId: dfareporting.advertiserGroups.update
-export def "userprofiles-advertiser-groups update-by-profile-id-1" [
+export def "dfareporting-advertiser-groups-update" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1831,7 +1831,7 @@ export def "userprofiles-advertiser-groups update-by-profile-id-1" [
 #
 # DELETE /userprofiles/{profileId}/advertiserGroups/{id}
 # operationId: dfareporting.advertiserGroups.delete
-export def "userprofiles-advertiser-groups delete" [
+export def "dfareporting-advertiser-groups-delete" [
   profile_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1881,7 +1881,7 @@ export def "userprofiles-advertiser-groups delete" [
 #
 # GET /userprofiles/{profileId}/advertiserGroups/{id}
 # operationId: dfareporting.advertiserGroups.get
-export def "userprofiles-advertiser-groups get" [
+export def "dfareporting-advertiser-groups-get" [
   profile_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1931,7 +1931,7 @@ export def "userprofiles-advertiser-groups get" [
 #
 # GET /userprofiles/{profileId}/advertiserLandingPages
 # operationId: dfareporting.advertiserLandingPages.list
-export def "userprofiles-advertiser-landing-pages list" [
+export def "dfareporting-advertiser-landing-pages-list" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1990,7 +1990,7 @@ export def "userprofiles-advertiser-landing-pages list" [
 # PATCH /userprofiles/{profileId}/advertiserLandingPages
 # operationId: dfareporting.advertiserLandingPages.patch
 # --deepLinks item shape: {appUrl?: string, fallbackUrl?: string, kind?: string, mobileApp?: record, remarketingListIds?: list<string>}
-export def "userprofiles-advertiser-landing-pages update-by-profile-id" [
+export def "dfareporting-advertiser-landing-pages-patch" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2050,7 +2050,7 @@ export def "userprofiles-advertiser-landing-pages update-by-profile-id" [
 # POST /userprofiles/{profileId}/advertiserLandingPages
 # operationId: dfareporting.advertiserLandingPages.insert
 # --deepLinks item shape: {appUrl?: string, fallbackUrl?: string, kind?: string, mobileApp?: record, remarketingListIds?: list<string>}
-export def "userprofiles-advertiser-landing-pages create" [
+export def "dfareporting-advertiser-landing-pages-insert" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2109,7 +2109,7 @@ export def "userprofiles-advertiser-landing-pages create" [
 # PUT /userprofiles/{profileId}/advertiserLandingPages
 # operationId: dfareporting.advertiserLandingPages.update
 # --deepLinks item shape: {appUrl?: string, fallbackUrl?: string, kind?: string, mobileApp?: record, remarketingListIds?: list<string>}
-export def "userprofiles-advertiser-landing-pages update-by-profile-id-1" [
+export def "dfareporting-advertiser-landing-pages-update" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2167,7 +2167,7 @@ export def "userprofiles-advertiser-landing-pages update-by-profile-id-1" [
 #
 # GET /userprofiles/{profileId}/advertiserLandingPages/{id}
 # operationId: dfareporting.advertiserLandingPages.get
-export def "userprofiles-advertiser-landing-pages get" [
+export def "dfareporting-advertiser-landing-pages-get" [
   profile_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2217,7 +2217,7 @@ export def "userprofiles-advertiser-landing-pages get" [
 #
 # GET /userprofiles/{profileId}/advertisers
 # operationId: dfareporting.advertisers.list
-export def "userprofiles-advertisers list" [
+export def "dfareporting-advertisers-list" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2279,7 +2279,7 @@ export def "userprofiles-advertisers list" [
 # operationId: dfareporting.advertisers.patch
 # --floodlightConfigurationIdDimensionValue shape: {dimensionName?: string, etag?: string, id?: string, kind?: string, matchType?: "EXACT"|"BEGINS_WITH"|"CONTAINS"|"WILDCARD_EXPRESSION", value?: string}
 # --idDimensionValue shape: {dimensionName?: string, etag?: string, id?: string, kind?: string, matchType?: "EXACT"|"BEGINS_WITH"|"CONTAINS"|"WILDCARD_EXPRESSION", value?: string}
-export def "userprofiles-advertisers update-by-profile-id" [
+export def "dfareporting-advertisers-patch" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2348,7 +2348,7 @@ export def "userprofiles-advertisers update-by-profile-id" [
 # operationId: dfareporting.advertisers.insert
 # --floodlightConfigurationIdDimensionValue shape: {dimensionName?: string, etag?: string, id?: string, kind?: string, matchType?: "EXACT"|"BEGINS_WITH"|"CONTAINS"|"WILDCARD_EXPRESSION", value?: string}
 # --idDimensionValue shape: {dimensionName?: string, etag?: string, id?: string, kind?: string, matchType?: "EXACT"|"BEGINS_WITH"|"CONTAINS"|"WILDCARD_EXPRESSION", value?: string}
-export def "userprofiles-advertisers create" [
+export def "dfareporting-advertisers-insert" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2416,7 +2416,7 @@ export def "userprofiles-advertisers create" [
 # operationId: dfareporting.advertisers.update
 # --floodlightConfigurationIdDimensionValue shape: {dimensionName?: string, etag?: string, id?: string, kind?: string, matchType?: "EXACT"|"BEGINS_WITH"|"CONTAINS"|"WILDCARD_EXPRESSION", value?: string}
 # --idDimensionValue shape: {dimensionName?: string, etag?: string, id?: string, kind?: string, matchType?: "EXACT"|"BEGINS_WITH"|"CONTAINS"|"WILDCARD_EXPRESSION", value?: string}
-export def "userprofiles-advertisers update-by-profile-id-1" [
+export def "dfareporting-advertisers-update" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2482,7 +2482,7 @@ export def "userprofiles-advertisers update-by-profile-id-1" [
 #
 # GET /userprofiles/{profileId}/advertisers/{id}
 # operationId: dfareporting.advertisers.get
-export def "userprofiles-advertisers get" [
+export def "dfareporting-advertisers-get" [
   profile_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2532,7 +2532,7 @@ export def "userprofiles-advertisers get" [
 #
 # GET /userprofiles/{profileId}/browsers
 # operationId: dfareporting.browsers.list
-export def "userprofiles-browsers list" [
+export def "dfareporting-browsers-list" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2580,7 +2580,7 @@ export def "userprofiles-browsers list" [
 #
 # GET /userprofiles/{profileId}/campaigns
 # operationId: dfareporting.campaigns.list
-export def "userprofiles-campaigns list" [
+export def "dfareporting-campaigns-list" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2652,7 +2652,7 @@ export def "userprofiles-campaigns list" [
 # --eventTagOverrides item shape: {enabled?: bool, id?: string}
 # --idDimensionValue shape: {dimensionName?: string, etag?: string, id?: string, kind?: string, matchType?: "EXACT"|"BEGINS_WITH"|"CONTAINS"|"WILDCARD_EXPRESSION", value?: string}
 # --lastModifiedInfo shape: {time?: string}
-export def "userprofiles-campaigns update-by-profile-id" [
+export def "dfareporting-campaigns-patch" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2743,7 +2743,7 @@ export def "userprofiles-campaigns update-by-profile-id" [
 # --eventTagOverrides item shape: {enabled?: bool, id?: string}
 # --idDimensionValue shape: {dimensionName?: string, etag?: string, id?: string, kind?: string, matchType?: "EXACT"|"BEGINS_WITH"|"CONTAINS"|"WILDCARD_EXPRESSION", value?: string}
 # --lastModifiedInfo shape: {time?: string}
-export def "userprofiles-campaigns create" [
+export def "dfareporting-campaigns-insert" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2833,7 +2833,7 @@ export def "userprofiles-campaigns create" [
 # --eventTagOverrides item shape: {enabled?: bool, id?: string}
 # --idDimensionValue shape: {dimensionName?: string, etag?: string, id?: string, kind?: string, matchType?: "EXACT"|"BEGINS_WITH"|"CONTAINS"|"WILDCARD_EXPRESSION", value?: string}
 # --lastModifiedInfo shape: {time?: string}
-export def "userprofiles-campaigns update-by-profile-id-1" [
+export def "dfareporting-campaigns-update" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2912,7 +2912,7 @@ export def "userprofiles-campaigns update-by-profile-id-1" [
 #
 # GET /userprofiles/{profileId}/campaigns/{campaignId}/campaignCreativeAssociations
 # operationId: dfareporting.campaignCreativeAssociations.list
-export def "userprofiles-campaigns-campaign-creative-associations list" [
+export def "dfareporting-campaign-creative-associations-list" [
   profile_id: string
   campaign_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2965,7 +2965,7 @@ export def "userprofiles-campaigns-campaign-creative-associations list" [
 #
 # POST /userprofiles/{profileId}/campaigns/{campaignId}/campaignCreativeAssociations
 # operationId: dfareporting.campaignCreativeAssociations.insert
-export def "userprofiles-campaigns-campaign-creative-associations create" [
+export def "dfareporting-campaign-creative-associations-insert" [
   profile_id: string
   campaign_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3020,7 +3020,7 @@ export def "userprofiles-campaigns-campaign-creative-associations create" [
 #
 # GET /userprofiles/{profileId}/campaigns/{id}
 # operationId: dfareporting.campaigns.get
-export def "userprofiles-campaigns get" [
+export def "dfareporting-campaigns-get" [
   profile_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3070,7 +3070,7 @@ export def "userprofiles-campaigns get" [
 #
 # GET /userprofiles/{profileId}/changeLogs
 # operationId: dfareporting.changeLogs.list
-export def "userprofiles-change-logs list" [
+export def "dfareporting-change-logs-list" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -3128,7 +3128,7 @@ export def "userprofiles-change-logs list" [
 #
 # GET /userprofiles/{profileId}/changeLogs/{id}
 # operationId: dfareporting.changeLogs.get
-export def "userprofiles-change-logs get" [
+export def "dfareporting-change-logs-get" [
   profile_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3178,7 +3178,7 @@ export def "userprofiles-change-logs get" [
 #
 # GET /userprofiles/{profileId}/cities
 # operationId: dfareporting.cities.list
-export def "userprofiles-cities list" [
+export def "dfareporting-cities-list" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -3230,7 +3230,7 @@ export def "userprofiles-cities list" [
 #
 # GET /userprofiles/{profileId}/connectionTypes
 # operationId: dfareporting.connectionTypes.list
-export def "userprofiles-connection-types list" [
+export def "dfareporting-connection-types-list" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -3278,7 +3278,7 @@ export def "userprofiles-connection-types list" [
 #
 # GET /userprofiles/{profileId}/connectionTypes/{id}
 # operationId: dfareporting.connectionTypes.get
-export def "userprofiles-connection-types get" [
+export def "dfareporting-connection-types-get" [
   profile_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3328,7 +3328,7 @@ export def "userprofiles-connection-types get" [
 #
 # GET /userprofiles/{profileId}/contentCategories
 # operationId: dfareporting.contentCategories.list
-export def "userprofiles-content-categories list" [
+export def "dfareporting-content-categories-list" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -3382,7 +3382,7 @@ export def "userprofiles-content-categories list" [
 #
 # PATCH /userprofiles/{profileId}/contentCategories
 # operationId: dfareporting.contentCategories.patch
-export def "userprofiles-content-categories update-by-profile-id" [
+export def "dfareporting-content-categories-patch" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -3438,7 +3438,7 @@ export def "userprofiles-content-categories update-by-profile-id" [
 #
 # POST /userprofiles/{profileId}/contentCategories
 # operationId: dfareporting.contentCategories.insert
-export def "userprofiles-content-categories create" [
+export def "dfareporting-content-categories-insert" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -3493,7 +3493,7 @@ export def "userprofiles-content-categories create" [
 #
 # PUT /userprofiles/{profileId}/contentCategories
 # operationId: dfareporting.contentCategories.update
-export def "userprofiles-content-categories update-by-profile-id-1" [
+export def "dfareporting-content-categories-update" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -3548,7 +3548,7 @@ export def "userprofiles-content-categories update-by-profile-id-1" [
 #
 # DELETE /userprofiles/{profileId}/contentCategories/{id}
 # operationId: dfareporting.contentCategories.delete
-export def "userprofiles-content-categories delete" [
+export def "dfareporting-content-categories-delete" [
   profile_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3598,7 +3598,7 @@ export def "userprofiles-content-categories delete" [
 #
 # GET /userprofiles/{profileId}/contentCategories/{id}
 # operationId: dfareporting.contentCategories.get
-export def "userprofiles-content-categories get" [
+export def "dfareporting-content-categories-get" [
   profile_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3650,7 +3650,7 @@ export def "userprofiles-content-categories get" [
 # operationId: dfareporting.conversions.batchinsert
 # --conversions item shape: {childDirectedTreatment?: bool, customVariables?: list, dclid?: string, encryptedUserId?: string, encryptedUserIdCandidates?: list<string>, floodlightActivityId?: string, floodlightConfigurationId?: string, gclid?: string, kind?: string, limitAdTracking?: bool, matchId?: string, mobileDeviceId?: string, nonPersonalizedAd?: bool, ordinal?: string, quantity?: string, timestampMicros?: string, treatmentForUnderage?: bool, value?: float}
 # --encryptionInfo shape: {encryptionEntityId?: string, encryptionEntityType?: "ENCRYPTION_ENTITY_TYPE_UNKNOWN"|"DCM_ACCOUNT"|"DCM_ADVERTISER"|"DBM_PARTNER"|"DBM_ADVERTISER"|"ADWORDS_CUSTOMER"|"DFP_NETWORK_CODE", encryptionSource?: "ENCRYPTION_SCOPE_UNKNOWN"|"AD_SERVING"|"DATA_TRANSFER", kind?: string}
-export def "userprofiles-conversions-batchinsert create" [
+export def "dfareporting-conversions-batchinsert" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -3706,7 +3706,7 @@ export def "userprofiles-conversions-batchinsert create" [
 # operationId: dfareporting.conversions.batchupdate
 # --conversions item shape: {childDirectedTreatment?: bool, customVariables?: list, dclid?: string, encryptedUserId?: string, encryptedUserIdCandidates?: list<string>, floodlightActivityId?: string, floodlightConfigurationId?: string, gclid?: string, kind?: string, limitAdTracking?: bool, matchId?: string, mobileDeviceId?: string, nonPersonalizedAd?: bool, ordinal?: string, quantity?: string, timestampMicros?: string, treatmentForUnderage?: bool, value?: float}
 # --encryptionInfo shape: {encryptionEntityId?: string, encryptionEntityType?: "ENCRYPTION_ENTITY_TYPE_UNKNOWN"|"DCM_ACCOUNT"|"DCM_ADVERTISER"|"DBM_PARTNER"|"DBM_ADVERTISER"|"ADWORDS_CUSTOMER"|"DFP_NETWORK_CODE", encryptionSource?: "ENCRYPTION_SCOPE_UNKNOWN"|"AD_SERVING"|"DATA_TRANSFER", kind?: string}
-export def "userprofiles-conversions-batchupdate create" [
+export def "dfareporting-conversions-batchupdate" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -3760,7 +3760,7 @@ export def "userprofiles-conversions-batchupdate create" [
 #
 # GET /userprofiles/{profileId}/countries
 # operationId: dfareporting.countries.list
-export def "userprofiles-countries list" [
+export def "dfareporting-countries-list" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -3808,7 +3808,7 @@ export def "userprofiles-countries list" [
 #
 # GET /userprofiles/{profileId}/countries/{dartId}
 # operationId: dfareporting.countries.get
-export def "userprofiles-countries get" [
+export def "dfareporting-countries-get" [
   profile_id: string
   dart_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3858,7 +3858,7 @@ export def "userprofiles-countries get" [
 #
 # POST /userprofiles/{profileId}/creativeAssets/{advertiserId}/creativeAssets
 # operationId: dfareporting.creativeAssets.insert
-export def "userprofiles-creative-assets-creative-assets create" [
+export def "dfareporting-creative-assets-insert" [
   profile_id: string
   advertiser_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3912,7 +3912,7 @@ export def "userprofiles-creative-assets-creative-assets create" [
 #
 # GET /userprofiles/{profileId}/creativeFields
 # operationId: dfareporting.creativeFields.list
-export def "userprofiles-creative-fields list" [
+export def "dfareporting-creative-fields-list" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -3968,7 +3968,7 @@ export def "userprofiles-creative-fields list" [
 # PATCH /userprofiles/{profileId}/creativeFields
 # operationId: dfareporting.creativeFields.patch
 # --advertiserIdDimensionValue shape: {dimensionName?: string, etag?: string, id?: string, kind?: string, matchType?: "EXACT"|"BEGINS_WITH"|"CONTAINS"|"WILDCARD_EXPRESSION", value?: string}
-export def "userprofiles-creative-fields update-by-profile-id" [
+export def "dfareporting-creative-fields-patch" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -4028,7 +4028,7 @@ export def "userprofiles-creative-fields update-by-profile-id" [
 # POST /userprofiles/{profileId}/creativeFields
 # operationId: dfareporting.creativeFields.insert
 # --advertiserIdDimensionValue shape: {dimensionName?: string, etag?: string, id?: string, kind?: string, matchType?: "EXACT"|"BEGINS_WITH"|"CONTAINS"|"WILDCARD_EXPRESSION", value?: string}
-export def "userprofiles-creative-fields create" [
+export def "dfareporting-creative-fields-insert" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -4087,7 +4087,7 @@ export def "userprofiles-creative-fields create" [
 # PUT /userprofiles/{profileId}/creativeFields
 # operationId: dfareporting.creativeFields.update
 # --advertiserIdDimensionValue shape: {dimensionName?: string, etag?: string, id?: string, kind?: string, matchType?: "EXACT"|"BEGINS_WITH"|"CONTAINS"|"WILDCARD_EXPRESSION", value?: string}
-export def "userprofiles-creative-fields update-by-profile-id-1" [
+export def "dfareporting-creative-fields-update" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -4145,7 +4145,7 @@ export def "userprofiles-creative-fields update-by-profile-id-1" [
 #
 # GET /userprofiles/{profileId}/creativeFields/{creativeFieldId}/creativeFieldValues
 # operationId: dfareporting.creativeFieldValues.list
-export def "userprofiles-creative-fields-creative-field-values list" [
+export def "dfareporting-creative-field-values-list" [
   profile_id: string
   creative_field_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4201,7 +4201,7 @@ export def "userprofiles-creative-fields-creative-field-values list" [
 #
 # PATCH /userprofiles/{profileId}/creativeFields/{creativeFieldId}/creativeFieldValues
 # operationId: dfareporting.creativeFieldValues.patch
-export def "userprofiles-creative-fields-creative-field-values update-by-profile-id-creative-field-id" [
+export def "dfareporting-creative-field-values-patch" [
   profile_id: string
   creative_field_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4258,7 +4258,7 @@ export def "userprofiles-creative-fields-creative-field-values update-by-profile
 #
 # POST /userprofiles/{profileId}/creativeFields/{creativeFieldId}/creativeFieldValues
 # operationId: dfareporting.creativeFieldValues.insert
-export def "userprofiles-creative-fields-creative-field-values create" [
+export def "dfareporting-creative-field-values-insert" [
   profile_id: string
   creative_field_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4314,7 +4314,7 @@ export def "userprofiles-creative-fields-creative-field-values create" [
 #
 # PUT /userprofiles/{profileId}/creativeFields/{creativeFieldId}/creativeFieldValues
 # operationId: dfareporting.creativeFieldValues.update
-export def "userprofiles-creative-fields-creative-field-values update-by-profile-id-creative-field-id-1" [
+export def "dfareporting-creative-field-values-update" [
   profile_id: string
   creative_field_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4370,7 +4370,7 @@ export def "userprofiles-creative-fields-creative-field-values update-by-profile
 #
 # DELETE /userprofiles/{profileId}/creativeFields/{creativeFieldId}/creativeFieldValues/{id}
 # operationId: dfareporting.creativeFieldValues.delete
-export def "userprofiles-creative-fields-creative-field-values delete" [
+export def "dfareporting-creative-field-values-delete" [
   profile_id: string
   creative_field_id: string
   id: string
@@ -4422,7 +4422,7 @@ export def "userprofiles-creative-fields-creative-field-values delete" [
 #
 # GET /userprofiles/{profileId}/creativeFields/{creativeFieldId}/creativeFieldValues/{id}
 # operationId: dfareporting.creativeFieldValues.get
-export def "userprofiles-creative-fields-creative-field-values get" [
+export def "dfareporting-creative-field-values-get" [
   profile_id: string
   creative_field_id: string
   id: string
@@ -4474,7 +4474,7 @@ export def "userprofiles-creative-fields-creative-field-values get" [
 #
 # DELETE /userprofiles/{profileId}/creativeFields/{id}
 # operationId: dfareporting.creativeFields.delete
-export def "userprofiles-creative-fields delete" [
+export def "dfareporting-creative-fields-delete" [
   profile_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4524,7 +4524,7 @@ export def "userprofiles-creative-fields delete" [
 #
 # GET /userprofiles/{profileId}/creativeFields/{id}
 # operationId: dfareporting.creativeFields.get
-export def "userprofiles-creative-fields get" [
+export def "dfareporting-creative-fields-get" [
   profile_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4574,7 +4574,7 @@ export def "userprofiles-creative-fields get" [
 #
 # GET /userprofiles/{profileId}/creativeGroups
 # operationId: dfareporting.creativeGroups.list
-export def "userprofiles-creative-groups list" [
+export def "dfareporting-creative-groups-list" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -4631,7 +4631,7 @@ export def "userprofiles-creative-groups list" [
 # PATCH /userprofiles/{profileId}/creativeGroups
 # operationId: dfareporting.creativeGroups.patch
 # --advertiserIdDimensionValue shape: {dimensionName?: string, etag?: string, id?: string, kind?: string, matchType?: "EXACT"|"BEGINS_WITH"|"CONTAINS"|"WILDCARD_EXPRESSION", value?: string}
-export def "userprofiles-creative-groups update-by-profile-id" [
+export def "dfareporting-creative-groups-patch" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -4692,7 +4692,7 @@ export def "userprofiles-creative-groups update-by-profile-id" [
 # POST /userprofiles/{profileId}/creativeGroups
 # operationId: dfareporting.creativeGroups.insert
 # --advertiserIdDimensionValue shape: {dimensionName?: string, etag?: string, id?: string, kind?: string, matchType?: "EXACT"|"BEGINS_WITH"|"CONTAINS"|"WILDCARD_EXPRESSION", value?: string}
-export def "userprofiles-creative-groups create" [
+export def "dfareporting-creative-groups-insert" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -4752,7 +4752,7 @@ export def "userprofiles-creative-groups create" [
 # PUT /userprofiles/{profileId}/creativeGroups
 # operationId: dfareporting.creativeGroups.update
 # --advertiserIdDimensionValue shape: {dimensionName?: string, etag?: string, id?: string, kind?: string, matchType?: "EXACT"|"BEGINS_WITH"|"CONTAINS"|"WILDCARD_EXPRESSION", value?: string}
-export def "userprofiles-creative-groups update-by-profile-id-1" [
+export def "dfareporting-creative-groups-update" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -4811,7 +4811,7 @@ export def "userprofiles-creative-groups update-by-profile-id-1" [
 #
 # GET /userprofiles/{profileId}/creativeGroups/{id}
 # operationId: dfareporting.creativeGroups.get
-export def "userprofiles-creative-groups get" [
+export def "dfareporting-creative-groups-get" [
   profile_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4861,7 +4861,7 @@ export def "userprofiles-creative-groups get" [
 #
 # GET /userprofiles/{profileId}/creatives
 # operationId: dfareporting.creatives.list
-export def "userprofiles-creatives list" [
+export def "dfareporting-creatives-list" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -4945,7 +4945,7 @@ export def "userprofiles-creatives list" [
 # --thirdPartyUrls item shape: {thirdPartyUrlType?: "IMPRESSION"|"CLICK_TRACKING"|"VIDEO_START"|"VIDEO_FIRST_QUARTILE"|"VIDEO_MIDPOINT"|"VIDEO_THIRD_QUARTILE"|"VIDEO_COMPLETE"|"VIDEO_MUTE"|"VIDEO_PAUSE"|"VIDEO_REWIND"|"VIDEO_FULLSCREEN"|"VIDEO_STOP"|"VIDEO_CUSTOM"|"SURVEY"|"RICH_MEDIA_IMPRESSION"|"RICH_MEDIA_RM_IMPRESSION"|"RICH_MEDIA_BACKUP_IMPRESSION"|"VIDEO_SKIP"|"VIDEO_PROGRESS", url?: string}
 # --timerCustomEvents item shape: {advertiserCustomEventId?: string, advertiserCustomEventName?: string, advertiserCustomEventType?: "ADVERTISER_EVENT_TIMER"|"ADVERTISER_EVENT_EXIT"|"ADVERTISER_EVENT_COUNTER", artworkLabel?: string, artworkType?: "ARTWORK_TYPE_FLASH"|"ARTWORK_TYPE_HTML5"|"ARTWORK_TYPE_MIXED"|"ARTWORK_TYPE_IMAGE", exitClickThroughUrl?: record, id?: string, popupWindowProperties?: record, targetType?: "TARGET_BLANK"|"TARGET_TOP"|"TARGET_SELF"|"TARGET_PARENT"|"TARGET_POPUP", videoReportingId?: string}
 # --universalAdId shape: {registry?: "OTHER"|"AD_ID_OFFICIAL"|"CLEARCAST"|"DCM", value?: string}
-export def "userprofiles-creatives update-by-profile-id" [
+export def "dfareporting-creatives-patch" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -5082,7 +5082,7 @@ export def "userprofiles-creatives update-by-profile-id" [
 # --thirdPartyUrls item shape: {thirdPartyUrlType?: "IMPRESSION"|"CLICK_TRACKING"|"VIDEO_START"|"VIDEO_FIRST_QUARTILE"|"VIDEO_MIDPOINT"|"VIDEO_THIRD_QUARTILE"|"VIDEO_COMPLETE"|"VIDEO_MUTE"|"VIDEO_PAUSE"|"VIDEO_REWIND"|"VIDEO_FULLSCREEN"|"VIDEO_STOP"|"VIDEO_CUSTOM"|"SURVEY"|"RICH_MEDIA_IMPRESSION"|"RICH_MEDIA_RM_IMPRESSION"|"RICH_MEDIA_BACKUP_IMPRESSION"|"VIDEO_SKIP"|"VIDEO_PROGRESS", url?: string}
 # --timerCustomEvents item shape: {advertiserCustomEventId?: string, advertiserCustomEventName?: string, advertiserCustomEventType?: "ADVERTISER_EVENT_TIMER"|"ADVERTISER_EVENT_EXIT"|"ADVERTISER_EVENT_COUNTER", artworkLabel?: string, artworkType?: "ARTWORK_TYPE_FLASH"|"ARTWORK_TYPE_HTML5"|"ARTWORK_TYPE_MIXED"|"ARTWORK_TYPE_IMAGE", exitClickThroughUrl?: record, id?: string, popupWindowProperties?: record, targetType?: "TARGET_BLANK"|"TARGET_TOP"|"TARGET_SELF"|"TARGET_PARENT"|"TARGET_POPUP", videoReportingId?: string}
 # --universalAdId shape: {registry?: "OTHER"|"AD_ID_OFFICIAL"|"CLEARCAST"|"DCM", value?: string}
-export def "userprofiles-creatives create" [
+export def "dfareporting-creatives-insert" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -5218,7 +5218,7 @@ export def "userprofiles-creatives create" [
 # --thirdPartyUrls item shape: {thirdPartyUrlType?: "IMPRESSION"|"CLICK_TRACKING"|"VIDEO_START"|"VIDEO_FIRST_QUARTILE"|"VIDEO_MIDPOINT"|"VIDEO_THIRD_QUARTILE"|"VIDEO_COMPLETE"|"VIDEO_MUTE"|"VIDEO_PAUSE"|"VIDEO_REWIND"|"VIDEO_FULLSCREEN"|"VIDEO_STOP"|"VIDEO_CUSTOM"|"SURVEY"|"RICH_MEDIA_IMPRESSION"|"RICH_MEDIA_RM_IMPRESSION"|"RICH_MEDIA_BACKUP_IMPRESSION"|"VIDEO_SKIP"|"VIDEO_PROGRESS", url?: string}
 # --timerCustomEvents item shape: {advertiserCustomEventId?: string, advertiserCustomEventName?: string, advertiserCustomEventType?: "ADVERTISER_EVENT_TIMER"|"ADVERTISER_EVENT_EXIT"|"ADVERTISER_EVENT_COUNTER", artworkLabel?: string, artworkType?: "ARTWORK_TYPE_FLASH"|"ARTWORK_TYPE_HTML5"|"ARTWORK_TYPE_MIXED"|"ARTWORK_TYPE_IMAGE", exitClickThroughUrl?: record, id?: string, popupWindowProperties?: record, targetType?: "TARGET_BLANK"|"TARGET_TOP"|"TARGET_SELF"|"TARGET_PARENT"|"TARGET_POPUP", videoReportingId?: string}
 # --universalAdId shape: {registry?: "OTHER"|"AD_ID_OFFICIAL"|"CLEARCAST"|"DCM", value?: string}
-export def "userprofiles-creatives update-by-profile-id-1" [
+export def "dfareporting-creatives-update" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -5334,7 +5334,7 @@ export def "userprofiles-creatives update-by-profile-id-1" [
 #
 # GET /userprofiles/{profileId}/creatives/{id}
 # operationId: dfareporting.creatives.get
-export def "userprofiles-creatives get" [
+export def "dfareporting-creatives-get" [
   profile_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5385,7 +5385,7 @@ export def "userprofiles-creatives get" [
 # POST /userprofiles/{profileId}/customEvents/batchinsert
 # operationId: dfareporting.customEvents.batchinsert
 # --customEvents item shape: {annotateClickEvent?: record, annotateImpressionEvent?: record, customVariables?: list, eventType?: "UNKNOWN"|"INSERT"|"ANNOTATE", floodlightConfigurationId?: string, insertEvent?: record, kind?: string, ordinal?: string, timestampMicros?: string}
-export def "userprofiles-custom-events-batchinsert create" [
+export def "dfareporting-custom-events-batchinsert" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -5439,7 +5439,7 @@ export def "userprofiles-custom-events-batchinsert create" [
 # POST /userprofiles/{profileId}/dimensionvalues/query
 # operationId: dfareporting.dimensionValues.query
 # --filters item shape: {dimensionName?: string, kind?: string, value?: string}
-export def "userprofiles-dimensionvalues-query list" [
+export def "dfareporting-dimension-values-query" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -5497,7 +5497,7 @@ export def "userprofiles-dimensionvalues-query list" [
 #
 # GET /userprofiles/{profileId}/directorySites
 # operationId: dfareporting.directorySites.list
-export def "userprofiles-directory-sites list" [
+export def "dfareporting-directory-sites-list" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -5558,7 +5558,7 @@ export def "userprofiles-directory-sites list" [
 # operationId: dfareporting.directorySites.insert
 # --idDimensionValue shape: {dimensionName?: string, etag?: string, id?: string, kind?: string, matchType?: "EXACT"|"BEGINS_WITH"|"CONTAINS"|"WILDCARD_EXPRESSION", value?: string}
 # --settings shape: {activeViewOptOut?: bool, dfpSettings?: record, instreamVideoPlacementAccepted?: bool, interstitialPlacementAccepted?: bool}
-export def "userprofiles-directory-sites create" [
+export def "dfareporting-directory-sites-insert" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -5617,7 +5617,7 @@ export def "userprofiles-directory-sites create" [
 #
 # GET /userprofiles/{profileId}/directorySites/{id}
 # operationId: dfareporting.directorySites.get
-export def "userprofiles-directory-sites get" [
+export def "dfareporting-directory-sites-get" [
   profile_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5667,7 +5667,7 @@ export def "userprofiles-directory-sites get" [
 #
 # GET /userprofiles/{profileId}/dynamicTargetingKeys
 # operationId: dfareporting.dynamicTargetingKeys.list
-export def "userprofiles-dynamic-targeting-keys list" [
+export def "dfareporting-dynamic-targeting-keys-list" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -5719,7 +5719,7 @@ export def "userprofiles-dynamic-targeting-keys list" [
 #
 # POST /userprofiles/{profileId}/dynamicTargetingKeys
 # operationId: dfareporting.dynamicTargetingKeys.insert
-export def "userprofiles-dynamic-targeting-keys create" [
+export def "dfareporting-dynamic-targeting-keys-insert" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -5774,7 +5774,7 @@ export def "userprofiles-dynamic-targeting-keys create" [
 #
 # DELETE /userprofiles/{profileId}/dynamicTargetingKeys/{objectId}
 # operationId: dfareporting.dynamicTargetingKeys.delete
-export def "userprofiles-dynamic-targeting-keys delete" [
+export def "dfareporting-dynamic-targeting-keys-delete" [
   profile_id: string
   object_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5826,7 +5826,7 @@ export def "userprofiles-dynamic-targeting-keys delete" [
 #
 # GET /userprofiles/{profileId}/eventTags
 # operationId: dfareporting.eventTags.list
-export def "userprofiles-event-tags list" [
+export def "dfareporting-event-tags-list" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -5886,7 +5886,7 @@ export def "userprofiles-event-tags list" [
 # operationId: dfareporting.eventTags.patch
 # --advertiserIdDimensionValue shape: {dimensionName?: string, etag?: string, id?: string, kind?: string, matchType?: "EXACT"|"BEGINS_WITH"|"CONTAINS"|"WILDCARD_EXPRESSION", value?: string}
 # --campaignIdDimensionValue shape: {dimensionName?: string, etag?: string, id?: string, kind?: string, matchType?: "EXACT"|"BEGINS_WITH"|"CONTAINS"|"WILDCARD_EXPRESSION", value?: string}
-export def "userprofiles-event-tags update-by-profile-id" [
+export def "dfareporting-event-tags-patch" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -5958,7 +5958,7 @@ export def "userprofiles-event-tags update-by-profile-id" [
 # operationId: dfareporting.eventTags.insert
 # --advertiserIdDimensionValue shape: {dimensionName?: string, etag?: string, id?: string, kind?: string, matchType?: "EXACT"|"BEGINS_WITH"|"CONTAINS"|"WILDCARD_EXPRESSION", value?: string}
 # --campaignIdDimensionValue shape: {dimensionName?: string, etag?: string, id?: string, kind?: string, matchType?: "EXACT"|"BEGINS_WITH"|"CONTAINS"|"WILDCARD_EXPRESSION", value?: string}
-export def "userprofiles-event-tags create" [
+export def "dfareporting-event-tags-insert" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -6029,7 +6029,7 @@ export def "userprofiles-event-tags create" [
 # operationId: dfareporting.eventTags.update
 # --advertiserIdDimensionValue shape: {dimensionName?: string, etag?: string, id?: string, kind?: string, matchType?: "EXACT"|"BEGINS_WITH"|"CONTAINS"|"WILDCARD_EXPRESSION", value?: string}
 # --campaignIdDimensionValue shape: {dimensionName?: string, etag?: string, id?: string, kind?: string, matchType?: "EXACT"|"BEGINS_WITH"|"CONTAINS"|"WILDCARD_EXPRESSION", value?: string}
-export def "userprofiles-event-tags update-by-profile-id-1" [
+export def "dfareporting-event-tags-update" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -6098,7 +6098,7 @@ export def "userprofiles-event-tags update-by-profile-id-1" [
 #
 # DELETE /userprofiles/{profileId}/eventTags/{id}
 # operationId: dfareporting.eventTags.delete
-export def "userprofiles-event-tags delete" [
+export def "dfareporting-event-tags-delete" [
   profile_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6148,7 +6148,7 @@ export def "userprofiles-event-tags delete" [
 #
 # GET /userprofiles/{profileId}/eventTags/{id}
 # operationId: dfareporting.eventTags.get
-export def "userprofiles-event-tags get" [
+export def "dfareporting-event-tags-get" [
   profile_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6198,7 +6198,7 @@ export def "userprofiles-event-tags get" [
 #
 # GET /userprofiles/{profileId}/files
 # operationId: dfareporting.files.list
-export def "userprofiles-files list" [
+export def "dfareporting-files-list" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -6251,7 +6251,7 @@ export def "userprofiles-files list" [
 #
 # GET /userprofiles/{profileId}/floodlightActivities
 # operationId: dfareporting.floodlightActivities.list
-export def "userprofiles-floodlight-activities list" [
+export def "dfareporting-floodlight-activities-list" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -6317,7 +6317,7 @@ export def "userprofiles-floodlight-activities list" [
 # --floodlightConfigurationIdDimensionValue shape: {dimensionName?: string, etag?: string, id?: string, kind?: string, matchType?: "EXACT"|"BEGINS_WITH"|"CONTAINS"|"WILDCARD_EXPRESSION", value?: string}
 # --idDimensionValue shape: {dimensionName?: string, etag?: string, id?: string, kind?: string, matchType?: "EXACT"|"BEGINS_WITH"|"CONTAINS"|"WILDCARD_EXPRESSION", value?: string}
 # --publisherTags item shape: {clickThrough?: bool, directorySiteId?: string, dynamicTag?: record, siteId?: string, siteIdDimensionValue?: record, viewThrough?: bool}
-export def "userprofiles-floodlight-activities update-by-profile-id" [
+export def "dfareporting-floodlight-activities-patch" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -6403,7 +6403,7 @@ export def "userprofiles-floodlight-activities update-by-profile-id" [
 # --floodlightConfigurationIdDimensionValue shape: {dimensionName?: string, etag?: string, id?: string, kind?: string, matchType?: "EXACT"|"BEGINS_WITH"|"CONTAINS"|"WILDCARD_EXPRESSION", value?: string}
 # --idDimensionValue shape: {dimensionName?: string, etag?: string, id?: string, kind?: string, matchType?: "EXACT"|"BEGINS_WITH"|"CONTAINS"|"WILDCARD_EXPRESSION", value?: string}
 # --publisherTags item shape: {clickThrough?: bool, directorySiteId?: string, dynamicTag?: record, siteId?: string, siteIdDimensionValue?: record, viewThrough?: bool}
-export def "userprofiles-floodlight-activities create" [
+export def "dfareporting-floodlight-activities-insert" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -6488,7 +6488,7 @@ export def "userprofiles-floodlight-activities create" [
 # --floodlightConfigurationIdDimensionValue shape: {dimensionName?: string, etag?: string, id?: string, kind?: string, matchType?: "EXACT"|"BEGINS_WITH"|"CONTAINS"|"WILDCARD_EXPRESSION", value?: string}
 # --idDimensionValue shape: {dimensionName?: string, etag?: string, id?: string, kind?: string, matchType?: "EXACT"|"BEGINS_WITH"|"CONTAINS"|"WILDCARD_EXPRESSION", value?: string}
 # --publisherTags item shape: {clickThrough?: bool, directorySiteId?: string, dynamicTag?: record, siteId?: string, siteIdDimensionValue?: record, viewThrough?: bool}
-export def "userprofiles-floodlight-activities update-by-profile-id-1" [
+export def "dfareporting-floodlight-activities-update" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -6568,7 +6568,7 @@ export def "userprofiles-floodlight-activities update-by-profile-id-1" [
 #
 # POST /userprofiles/{profileId}/floodlightActivities/generatetag
 # operationId: dfareporting.floodlightActivities.generatetag
-export def "userprofiles-floodlight-activities-generatetag create" [
+export def "dfareporting-floodlight-activities-generatetag" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -6617,7 +6617,7 @@ export def "userprofiles-floodlight-activities-generatetag create" [
 #
 # DELETE /userprofiles/{profileId}/floodlightActivities/{id}
 # operationId: dfareporting.floodlightActivities.delete
-export def "userprofiles-floodlight-activities delete" [
+export def "dfareporting-floodlight-activities-delete" [
   profile_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6667,7 +6667,7 @@ export def "userprofiles-floodlight-activities delete" [
 #
 # GET /userprofiles/{profileId}/floodlightActivities/{id}
 # operationId: dfareporting.floodlightActivities.get
-export def "userprofiles-floodlight-activities get" [
+export def "dfareporting-floodlight-activities-get" [
   profile_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6717,7 +6717,7 @@ export def "userprofiles-floodlight-activities get" [
 #
 # GET /userprofiles/{profileId}/floodlightActivityGroups
 # operationId: dfareporting.floodlightActivityGroups.list
-export def "userprofiles-floodlight-activity-groups list" [
+export def "dfareporting-floodlight-activity-groups-list" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -6777,7 +6777,7 @@ export def "userprofiles-floodlight-activity-groups list" [
 # --advertiserIdDimensionValue shape: {dimensionName?: string, etag?: string, id?: string, kind?: string, matchType?: "EXACT"|"BEGINS_WITH"|"CONTAINS"|"WILDCARD_EXPRESSION", value?: string}
 # --floodlightConfigurationIdDimensionValue shape: {dimensionName?: string, etag?: string, id?: string, kind?: string, matchType?: "EXACT"|"BEGINS_WITH"|"CONTAINS"|"WILDCARD_EXPRESSION", value?: string}
 # --idDimensionValue shape: {dimensionName?: string, etag?: string, id?: string, kind?: string, matchType?: "EXACT"|"BEGINS_WITH"|"CONTAINS"|"WILDCARD_EXPRESSION", value?: string}
-export def "userprofiles-floodlight-activity-groups update-by-profile-id" [
+export def "dfareporting-floodlight-activity-groups-patch" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -6844,7 +6844,7 @@ export def "userprofiles-floodlight-activity-groups update-by-profile-id" [
 # --advertiserIdDimensionValue shape: {dimensionName?: string, etag?: string, id?: string, kind?: string, matchType?: "EXACT"|"BEGINS_WITH"|"CONTAINS"|"WILDCARD_EXPRESSION", value?: string}
 # --floodlightConfigurationIdDimensionValue shape: {dimensionName?: string, etag?: string, id?: string, kind?: string, matchType?: "EXACT"|"BEGINS_WITH"|"CONTAINS"|"WILDCARD_EXPRESSION", value?: string}
 # --idDimensionValue shape: {dimensionName?: string, etag?: string, id?: string, kind?: string, matchType?: "EXACT"|"BEGINS_WITH"|"CONTAINS"|"WILDCARD_EXPRESSION", value?: string}
-export def "userprofiles-floodlight-activity-groups create" [
+export def "dfareporting-floodlight-activity-groups-insert" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -6910,7 +6910,7 @@ export def "userprofiles-floodlight-activity-groups create" [
 # --advertiserIdDimensionValue shape: {dimensionName?: string, etag?: string, id?: string, kind?: string, matchType?: "EXACT"|"BEGINS_WITH"|"CONTAINS"|"WILDCARD_EXPRESSION", value?: string}
 # --floodlightConfigurationIdDimensionValue shape: {dimensionName?: string, etag?: string, id?: string, kind?: string, matchType?: "EXACT"|"BEGINS_WITH"|"CONTAINS"|"WILDCARD_EXPRESSION", value?: string}
 # --idDimensionValue shape: {dimensionName?: string, etag?: string, id?: string, kind?: string, matchType?: "EXACT"|"BEGINS_WITH"|"CONTAINS"|"WILDCARD_EXPRESSION", value?: string}
-export def "userprofiles-floodlight-activity-groups update-by-profile-id-1" [
+export def "dfareporting-floodlight-activity-groups-update" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -6973,7 +6973,7 @@ export def "userprofiles-floodlight-activity-groups update-by-profile-id-1" [
 #
 # GET /userprofiles/{profileId}/floodlightActivityGroups/{id}
 # operationId: dfareporting.floodlightActivityGroups.get
-export def "userprofiles-floodlight-activity-groups get" [
+export def "dfareporting-floodlight-activity-groups-get" [
   profile_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7023,7 +7023,7 @@ export def "userprofiles-floodlight-activity-groups get" [
 #
 # GET /userprofiles/{profileId}/floodlightConfigurations
 # operationId: dfareporting.floodlightConfigurations.list
-export def "userprofiles-floodlight-configurations list" [
+export def "dfareporting-floodlight-configurations-list" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -7080,7 +7080,7 @@ export def "userprofiles-floodlight-configurations list" [
 # --tagSettings shape: {dynamicTagEnabled?: bool, imageTagEnabled?: bool}
 # --thirdPartyAuthenticationTokens item shape: {name?: string, value?: string}
 # --userDefinedVariableConfigurations item shape: {dataType?: "STRING"|"NUMBER", reportName?: string, ... (1 more fields)}
-export def "userprofiles-floodlight-configurations update-by-profile-id" [
+export def "dfareporting-floodlight-configurations-patch" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -7158,7 +7158,7 @@ export def "userprofiles-floodlight-configurations update-by-profile-id" [
 # --tagSettings shape: {dynamicTagEnabled?: bool, imageTagEnabled?: bool}
 # --thirdPartyAuthenticationTokens item shape: {name?: string, value?: string}
 # --userDefinedVariableConfigurations item shape: {dataType?: "STRING"|"NUMBER", reportName?: string, ... (1 more fields)}
-export def "userprofiles-floodlight-configurations update-by-profile-id-1" [
+export def "dfareporting-floodlight-configurations-update" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -7227,7 +7227,7 @@ export def "userprofiles-floodlight-configurations update-by-profile-id-1" [
 #
 # GET /userprofiles/{profileId}/floodlightConfigurations/{id}
 # operationId: dfareporting.floodlightConfigurations.get
-export def "userprofiles-floodlight-configurations get" [
+export def "dfareporting-floodlight-configurations-get" [
   profile_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7277,7 +7277,7 @@ export def "userprofiles-floodlight-configurations get" [
 #
 # GET /userprofiles/{profileId}/languages
 # operationId: dfareporting.languages.list
-export def "userprofiles-languages list" [
+export def "dfareporting-languages-list" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -7325,7 +7325,7 @@ export def "userprofiles-languages list" [
 #
 # GET /userprofiles/{profileId}/metros
 # operationId: dfareporting.metros.list
-export def "userprofiles-metros list" [
+export def "dfareporting-metros-list" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -7373,7 +7373,7 @@ export def "userprofiles-metros list" [
 #
 # GET /userprofiles/{profileId}/mobileApps
 # operationId: dfareporting.mobileApps.list
-export def "userprofiles-mobile-apps list" [
+export def "dfareporting-mobile-apps-list" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -7426,7 +7426,7 @@ export def "userprofiles-mobile-apps list" [
 #
 # GET /userprofiles/{profileId}/mobileApps/{id}
 # operationId: dfareporting.mobileApps.get
-export def "userprofiles-mobile-apps get" [
+export def "dfareporting-mobile-apps-get" [
   profile_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7476,7 +7476,7 @@ export def "userprofiles-mobile-apps get" [
 #
 # GET /userprofiles/{profileId}/mobileCarriers
 # operationId: dfareporting.mobileCarriers.list
-export def "userprofiles-mobile-carriers list" [
+export def "dfareporting-mobile-carriers-list" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -7524,7 +7524,7 @@ export def "userprofiles-mobile-carriers list" [
 #
 # GET /userprofiles/{profileId}/mobileCarriers/{id}
 # operationId: dfareporting.mobileCarriers.get
-export def "userprofiles-mobile-carriers get" [
+export def "dfareporting-mobile-carriers-get" [
   profile_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7574,7 +7574,7 @@ export def "userprofiles-mobile-carriers get" [
 #
 # GET /userprofiles/{profileId}/operatingSystemVersions
 # operationId: dfareporting.operatingSystemVersions.list
-export def "userprofiles-operating-system-versions list" [
+export def "dfareporting-operating-system-versions-list" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -7622,7 +7622,7 @@ export def "userprofiles-operating-system-versions list" [
 #
 # GET /userprofiles/{profileId}/operatingSystemVersions/{id}
 # operationId: dfareporting.operatingSystemVersions.get
-export def "userprofiles-operating-system-versions get" [
+export def "dfareporting-operating-system-versions-get" [
   profile_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7672,7 +7672,7 @@ export def "userprofiles-operating-system-versions get" [
 #
 # GET /userprofiles/{profileId}/operatingSystems
 # operationId: dfareporting.operatingSystems.list
-export def "userprofiles-operating-systems list" [
+export def "dfareporting-operating-systems-list" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -7720,7 +7720,7 @@ export def "userprofiles-operating-systems list" [
 #
 # GET /userprofiles/{profileId}/operatingSystems/{dartId}
 # operationId: dfareporting.operatingSystems.get
-export def "userprofiles-operating-systems get" [
+export def "dfareporting-operating-systems-get" [
   profile_id: string
   dart_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7770,7 +7770,7 @@ export def "userprofiles-operating-systems get" [
 #
 # GET /userprofiles/{profileId}/placementGroups
 # operationId: dfareporting.placementGroups.list
-export def "userprofiles-placement-groups list" [
+export def "dfareporting-placement-groups-list" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -7846,7 +7846,7 @@ export def "userprofiles-placement-groups list" [
 # --pricingSchedule shape: {capCostOption?: "CAP_COST_NONE"|"CAP_COST_MONTHLY"|"CAP_COST_CUMULATIVE", endDate?: string, flighted?: bool, floodlightActivityId?: string, pricingPeriods?: list, pricingType?: "PRICING_TYPE_CPM"|"PRICING_TYPE_CPC"|"PRICING_TYPE_CPA"|"PRICING_TYPE_FLAT_RATE_IMPRESSIONS"|"PRICING_TYPE_FLAT_RATE_CLICKS"|"PRICING_TYPE_CPM_ACTIVEVIEW", startDate?: string, testingStartDate?: string}
 # --primaryPlacementIdDimensionValue shape: {dimensionName?: string, etag?: string, id?: string, kind?: string, matchType?: "EXACT"|"BEGINS_WITH"|"CONTAINS"|"WILDCARD_EXPRESSION", value?: string}
 # --siteIdDimensionValue shape: {dimensionName?: string, etag?: string, id?: string, kind?: string, matchType?: "EXACT"|"BEGINS_WITH"|"CONTAINS"|"WILDCARD_EXPRESSION", value?: string}
-export def "userprofiles-placement-groups update-by-profile-id" [
+export def "dfareporting-placement-groups-patch" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -7933,7 +7933,7 @@ export def "userprofiles-placement-groups update-by-profile-id" [
 # --pricingSchedule shape: {capCostOption?: "CAP_COST_NONE"|"CAP_COST_MONTHLY"|"CAP_COST_CUMULATIVE", endDate?: string, flighted?: bool, floodlightActivityId?: string, pricingPeriods?: list, pricingType?: "PRICING_TYPE_CPM"|"PRICING_TYPE_CPC"|"PRICING_TYPE_CPA"|"PRICING_TYPE_FLAT_RATE_IMPRESSIONS"|"PRICING_TYPE_FLAT_RATE_CLICKS"|"PRICING_TYPE_CPM_ACTIVEVIEW", startDate?: string, testingStartDate?: string}
 # --primaryPlacementIdDimensionValue shape: {dimensionName?: string, etag?: string, id?: string, kind?: string, matchType?: "EXACT"|"BEGINS_WITH"|"CONTAINS"|"WILDCARD_EXPRESSION", value?: string}
 # --siteIdDimensionValue shape: {dimensionName?: string, etag?: string, id?: string, kind?: string, matchType?: "EXACT"|"BEGINS_WITH"|"CONTAINS"|"WILDCARD_EXPRESSION", value?: string}
-export def "userprofiles-placement-groups create" [
+export def "dfareporting-placement-groups-insert" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -8019,7 +8019,7 @@ export def "userprofiles-placement-groups create" [
 # --pricingSchedule shape: {capCostOption?: "CAP_COST_NONE"|"CAP_COST_MONTHLY"|"CAP_COST_CUMULATIVE", endDate?: string, flighted?: bool, floodlightActivityId?: string, pricingPeriods?: list, pricingType?: "PRICING_TYPE_CPM"|"PRICING_TYPE_CPC"|"PRICING_TYPE_CPA"|"PRICING_TYPE_FLAT_RATE_IMPRESSIONS"|"PRICING_TYPE_FLAT_RATE_CLICKS"|"PRICING_TYPE_CPM_ACTIVEVIEW", startDate?: string, testingStartDate?: string}
 # --primaryPlacementIdDimensionValue shape: {dimensionName?: string, etag?: string, id?: string, kind?: string, matchType?: "EXACT"|"BEGINS_WITH"|"CONTAINS"|"WILDCARD_EXPRESSION", value?: string}
 # --siteIdDimensionValue shape: {dimensionName?: string, etag?: string, id?: string, kind?: string, matchType?: "EXACT"|"BEGINS_WITH"|"CONTAINS"|"WILDCARD_EXPRESSION", value?: string}
-export def "userprofiles-placement-groups update-by-profile-id-1" [
+export def "dfareporting-placement-groups-update" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -8096,7 +8096,7 @@ export def "userprofiles-placement-groups update-by-profile-id-1" [
 #
 # GET /userprofiles/{profileId}/placementGroups/{id}
 # operationId: dfareporting.placementGroups.get
-export def "userprofiles-placement-groups get" [
+export def "dfareporting-placement-groups-get" [
   profile_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8146,7 +8146,7 @@ export def "userprofiles-placement-groups get" [
 #
 # GET /userprofiles/{profileId}/placementStrategies
 # operationId: dfareporting.placementStrategies.list
-export def "userprofiles-placement-strategies list" [
+export def "dfareporting-placement-strategies-list" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -8200,7 +8200,7 @@ export def "userprofiles-placement-strategies list" [
 #
 # PATCH /userprofiles/{profileId}/placementStrategies
 # operationId: dfareporting.placementStrategies.patch
-export def "userprofiles-placement-strategies update-by-profile-id" [
+export def "dfareporting-placement-strategies-patch" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -8256,7 +8256,7 @@ export def "userprofiles-placement-strategies update-by-profile-id" [
 #
 # POST /userprofiles/{profileId}/placementStrategies
 # operationId: dfareporting.placementStrategies.insert
-export def "userprofiles-placement-strategies create" [
+export def "dfareporting-placement-strategies-insert" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -8311,7 +8311,7 @@ export def "userprofiles-placement-strategies create" [
 #
 # PUT /userprofiles/{profileId}/placementStrategies
 # operationId: dfareporting.placementStrategies.update
-export def "userprofiles-placement-strategies update-by-profile-id-1" [
+export def "dfareporting-placement-strategies-update" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -8366,7 +8366,7 @@ export def "userprofiles-placement-strategies update-by-profile-id-1" [
 #
 # DELETE /userprofiles/{profileId}/placementStrategies/{id}
 # operationId: dfareporting.placementStrategies.delete
-export def "userprofiles-placement-strategies delete" [
+export def "dfareporting-placement-strategies-delete" [
   profile_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8416,7 +8416,7 @@ export def "userprofiles-placement-strategies delete" [
 #
 # GET /userprofiles/{profileId}/placementStrategies/{id}
 # operationId: dfareporting.placementStrategies.get
-export def "userprofiles-placement-strategies get" [
+export def "dfareporting-placement-strategies-get" [
   profile_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8466,7 +8466,7 @@ export def "userprofiles-placement-strategies get" [
 #
 # GET /userprofiles/{profileId}/placements
 # operationId: dfareporting.placements.list
-export def "userprofiles-placements list" [
+export def "dfareporting-placements-list" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -8551,7 +8551,7 @@ export def "userprofiles-placements list" [
 # --size shape: {height?: int, iab?: bool, id?: string, kind?: string, width?: int}
 # --tagSetting shape: {additionalKeyValues?: string, includeClickThroughUrls?: bool, includeClickTracking?: bool, keywordOption?: "PLACEHOLDER_WITH_LIST_OF_KEYWORDS"|"IGNORE"|"GENERATE_SEPARATE_TAG_FOR_EACH_KEYWORD"}
 # --videoSettings shape: {companionSettings?: record, kind?: string, obaEnabled?: bool, obaSettings?: record, orientation?: "ANY"|"LANDSCAPE"|"PORTRAIT", skippableSettings?: record, transcodeSettings?: record}
-export def "userprofiles-placements update-by-profile-id" [
+export def "dfareporting-placements-patch" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -8659,7 +8659,7 @@ export def "userprofiles-placements update-by-profile-id" [
 # --size shape: {height?: int, iab?: bool, id?: string, kind?: string, width?: int}
 # --tagSetting shape: {additionalKeyValues?: string, includeClickThroughUrls?: bool, includeClickTracking?: bool, keywordOption?: "PLACEHOLDER_WITH_LIST_OF_KEYWORDS"|"IGNORE"|"GENERATE_SEPARATE_TAG_FOR_EACH_KEYWORD"}
 # --videoSettings shape: {companionSettings?: record, kind?: string, obaEnabled?: bool, obaSettings?: record, orientation?: "ANY"|"LANDSCAPE"|"PORTRAIT", skippableSettings?: record, transcodeSettings?: record}
-export def "userprofiles-placements create" [
+export def "dfareporting-placements-insert" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -8766,7 +8766,7 @@ export def "userprofiles-placements create" [
 # --size shape: {height?: int, iab?: bool, id?: string, kind?: string, width?: int}
 # --tagSetting shape: {additionalKeyValues?: string, includeClickThroughUrls?: bool, includeClickTracking?: bool, keywordOption?: "PLACEHOLDER_WITH_LIST_OF_KEYWORDS"|"IGNORE"|"GENERATE_SEPARATE_TAG_FOR_EACH_KEYWORD"}
 # --videoSettings shape: {companionSettings?: record, kind?: string, obaEnabled?: bool, obaSettings?: record, orientation?: "ANY"|"LANDSCAPE"|"PORTRAIT", skippableSettings?: record, transcodeSettings?: record}
-export def "userprofiles-placements update-by-profile-id-1" [
+export def "dfareporting-placements-update" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -8858,7 +8858,7 @@ export def "userprofiles-placements update-by-profile-id-1" [
 #
 # POST /userprofiles/{profileId}/placements/generatetags
 # operationId: dfareporting.placements.generatetags
-export def "userprofiles-placements-generatetags create" [
+export def "dfareporting-placements-generatetags" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -8909,7 +8909,7 @@ export def "userprofiles-placements-generatetags create" [
 #
 # GET /userprofiles/{profileId}/placements/{id}
 # operationId: dfareporting.placements.get
-export def "userprofiles-placements get" [
+export def "dfareporting-placements-get" [
   profile_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8959,7 +8959,7 @@ export def "userprofiles-placements get" [
 #
 # GET /userprofiles/{profileId}/platformTypes
 # operationId: dfareporting.platformTypes.list
-export def "userprofiles-platform-types list" [
+export def "dfareporting-platform-types-list" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -9007,7 +9007,7 @@ export def "userprofiles-platform-types list" [
 #
 # GET /userprofiles/{profileId}/platformTypes/{id}
 # operationId: dfareporting.platformTypes.get
-export def "userprofiles-platform-types get" [
+export def "dfareporting-platform-types-get" [
   profile_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9057,7 +9057,7 @@ export def "userprofiles-platform-types get" [
 #
 # GET /userprofiles/{profileId}/postalCodes
 # operationId: dfareporting.postalCodes.list
-export def "userprofiles-postal-codes list" [
+export def "dfareporting-postal-codes-list" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -9105,7 +9105,7 @@ export def "userprofiles-postal-codes list" [
 #
 # GET /userprofiles/{profileId}/postalCodes/{code}
 # operationId: dfareporting.postalCodes.get
-export def "userprofiles-postal-codes get" [
+export def "dfareporting-postal-codes-get" [
   profile_id: string
   code: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9155,7 +9155,7 @@ export def "userprofiles-postal-codes get" [
 #
 # GET /userprofiles/{profileId}/projects
 # operationId: dfareporting.projects.list
-export def "userprofiles-projects list" [
+export def "dfareporting-projects-list" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -9210,7 +9210,7 @@ export def "userprofiles-projects list" [
 #
 # GET /userprofiles/{profileId}/projects/{id}
 # operationId: dfareporting.projects.get
-export def "userprofiles-projects get" [
+export def "dfareporting-projects-get" [
   profile_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9260,7 +9260,7 @@ export def "userprofiles-projects get" [
 #
 # GET /userprofiles/{profileId}/projects/{projectId}/inventoryItems
 # operationId: dfareporting.inventoryItems.list
-export def "userprofiles-projects-inventory-items list" [
+export def "dfareporting-inventory-items-list" [
   profile_id: string
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9319,7 +9319,7 @@ export def "userprofiles-projects-inventory-items list" [
 #
 # GET /userprofiles/{profileId}/projects/{projectId}/inventoryItems/{id}
 # operationId: dfareporting.inventoryItems.get
-export def "userprofiles-projects-inventory-items get" [
+export def "dfareporting-inventory-items-get" [
   profile_id: string
   project_id: string
   id: string
@@ -9371,7 +9371,7 @@ export def "userprofiles-projects-inventory-items get" [
 #
 # GET /userprofiles/{profileId}/projects/{projectId}/orderDocuments
 # operationId: dfareporting.orderDocuments.list
-export def "userprofiles-projects-order-documents list" [
+export def "dfareporting-order-documents-list" [
   profile_id: string
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9430,7 +9430,7 @@ export def "userprofiles-projects-order-documents list" [
 #
 # GET /userprofiles/{profileId}/projects/{projectId}/orderDocuments/{id}
 # operationId: dfareporting.orderDocuments.get
-export def "userprofiles-projects-order-documents get" [
+export def "dfareporting-order-documents-get" [
   profile_id: string
   project_id: string
   id: string
@@ -9482,7 +9482,7 @@ export def "userprofiles-projects-order-documents get" [
 #
 # GET /userprofiles/{profileId}/projects/{projectId}/orders
 # operationId: dfareporting.orders.list
-export def "userprofiles-projects-orders list" [
+export def "dfareporting-orders-list" [
   profile_id: string
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9539,7 +9539,7 @@ export def "userprofiles-projects-orders list" [
 #
 # GET /userprofiles/{profileId}/projects/{projectId}/orders/{id}
 # operationId: dfareporting.orders.get
-export def "userprofiles-projects-orders get" [
+export def "dfareporting-orders-get" [
   profile_id: string
   project_id: string
   id: string
@@ -9591,7 +9591,7 @@ export def "userprofiles-projects-orders get" [
 #
 # GET /userprofiles/{profileId}/regions
 # operationId: dfareporting.regions.list
-export def "userprofiles-regions list" [
+export def "dfareporting-regions-list" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -9639,7 +9639,7 @@ export def "userprofiles-regions list" [
 #
 # PATCH /userprofiles/{profileId}/remarketingListShares
 # operationId: dfareporting.remarketingListShares.patch
-export def "userprofiles-remarketing-list-shares update-by-profile-id" [
+export def "dfareporting-remarketing-list-shares-patch" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -9695,7 +9695,7 @@ export def "userprofiles-remarketing-list-shares update-by-profile-id" [
 #
 # PUT /userprofiles/{profileId}/remarketingListShares
 # operationId: dfareporting.remarketingListShares.update
-export def "userprofiles-remarketing-list-shares update-by-profile-id-1" [
+export def "dfareporting-remarketing-list-shares-update" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -9750,7 +9750,7 @@ export def "userprofiles-remarketing-list-shares update-by-profile-id-1" [
 #
 # GET /userprofiles/{profileId}/remarketingListShares/{remarketingListId}
 # operationId: dfareporting.remarketingListShares.get
-export def "userprofiles-remarketing-list-shares get" [
+export def "dfareporting-remarketing-list-shares-get" [
   profile_id: string
   remarketing_list_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9800,7 +9800,7 @@ export def "userprofiles-remarketing-list-shares get" [
 #
 # GET /userprofiles/{profileId}/remarketingLists
 # operationId: dfareporting.remarketingLists.list
-export def "userprofiles-remarketing-lists list" [
+export def "dfareporting-remarketing-lists-list" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -9858,7 +9858,7 @@ export def "userprofiles-remarketing-lists list" [
 # operationId: dfareporting.remarketingLists.patch
 # --advertiserIdDimensionValue shape: {dimensionName?: string, etag?: string, id?: string, kind?: string, matchType?: "EXACT"|"BEGINS_WITH"|"CONTAINS"|"WILDCARD_EXPRESSION", value?: string}
 # --listPopulationRule shape: {floodlightActivityId?: string, floodlightActivityName?: string, listPopulationClauses?: list}
-export def "userprofiles-remarketing-lists update-by-profile-id" [
+export def "dfareporting-remarketing-lists-patch" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -9925,7 +9925,7 @@ export def "userprofiles-remarketing-lists update-by-profile-id" [
 # operationId: dfareporting.remarketingLists.insert
 # --advertiserIdDimensionValue shape: {dimensionName?: string, etag?: string, id?: string, kind?: string, matchType?: "EXACT"|"BEGINS_WITH"|"CONTAINS"|"WILDCARD_EXPRESSION", value?: string}
 # --listPopulationRule shape: {floodlightActivityId?: string, floodlightActivityName?: string, listPopulationClauses?: list}
-export def "userprofiles-remarketing-lists create" [
+export def "dfareporting-remarketing-lists-insert" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -9991,7 +9991,7 @@ export def "userprofiles-remarketing-lists create" [
 # operationId: dfareporting.remarketingLists.update
 # --advertiserIdDimensionValue shape: {dimensionName?: string, etag?: string, id?: string, kind?: string, matchType?: "EXACT"|"BEGINS_WITH"|"CONTAINS"|"WILDCARD_EXPRESSION", value?: string}
 # --listPopulationRule shape: {floodlightActivityId?: string, floodlightActivityName?: string, listPopulationClauses?: list}
-export def "userprofiles-remarketing-lists update-by-profile-id-1" [
+export def "dfareporting-remarketing-lists-update" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -10055,7 +10055,7 @@ export def "userprofiles-remarketing-lists update-by-profile-id-1" [
 #
 # GET /userprofiles/{profileId}/remarketingLists/{id}
 # operationId: dfareporting.remarketingLists.get
-export def "userprofiles-remarketing-lists get" [
+export def "dfareporting-remarketing-lists-get" [
   profile_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -10105,7 +10105,7 @@ export def "userprofiles-remarketing-lists get" [
 #
 # GET /userprofiles/{profileId}/reports
 # operationId: dfareporting.reports.list
-export def "userprofiles-reports list" [
+export def "dfareporting-reports-list" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -10167,7 +10167,7 @@ export def "userprofiles-reports list" [
 # --pathToConversionCriteria shape: {activityFilters?: list, conversionDimensions?: list, customFloodlightVariables?: list, customRichMediaEvents?: list, dateRange?: record, floodlightConfigId?: record, metricNames?: list<string>, perInteractionDimensions?: list, reportProperties?: record}
 # --reachCriteria shape: {activities?: record, customRichMediaEvents?: record, dateRange?: record, dimensionFilters?: list, dimensions?: list, enableAllDimensionCombinations?: bool, metricNames?: list<string>, reachByFrequencyMetricNames?: list<string>}
 # --schedule shape: {active?: bool, every?: int, expirationDate?: string, repeats?: string, repeatsOnWeekDays?: list<string>, runsOnDayOfMonth?: "DAY_OF_MONTH"|"WEEK_OF_MONTH", startDate?: string}
-export def "userprofiles-reports create" [
+export def "dfareporting-reports-insert" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -10247,7 +10247,7 @@ export def "userprofiles-reports create" [
 # --pathToConversionCriteria shape: {activityFilters?: list, conversionDimensions?: list, customFloodlightVariables?: list, customRichMediaEvents?: list, dateRange?: record, floodlightConfigId?: record, metricNames?: list<string>, perInteractionDimensions?: list, reportProperties?: record}
 # --reachCriteria shape: {activities?: record, customRichMediaEvents?: record, dateRange?: record, dimensionFilters?: list, dimensions?: list, enableAllDimensionCombinations?: bool, metricNames?: list<string>, reachByFrequencyMetricNames?: list<string>}
 # --schedule shape: {active?: bool, every?: int, expirationDate?: string, repeats?: string, repeatsOnWeekDays?: list<string>, runsOnDayOfMonth?: "DAY_OF_MONTH"|"WEEK_OF_MONTH", startDate?: string}
-export def "userprofiles-reports-compatiblefields-query list" [
+export def "dfareporting-reports-compatible-fields-query" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -10318,7 +10318,7 @@ export def "userprofiles-reports-compatiblefields-query list" [
 #
 # DELETE /userprofiles/{profileId}/reports/{reportId}
 # operationId: dfareporting.reports.delete
-export def "userprofiles-reports delete" [
+export def "dfareporting-reports-delete" [
   profile_id: string
   report_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -10368,7 +10368,7 @@ export def "userprofiles-reports delete" [
 #
 # GET /userprofiles/{profileId}/reports/{reportId}
 # operationId: dfareporting.reports.get
-export def "userprofiles-reports get" [
+export def "dfareporting-reports-get" [
   profile_id: string
   report_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -10427,7 +10427,7 @@ export def "userprofiles-reports get" [
 # --pathToConversionCriteria shape: {activityFilters?: list, conversionDimensions?: list, customFloodlightVariables?: list, customRichMediaEvents?: list, dateRange?: record, floodlightConfigId?: record, metricNames?: list<string>, perInteractionDimensions?: list, reportProperties?: record}
 # --reachCriteria shape: {activities?: record, customRichMediaEvents?: record, dateRange?: record, dimensionFilters?: list, dimensions?: list, enableAllDimensionCombinations?: bool, metricNames?: list<string>, reachByFrequencyMetricNames?: list<string>}
 # --schedule shape: {active?: bool, every?: int, expirationDate?: string, repeats?: string, repeatsOnWeekDays?: list<string>, runsOnDayOfMonth?: "DAY_OF_MONTH"|"WEEK_OF_MONTH", startDate?: string}
-export def "userprofiles-reports update-by-profile-id-report-id" [
+export def "dfareporting-reports-patch" [
   profile_id: string
   report_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -10509,7 +10509,7 @@ export def "userprofiles-reports update-by-profile-id-report-id" [
 # --pathToConversionCriteria shape: {activityFilters?: list, conversionDimensions?: list, customFloodlightVariables?: list, customRichMediaEvents?: list, dateRange?: record, floodlightConfigId?: record, metricNames?: list<string>, perInteractionDimensions?: list, reportProperties?: record}
 # --reachCriteria shape: {activities?: record, customRichMediaEvents?: record, dateRange?: record, dimensionFilters?: list, dimensions?: list, enableAllDimensionCombinations?: bool, metricNames?: list<string>, reachByFrequencyMetricNames?: list<string>}
 # --schedule shape: {active?: bool, every?: int, expirationDate?: string, repeats?: string, repeatsOnWeekDays?: list<string>, runsOnDayOfMonth?: "DAY_OF_MONTH"|"WEEK_OF_MONTH", startDate?: string}
-export def "userprofiles-reports update-by-profile-id-report-id-1" [
+export def "dfareporting-reports-update" [
   profile_id: string
   report_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -10582,7 +10582,7 @@ export def "userprofiles-reports update-by-profile-id-report-id-1" [
 #
 # GET /userprofiles/{profileId}/reports/{reportId}/files
 # operationId: dfareporting.reports.files.list
-export def "userprofiles-reports-files list" [
+export def "dfareporting-reports-files-list" [
   profile_id: string
   report_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -10636,7 +10636,7 @@ export def "userprofiles-reports-files list" [
 #
 # GET /userprofiles/{profileId}/reports/{reportId}/files/{fileId}
 # operationId: dfareporting.reports.files.get
-export def "userprofiles-reports-files get" [
+export def "dfareporting-reports-files-get" [
   profile_id: string
   report_id: string
   file_id: string
@@ -10688,7 +10688,7 @@ export def "userprofiles-reports-files get" [
 #
 # POST /userprofiles/{profileId}/reports/{reportId}/run
 # operationId: dfareporting.reports.run
-export def "userprofiles-reports-run create" [
+export def "dfareporting-reports-run" [
   profile_id: string
   report_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -10739,7 +10739,7 @@ export def "userprofiles-reports-run create" [
 #
 # GET /userprofiles/{profileId}/sites
 # operationId: dfareporting.sites.list
-export def "userprofiles-sites list" [
+export def "dfareporting-sites-list" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -10807,7 +10807,7 @@ export def "userprofiles-sites list" [
 # --siteContacts item shape: {address?: string, contactType?: "SALES_PERSON"|"TRAFFICKER", email?: string, firstName?: string, id?: string, lastName?: string, phone?: string, title?: string}
 # --siteSettings shape: {activeViewOptOut?: bool, adBlockingOptOut?: bool, disableNewCookie?: bool, tagSetting?: record, videoActiveViewOptOutTemplate?: bool, vpaidAdapterChoiceTemplate?: "DEFAULT"|"FLASH"|"HTML5"|"BOTH"}
 # --videoSettings shape: {companionSettings?: record, kind?: string, obaEnabled?: bool, obaSettings?: record, orientation?: "ANY"|"LANDSCAPE"|"PORTRAIT", skippableSettings?: record, transcodeSettings?: record}
-export def "userprofiles-sites update-by-profile-id" [
+export def "dfareporting-sites-patch" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -10877,7 +10877,7 @@ export def "userprofiles-sites update-by-profile-id" [
 # --siteContacts item shape: {address?: string, contactType?: "SALES_PERSON"|"TRAFFICKER", email?: string, firstName?: string, id?: string, lastName?: string, phone?: string, title?: string}
 # --siteSettings shape: {activeViewOptOut?: bool, adBlockingOptOut?: bool, disableNewCookie?: bool, tagSetting?: record, videoActiveViewOptOutTemplate?: bool, vpaidAdapterChoiceTemplate?: "DEFAULT"|"FLASH"|"HTML5"|"BOTH"}
 # --videoSettings shape: {companionSettings?: record, kind?: string, obaEnabled?: bool, obaSettings?: record, orientation?: "ANY"|"LANDSCAPE"|"PORTRAIT", skippableSettings?: record, transcodeSettings?: record}
-export def "userprofiles-sites create" [
+export def "dfareporting-sites-insert" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -10946,7 +10946,7 @@ export def "userprofiles-sites create" [
 # --siteContacts item shape: {address?: string, contactType?: "SALES_PERSON"|"TRAFFICKER", email?: string, firstName?: string, id?: string, lastName?: string, phone?: string, title?: string}
 # --siteSettings shape: {activeViewOptOut?: bool, adBlockingOptOut?: bool, disableNewCookie?: bool, tagSetting?: record, videoActiveViewOptOutTemplate?: bool, vpaidAdapterChoiceTemplate?: "DEFAULT"|"FLASH"|"HTML5"|"BOTH"}
 # --videoSettings shape: {companionSettings?: record, kind?: string, obaEnabled?: bool, obaSettings?: record, orientation?: "ANY"|"LANDSCAPE"|"PORTRAIT", skippableSettings?: record, transcodeSettings?: record}
-export def "userprofiles-sites update-by-profile-id-1" [
+export def "dfareporting-sites-update" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -11010,7 +11010,7 @@ export def "userprofiles-sites update-by-profile-id-1" [
 #
 # GET /userprofiles/{profileId}/sites/{id}
 # operationId: dfareporting.sites.get
-export def "userprofiles-sites get" [
+export def "dfareporting-sites-get" [
   profile_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -11060,7 +11060,7 @@ export def "userprofiles-sites get" [
 #
 # GET /userprofiles/{profileId}/sizes
 # operationId: dfareporting.sizes.list
-export def "userprofiles-sizes list" [
+export def "dfareporting-sizes-list" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -11112,7 +11112,7 @@ export def "userprofiles-sizes list" [
 #
 # POST /userprofiles/{profileId}/sizes
 # operationId: dfareporting.sizes.insert
-export def "userprofiles-sizes create" [
+export def "dfareporting-sizes-insert" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -11168,7 +11168,7 @@ export def "userprofiles-sizes create" [
 #
 # GET /userprofiles/{profileId}/sizes/{id}
 # operationId: dfareporting.sizes.get
-export def "userprofiles-sizes get" [
+export def "dfareporting-sizes-get" [
   profile_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -11218,7 +11218,7 @@ export def "userprofiles-sizes get" [
 #
 # GET /userprofiles/{profileId}/subaccounts
 # operationId: dfareporting.subaccounts.list
-export def "userprofiles-subaccounts list" [
+export def "dfareporting-subaccounts-list" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -11272,7 +11272,7 @@ export def "userprofiles-subaccounts list" [
 #
 # PATCH /userprofiles/{profileId}/subaccounts
 # operationId: dfareporting.subaccounts.patch
-export def "userprofiles-subaccounts update-by-profile-id" [
+export def "dfareporting-subaccounts-patch" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -11329,7 +11329,7 @@ export def "userprofiles-subaccounts update-by-profile-id" [
 #
 # POST /userprofiles/{profileId}/subaccounts
 # operationId: dfareporting.subaccounts.insert
-export def "userprofiles-subaccounts create" [
+export def "dfareporting-subaccounts-insert" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -11385,7 +11385,7 @@ export def "userprofiles-subaccounts create" [
 #
 # PUT /userprofiles/{profileId}/subaccounts
 # operationId: dfareporting.subaccounts.update
-export def "userprofiles-subaccounts update-by-profile-id-1" [
+export def "dfareporting-subaccounts-update" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -11441,7 +11441,7 @@ export def "userprofiles-subaccounts update-by-profile-id-1" [
 #
 # GET /userprofiles/{profileId}/subaccounts/{id}
 # operationId: dfareporting.subaccounts.get
-export def "userprofiles-subaccounts get" [
+export def "dfareporting-subaccounts-get" [
   profile_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -11491,7 +11491,7 @@ export def "userprofiles-subaccounts get" [
 #
 # GET /userprofiles/{profileId}/targetableRemarketingLists
 # operationId: dfareporting.targetableRemarketingLists.list
-export def "userprofiles-targetable-remarketing-lists list" [
+export def "dfareporting-targetable-remarketing-lists-list" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -11546,7 +11546,7 @@ export def "userprofiles-targetable-remarketing-lists list" [
 #
 # GET /userprofiles/{profileId}/targetableRemarketingLists/{id}
 # operationId: dfareporting.targetableRemarketingLists.get
-export def "userprofiles-targetable-remarketing-lists get" [
+export def "dfareporting-targetable-remarketing-lists-get" [
   profile_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -11596,7 +11596,7 @@ export def "userprofiles-targetable-remarketing-lists get" [
 #
 # GET /userprofiles/{profileId}/targetingTemplates
 # operationId: dfareporting.targetingTemplates.list
-export def "userprofiles-targeting-templates list" [
+export def "dfareporting-targeting-templates-list" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -11658,7 +11658,7 @@ export def "userprofiles-targeting-templates list" [
 # --languageTargeting shape: {languages?: list}
 # --listTargetingExpression shape: {expression?: string}
 # --technologyTargeting shape: {browsers?: list, connectionTypes?: list, mobileCarriers?: list, operatingSystemVersions?: list, operatingSystems?: list, platformTypes?: list}
-export def "userprofiles-targeting-templates update-by-profile-id" [
+export def "dfareporting-targeting-templates-patch" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -11730,7 +11730,7 @@ export def "userprofiles-targeting-templates update-by-profile-id" [
 # --languageTargeting shape: {languages?: list}
 # --listTargetingExpression shape: {expression?: string}
 # --technologyTargeting shape: {browsers?: list, connectionTypes?: list, mobileCarriers?: list, operatingSystemVersions?: list, operatingSystems?: list, platformTypes?: list}
-export def "userprofiles-targeting-templates create" [
+export def "dfareporting-targeting-templates-insert" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -11801,7 +11801,7 @@ export def "userprofiles-targeting-templates create" [
 # --languageTargeting shape: {languages?: list}
 # --listTargetingExpression shape: {expression?: string}
 # --technologyTargeting shape: {browsers?: list, connectionTypes?: list, mobileCarriers?: list, operatingSystemVersions?: list, operatingSystems?: list, platformTypes?: list}
-export def "userprofiles-targeting-templates update-by-profile-id-1" [
+export def "dfareporting-targeting-templates-update" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -11865,7 +11865,7 @@ export def "userprofiles-targeting-templates update-by-profile-id-1" [
 #
 # GET /userprofiles/{profileId}/targetingTemplates/{id}
 # operationId: dfareporting.targetingTemplates.get
-export def "userprofiles-targeting-templates get" [
+export def "dfareporting-targeting-templates-get" [
   profile_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -11915,7 +11915,7 @@ export def "userprofiles-targeting-templates get" [
 #
 # GET /userprofiles/{profileId}/userRolePermissionGroups
 # operationId: dfareporting.userRolePermissionGroups.list
-export def "userprofiles-user-role-permission-groups list" [
+export def "dfareporting-user-role-permission-groups-list" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -11963,7 +11963,7 @@ export def "userprofiles-user-role-permission-groups list" [
 #
 # GET /userprofiles/{profileId}/userRolePermissionGroups/{id}
 # operationId: dfareporting.userRolePermissionGroups.get
-export def "userprofiles-user-role-permission-groups get" [
+export def "dfareporting-user-role-permission-groups-get" [
   profile_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -12013,7 +12013,7 @@ export def "userprofiles-user-role-permission-groups get" [
 #
 # GET /userprofiles/{profileId}/userRolePermissions
 # operationId: dfareporting.userRolePermissions.list
-export def "userprofiles-user-role-permissions list" [
+export def "dfareporting-user-role-permissions-list" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -12062,7 +12062,7 @@ export def "userprofiles-user-role-permissions list" [
 #
 # GET /userprofiles/{profileId}/userRolePermissions/{id}
 # operationId: dfareporting.userRolePermissions.get
-export def "userprofiles-user-role-permissions get" [
+export def "dfareporting-user-role-permissions-get" [
   profile_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -12112,7 +12112,7 @@ export def "userprofiles-user-role-permissions get" [
 #
 # GET /userprofiles/{profileId}/userRoles
 # operationId: dfareporting.userRoles.list
-export def "userprofiles-user-roles list" [
+export def "dfareporting-user-roles-list" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -12169,7 +12169,7 @@ export def "userprofiles-user-roles list" [
 # PATCH /userprofiles/{profileId}/userRoles
 # operationId: dfareporting.userRoles.patch
 # --permissions item shape: {availability?: "NOT_AVAILABLE_BY_DEFAULT"|"ACCOUNT_BY_DEFAULT"|"SUBACCOUNT_AND_ACCOUNT_BY_DEFAULT"|"ACCOUNT_ALWAYS"|"SUBACCOUNT_AND_ACCOUNT_ALWAYS"|"USER_PROFILE_ONLY", id?: string, kind?: string, name?: string, permissionGroupId?: string}
-export def "userprofiles-user-roles update-by-profile-id" [
+export def "dfareporting-user-roles-patch" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -12230,7 +12230,7 @@ export def "userprofiles-user-roles update-by-profile-id" [
 # POST /userprofiles/{profileId}/userRoles
 # operationId: dfareporting.userRoles.insert
 # --permissions item shape: {availability?: "NOT_AVAILABLE_BY_DEFAULT"|"ACCOUNT_BY_DEFAULT"|"SUBACCOUNT_AND_ACCOUNT_BY_DEFAULT"|"ACCOUNT_ALWAYS"|"SUBACCOUNT_AND_ACCOUNT_ALWAYS"|"USER_PROFILE_ONLY", id?: string, kind?: string, name?: string, permissionGroupId?: string}
-export def "userprofiles-user-roles create" [
+export def "dfareporting-user-roles-insert" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -12290,7 +12290,7 @@ export def "userprofiles-user-roles create" [
 # PUT /userprofiles/{profileId}/userRoles
 # operationId: dfareporting.userRoles.update
 # --permissions item shape: {availability?: "NOT_AVAILABLE_BY_DEFAULT"|"ACCOUNT_BY_DEFAULT"|"SUBACCOUNT_AND_ACCOUNT_BY_DEFAULT"|"ACCOUNT_ALWAYS"|"SUBACCOUNT_AND_ACCOUNT_ALWAYS"|"USER_PROFILE_ONLY", id?: string, kind?: string, name?: string, permissionGroupId?: string}
-export def "userprofiles-user-roles update-by-profile-id-1" [
+export def "dfareporting-user-roles-update" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -12349,7 +12349,7 @@ export def "userprofiles-user-roles update-by-profile-id-1" [
 #
 # DELETE /userprofiles/{profileId}/userRoles/{id}
 # operationId: dfareporting.userRoles.delete
-export def "userprofiles-user-roles delete" [
+export def "dfareporting-user-roles-delete" [
   profile_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -12399,7 +12399,7 @@ export def "userprofiles-user-roles delete" [
 #
 # GET /userprofiles/{profileId}/userRoles/{id}
 # operationId: dfareporting.userRoles.get
-export def "userprofiles-user-roles get" [
+export def "dfareporting-user-roles-get" [
   profile_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -12449,7 +12449,7 @@ export def "userprofiles-user-roles get" [
 #
 # GET /userprofiles/{profileId}/videoFormats
 # operationId: dfareporting.videoFormats.list
-export def "userprofiles-video-formats list" [
+export def "dfareporting-video-formats-list" [
   profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -12497,7 +12497,7 @@ export def "userprofiles-video-formats list" [
 #
 # GET /userprofiles/{profileId}/videoFormats/{id}
 # operationId: dfareporting.videoFormats.get
-export def "userprofiles-video-formats get" [
+export def "dfareporting-video-formats-get" [
   profile_id: string
   id: int
   --base-url(-b): string@base-url-completer # API base URL

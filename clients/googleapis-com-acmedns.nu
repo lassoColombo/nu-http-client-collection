@@ -106,7 +106,7 @@ def alt-completer [] { ["json" "media" "proto"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "acme-challenge-sets get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "acmedns-acme-challenge-sets-get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -130,7 +130,7 @@ export def commands []: nothing -> table {
 #
 # GET /v1/acmeChallengeSets/{rootDomain}
 # operationId: acmedns.acmeChallengeSets.get
-export def "acme-challenge-sets get" [
+export def "acmedns-acme-challenge-sets-get" [
   root_domain: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -180,7 +180,7 @@ export def "acme-challenge-sets get" [
 # operationId: acmedns.acmeChallengeSets.rotateChallenges
 # --recordsToAdd item shape: {digest?: string, fqdn?: string}
 # --recordsToRemove item shape: {digest?: string, fqdn?: string}
-export def "acme-challenge-sets create-rotate" [
+export def "acmedns-acme-challenge-sets-rotate-challenges" [
   root_domain: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

@@ -98,7 +98,7 @@ def auth-scheme-completer [] { ["query-api-key"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "content-json get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-content-json" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -119,7 +119,7 @@ export def commands []: nothing -> table {
 }
 
 # GET /content.json
-export def "content-json get" [
+export def "get-content-json" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -152,7 +152,7 @@ export def "content-json get" [
 }
 
 # GET /content/{source}/{section}.json
-export def "content list" [
+export def "get-content-source-section-json" [
   source: string
   section: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -190,7 +190,7 @@ export def "content list" [
 }
 
 # GET /content/{source}/{section}/{time-period}.json
-export def "content get" [
+export def "get-content-source-section-time-period-json" [
   source: string
   section: string
   time_period: int

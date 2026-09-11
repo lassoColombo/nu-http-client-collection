@@ -133,7 +133,7 @@ def time-series-type-completer [] { ["ASSOCIATED" "DISASSOCIATED"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "assets-associate create" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "associate-assets" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -157,7 +157,7 @@ export def commands []: nothing -> table {
 #
 # POST /assets/{assetId}/associate
 # operationId: AssociateAssets
-export def "assets-associate create" [
+export def "associate-assets" [
   asset_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -208,7 +208,7 @@ export def "assets-associate create" [
 #
 # POST /timeseries/associate/
 # operationId: AssociateTimeSeriesToAssetProperty
-export def "timeseries-associate create-time-series-to-asset-property" [
+export def "associate-time-series-to-asset-property" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -259,7 +259,7 @@ export def "timeseries-associate create-time-series-to-asset-property" [
 #
 # POST /projects/{projectId}/assets/associate
 # operationId: BatchAssociateProjectAssets
-export def "projects-assets-associate create-batch" [
+export def "batch-associate-project-assets" [
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -309,7 +309,7 @@ export def "projects-assets-associate create-batch" [
 #
 # POST /projects/{projectId}/assets/disassociate
 # operationId: BatchDisassociateProjectAssets
-export def "projects-assets-disassociate create-batch" [
+export def "batch-disassociate-project-assets" [
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -360,7 +360,7 @@ export def "projects-assets-disassociate create-batch" [
 # POST /properties/batch/aggregates
 # operationId: BatchGetAssetPropertyAggregates
 # --entries item shape: {entryId: any, assetId?: any, propertyId?: any, propertyAlias?: any, aggregateTypes: any, resolution: any, startDate: any, endDate: any, qualities?: any, timeOrdering?: any}
-export def "properties-batch-aggregates get-asset-property" [
+export def "batch-get-asset-property-aggregates" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -413,7 +413,7 @@ export def "properties-batch-aggregates get-asset-property" [
 # POST /properties/batch/latest
 # operationId: BatchGetAssetPropertyValue
 # --entries item shape: {entryId: any, assetId?: any, propertyId?: any, propertyAlias?: any}
-export def "properties-batch-latest get-asset-property-value" [
+export def "batch-get-asset-property-value" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -464,7 +464,7 @@ export def "properties-batch-latest get-asset-property-value" [
 # POST /properties/batch/history
 # operationId: BatchGetAssetPropertyValueHistory
 # --entries item shape: {entryId: any, assetId?: any, propertyId?: any, propertyAlias?: any, startDate?: any, endDate?: any, qualities?: any, timeOrdering?: any}
-export def "properties-batch-history get-asset-property-value" [
+export def "batch-get-asset-property-value-history" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -517,7 +517,7 @@ export def "properties-batch-history get-asset-property-value" [
 # POST /properties
 # operationId: BatchPutAssetPropertyValue
 # --entries item shape: {entryId: any, assetId?: any, propertyId?: any, propertyAlias?: any, propertyValues: any}
-export def "properties update-batch-asset-property-value" [
+export def "batch-put-asset-property-value" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -566,7 +566,7 @@ export def "properties update-batch-asset-property-value" [
 # operationId: CreateAccessPolicy
 # --accessPolicyIdentity shape: {user?: any, group?: any, iamUser?: any, iamRole?: any}
 # --accessPolicyResource shape: {portal?: any, project?: any}
-export def "access-policies create-policy" [
+export def "create-access-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -617,7 +617,7 @@ export def "access-policies create-policy" [
 #
 # GET /access-policies
 # operationId: ListAccessPolicies
-export def "access-policies list" [
+export def "list-access-policies" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -668,7 +668,7 @@ export def "access-policies list" [
 #
 # POST /assets
 # operationId: CreateAsset
-export def "assets create" [
+export def "create-asset" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -719,7 +719,7 @@ export def "assets create" [
 #
 # GET /assets
 # operationId: ListAssets
-export def "assets list" [
+export def "list-assets" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -770,7 +770,7 @@ export def "assets list" [
 # --assetModelProperties item shape: {name: any, dataType: any, dataTypeSpec?: any, unit?: any, type: any}
 # --assetModelHierarchies item shape: {name: any, childAssetModelId: any}
 # --assetModelCompositeModels item shape: {name: any, description?: any, type: any, properties?: any}
-export def "asset-models create" [
+export def "create-asset-model" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -823,7 +823,7 @@ export def "asset-models create" [
 #
 # GET /asset-models
 # operationId: ListAssetModels
-export def "asset-models list" [
+export def "list-asset-models" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -872,7 +872,7 @@ export def "asset-models list" [
 # --files item shape: {bucket: any, key: any, versionId?: any}
 # --errorReportLocation shape: {bucket?: any, prefix?: any}
 # --jobConfiguration shape: {fileFormat?: any}
-export def "jobs create-bulk-import" [
+export def "create-bulk-import-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -923,7 +923,7 @@ export def "jobs create-bulk-import" [
 #
 # GET /jobs
 # operationId: ListBulkImportJobs
-export def "jobs list-bulk-import" [
+export def "list-bulk-import-jobs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -970,7 +970,7 @@ export def "jobs list-bulk-import" [
 #
 # POST /dashboards
 # operationId: CreateDashboard
-export def "dashboards create" [
+export def "create-dashboard" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1023,7 +1023,7 @@ export def "dashboards create" [
 # POST /20200301/gateways
 # operationId: CreateGateway
 # --gatewayPlatform shape: {greengrass?: any, greengrassV2?: any}
-export def "20200301-gateways create" [
+export def "create-gateway" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1072,7 +1072,7 @@ export def "20200301-gateways create" [
 #
 # GET /20200301/gateways
 # operationId: ListGateways
-export def "20200301-gateways list" [
+export def "list-gateways" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1120,7 +1120,7 @@ export def "20200301-gateways list" [
 # operationId: CreatePortal
 # --portalLogoImageFile shape: {data?: any, type?: any}
 # --alarms shape: {alarmRoleArn?: any, notificationLambdaArn?: any}
-export def "portals create" [
+export def "create-portal" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1176,7 +1176,7 @@ export def "portals create" [
 #
 # GET /portals
 # operationId: ListPortals
-export def "portals list" [
+export def "list-portals" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1222,7 +1222,7 @@ export def "portals list" [
 #
 # POST /projects
 # operationId: CreateProject
-export def "projects create" [
+export def "create-project" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1273,7 +1273,7 @@ export def "projects create" [
 #
 # DELETE /access-policies/{accessPolicyId}
 # operationId: DeleteAccessPolicy
-export def "access-policies delete-policy" [
+export def "delete-access-policy" [
   access_policy_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1320,7 +1320,7 @@ export def "access-policies delete-policy" [
 #
 # GET /access-policies/{accessPolicyId}
 # operationId: DescribeAccessPolicy
-export def "access-policies get-policy" [
+export def "describe-access-policy" [
   access_policy_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1367,7 +1367,7 @@ export def "access-policies get-policy" [
 # operationId: UpdateAccessPolicy
 # --accessPolicyIdentity shape: {user?: any, group?: any, iamUser?: any, iamRole?: any}
 # --accessPolicyResource shape: {portal?: any, project?: any}
-export def "access-policies update-policy" [
+export def "update-access-policy" [
   access_policy_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1419,7 +1419,7 @@ export def "access-policies update-policy" [
 #
 # DELETE /assets/{assetId}
 # operationId: DeleteAsset
-export def "assets delete" [
+export def "delete-asset" [
   asset_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1466,7 +1466,7 @@ export def "assets delete" [
 #
 # GET /assets/{assetId}
 # operationId: DescribeAsset
-export def "assets get" [
+export def "describe-asset" [
   asset_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1513,7 +1513,7 @@ export def "assets get" [
 #
 # PUT /assets/{assetId}
 # operationId: UpdateAsset
-export def "assets update" [
+export def "update-asset" [
   asset_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1564,7 +1564,7 @@ export def "assets update" [
 #
 # DELETE /asset-models/{assetModelId}
 # operationId: DeleteAssetModel
-export def "asset-models delete" [
+export def "delete-asset-model" [
   asset_model_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1611,7 +1611,7 @@ export def "asset-models delete" [
 #
 # GET /asset-models/{assetModelId}
 # operationId: DescribeAssetModel
-export def "asset-models get" [
+export def "describe-asset-model" [
   asset_model_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1661,7 +1661,7 @@ export def "asset-models get" [
 # --assetModelProperties item shape: {id?: any, name: any, dataType: any, dataTypeSpec?: any, unit?: any, type: any}
 # --assetModelHierarchies item shape: {id?: any, name: any, childAssetModelId: any}
 # --assetModelCompositeModels item shape: {name: any, description?: any, type: any, properties?: any, id?: any}
-export def "asset-models update" [
+export def "update-asset-model" [
   asset_model_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1715,7 +1715,7 @@ export def "asset-models update" [
 #
 # DELETE /dashboards/{dashboardId}
 # operationId: DeleteDashboard
-export def "dashboards delete" [
+export def "delete-dashboard" [
   dashboard_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1762,7 +1762,7 @@ export def "dashboards delete" [
 #
 # GET /dashboards/{dashboardId}
 # operationId: DescribeDashboard
-export def "dashboards get" [
+export def "describe-dashboard" [
   dashboard_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1807,7 +1807,7 @@ export def "dashboards get" [
 #
 # PUT /dashboards/{dashboardId}
 # operationId: UpdateDashboard
-export def "dashboards update" [
+export def "update-dashboard" [
   dashboard_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1859,7 +1859,7 @@ export def "dashboards update" [
 #
 # DELETE /20200301/gateways/{gatewayId}
 # operationId: DeleteGateway
-export def "20200301-gateways delete" [
+export def "delete-gateway" [
   gateway_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1904,7 +1904,7 @@ export def "20200301-gateways delete" [
 #
 # GET /20200301/gateways/{gatewayId}
 # operationId: DescribeGateway
-export def "20200301-gateways get" [
+export def "describe-gateway" [
   gateway_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1949,7 +1949,7 @@ export def "20200301-gateways get" [
 #
 # PUT /20200301/gateways/{gatewayId}
 # operationId: UpdateGateway
-export def "20200301-gateways update" [
+export def "update-gateway" [
   gateway_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1998,7 +1998,7 @@ export def "20200301-gateways update" [
 #
 # DELETE /portals/{portalId}
 # operationId: DeletePortal
-export def "portals delete" [
+export def "delete-portal" [
   portal_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2045,7 +2045,7 @@ export def "portals delete" [
 #
 # GET /portals/{portalId}
 # operationId: DescribePortal
-export def "portals get" [
+export def "describe-portal" [
   portal_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2092,7 +2092,7 @@ export def "portals get" [
 # operationId: UpdatePortal
 # --portalLogoImage shape: {id?: any, file?: record}
 # --alarms shape: {alarmRoleArn?: any, notificationLambdaArn?: any}
-export def "portals update" [
+export def "update-portal" [
   portal_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2148,7 +2148,7 @@ export def "portals update" [
 #
 # DELETE /projects/{projectId}
 # operationId: DeleteProject
-export def "projects delete" [
+export def "delete-project" [
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2195,7 +2195,7 @@ export def "projects delete" [
 #
 # GET /projects/{projectId}
 # operationId: DescribeProject
-export def "projects get" [
+export def "describe-project" [
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2240,7 +2240,7 @@ export def "projects get" [
 #
 # PUT /projects/{projectId}
 # operationId: UpdateProject
-export def "projects update" [
+export def "update-project" [
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2291,7 +2291,7 @@ export def "projects update" [
 #
 # POST /timeseries/delete/
 # operationId: DeleteTimeSeries
-export def "timeseries-delete delete-time-series" [
+export def "delete-time-series" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2342,7 +2342,7 @@ export def "timeseries-delete delete-time-series" [
 #
 # GET /assets/{assetId}/properties/{propertyId}
 # operationId: DescribeAssetProperty
-export def "assets-properties get-property" [
+export def "describe-asset-property" [
   asset_id: string
   property_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2389,7 +2389,7 @@ export def "assets-properties get-property" [
 #
 # PUT /assets/{assetId}/properties/{propertyId}
 # operationId: UpdateAssetProperty
-export def "assets-properties update-property" [
+export def "update-asset-property" [
   asset_id: string
   property_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2443,7 +2443,7 @@ export def "assets-properties update-property" [
 #
 # GET /jobs/{jobId}
 # operationId: DescribeBulkImportJob
-export def "jobs get-bulk-import" [
+export def "describe-bulk-import-job" [
   job_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2488,7 +2488,7 @@ export def "jobs get-bulk-import" [
 #
 # GET /configuration/account/encryption
 # operationId: DescribeDefaultEncryptionConfiguration
-export def "configuration-account-encryption get-default" [
+export def "describe-default-encryption-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2531,7 +2531,7 @@ export def "configuration-account-encryption get-default" [
 #
 # POST /configuration/account/encryption
 # operationId: PutDefaultEncryptionConfiguration
-export def "configuration-account-encryption update-default" [
+export def "put-default-encryption-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2579,7 +2579,7 @@ export def "configuration-account-encryption update-default" [
 #
 # GET /20200301/gateways/{gatewayId}/capability/{capabilityNamespace}
 # operationId: DescribeGatewayCapabilityConfiguration
-export def "20200301-gateways-capability get-configuration" [
+export def "describe-gateway-capability-configuration" [
   gateway_id: string
   capability_namespace: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2626,7 +2626,7 @@ export def "20200301-gateways-capability get-configuration" [
 #
 # GET /logging
 # operationId: DescribeLoggingOptions
-export def "logging get-options" [
+export def "describe-logging-options" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2670,7 +2670,7 @@ export def "logging get-options" [
 # PUT /logging
 # operationId: PutLoggingOptions
 # --loggingOptions shape: {level?: any}
-export def "logging update-options" [
+export def "put-logging-options" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2717,7 +2717,7 @@ export def "logging update-options" [
 #
 # GET /configuration/account/storage
 # operationId: DescribeStorageConfiguration
-export def "configuration-account-storage get" [
+export def "describe-storage-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2762,7 +2762,7 @@ export def "configuration-account-storage get" [
 # operationId: PutStorageConfiguration
 # --multiLayerStorage shape: {customerManagedS3Storage?: any}
 # --retentionPeriod shape: {numberOfDays?: any, unlimited?: any}
-export def "configuration-account-storage update" [
+export def "put-storage-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2812,7 +2812,7 @@ export def "configuration-account-storage update" [
 #
 # GET /timeseries/describe/
 # operationId: DescribeTimeSeries
-export def "timeseries-describe get-time-series" [
+export def "describe-time-series" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2859,7 +2859,7 @@ export def "timeseries-describe get-time-series" [
 #
 # POST /assets/{assetId}/disassociate
 # operationId: DisassociateAssets
-export def "assets-disassociate create" [
+export def "disassociate-assets" [
   asset_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2910,7 +2910,7 @@ export def "assets-disassociate create" [
 #
 # POST /timeseries/disassociate/
 # operationId: DisassociateTimeSeriesFromAssetProperty
-export def "timeseries-disassociate create-time-series-from-asset-property" [
+export def "disassociate-time-series-from-asset-property" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2961,7 +2961,7 @@ export def "timeseries-disassociate create-time-series-from-asset-property" [
 #
 # GET /properties/aggregates
 # operationId: GetAssetPropertyAggregates
-export def "properties-aggregates get-asset-property" [
+export def "get-asset-property-aggregates" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3016,7 +3016,7 @@ export def "properties-aggregates get-asset-property" [
 #
 # GET /properties/latest
 # operationId: GetAssetPropertyValue
-export def "properties-latest get-asset-property-value" [
+export def "get-asset-property-value" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3063,7 +3063,7 @@ export def "properties-latest get-asset-property-value" [
 #
 # GET /properties/history
 # operationId: GetAssetPropertyValueHistory
-export def "properties-history get-asset-property-value" [
+export def "get-asset-property-value-history" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3116,7 +3116,7 @@ export def "properties-history get-asset-property-value" [
 #
 # GET /properties/interpolated
 # operationId: GetInterpolatedAssetPropertyValues
-export def "properties-interpolated get-asset-property-values" [
+export def "get-interpolated-asset-property-values" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3173,7 +3173,7 @@ export def "properties-interpolated get-asset-property-values" [
 #
 # GET /asset-models/{assetModelId}/properties
 # operationId: ListAssetModelProperties
-export def "asset-models-properties list" [
+export def "list-asset-model-properties" [
   asset_model_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3222,7 +3222,7 @@ export def "asset-models-properties list" [
 #
 # GET /assets/{assetId}/properties
 # operationId: ListAssetProperties
-export def "assets-properties list" [
+export def "list-asset-properties" [
   asset_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3271,7 +3271,7 @@ export def "assets-properties list" [
 #
 # GET /assets/{assetId}/assetRelationships
 # operationId: ListAssetRelationships
-export def "assets-asset-relationships list" [
+export def "list-asset-relationships" [
   asset_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3320,7 +3320,7 @@ export def "assets-asset-relationships list" [
 #
 # GET /assets/{assetId}/hierarchies
 # operationId: ListAssociatedAssets
-export def "assets-hierarchies list-associated" [
+export def "list-associated-assets" [
   asset_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3370,7 +3370,7 @@ export def "assets-hierarchies list-associated" [
 #
 # GET /dashboards
 # operationId: ListDashboards
-export def "dashboards list" [
+export def "list-dashboards" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3417,7 +3417,7 @@ export def "dashboards list" [
 #
 # GET /projects/{projectId}/assets
 # operationId: ListProjectAssets
-export def "projects-assets list" [
+export def "list-project-assets" [
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3465,7 +3465,7 @@ export def "projects-assets list" [
 #
 # GET /projects
 # operationId: ListProjects
-export def "projects list" [
+export def "list-projects" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3512,7 +3512,7 @@ export def "projects list" [
 #
 # GET /tags
 # operationId: ListTagsForResource
-export def "tags list-for-resource" [
+export def "list-tags-for-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3557,7 +3557,7 @@ export def "tags list-for-resource" [
 #
 # POST /tags
 # operationId: TagResource
-export def "tags tag-resource" [
+export def "tag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3606,7 +3606,7 @@ export def "tags tag-resource" [
 #
 # GET /timeseries/
 # operationId: ListTimeSeries
-export def "timeseries list-time-series" [
+export def "list-time-series" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3655,7 +3655,7 @@ export def "timeseries list-time-series" [
 #
 # DELETE /tags
 # operationId: UntagResource
-export def "tags untag-resource" [
+export def "untag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3701,7 +3701,7 @@ export def "tags untag-resource" [
 #
 # POST /20200301/gateways/{gatewayId}/capability
 # operationId: UpdateGatewayCapabilityConfiguration
-export def "20200301-gateways-capability update-configuration" [
+export def "update-gateway-capability-configuration" [
   gateway_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

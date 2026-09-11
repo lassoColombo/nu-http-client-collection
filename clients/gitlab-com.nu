@@ -172,7 +172,7 @@ def scope-completer-3 [] { ["active" "online" "paused"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "application-settings get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-v3-application-settings" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -196,7 +196,7 @@ export def commands []: nothing -> table {
 #
 # GET /v3/application/settings
 # operationId: getV3ApplicationSettings
-export def "application-settings get" [
+export def "get-v3-application-settings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -230,7 +230,7 @@ export def "application-settings get" [
 #
 # PUT /v3/application/settings
 # operationId: putV3ApplicationSettings
-export def "application-settings update" [
+export def "put-v3-application-settings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -332,7 +332,7 @@ export def "application-settings update" [
 #
 # POST /v3/ci/lint
 # operationId: postV3CiLint
-export def "ci-lint create" [
+export def "post-v3-ci-lint" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -370,7 +370,7 @@ export def "ci-lint create" [
 # GET /v3/deploy_keys
 #
 # operationId: getV3DeployKeys
-export def "deploy-keys get" [
+export def "get-v3-deploy-keys" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -404,7 +404,7 @@ export def "deploy-keys get" [
 #
 # GET /v3/dockerfiles
 # operationId: getV3Dockerfiles
-export def "dockerfiles list" [
+export def "get-v3-dockerfiles" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -438,7 +438,7 @@ export def "dockerfiles list" [
 #
 # GET /v3/dockerfiles/{name}
 # operationId: getV3DockerfilesName
-export def "dockerfiles get" [
+export def "get-v3-dockerfiles-name" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -474,7 +474,7 @@ export def "dockerfiles get" [
 #
 # GET /v3/gitignores
 # operationId: getV3Gitignores
-export def "gitignores list" [
+export def "get-v3-gitignores" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -508,7 +508,7 @@ export def "gitignores list" [
 #
 # GET /v3/gitignores/{name}
 # operationId: getV3GitignoresName
-export def "gitignores get" [
+export def "get-v3-gitignores-name" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -544,7 +544,7 @@ export def "gitignores get" [
 #
 # GET /v3/gitlab_ci_ymls
 # operationId: getV3GitlabCiYmls
-export def "gitlab-ci-ymls list" [
+export def "get-v3-gitlab-ci-ymls" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -578,7 +578,7 @@ export def "gitlab-ci-ymls list" [
 #
 # GET /v3/gitlab_ci_ymls/{name}
 # operationId: getV3GitlabCiYmlsName
-export def "gitlab-ci-ymls get" [
+export def "get-v3-gitlab-ci-ymls-name" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -614,7 +614,7 @@ export def "gitlab-ci-ymls get" [
 #
 # GET /v3/groups
 # operationId: getV3Groups
-export def "groups list" [
+export def "get-v3-groups" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -656,7 +656,7 @@ export def "groups list" [
 #
 # POST /v3/groups
 # operationId: postV3Groups
-export def "groups create" [
+export def "post-v3-groups" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -700,7 +700,7 @@ export def "groups create" [
 #
 # GET /v3/groups/owned
 # operationId: getV3GroupsOwned
-export def "groups-owned get" [
+export def "get-v3-groups-owned" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -738,7 +738,7 @@ export def "groups-owned get" [
 #
 # DELETE /v3/groups/{id}
 # operationId: deleteV3GroupsId
-export def "groups delete" [
+export def "delete-v3-groups-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -774,7 +774,7 @@ export def "groups delete" [
 #
 # GET /v3/groups/{id}
 # operationId: getV3GroupsId
-export def "groups get" [
+export def "get-v3-groups-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -810,7 +810,7 @@ export def "groups get" [
 #
 # PUT /v3/groups/{id}
 # operationId: putV3GroupsId
-export def "groups update" [
+export def "put-v3-groups-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -856,7 +856,7 @@ export def "groups update" [
 #
 # GET /v3/groups/{id}/access_requests
 # operationId: getV3GroupsIdAccessRequests
-export def "groups-access-requests get" [
+export def "get-v3-groups-id-access-requests" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -895,7 +895,7 @@ export def "groups-access-requests get" [
 #
 # POST /v3/groups/{id}/access_requests
 # operationId: postV3GroupsIdAccessRequests
-export def "groups-access-requests create" [
+export def "post-v3-groups-id-access-requests" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -931,7 +931,7 @@ export def "groups-access-requests create" [
 #
 # DELETE /v3/groups/{id}/access_requests/{user_id}
 # operationId: deleteV3GroupsIdAccessRequestsUserId
-export def "groups-access-requests delete" [
+export def "delete-v3-groups-id-access-requests-user-id" [
   id: string
   user_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -969,7 +969,7 @@ export def "groups-access-requests delete" [
 #
 # PUT /v3/groups/{id}/access_requests/{user_id}/approve
 # operationId: putV3GroupsIdAccessRequestsUserIdApprove
-export def "groups-access-requests-approve update" [
+export def "put-v3-groups-id-access-requests-user-id-approve" [
   id: string
   user_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -1012,7 +1012,7 @@ export def "groups-access-requests-approve update" [
 #
 # GET /v3/groups/{id}/issues
 # operationId: getV3GroupsIdIssues
-export def "groups-issues get" [
+export def "get-v3-groups-id-issues" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1056,7 +1056,7 @@ export def "groups-issues get" [
 #
 # GET /v3/groups/{id}/members
 # operationId: getV3GroupsIdMembers
-export def "groups-members list" [
+export def "get-v3-groups-id-members" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1096,7 +1096,7 @@ export def "groups-members list" [
 #
 # POST /v3/groups/{id}/members
 # operationId: postV3GroupsIdMembers
-export def "groups-members create" [
+export def "post-v3-groups-id-members" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1139,7 +1139,7 @@ export def "groups-members create" [
 #
 # DELETE /v3/groups/{id}/members/{user_id}
 # operationId: deleteV3GroupsIdMembersUserId
-export def "groups-members delete" [
+export def "delete-v3-groups-id-members-user-id" [
   id: string
   user_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -1177,7 +1177,7 @@ export def "groups-members delete" [
 #
 # GET /v3/groups/{id}/members/{user_id}
 # operationId: getV3GroupsIdMembersUserId
-export def "groups-members get" [
+export def "get-v3-groups-id-members-user-id" [
   id: string
   user_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -1215,7 +1215,7 @@ export def "groups-members get" [
 #
 # PUT /v3/groups/{id}/members/{user_id}
 # operationId: putV3GroupsIdMembersUserId
-export def "groups-members update" [
+export def "put-v3-groups-id-members-user-id" [
   id: string
   user_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -1259,7 +1259,7 @@ export def "groups-members update" [
 #
 # GET /v3/groups/{id}/notification_settings
 # operationId: getV3GroupsIdNotificationSettings
-export def "groups-notification-settings get" [
+export def "get-v3-groups-id-notification-settings" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1295,7 +1295,7 @@ export def "groups-notification-settings get" [
 #
 # PUT /v3/groups/{id}/notification_settings
 # operationId: putV3GroupsIdNotificationSettings
-export def "groups-notification-settings update" [
+export def "put-v3-groups-id-notification-settings" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1348,7 +1348,7 @@ export def "groups-notification-settings update" [
 #
 # GET /v3/groups/{id}/projects
 # operationId: getV3GroupsIdProjects
-export def "groups-projects get" [
+export def "get-v3-groups-id-projects" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1393,7 +1393,7 @@ export def "groups-projects get" [
 #
 # POST /v3/groups/{id}/projects/{project_id}
 # operationId: postV3GroupsIdProjectsProjectId
-export def "groups-projects create" [
+export def "post-v3-groups-id-projects-project-id" [
   id: string
   project_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1431,7 +1431,7 @@ export def "groups-projects create" [
 #
 # GET /v3/hooks
 # operationId: getV3Hooks
-export def "hooks list" [
+export def "get-v3-hooks" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1465,7 +1465,7 @@ export def "hooks list" [
 #
 # POST /v3/hooks
 # operationId: postV3Hooks
-export def "hooks create" [
+export def "post-v3-hooks" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1508,7 +1508,7 @@ export def "hooks create" [
 #
 # DELETE /v3/hooks/{id}
 # operationId: deleteV3HooksId
-export def "hooks delete" [
+export def "delete-v3-hooks-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1544,7 +1544,7 @@ export def "hooks delete" [
 #
 # GET /v3/hooks/{id}
 # operationId: getV3HooksId
-export def "hooks get" [
+export def "get-v3-hooks-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1579,7 +1579,7 @@ export def "hooks get" [
 # POST /v3/internal/allowed
 #
 # operationId: postV3InternalAllowed
-export def "internal-allowed create" [
+export def "post-v3-internal-allowed" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1612,7 +1612,7 @@ export def "internal-allowed create" [
 # GET /v3/internal/broadcast_message
 #
 # operationId: getV3InternalBroadcastMessage
-export def "internal-broadcast-message get" [
+export def "get-v3-internal-broadcast-message" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1645,7 +1645,7 @@ export def "internal-broadcast-message get" [
 # GET /v3/internal/check
 #
 # operationId: getV3InternalCheck
-export def "internal-check get" [
+export def "get-v3-internal-check" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1678,7 +1678,7 @@ export def "internal-check get" [
 # GET /v3/internal/discover
 #
 # operationId: getV3InternalDiscover
-export def "internal-discover get" [
+export def "get-v3-internal-discover" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1711,7 +1711,7 @@ export def "internal-discover get" [
 # POST /v3/internal/lfs_authenticate
 #
 # operationId: postV3InternalLfsAuthenticate
-export def "internal-lfs-authenticate create" [
+export def "post-v3-internal-lfs-authenticate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1744,7 +1744,7 @@ export def "internal-lfs-authenticate create" [
 # GET /v3/internal/merge_request_urls
 #
 # operationId: getV3InternalMergeRequestUrls
-export def "internal-merge-request-urls get" [
+export def "get-v3-internal-merge-request-urls" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1777,7 +1777,7 @@ export def "internal-merge-request-urls get" [
 # POST /v3/internal/two_factor_recovery_codes
 #
 # operationId: postV3InternalTwoFactorRecoveryCodes
-export def "internal-two-factor-recovery-codes create" [
+export def "post-v3-internal-two-factor-recovery-codes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1811,7 +1811,7 @@ export def "internal-two-factor-recovery-codes create" [
 #
 # GET /v3/issues
 # operationId: getV3Issues
-export def "issues get" [
+export def "get-v3-issues" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1853,7 +1853,7 @@ export def "issues get" [
 #
 # GET /v3/keys/{id}
 # operationId: getV3KeysId
-export def "keys get" [
+export def "get-v3-keys-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1889,7 +1889,7 @@ export def "keys get" [
 #
 # GET /v3/licenses
 # operationId: getV3Licenses
-export def "licenses list" [
+export def "get-v3-licenses" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1925,7 +1925,7 @@ export def "licenses list" [
 #
 # GET /v3/licenses/{name}
 # operationId: getV3LicensesName
-export def "licenses get" [
+export def "get-v3-licenses-name" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1961,7 +1961,7 @@ export def "licenses get" [
 #
 # GET /v3/namespaces
 # operationId: getV3Namespaces
-export def "namespaces get" [
+export def "get-v3-namespaces" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1999,7 +1999,7 @@ export def "namespaces get" [
 #
 # GET /v3/notification_settings
 # operationId: getV3NotificationSettings
-export def "notification-settings get" [
+export def "get-v3-notification-settings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2033,7 +2033,7 @@ export def "notification-settings get" [
 #
 # PUT /v3/notification_settings
 # operationId: putV3NotificationSettings
-export def "notification-settings update" [
+export def "put-v3-notification-settings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2085,7 +2085,7 @@ export def "notification-settings update" [
 #
 # GET /v3/projects
 # operationId: getV3Projects
-export def "projects list" [
+export def "get-v3-projects" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2128,7 +2128,7 @@ export def "projects list" [
 #
 # POST /v3/projects
 # operationId: postV3Projects
-export def "projects create" [
+export def "post-v3-projects" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2185,7 +2185,7 @@ export def "projects create" [
 #
 # GET /v3/projects/all
 # operationId: getV3ProjectsAll
-export def "projects-all get" [
+export def "get-v3-projects-all" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2229,7 +2229,7 @@ export def "projects-all get" [
 #
 # POST /v3/projects/fork/{id}
 # operationId: postV3ProjectsForkId
-export def "projects-fork create-by-id" [
+export def "post-v3-projects-fork-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2270,7 +2270,7 @@ export def "projects-fork create-by-id" [
 #
 # GET /v3/projects/owned
 # operationId: getV3ProjectsOwned
-export def "projects-owned get" [
+export def "get-v3-projects-owned" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2314,7 +2314,7 @@ export def "projects-owned get" [
 #
 # GET /v3/projects/search/{query}
 # operationId: getV3ProjectsSearchQuery
-export def "projects-search get" [
+export def "get-v3-projects-search-query" [
   query: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2355,7 +2355,7 @@ export def "projects-search get" [
 #
 # GET /v3/projects/starred
 # operationId: getV3ProjectsStarred
-export def "projects-starred get" [
+export def "get-v3-projects-starred" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2398,7 +2398,7 @@ export def "projects-starred get" [
 #
 # POST /v3/projects/user/{user_id}
 # operationId: postV3ProjectsUserUserId
-export def "projects-user create" [
+export def "post-v3-projects-user-user-id" [
   user_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2457,7 +2457,7 @@ export def "projects-user create" [
 #
 # GET /v3/projects/visible
 # operationId: getV3ProjectsVisible
-export def "projects-visible get" [
+export def "get-v3-projects-visible" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2500,7 +2500,7 @@ export def "projects-visible get" [
 #
 # DELETE /v3/projects/{id}
 # operationId: deleteV3ProjectsId
-export def "projects delete" [
+export def "delete-v3-projects-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2536,7 +2536,7 @@ export def "projects delete" [
 #
 # GET /v3/projects/{id}
 # operationId: getV3ProjectsId
-export def "projects get" [
+export def "get-v3-projects-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2572,7 +2572,7 @@ export def "projects get" [
 #
 # PUT /v3/projects/{id}
 # operationId: putV3ProjectsId
-export def "projects update" [
+export def "put-v3-projects-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2630,7 +2630,7 @@ export def "projects update" [
 #
 # POST /v3/projects/{id}/(ref/{ref}/)trigger/builds
 # operationId: postV3ProjectsId(refRef)triggerBuilds
-export def "projects-ref-trigger-builds create-idref-reftrigger" [
+export def "post-v3-projects-idref-reftrigger-builds" [
   id: string
   ref: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2673,7 +2673,7 @@ export def "projects-ref-trigger-builds create-idref-reftrigger" [
 #
 # GET /v3/projects/{id}/access_requests
 # operationId: getV3ProjectsIdAccessRequests
-export def "projects-access-requests get" [
+export def "get-v3-projects-id-access-requests" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2712,7 +2712,7 @@ export def "projects-access-requests get" [
 #
 # POST /v3/projects/{id}/access_requests
 # operationId: postV3ProjectsIdAccessRequests
-export def "projects-access-requests create" [
+export def "post-v3-projects-id-access-requests" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2748,7 +2748,7 @@ export def "projects-access-requests create" [
 #
 # DELETE /v3/projects/{id}/access_requests/{user_id}
 # operationId: deleteV3ProjectsIdAccessRequestsUserId
-export def "projects-access-requests delete" [
+export def "delete-v3-projects-id-access-requests-user-id" [
   id: string
   user_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -2786,7 +2786,7 @@ export def "projects-access-requests delete" [
 #
 # PUT /v3/projects/{id}/access_requests/{user_id}/approve
 # operationId: putV3ProjectsIdAccessRequestsUserIdApprove
-export def "projects-access-requests-approve update" [
+export def "put-v3-projects-id-access-requests-user-id-approve" [
   id: string
   user_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -2829,7 +2829,7 @@ export def "projects-access-requests-approve update" [
 #
 # POST /v3/projects/{id}/archive
 # operationId: postV3ProjectsIdArchive
-export def "projects-archive create" [
+export def "post-v3-projects-id-archive" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2865,7 +2865,7 @@ export def "projects-archive create" [
 #
 # GET /v3/projects/{id}/boards
 # operationId: getV3ProjectsIdBoards
-export def "projects-boards get" [
+export def "get-v3-projects-id-boards" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2901,7 +2901,7 @@ export def "projects-boards get" [
 #
 # GET /v3/projects/{id}/boards/{board_id}/lists
 # operationId: getV3ProjectsIdBoardsBoardIdLists
-export def "projects-boards-lists list" [
+export def "get-v3-projects-id-boards-board-id-lists" [
   id: string
   board_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -2939,7 +2939,7 @@ export def "projects-boards-lists list" [
 #
 # POST /v3/projects/{id}/boards/{board_id}/lists
 # operationId: postV3ProjectsIdBoardsBoardIdLists
-export def "projects-boards-lists create" [
+export def "post-v3-projects-id-boards-board-id-lists" [
   id: string
   board_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -2982,7 +2982,7 @@ export def "projects-boards-lists create" [
 #
 # DELETE /v3/projects/{id}/boards/{board_id}/lists/{list_id}
 # operationId: deleteV3ProjectsIdBoardsBoardIdListsListId
-export def "projects-boards-lists delete" [
+export def "delete-v3-projects-id-boards-board-id-lists-list-id" [
   id: string
   board_id: int
   list_id: int
@@ -3022,7 +3022,7 @@ export def "projects-boards-lists delete" [
 #
 # GET /v3/projects/{id}/boards/{board_id}/lists/{list_id}
 # operationId: getV3ProjectsIdBoardsBoardIdListsListId
-export def "projects-boards-lists get" [
+export def "get-v3-projects-id-boards-board-id-lists-list-id" [
   id: string
   board_id: int
   list_id: int
@@ -3062,7 +3062,7 @@ export def "projects-boards-lists get" [
 #
 # PUT /v3/projects/{id}/boards/{board_id}/lists/{list_id}
 # operationId: putV3ProjectsIdBoardsBoardIdListsListId
-export def "projects-boards-lists update" [
+export def "put-v3-projects-id-boards-board-id-lists-list-id" [
   id: string
   board_id: int
   list_id: int
@@ -3107,7 +3107,7 @@ export def "projects-boards-lists update" [
 #
 # GET /v3/projects/{id}/builds
 # operationId: getV3ProjectsIdBuilds
-export def "projects-builds list" [
+export def "get-v3-projects-id-builds" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3147,7 +3147,7 @@ export def "projects-builds list" [
 #
 # GET /v3/projects/{id}/builds/artifacts/{ref_name}/download
 # operationId: getV3ProjectsIdBuildsArtifactsRefNameDownload
-export def "projects-builds-artifacts-download get" [
+export def "get-v3-projects-id-builds-artifacts-ref-name-download" [
   id: string
   ref_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3187,7 +3187,7 @@ export def "projects-builds-artifacts-download get" [
 #
 # GET /v3/projects/{id}/builds/{build_id}
 # operationId: getV3ProjectsIdBuildsBuildId
-export def "projects-builds get" [
+export def "get-v3-projects-id-builds-build-id" [
   id: string
   build_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -3225,7 +3225,7 @@ export def "projects-builds get" [
 #
 # GET /v3/projects/{id}/builds/{build_id}/artifacts
 # operationId: getV3ProjectsIdBuildsBuildIdArtifacts
-export def "projects-builds-artifacts get" [
+export def "get-v3-projects-id-builds-build-id-artifacts" [
   id: string
   build_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -3263,7 +3263,7 @@ export def "projects-builds-artifacts get" [
 #
 # POST /v3/projects/{id}/builds/{build_id}/artifacts/keep
 # operationId: postV3ProjectsIdBuildsBuildIdArtifactsKeep
-export def "projects-builds-artifacts-keep create" [
+export def "post-v3-projects-id-builds-build-id-artifacts-keep" [
   id: string
   build_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -3301,7 +3301,7 @@ export def "projects-builds-artifacts-keep create" [
 #
 # POST /v3/projects/{id}/builds/{build_id}/cancel
 # operationId: postV3ProjectsIdBuildsBuildIdCancel
-export def "projects-builds-cancel create" [
+export def "post-v3-projects-id-builds-build-id-cancel" [
   id: string
   build_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -3339,7 +3339,7 @@ export def "projects-builds-cancel create" [
 #
 # POST /v3/projects/{id}/builds/{build_id}/erase
 # operationId: postV3ProjectsIdBuildsBuildIdErase
-export def "projects-builds-erase create" [
+export def "post-v3-projects-id-builds-build-id-erase" [
   id: string
   build_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -3377,7 +3377,7 @@ export def "projects-builds-erase create" [
 #
 # POST /v3/projects/{id}/builds/{build_id}/play
 # operationId: postV3ProjectsIdBuildsBuildIdPlay
-export def "projects-builds-play create" [
+export def "post-v3-projects-id-builds-build-id-play" [
   id: string
   build_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -3415,7 +3415,7 @@ export def "projects-builds-play create" [
 #
 # POST /v3/projects/{id}/builds/{build_id}/retry
 # operationId: postV3ProjectsIdBuildsBuildIdRetry
-export def "projects-builds-retry create" [
+export def "post-v3-projects-id-builds-build-id-retry" [
   id: string
   build_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -3453,7 +3453,7 @@ export def "projects-builds-retry create" [
 #
 # GET /v3/projects/{id}/builds/{build_id}/trace
 # operationId: getV3ProjectsIdBuildsBuildIdTrace
-export def "projects-builds-trace get" [
+export def "get-v3-projects-id-builds-build-id-trace" [
   id: string
   build_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -3491,7 +3491,7 @@ export def "projects-builds-trace get" [
 #
 # GET /v3/projects/{id}/deploy_keys
 # operationId: getV3ProjectsIdDeployKeys
-export def "projects-deploy-keys list" [
+export def "get-v3-projects-id-deploy-keys" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3527,7 +3527,7 @@ export def "projects-deploy-keys list" [
 #
 # POST /v3/projects/{id}/deploy_keys
 # operationId: postV3ProjectsIdDeployKeys
-export def "projects-deploy-keys create" [
+export def "post-v3-projects-id-deploy-keys" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3569,7 +3569,7 @@ export def "projects-deploy-keys create" [
 #
 # DELETE /v3/projects/{id}/deploy_keys/{key_id}
 # operationId: deleteV3ProjectsIdDeployKeysKeyId
-export def "projects-deploy-keys delete" [
+export def "delete-v3-projects-id-deploy-keys-key-id" [
   id: string
   key_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -3607,7 +3607,7 @@ export def "projects-deploy-keys delete" [
 #
 # GET /v3/projects/{id}/deploy_keys/{key_id}
 # operationId: getV3ProjectsIdDeployKeysKeyId
-export def "projects-deploy-keys get" [
+export def "get-v3-projects-id-deploy-keys-key-id" [
   id: string
   key_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -3645,7 +3645,7 @@ export def "projects-deploy-keys get" [
 #
 # DELETE /v3/projects/{id}/deploy_keys/{key_id}/disable
 # operationId: deleteV3ProjectsIdDeployKeysKeyIdDisable
-export def "projects-deploy-keys-disable delete" [
+export def "delete-v3-projects-id-deploy-keys-key-id-disable" [
   id: string
   key_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -3683,7 +3683,7 @@ export def "projects-deploy-keys-disable delete" [
 #
 # POST /v3/projects/{id}/deploy_keys/{key_id}/enable
 # operationId: postV3ProjectsIdDeployKeysKeyIdEnable
-export def "projects-deploy-keys-enable create" [
+export def "post-v3-projects-id-deploy-keys-key-id-enable" [
   id: string
   key_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -3721,7 +3721,7 @@ export def "projects-deploy-keys-enable create" [
 #
 # GET /v3/projects/{id}/deployments
 # operationId: getV3ProjectsIdDeployments
-export def "projects-deployments list" [
+export def "get-v3-projects-id-deployments" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3760,7 +3760,7 @@ export def "projects-deployments list" [
 #
 # GET /v3/projects/{id}/deployments/{deployment_id}
 # operationId: getV3ProjectsIdDeploymentsDeploymentId
-export def "projects-deployments get" [
+export def "get-v3-projects-id-deployments-deployment-id" [
   id: string
   deployment_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -3798,7 +3798,7 @@ export def "projects-deployments get" [
 #
 # GET /v3/projects/{id}/environments
 # operationId: getV3ProjectsIdEnvironments
-export def "projects-environments get" [
+export def "get-v3-projects-id-environments" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3837,7 +3837,7 @@ export def "projects-environments get" [
 #
 # POST /v3/projects/{id}/environments
 # operationId: postV3ProjectsIdEnvironments
-export def "projects-environments create" [
+export def "post-v3-projects-id-environments" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3880,7 +3880,7 @@ export def "projects-environments create" [
 #
 # DELETE /v3/projects/{id}/environments/{environment_id}
 # operationId: deleteV3ProjectsIdEnvironmentsEnvironmentId
-export def "projects-environments delete" [
+export def "delete-v3-projects-id-environments-environment-id" [
   id: string
   environment_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -3918,7 +3918,7 @@ export def "projects-environments delete" [
 #
 # PUT /v3/projects/{id}/environments/{environment_id}
 # operationId: putV3ProjectsIdEnvironmentsEnvironmentId
-export def "projects-environments update" [
+export def "put-v3-projects-id-environments-environment-id" [
   id: string
   environment_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -3963,7 +3963,7 @@ export def "projects-environments update" [
 #
 # GET /v3/projects/{id}/events
 # operationId: getV3ProjectsIdEvents
-export def "projects-events get" [
+export def "get-v3-projects-id-events" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4002,7 +4002,7 @@ export def "projects-events get" [
 #
 # DELETE /v3/projects/{id}/fork
 # operationId: deleteV3ProjectsIdFork
-export def "projects-fork delete" [
+export def "delete-v3-projects-id-fork" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4038,7 +4038,7 @@ export def "projects-fork delete" [
 #
 # POST /v3/projects/{id}/fork/{forked_from_id}
 # operationId: postV3ProjectsIdForkForkedFromId
-export def "projects-fork create-by-id-forked-from-id" [
+export def "post-v3-projects-id-fork-forked-from-id" [
   id: string
   forked_from_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4076,7 +4076,7 @@ export def "projects-fork create-by-id-forked-from-id" [
 #
 # GET /v3/projects/{id}/hooks
 # operationId: getV3ProjectsIdHooks
-export def "projects-hooks list" [
+export def "get-v3-projects-id-hooks" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4115,7 +4115,7 @@ export def "projects-hooks list" [
 #
 # POST /v3/projects/{id}/hooks
 # operationId: postV3ProjectsIdHooks
-export def "projects-hooks create" [
+export def "post-v3-projects-id-hooks" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4166,7 +4166,7 @@ export def "projects-hooks create" [
 #
 # DELETE /v3/projects/{id}/hooks/{hook_id}
 # operationId: deleteV3ProjectsIdHooksHookId
-export def "projects-hooks delete" [
+export def "delete-v3-projects-id-hooks-hook-id" [
   id: string
   hook_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -4204,7 +4204,7 @@ export def "projects-hooks delete" [
 #
 # GET /v3/projects/{id}/hooks/{hook_id}
 # operationId: getV3ProjectsIdHooksHookId
-export def "projects-hooks get" [
+export def "get-v3-projects-id-hooks-hook-id" [
   id: string
   hook_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -4242,7 +4242,7 @@ export def "projects-hooks get" [
 #
 # PUT /v3/projects/{id}/hooks/{hook_id}
 # operationId: putV3ProjectsIdHooksHookId
-export def "projects-hooks update" [
+export def "put-v3-projects-id-hooks-hook-id" [
   id: string
   hook_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -4295,7 +4295,7 @@ export def "projects-hooks update" [
 #
 # GET /v3/projects/{id}/issues
 # operationId: getV3ProjectsIdIssues
-export def "projects-issues list" [
+export def "get-v3-projects-id-issues" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4340,7 +4340,7 @@ export def "projects-issues list" [
 #
 # POST /v3/projects/{id}/issues
 # operationId: postV3ProjectsIdIssues
-export def "projects-issues create" [
+export def "post-v3-projects-id-issues" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4389,7 +4389,7 @@ export def "projects-issues create" [
 #
 # DELETE /v3/projects/{id}/issues/{issue_id}
 # operationId: deleteV3ProjectsIdIssuesIssueId
-export def "projects-issues delete" [
+export def "delete-v3-projects-id-issues-issue-id" [
   id: string
   issue_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -4427,7 +4427,7 @@ export def "projects-issues delete" [
 #
 # GET /v3/projects/{id}/issues/{issue_id}
 # operationId: getV3ProjectsIdIssuesIssueId
-export def "projects-issues get" [
+export def "get-v3-projects-id-issues-issue-id" [
   id: string
   issue_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -4465,7 +4465,7 @@ export def "projects-issues get" [
 #
 # PUT /v3/projects/{id}/issues/{issue_id}
 # operationId: putV3ProjectsIdIssuesIssueId
-export def "projects-issues update" [
+export def "put-v3-projects-id-issues-issue-id" [
   id: string
   issue_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -4517,7 +4517,7 @@ export def "projects-issues update" [
 #
 # POST /v3/projects/{id}/issues/{issue_id}/add_spent_time
 # operationId: postV3ProjectsIdIssuesIssueIdAddSpentTime
-export def "projects-issues-add-spent-time create" [
+export def "post-v3-projects-id-issues-issue-id-add-spent-time" [
   id: string
   issue_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -4560,7 +4560,7 @@ export def "projects-issues-add-spent-time create" [
 #
 # GET /v3/projects/{id}/issues/{issue_id}/award_emoji
 # operationId: getV3ProjectsIdIssuesIssueIdAwardEmoji
-export def "projects-issues-award-emoji list" [
+export def "get-v3-projects-id-issues-issue-id-award-emoji" [
   id: string
   issue_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -4601,7 +4601,7 @@ export def "projects-issues-award-emoji list" [
 #
 # POST /v3/projects/{id}/issues/{issue_id}/award_emoji
 # operationId: postV3ProjectsIdIssuesIssueIdAwardEmoji
-export def "projects-issues-award-emoji create" [
+export def "post-v3-projects-id-issues-issue-id-award-emoji" [
   id: int
   issue_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -4644,7 +4644,7 @@ export def "projects-issues-award-emoji create" [
 #
 # DELETE /v3/projects/{id}/issues/{issue_id}/award_emoji/{award_id}
 # operationId: deleteV3ProjectsIdIssuesIssueIdAwardEmojiAwardId
-export def "projects-issues-award-emoji delete" [
+export def "delete-v3-projects-id-issues-issue-id-award-emoji-award-id" [
   id: int
   issue_id: int
   award_id: int
@@ -4684,7 +4684,7 @@ export def "projects-issues-award-emoji delete" [
 #
 # GET /v3/projects/{id}/issues/{issue_id}/award_emoji/{award_id}
 # operationId: getV3ProjectsIdIssuesIssueIdAwardEmojiAwardId
-export def "projects-issues-award-emoji get" [
+export def "get-v3-projects-id-issues-issue-id-award-emoji-award-id" [
   id: int
   issue_id: int
   award_id: int
@@ -4724,7 +4724,7 @@ export def "projects-issues-award-emoji get" [
 #
 # POST /v3/projects/{id}/issues/{issue_id}/move
 # operationId: postV3ProjectsIdIssuesIssueIdMove
-export def "projects-issues-move create" [
+export def "post-v3-projects-id-issues-issue-id-move" [
   id: string
   issue_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -4767,7 +4767,7 @@ export def "projects-issues-move create" [
 #
 # GET /v3/projects/{id}/issues/{issue_id}/notes/{note_id}/award_emoji
 # operationId: getV3ProjectsIdIssuesIssueIdNotesNoteIdAwardEmoji
-export def "projects-issues-notes-award-emoji list" [
+export def "get-v3-projects-id-issues-issue-id-notes-note-id-award-emoji" [
   id: int
   issue_id: int
   note_id: int
@@ -4810,7 +4810,7 @@ export def "projects-issues-notes-award-emoji list" [
 #
 # POST /v3/projects/{id}/issues/{issue_id}/notes/{note_id}/award_emoji
 # operationId: postV3ProjectsIdIssuesIssueIdNotesNoteIdAwardEmoji
-export def "projects-issues-notes-award-emoji create" [
+export def "post-v3-projects-id-issues-issue-id-notes-note-id-award-emoji" [
   id: int
   issue_id: int
   note_id: int
@@ -4855,7 +4855,7 @@ export def "projects-issues-notes-award-emoji create" [
 #
 # DELETE /v3/projects/{id}/issues/{issue_id}/notes/{note_id}/award_emoji/{award_id}
 # operationId: deleteV3ProjectsIdIssuesIssueIdNotesNoteIdAwardEmojiAwardId
-export def "projects-issues-notes-award-emoji delete" [
+export def "delete-v3-projects-id-issues-issue-id-notes-note-id-award-emoji-award-id" [
   id: int
   issue_id: int
   note_id: int
@@ -4897,7 +4897,7 @@ export def "projects-issues-notes-award-emoji delete" [
 #
 # GET /v3/projects/{id}/issues/{issue_id}/notes/{note_id}/award_emoji/{award_id}
 # operationId: getV3ProjectsIdIssuesIssueIdNotesNoteIdAwardEmojiAwardId
-export def "projects-issues-notes-award-emoji get" [
+export def "get-v3-projects-id-issues-issue-id-notes-note-id-award-emoji-award-id" [
   id: int
   issue_id: int
   note_id: int
@@ -4939,7 +4939,7 @@ export def "projects-issues-notes-award-emoji get" [
 #
 # POST /v3/projects/{id}/issues/{issue_id}/reset_spent_time
 # operationId: postV3ProjectsIdIssuesIssueIdResetSpentTime
-export def "projects-issues-reset-spent-time create" [
+export def "post-v3-projects-id-issues-issue-id-reset-spent-time" [
   id: string
   issue_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -4977,7 +4977,7 @@ export def "projects-issues-reset-spent-time create" [
 #
 # POST /v3/projects/{id}/issues/{issue_id}/reset_time_estimate
 # operationId: postV3ProjectsIdIssuesIssueIdResetTimeEstimate
-export def "projects-issues-reset-time-estimate create" [
+export def "post-v3-projects-id-issues-issue-id-reset-time-estimate" [
   id: string
   issue_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -5015,7 +5015,7 @@ export def "projects-issues-reset-time-estimate create" [
 #
 # POST /v3/projects/{id}/issues/{issue_id}/time_estimate
 # operationId: postV3ProjectsIdIssuesIssueIdTimeEstimate
-export def "projects-issues-time-estimate create" [
+export def "post-v3-projects-id-issues-issue-id-time-estimate" [
   id: string
   issue_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -5058,7 +5058,7 @@ export def "projects-issues-time-estimate create" [
 #
 # GET /v3/projects/{id}/issues/{issue_id}/time_stats
 # operationId: getV3ProjectsIdIssuesIssueIdTimeStats
-export def "projects-issues-time-stats get" [
+export def "get-v3-projects-id-issues-issue-id-time-stats" [
   id: string
   issue_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -5096,7 +5096,7 @@ export def "projects-issues-time-stats get" [
 #
 # POST /v3/projects/{id}/issues/{issue_id}/todo
 # operationId: postV3ProjectsIdIssuesIssueIdTodo
-export def "projects-issues-todo create" [
+export def "post-v3-projects-id-issues-issue-id-todo" [
   id: string
   issue_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -5134,7 +5134,7 @@ export def "projects-issues-todo create" [
 #
 # GET /v3/projects/{id}/issues/{noteable_id}/notes
 # operationId: getV3ProjectsIdIssuesNoteableIdNotes
-export def "projects-issues-notes list" [
+export def "get-v3-projects-id-issues-noteable-id-notes" [
   id: string
   noteable_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -5175,7 +5175,7 @@ export def "projects-issues-notes list" [
 #
 # POST /v3/projects/{id}/issues/{noteable_id}/notes
 # operationId: postV3ProjectsIdIssuesNoteableIdNotes
-export def "projects-issues-notes create" [
+export def "post-v3-projects-id-issues-noteable-id-notes" [
   id: string
   noteable_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -5219,7 +5219,7 @@ export def "projects-issues-notes create" [
 #
 # DELETE /v3/projects/{id}/issues/{noteable_id}/notes/{note_id}
 # operationId: deleteV3ProjectsIdIssuesNoteableIdNotesNoteId
-export def "projects-issues-notes delete" [
+export def "delete-v3-projects-id-issues-noteable-id-notes-note-id" [
   id: string
   noteable_id: int
   note_id: int
@@ -5259,7 +5259,7 @@ export def "projects-issues-notes delete" [
 #
 # GET /v3/projects/{id}/issues/{noteable_id}/notes/{note_id}
 # operationId: getV3ProjectsIdIssuesNoteableIdNotesNoteId
-export def "projects-issues-notes get" [
+export def "get-v3-projects-id-issues-noteable-id-notes-note-id" [
   id: string
   noteable_id: int
   note_id: int
@@ -5299,7 +5299,7 @@ export def "projects-issues-notes get" [
 #
 # PUT /v3/projects/{id}/issues/{noteable_id}/notes/{note_id}
 # operationId: putV3ProjectsIdIssuesNoteableIdNotesNoteId
-export def "projects-issues-notes update" [
+export def "put-v3-projects-id-issues-noteable-id-notes-note-id" [
   id: string
   noteable_id: int
   note_id: int
@@ -5344,7 +5344,7 @@ export def "projects-issues-notes update" [
 #
 # DELETE /v3/projects/{id}/issues/{subscribable_id}/subscription
 # operationId: deleteV3ProjectsIdIssuesSubscribableIdSubscription
-export def "projects-issues-subscription delete" [
+export def "delete-v3-projects-id-issues-subscribable-id-subscription" [
   id: string
   subscribable_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5382,7 +5382,7 @@ export def "projects-issues-subscription delete" [
 #
 # POST /v3/projects/{id}/issues/{subscribable_id}/subscription
 # operationId: postV3ProjectsIdIssuesSubscribableIdSubscription
-export def "projects-issues-subscription create" [
+export def "post-v3-projects-id-issues-subscribable-id-subscription" [
   id: string
   subscribable_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5420,7 +5420,7 @@ export def "projects-issues-subscription create" [
 #
 # GET /v3/projects/{id}/keys
 # operationId: getV3ProjectsIdKeys
-export def "projects-keys list" [
+export def "get-v3-projects-id-keys" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5456,7 +5456,7 @@ export def "projects-keys list" [
 #
 # POST /v3/projects/{id}/keys
 # operationId: postV3ProjectsIdKeys
-export def "projects-keys create" [
+export def "post-v3-projects-id-keys" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5498,7 +5498,7 @@ export def "projects-keys create" [
 #
 # DELETE /v3/projects/{id}/keys/{key_id}
 # operationId: deleteV3ProjectsIdKeysKeyId
-export def "projects-keys delete" [
+export def "delete-v3-projects-id-keys-key-id" [
   id: string
   key_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -5536,7 +5536,7 @@ export def "projects-keys delete" [
 #
 # GET /v3/projects/{id}/keys/{key_id}
 # operationId: getV3ProjectsIdKeysKeyId
-export def "projects-keys get" [
+export def "get-v3-projects-id-keys-key-id" [
   id: string
   key_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -5574,7 +5574,7 @@ export def "projects-keys get" [
 #
 # DELETE /v3/projects/{id}/keys/{key_id}/disable
 # operationId: deleteV3ProjectsIdKeysKeyIdDisable
-export def "projects-keys-disable delete" [
+export def "delete-v3-projects-id-keys-key-id-disable" [
   id: string
   key_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -5612,7 +5612,7 @@ export def "projects-keys-disable delete" [
 #
 # POST /v3/projects/{id}/keys/{key_id}/enable
 # operationId: postV3ProjectsIdKeysKeyIdEnable
-export def "projects-keys-enable create" [
+export def "post-v3-projects-id-keys-key-id-enable" [
   id: string
   key_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -5650,7 +5650,7 @@ export def "projects-keys-enable create" [
 #
 # DELETE /v3/projects/{id}/labels
 # operationId: deleteV3ProjectsIdLabels
-export def "projects-labels delete" [
+export def "delete-v3-projects-id-labels" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5688,7 +5688,7 @@ export def "projects-labels delete" [
 #
 # GET /v3/projects/{id}/labels
 # operationId: getV3ProjectsIdLabels
-export def "projects-labels get" [
+export def "get-v3-projects-id-labels" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5724,7 +5724,7 @@ export def "projects-labels get" [
 #
 # POST /v3/projects/{id}/labels
 # operationId: postV3ProjectsIdLabels
-export def "projects-labels create" [
+export def "post-v3-projects-id-labels" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5768,7 +5768,7 @@ export def "projects-labels create" [
 #
 # PUT /v3/projects/{id}/labels
 # operationId: putV3ProjectsIdLabels
-export def "projects-labels update" [
+export def "put-v3-projects-id-labels" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5813,7 +5813,7 @@ export def "projects-labels update" [
 #
 # DELETE /v3/projects/{id}/labels/{subscribable_id}/subscription
 # operationId: deleteV3ProjectsIdLabelsSubscribableIdSubscription
-export def "projects-labels-subscription delete" [
+export def "delete-v3-projects-id-labels-subscribable-id-subscription" [
   id: string
   subscribable_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5851,7 +5851,7 @@ export def "projects-labels-subscription delete" [
 #
 # POST /v3/projects/{id}/labels/{subscribable_id}/subscription
 # operationId: postV3ProjectsIdLabelsSubscribableIdSubscription
-export def "projects-labels-subscription create" [
+export def "post-v3-projects-id-labels-subscribable-id-subscription" [
   id: string
   subscribable_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5889,7 +5889,7 @@ export def "projects-labels-subscription create" [
 #
 # GET /v3/projects/{id}/members
 # operationId: getV3ProjectsIdMembers
-export def "projects-members list" [
+export def "get-v3-projects-id-members" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5929,7 +5929,7 @@ export def "projects-members list" [
 #
 # POST /v3/projects/{id}/members
 # operationId: postV3ProjectsIdMembers
-export def "projects-members create" [
+export def "post-v3-projects-id-members" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5972,7 +5972,7 @@ export def "projects-members create" [
 #
 # DELETE /v3/projects/{id}/members/{user_id}
 # operationId: deleteV3ProjectsIdMembersUserId
-export def "projects-members delete" [
+export def "delete-v3-projects-id-members-user-id" [
   id: string
   user_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -6010,7 +6010,7 @@ export def "projects-members delete" [
 #
 # GET /v3/projects/{id}/members/{user_id}
 # operationId: getV3ProjectsIdMembersUserId
-export def "projects-members get" [
+export def "get-v3-projects-id-members-user-id" [
   id: string
   user_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -6048,7 +6048,7 @@ export def "projects-members get" [
 #
 # PUT /v3/projects/{id}/members/{user_id}
 # operationId: putV3ProjectsIdMembersUserId
-export def "projects-members update" [
+export def "put-v3-projects-id-members-user-id" [
   id: string
   user_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -6092,7 +6092,7 @@ export def "projects-members update" [
 #
 # GET /v3/projects/{id}/merge_request/{merge_request_id}
 # operationId: getV3ProjectsIdMergeRequestMergeRequestId
-export def "projects-merge-request get" [
+export def "get-v3-projects-id-merge-request-merge-request-id" [
   id: string
   merge_request_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -6130,7 +6130,7 @@ export def "projects-merge-request get" [
 #
 # PUT /v3/projects/{id}/merge_request/{merge_request_id}
 # operationId: putV3ProjectsIdMergeRequestMergeRequestId
-export def "projects-merge-request update" [
+export def "put-v3-projects-id-merge-request-merge-request-id" [
   id: string
   merge_request_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -6180,7 +6180,7 @@ export def "projects-merge-request update" [
 #
 # POST /v3/projects/{id}/merge_request/{merge_request_id}/cancel_merge_when_build_succeeds
 # operationId: postV3ProjectsIdMergeRequestMergeRequestIdCancelMergeWhenBuildSucceeds
-export def "projects-merge-request-cancel-merge-when-build-succeeds create" [
+export def "post-v3-projects-id-merge-request-merge-request-id-cancel-merge-when-build-succeeds" [
   id: string
   merge_request_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -6218,7 +6218,7 @@ export def "projects-merge-request-cancel-merge-when-build-succeeds create" [
 #
 # GET /v3/projects/{id}/merge_request/{merge_request_id}/changes
 # operationId: getV3ProjectsIdMergeRequestMergeRequestIdChanges
-export def "projects-merge-request-changes get" [
+export def "get-v3-projects-id-merge-request-merge-request-id-changes" [
   id: string
   merge_request_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -6256,7 +6256,7 @@ export def "projects-merge-request-changes get" [
 #
 # GET /v3/projects/{id}/merge_request/{merge_request_id}/closes_issues
 # operationId: getV3ProjectsIdMergeRequestMergeRequestIdClosesIssues
-export def "projects-merge-request-closes-issues get" [
+export def "get-v3-projects-id-merge-request-merge-request-id-closes-issues" [
   id: string
   merge_request_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -6297,7 +6297,7 @@ export def "projects-merge-request-closes-issues get" [
 #
 # GET /v3/projects/{id}/merge_request/{merge_request_id}/comments
 # operationId: getV3ProjectsIdMergeRequestMergeRequestIdComments
-export def "projects-merge-request-comments get" [
+export def "get-v3-projects-id-merge-request-merge-request-id-comments" [
   id: string
   merge_request_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -6338,7 +6338,7 @@ export def "projects-merge-request-comments get" [
 #
 # POST /v3/projects/{id}/merge_request/{merge_request_id}/comments
 # operationId: postV3ProjectsIdMergeRequestMergeRequestIdComments
-export def "projects-merge-request-comments create" [
+export def "post-v3-projects-id-merge-request-merge-request-id-comments" [
   id: string
   merge_request_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -6381,7 +6381,7 @@ export def "projects-merge-request-comments create" [
 #
 # GET /v3/projects/{id}/merge_request/{merge_request_id}/commits
 # operationId: getV3ProjectsIdMergeRequestMergeRequestIdCommits
-export def "projects-merge-request-commits get" [
+export def "get-v3-projects-id-merge-request-merge-request-id-commits" [
   id: string
   merge_request_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -6419,7 +6419,7 @@ export def "projects-merge-request-commits get" [
 #
 # PUT /v3/projects/{id}/merge_request/{merge_request_id}/merge
 # operationId: putV3ProjectsIdMergeRequestMergeRequestIdMerge
-export def "projects-merge-request-merge update" [
+export def "put-v3-projects-id-merge-request-merge-request-id-merge" [
   id: string
   merge_request_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -6465,7 +6465,7 @@ export def "projects-merge-request-merge update" [
 #
 # DELETE /v3/projects/{id}/merge_request/{subscribable_id}/subscription
 # operationId: deleteV3ProjectsIdMergeRequestSubscribableIdSubscription
-export def "projects-merge-request-subscription delete" [
+export def "delete-v3-projects-id-merge-request-subscribable-id-subscription" [
   id: string
   subscribable_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6503,7 +6503,7 @@ export def "projects-merge-request-subscription delete" [
 #
 # POST /v3/projects/{id}/merge_request/{subscribable_id}/subscription
 # operationId: postV3ProjectsIdMergeRequestSubscribableIdSubscription
-export def "projects-merge-request-subscription create" [
+export def "post-v3-projects-id-merge-request-subscribable-id-subscription" [
   id: string
   subscribable_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6541,7 +6541,7 @@ export def "projects-merge-request-subscription create" [
 #
 # GET /v3/projects/{id}/merge_requests
 # operationId: getV3ProjectsIdMergeRequests
-export def "projects-merge-requests list" [
+export def "get-v3-projects-id-merge-requests" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6583,7 +6583,7 @@ export def "projects-merge-requests list" [
 #
 # POST /v3/projects/{id}/merge_requests
 # operationId: postV3ProjectsIdMergeRequests
-export def "projects-merge-requests create" [
+export def "post-v3-projects-id-merge-requests" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6632,7 +6632,7 @@ export def "projects-merge-requests create" [
 #
 # DELETE /v3/projects/{id}/merge_requests/{merge_request_id}
 # operationId: deleteV3ProjectsIdMergeRequestsMergeRequestId
-export def "projects-merge-requests delete" [
+export def "delete-v3-projects-id-merge-requests-merge-request-id" [
   id: string
   merge_request_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -6670,7 +6670,7 @@ export def "projects-merge-requests delete" [
 #
 # GET /v3/projects/{id}/merge_requests/{merge_request_id}
 # operationId: getV3ProjectsIdMergeRequestsMergeRequestId
-export def "projects-merge-requests get" [
+export def "get-v3-projects-id-merge-requests-merge-request-id" [
   id: string
   merge_request_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -6708,7 +6708,7 @@ export def "projects-merge-requests get" [
 #
 # PUT /v3/projects/{id}/merge_requests/{merge_request_id}
 # operationId: putV3ProjectsIdMergeRequestsMergeRequestId
-export def "projects-merge-requests update" [
+export def "put-v3-projects-id-merge-requests-merge-request-id" [
   id: string
   merge_request_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -6758,7 +6758,7 @@ export def "projects-merge-requests update" [
 #
 # POST /v3/projects/{id}/merge_requests/{merge_request_id}/add_spent_time
 # operationId: postV3ProjectsIdMergeRequestsMergeRequestIdAddSpentTime
-export def "projects-merge-requests-add-spent-time create" [
+export def "post-v3-projects-id-merge-requests-merge-request-id-add-spent-time" [
   id: string
   merge_request_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -6801,7 +6801,7 @@ export def "projects-merge-requests-add-spent-time create" [
 #
 # GET /v3/projects/{id}/merge_requests/{merge_request_id}/award_emoji
 # operationId: getV3ProjectsIdMergeRequestsMergeRequestIdAwardEmoji
-export def "projects-merge-requests-award-emoji list" [
+export def "get-v3-projects-id-merge-requests-merge-request-id-award-emoji" [
   id: string
   merge_request_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -6842,7 +6842,7 @@ export def "projects-merge-requests-award-emoji list" [
 #
 # POST /v3/projects/{id}/merge_requests/{merge_request_id}/award_emoji
 # operationId: postV3ProjectsIdMergeRequestsMergeRequestIdAwardEmoji
-export def "projects-merge-requests-award-emoji create" [
+export def "post-v3-projects-id-merge-requests-merge-request-id-award-emoji" [
   id: int
   merge_request_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -6885,7 +6885,7 @@ export def "projects-merge-requests-award-emoji create" [
 #
 # DELETE /v3/projects/{id}/merge_requests/{merge_request_id}/award_emoji/{award_id}
 # operationId: deleteV3ProjectsIdMergeRequestsMergeRequestIdAwardEmojiAwardId
-export def "projects-merge-requests-award-emoji delete" [
+export def "delete-v3-projects-id-merge-requests-merge-request-id-award-emoji-award-id" [
   id: int
   merge_request_id: int
   award_id: int
@@ -6925,7 +6925,7 @@ export def "projects-merge-requests-award-emoji delete" [
 #
 # GET /v3/projects/{id}/merge_requests/{merge_request_id}/award_emoji/{award_id}
 # operationId: getV3ProjectsIdMergeRequestsMergeRequestIdAwardEmojiAwardId
-export def "projects-merge-requests-award-emoji get" [
+export def "get-v3-projects-id-merge-requests-merge-request-id-award-emoji-award-id" [
   id: int
   merge_request_id: int
   award_id: int
@@ -6965,7 +6965,7 @@ export def "projects-merge-requests-award-emoji get" [
 #
 # POST /v3/projects/{id}/merge_requests/{merge_request_id}/cancel_merge_when_build_succeeds
 # operationId: postV3ProjectsIdMergeRequestsMergeRequestIdCancelMergeWhenBuildSucceeds
-export def "projects-merge-requests-cancel-merge-when-build-succeeds create" [
+export def "post-v3-projects-id-merge-requests-merge-request-id-cancel-merge-when-build-succeeds" [
   id: string
   merge_request_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -7003,7 +7003,7 @@ export def "projects-merge-requests-cancel-merge-when-build-succeeds create" [
 #
 # GET /v3/projects/{id}/merge_requests/{merge_request_id}/changes
 # operationId: getV3ProjectsIdMergeRequestsMergeRequestIdChanges
-export def "projects-merge-requests-changes get" [
+export def "get-v3-projects-id-merge-requests-merge-request-id-changes" [
   id: string
   merge_request_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -7041,7 +7041,7 @@ export def "projects-merge-requests-changes get" [
 #
 # GET /v3/projects/{id}/merge_requests/{merge_request_id}/closes_issues
 # operationId: getV3ProjectsIdMergeRequestsMergeRequestIdClosesIssues
-export def "projects-merge-requests-closes-issues get" [
+export def "get-v3-projects-id-merge-requests-merge-request-id-closes-issues" [
   id: string
   merge_request_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -7082,7 +7082,7 @@ export def "projects-merge-requests-closes-issues get" [
 #
 # GET /v3/projects/{id}/merge_requests/{merge_request_id}/comments
 # operationId: getV3ProjectsIdMergeRequestsMergeRequestIdComments
-export def "projects-merge-requests-comments get" [
+export def "get-v3-projects-id-merge-requests-merge-request-id-comments" [
   id: string
   merge_request_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -7123,7 +7123,7 @@ export def "projects-merge-requests-comments get" [
 #
 # POST /v3/projects/{id}/merge_requests/{merge_request_id}/comments
 # operationId: postV3ProjectsIdMergeRequestsMergeRequestIdComments
-export def "projects-merge-requests-comments create" [
+export def "post-v3-projects-id-merge-requests-merge-request-id-comments" [
   id: string
   merge_request_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -7166,7 +7166,7 @@ export def "projects-merge-requests-comments create" [
 #
 # GET /v3/projects/{id}/merge_requests/{merge_request_id}/commits
 # operationId: getV3ProjectsIdMergeRequestsMergeRequestIdCommits
-export def "projects-merge-requests-commits get" [
+export def "get-v3-projects-id-merge-requests-merge-request-id-commits" [
   id: string
   merge_request_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -7204,7 +7204,7 @@ export def "projects-merge-requests-commits get" [
 #
 # PUT /v3/projects/{id}/merge_requests/{merge_request_id}/merge
 # operationId: putV3ProjectsIdMergeRequestsMergeRequestIdMerge
-export def "projects-merge-requests-merge update" [
+export def "put-v3-projects-id-merge-requests-merge-request-id-merge" [
   id: string
   merge_request_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -7250,7 +7250,7 @@ export def "projects-merge-requests-merge update" [
 #
 # GET /v3/projects/{id}/merge_requests/{merge_request_id}/notes/{note_id}/award_emoji
 # operationId: getV3ProjectsIdMergeRequestsMergeRequestIdNotesNoteIdAwardEmoji
-export def "projects-merge-requests-notes-award-emoji list" [
+export def "get-v3-projects-id-merge-requests-merge-request-id-notes-note-id-award-emoji" [
   id: int
   merge_request_id: int
   note_id: int
@@ -7293,7 +7293,7 @@ export def "projects-merge-requests-notes-award-emoji list" [
 #
 # POST /v3/projects/{id}/merge_requests/{merge_request_id}/notes/{note_id}/award_emoji
 # operationId: postV3ProjectsIdMergeRequestsMergeRequestIdNotesNoteIdAwardEmoji
-export def "projects-merge-requests-notes-award-emoji create" [
+export def "post-v3-projects-id-merge-requests-merge-request-id-notes-note-id-award-emoji" [
   id: int
   merge_request_id: int
   note_id: int
@@ -7338,7 +7338,7 @@ export def "projects-merge-requests-notes-award-emoji create" [
 #
 # DELETE /v3/projects/{id}/merge_requests/{merge_request_id}/notes/{note_id}/award_emoji/{award_id}
 # operationId: deleteV3ProjectsIdMergeRequestsMergeRequestIdNotesNoteIdAwardEmojiAwardId
-export def "projects-merge-requests-notes-award-emoji delete" [
+export def "delete-v3-projects-id-merge-requests-merge-request-id-notes-note-id-award-emoji-award-id" [
   id: int
   merge_request_id: int
   note_id: int
@@ -7380,7 +7380,7 @@ export def "projects-merge-requests-notes-award-emoji delete" [
 #
 # GET /v3/projects/{id}/merge_requests/{merge_request_id}/notes/{note_id}/award_emoji/{award_id}
 # operationId: getV3ProjectsIdMergeRequestsMergeRequestIdNotesNoteIdAwardEmojiAwardId
-export def "projects-merge-requests-notes-award-emoji get" [
+export def "get-v3-projects-id-merge-requests-merge-request-id-notes-note-id-award-emoji-award-id" [
   id: int
   merge_request_id: int
   note_id: int
@@ -7422,7 +7422,7 @@ export def "projects-merge-requests-notes-award-emoji get" [
 #
 # POST /v3/projects/{id}/merge_requests/{merge_request_id}/reset_spent_time
 # operationId: postV3ProjectsIdMergeRequestsMergeRequestIdResetSpentTime
-export def "projects-merge-requests-reset-spent-time create" [
+export def "post-v3-projects-id-merge-requests-merge-request-id-reset-spent-time" [
   id: string
   merge_request_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -7460,7 +7460,7 @@ export def "projects-merge-requests-reset-spent-time create" [
 #
 # POST /v3/projects/{id}/merge_requests/{merge_request_id}/reset_time_estimate
 # operationId: postV3ProjectsIdMergeRequestsMergeRequestIdResetTimeEstimate
-export def "projects-merge-requests-reset-time-estimate create" [
+export def "post-v3-projects-id-merge-requests-merge-request-id-reset-time-estimate" [
   id: string
   merge_request_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -7498,7 +7498,7 @@ export def "projects-merge-requests-reset-time-estimate create" [
 #
 # POST /v3/projects/{id}/merge_requests/{merge_request_id}/time_estimate
 # operationId: postV3ProjectsIdMergeRequestsMergeRequestIdTimeEstimate
-export def "projects-merge-requests-time-estimate create" [
+export def "post-v3-projects-id-merge-requests-merge-request-id-time-estimate" [
   id: string
   merge_request_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -7541,7 +7541,7 @@ export def "projects-merge-requests-time-estimate create" [
 #
 # GET /v3/projects/{id}/merge_requests/{merge_request_id}/time_stats
 # operationId: getV3ProjectsIdMergeRequestsMergeRequestIdTimeStats
-export def "projects-merge-requests-time-stats get" [
+export def "get-v3-projects-id-merge-requests-merge-request-id-time-stats" [
   id: string
   merge_request_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -7579,7 +7579,7 @@ export def "projects-merge-requests-time-stats get" [
 #
 # POST /v3/projects/{id}/merge_requests/{merge_request_id}/todo
 # operationId: postV3ProjectsIdMergeRequestsMergeRequestIdTodo
-export def "projects-merge-requests-todo create" [
+export def "post-v3-projects-id-merge-requests-merge-request-id-todo" [
   id: string
   merge_request_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -7617,7 +7617,7 @@ export def "projects-merge-requests-todo create" [
 #
 # GET /v3/projects/{id}/merge_requests/{merge_request_id}/versions
 # operationId: getV3ProjectsIdMergeRequestsMergeRequestIdVersions
-export def "projects-merge-requests-versions list" [
+export def "get-v3-projects-id-merge-requests-merge-request-id-versions" [
   id: string
   merge_request_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -7655,7 +7655,7 @@ export def "projects-merge-requests-versions list" [
 #
 # GET /v3/projects/{id}/merge_requests/{merge_request_id}/versions/{version_id}
 # operationId: getV3ProjectsIdMergeRequestsMergeRequestIdVersionsVersionId
-export def "projects-merge-requests-versions get" [
+export def "get-v3-projects-id-merge-requests-merge-request-id-versions-version-id" [
   id: string
   merge_request_id: int
   version_id: int
@@ -7695,7 +7695,7 @@ export def "projects-merge-requests-versions get" [
 #
 # GET /v3/projects/{id}/merge_requests/{noteable_id}/notes
 # operationId: getV3ProjectsIdMergeRequestsNoteableIdNotes
-export def "projects-merge-requests-notes list" [
+export def "get-v3-projects-id-merge-requests-noteable-id-notes" [
   id: string
   noteable_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -7736,7 +7736,7 @@ export def "projects-merge-requests-notes list" [
 #
 # POST /v3/projects/{id}/merge_requests/{noteable_id}/notes
 # operationId: postV3ProjectsIdMergeRequestsNoteableIdNotes
-export def "projects-merge-requests-notes create" [
+export def "post-v3-projects-id-merge-requests-noteable-id-notes" [
   id: string
   noteable_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -7780,7 +7780,7 @@ export def "projects-merge-requests-notes create" [
 #
 # DELETE /v3/projects/{id}/merge_requests/{noteable_id}/notes/{note_id}
 # operationId: deleteV3ProjectsIdMergeRequestsNoteableIdNotesNoteId
-export def "projects-merge-requests-notes delete" [
+export def "delete-v3-projects-id-merge-requests-noteable-id-notes-note-id" [
   id: string
   noteable_id: int
   note_id: int
@@ -7820,7 +7820,7 @@ export def "projects-merge-requests-notes delete" [
 #
 # GET /v3/projects/{id}/merge_requests/{noteable_id}/notes/{note_id}
 # operationId: getV3ProjectsIdMergeRequestsNoteableIdNotesNoteId
-export def "projects-merge-requests-notes get" [
+export def "get-v3-projects-id-merge-requests-noteable-id-notes-note-id" [
   id: string
   noteable_id: int
   note_id: int
@@ -7860,7 +7860,7 @@ export def "projects-merge-requests-notes get" [
 #
 # PUT /v3/projects/{id}/merge_requests/{noteable_id}/notes/{note_id}
 # operationId: putV3ProjectsIdMergeRequestsNoteableIdNotesNoteId
-export def "projects-merge-requests-notes update" [
+export def "put-v3-projects-id-merge-requests-noteable-id-notes-note-id" [
   id: string
   noteable_id: int
   note_id: int
@@ -7905,7 +7905,7 @@ export def "projects-merge-requests-notes update" [
 #
 # DELETE /v3/projects/{id}/merge_requests/{subscribable_id}/subscription
 # operationId: deleteV3ProjectsIdMergeRequestsSubscribableIdSubscription
-export def "projects-merge-requests-subscription delete" [
+export def "delete-v3-projects-id-merge-requests-subscribable-id-subscription" [
   id: string
   subscribable_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7943,7 +7943,7 @@ export def "projects-merge-requests-subscription delete" [
 #
 # POST /v3/projects/{id}/merge_requests/{subscribable_id}/subscription
 # operationId: postV3ProjectsIdMergeRequestsSubscribableIdSubscription
-export def "projects-merge-requests-subscription create" [
+export def "post-v3-projects-id-merge-requests-subscribable-id-subscription" [
   id: string
   subscribable_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7981,7 +7981,7 @@ export def "projects-merge-requests-subscription create" [
 #
 # GET /v3/projects/{id}/milestones
 # operationId: getV3ProjectsIdMilestones
-export def "projects-milestones list" [
+export def "get-v3-projects-id-milestones" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8021,7 +8021,7 @@ export def "projects-milestones list" [
 #
 # POST /v3/projects/{id}/milestones
 # operationId: postV3ProjectsIdMilestones
-export def "projects-milestones create" [
+export def "post-v3-projects-id-milestones" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8065,7 +8065,7 @@ export def "projects-milestones create" [
 #
 # GET /v3/projects/{id}/milestones/{milestone_id}
 # operationId: getV3ProjectsIdMilestonesMilestoneId
-export def "projects-milestones get" [
+export def "get-v3-projects-id-milestones-milestone-id" [
   id: string
   milestone_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -8103,7 +8103,7 @@ export def "projects-milestones get" [
 #
 # PUT /v3/projects/{id}/milestones/{milestone_id}
 # operationId: putV3ProjectsIdMilestonesMilestoneId
-export def "projects-milestones update" [
+export def "put-v3-projects-id-milestones-milestone-id" [
   id: string
   milestone_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -8150,7 +8150,7 @@ export def "projects-milestones update" [
 #
 # GET /v3/projects/{id}/milestones/{milestone_id}/issues
 # operationId: getV3ProjectsIdMilestonesMilestoneIdIssues
-export def "projects-milestones-issues get" [
+export def "get-v3-projects-id-milestones-milestone-id-issues" [
   id: string
   milestone_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -8191,7 +8191,7 @@ export def "projects-milestones-issues get" [
 #
 # GET /v3/projects/{id}/notification_settings
 # operationId: getV3ProjectsIdNotificationSettings
-export def "projects-notification-settings get" [
+export def "get-v3-projects-id-notification-settings" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8227,7 +8227,7 @@ export def "projects-notification-settings get" [
 #
 # PUT /v3/projects/{id}/notification_settings
 # operationId: putV3ProjectsIdNotificationSettings
-export def "projects-notification-settings update" [
+export def "put-v3-projects-id-notification-settings" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8280,7 +8280,7 @@ export def "projects-notification-settings update" [
 #
 # POST /v3/projects/{id}/pipeline
 # operationId: postV3ProjectsIdPipeline
-export def "projects-pipeline create" [
+export def "post-v3-projects-id-pipeline" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8321,7 +8321,7 @@ export def "projects-pipeline create" [
 #
 # GET /v3/projects/{id}/pipelines
 # operationId: getV3ProjectsIdPipelines
-export def "projects-pipelines list" [
+export def "get-v3-projects-id-pipelines" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8361,7 +8361,7 @@ export def "projects-pipelines list" [
 #
 # GET /v3/projects/{id}/pipelines/{pipeline_id}
 # operationId: getV3ProjectsIdPipelinesPipelineId
-export def "projects-pipelines get" [
+export def "get-v3-projects-id-pipelines-pipeline-id" [
   id: string
   pipeline_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -8399,7 +8399,7 @@ export def "projects-pipelines get" [
 #
 # POST /v3/projects/{id}/pipelines/{pipeline_id}/cancel
 # operationId: postV3ProjectsIdPipelinesPipelineIdCancel
-export def "projects-pipelines-cancel create" [
+export def "post-v3-projects-id-pipelines-pipeline-id-cancel" [
   id: string
   pipeline_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -8437,7 +8437,7 @@ export def "projects-pipelines-cancel create" [
 #
 # POST /v3/projects/{id}/pipelines/{pipeline_id}/retry
 # operationId: postV3ProjectsIdPipelinesPipelineIdRetry
-export def "projects-pipelines-retry create" [
+export def "post-v3-projects-id-pipelines-pipeline-id-retry" [
   id: string
   pipeline_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -8475,7 +8475,7 @@ export def "projects-pipelines-retry create" [
 #
 # GET /v3/projects/{id}/repository/archive
 # operationId: getV3ProjectsIdRepositoryArchive
-export def "projects-repository-archive get" [
+export def "get-v3-projects-id-repository-archive" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8514,7 +8514,7 @@ export def "projects-repository-archive get" [
 #
 # GET /v3/projects/{id}/repository/blobs/{sha}
 # operationId: getV3ProjectsIdRepositoryBlobsSha
-export def "projects-repository-blobs get" [
+export def "get-v3-projects-id-repository-blobs-sha" [
   id: string
   sha: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8554,7 +8554,7 @@ export def "projects-repository-blobs get" [
 #
 # GET /v3/projects/{id}/repository/branches
 # operationId: getV3ProjectsIdRepositoryBranches
-export def "projects-repository-branches list" [
+export def "get-v3-projects-id-repository-branches" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8590,7 +8590,7 @@ export def "projects-repository-branches list" [
 #
 # POST /v3/projects/{id}/repository/branches
 # operationId: postV3ProjectsIdRepositoryBranches
-export def "projects-repository-branches create" [
+export def "post-v3-projects-id-repository-branches" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8632,7 +8632,7 @@ export def "projects-repository-branches create" [
 #
 # DELETE /v3/projects/{id}/repository/branches/{branch}
 # operationId: deleteV3ProjectsIdRepositoryBranchesBranch
-export def "projects-repository-branches delete" [
+export def "delete-v3-projects-id-repository-branches-branch" [
   id: string
   branch: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8670,7 +8670,7 @@ export def "projects-repository-branches delete" [
 #
 # GET /v3/projects/{id}/repository/branches/{branch}
 # operationId: getV3ProjectsIdRepositoryBranchesBranch
-export def "projects-repository-branches get" [
+export def "get-v3-projects-id-repository-branches-branch" [
   id: string
   branch: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8708,7 +8708,7 @@ export def "projects-repository-branches get" [
 #
 # PUT /v3/projects/{id}/repository/branches/{branch}/protect
 # operationId: putV3ProjectsIdRepositoryBranchesBranchProtect
-export def "projects-repository-branches-protect update" [
+export def "put-v3-projects-id-repository-branches-branch-protect" [
   id: string
   branch: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8752,7 +8752,7 @@ export def "projects-repository-branches-protect update" [
 #
 # PUT /v3/projects/{id}/repository/branches/{branch}/unprotect
 # operationId: putV3ProjectsIdRepositoryBranchesBranchUnprotect
-export def "projects-repository-branches-unprotect update" [
+export def "put-v3-projects-id-repository-branches-branch-unprotect" [
   id: string
   branch: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8790,7 +8790,7 @@ export def "projects-repository-branches-unprotect update" [
 #
 # GET /v3/projects/{id}/repository/commits
 # operationId: getV3ProjectsIdRepositoryCommits
-export def "projects-repository-commits list" [
+export def "get-v3-projects-id-repository-commits" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8833,7 +8833,7 @@ export def "projects-repository-commits list" [
 #
 # POST /v3/projects/{id}/repository/commits
 # operationId: postV3ProjectsIdRepositoryCommits
-export def "projects-repository-commits create" [
+export def "post-v3-projects-id-repository-commits" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8878,7 +8878,7 @@ export def "projects-repository-commits create" [
 #
 # GET /v3/projects/{id}/repository/commits/{sha}
 # operationId: getV3ProjectsIdRepositoryCommitsSha
-export def "projects-repository-commits get" [
+export def "get-v3-projects-id-repository-commits-sha" [
   id: string
   sha: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8916,7 +8916,7 @@ export def "projects-repository-commits get" [
 #
 # GET /v3/projects/{id}/repository/commits/{sha}/blob
 # operationId: getV3ProjectsIdRepositoryCommitsShaBlob
-export def "projects-repository-commits-blob get" [
+export def "get-v3-projects-id-repository-commits-sha-blob" [
   id: string
   sha: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8956,7 +8956,7 @@ export def "projects-repository-commits-blob get" [
 #
 # GET /v3/projects/{id}/repository/commits/{sha}/builds
 # operationId: getV3ProjectsIdRepositoryCommitsShaBuilds
-export def "projects-repository-commits-builds get" [
+export def "get-v3-projects-id-repository-commits-sha-builds" [
   id: string
   sha: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8998,7 +8998,7 @@ export def "projects-repository-commits-builds get" [
 #
 # POST /v3/projects/{id}/repository/commits/{sha}/cherry_pick
 # operationId: postV3ProjectsIdRepositoryCommitsShaCherryPick
-export def "projects-repository-commits-cherry-pick create" [
+export def "post-v3-projects-id-repository-commits-sha-cherry-pick" [
   id: string
   sha: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9041,7 +9041,7 @@ export def "projects-repository-commits-cherry-pick create" [
 #
 # GET /v3/projects/{id}/repository/commits/{sha}/comments
 # operationId: getV3ProjectsIdRepositoryCommitsShaComments
-export def "projects-repository-commits-comments get" [
+export def "get-v3-projects-id-repository-commits-sha-comments" [
   id: string
   sha: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9082,7 +9082,7 @@ export def "projects-repository-commits-comments get" [
 #
 # POST /v3/projects/{id}/repository/commits/{sha}/comments
 # operationId: postV3ProjectsIdRepositoryCommitsShaComments
-export def "projects-repository-commits-comments create" [
+export def "post-v3-projects-id-repository-commits-sha-comments" [
   id: string
   sha: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9128,7 +9128,7 @@ export def "projects-repository-commits-comments create" [
 #
 # GET /v3/projects/{id}/repository/commits/{sha}/diff
 # operationId: getV3ProjectsIdRepositoryCommitsShaDiff
-export def "projects-repository-commits-diff get" [
+export def "get-v3-projects-id-repository-commits-sha-diff" [
   id: string
   sha: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9166,7 +9166,7 @@ export def "projects-repository-commits-diff get" [
 #
 # GET /v3/projects/{id}/repository/commits/{sha}/statuses
 # operationId: getV3ProjectsIdRepositoryCommitsShaStatuses
-export def "projects-repository-commits-statuses get" [
+export def "get-v3-projects-id-repository-commits-sha-statuses" [
   id: string
   sha: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9211,7 +9211,7 @@ export def "projects-repository-commits-statuses get" [
 #
 # GET /v3/projects/{id}/repository/compare
 # operationId: getV3ProjectsIdRepositoryCompare
-export def "projects-repository-compare get" [
+export def "get-v3-projects-id-repository-compare" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9250,7 +9250,7 @@ export def "projects-repository-compare get" [
 #
 # GET /v3/projects/{id}/repository/contributors
 # operationId: getV3ProjectsIdRepositoryContributors
-export def "projects-repository-contributors get" [
+export def "get-v3-projects-id-repository-contributors" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9286,7 +9286,7 @@ export def "projects-repository-contributors get" [
 #
 # DELETE /v3/projects/{id}/repository/files
 # operationId: deleteV3ProjectsIdRepositoryFiles
-export def "projects-repository-files delete" [
+export def "delete-v3-projects-id-repository-files" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9328,7 +9328,7 @@ export def "projects-repository-files delete" [
 #
 # GET /v3/projects/{id}/repository/files
 # operationId: getV3ProjectsIdRepositoryFiles
-export def "projects-repository-files get" [
+export def "get-v3-projects-id-repository-files" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9367,7 +9367,7 @@ export def "projects-repository-files get" [
 #
 # POST /v3/projects/{id}/repository/files
 # operationId: postV3ProjectsIdRepositoryFiles
-export def "projects-repository-files create" [
+export def "post-v3-projects-id-repository-files" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9414,7 +9414,7 @@ export def "projects-repository-files create" [
 #
 # PUT /v3/projects/{id}/repository/files
 # operationId: putV3ProjectsIdRepositoryFiles
-export def "projects-repository-files update" [
+export def "put-v3-projects-id-repository-files" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9460,7 +9460,7 @@ export def "projects-repository-files update" [
 # DELETE /v3/projects/{id}/repository/merged_branches
 #
 # operationId: deleteV3ProjectsIdRepositoryMergedBranches
-export def "projects-repository-merged-branches delete" [
+export def "delete-v3-projects-id-repository-merged-branches" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9496,7 +9496,7 @@ export def "projects-repository-merged-branches delete" [
 #
 # GET /v3/projects/{id}/repository/raw_blobs/{sha}
 # operationId: getV3ProjectsIdRepositoryRawBlobsSha
-export def "projects-repository-raw-blobs get" [
+export def "get-v3-projects-id-repository-raw-blobs-sha" [
   id: string
   sha: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9534,7 +9534,7 @@ export def "projects-repository-raw-blobs get" [
 #
 # GET /v3/projects/{id}/repository/tags
 # operationId: getV3ProjectsIdRepositoryTags
-export def "projects-repository-tags list" [
+export def "get-v3-projects-id-repository-tags" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9570,7 +9570,7 @@ export def "projects-repository-tags list" [
 #
 # POST /v3/projects/{id}/repository/tags
 # operationId: postV3ProjectsIdRepositoryTags
-export def "projects-repository-tags create" [
+export def "post-v3-projects-id-repository-tags" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9614,7 +9614,7 @@ export def "projects-repository-tags create" [
 #
 # DELETE /v3/projects/{id}/repository/tags/{tag_name}
 # operationId: deleteV3ProjectsIdRepositoryTagsTagName
-export def "projects-repository-tags delete" [
+export def "delete-v3-projects-id-repository-tags-tag-name" [
   id: string
   tag_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9652,7 +9652,7 @@ export def "projects-repository-tags delete" [
 #
 # GET /v3/projects/{id}/repository/tags/{tag_name}
 # operationId: getV3ProjectsIdRepositoryTagsTagName
-export def "projects-repository-tags get" [
+export def "get-v3-projects-id-repository-tags-tag-name" [
   id: string
   tag_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9690,7 +9690,7 @@ export def "projects-repository-tags get" [
 #
 # POST /v3/projects/{id}/repository/tags/{tag_name}/release
 # operationId: postV3ProjectsIdRepositoryTagsTagNameRelease
-export def "projects-repository-tags-release create" [
+export def "post-v3-projects-id-repository-tags-tag-name-release" [
   id: string
   tag_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9733,7 +9733,7 @@ export def "projects-repository-tags-release create" [
 #
 # PUT /v3/projects/{id}/repository/tags/{tag_name}/release
 # operationId: putV3ProjectsIdRepositoryTagsTagNameRelease
-export def "projects-repository-tags-release update" [
+export def "put-v3-projects-id-repository-tags-tag-name-release" [
   id: string
   tag_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9776,7 +9776,7 @@ export def "projects-repository-tags-release update" [
 #
 # GET /v3/projects/{id}/repository/tree
 # operationId: getV3ProjectsIdRepositoryTree
-export def "projects-repository-tree get" [
+export def "get-v3-projects-id-repository-tree" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9816,7 +9816,7 @@ export def "projects-repository-tree get" [
 #
 # GET /v3/projects/{id}/runners
 # operationId: getV3ProjectsIdRunners
-export def "projects-runners get" [
+export def "get-v3-projects-id-runners" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9856,7 +9856,7 @@ export def "projects-runners get" [
 #
 # POST /v3/projects/{id}/runners
 # operationId: postV3ProjectsIdRunners
-export def "projects-runners create" [
+export def "post-v3-projects-id-runners" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9897,7 +9897,7 @@ export def "projects-runners create" [
 #
 # DELETE /v3/projects/{id}/runners/{runner_id}
 # operationId: deleteV3ProjectsIdRunnersRunnerId
-export def "projects-runners delete" [
+export def "delete-v3-projects-id-runners-runner-id" [
   id: string
   runner_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -9935,7 +9935,7 @@ export def "projects-runners delete" [
 #
 # PUT /v3/projects/{id}/services/asana
 # operationId: putV3ProjectsIdServicesAsana
-export def "projects-services-asana update" [
+export def "put-v3-projects-id-services-asana" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9978,7 +9978,7 @@ export def "projects-services-asana update" [
 #
 # PUT /v3/projects/{id}/services/assembla
 # operationId: putV3ProjectsIdServicesAssembla
-export def "projects-services-assembla update" [
+export def "put-v3-projects-id-services-assembla" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10021,7 +10021,7 @@ export def "projects-services-assembla update" [
 #
 # PUT /v3/projects/{id}/services/bamboo
 # operationId: putV3ProjectsIdServicesBamboo
-export def "projects-services-bamboo update" [
+export def "put-v3-projects-id-services-bamboo" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10066,7 +10066,7 @@ export def "projects-services-bamboo update" [
 #
 # PUT /v3/projects/{id}/services/bugzilla
 # operationId: putV3ProjectsIdServicesBugzilla
-export def "projects-services-bugzilla update" [
+export def "put-v3-projects-id-services-bugzilla" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10112,7 +10112,7 @@ export def "projects-services-bugzilla update" [
 #
 # PUT /v3/projects/{id}/services/buildkite
 # operationId: putV3ProjectsIdServicesBuildkite
-export def "projects-services-buildkite update" [
+export def "put-v3-projects-id-services-buildkite" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10156,7 +10156,7 @@ export def "projects-services-buildkite update" [
 #
 # PUT /v3/projects/{id}/services/builds-email
 # operationId: putV3ProjectsIdServicesBuildsEmail
-export def "projects-services-builds-email update" [
+export def "put-v3-projects-id-services-builds-email" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10200,7 +10200,7 @@ export def "projects-services-builds-email update" [
 #
 # PUT /v3/projects/{id}/services/campfire
 # operationId: putV3ProjectsIdServicesCampfire
-export def "projects-services-campfire update" [
+export def "put-v3-projects-id-services-campfire" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10244,7 +10244,7 @@ export def "projects-services-campfire update" [
 #
 # PUT /v3/projects/{id}/services/custom-issue-tracker
 # operationId: putV3ProjectsIdServicesCustomIssueTracker
-export def "projects-services-custom-issue-tracker update" [
+export def "put-v3-projects-id-services-custom-issue-tracker" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10290,7 +10290,7 @@ export def "projects-services-custom-issue-tracker update" [
 #
 # PUT /v3/projects/{id}/services/drone-ci
 # operationId: putV3ProjectsIdServicesDroneCi
-export def "projects-services-drone-ci update" [
+export def "put-v3-projects-id-services-drone-ci" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10336,7 +10336,7 @@ export def "projects-services-drone-ci update" [
 #
 # PUT /v3/projects/{id}/services/emails-on-push
 # operationId: putV3ProjectsIdServicesEmailsOnPush
-export def "projects-services-emails-on-push update" [
+export def "put-v3-projects-id-services-emails-on-push" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10381,7 +10381,7 @@ export def "projects-services-emails-on-push update" [
 #
 # PUT /v3/projects/{id}/services/external-wiki
 # operationId: putV3ProjectsIdServicesExternalWiki
-export def "projects-services-external-wiki update" [
+export def "put-v3-projects-id-services-external-wiki" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10422,7 +10422,7 @@ export def "projects-services-external-wiki update" [
 #
 # PUT /v3/projects/{id}/services/flowdock
 # operationId: putV3ProjectsIdServicesFlowdock
-export def "projects-services-flowdock update" [
+export def "put-v3-projects-id-services-flowdock" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10464,7 +10464,7 @@ export def "projects-services-flowdock update" [
 #
 # PUT /v3/projects/{id}/services/gemnasium
 # operationId: putV3ProjectsIdServicesGemnasium
-export def "projects-services-gemnasium update" [
+export def "put-v3-projects-id-services-gemnasium" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10507,7 +10507,7 @@ export def "projects-services-gemnasium update" [
 #
 # PUT /v3/projects/{id}/services/hipchat
 # operationId: putV3ProjectsIdServicesHipchat
-export def "projects-services-hipchat update" [
+export def "put-v3-projects-id-services-hipchat" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10560,7 +10560,7 @@ export def "projects-services-hipchat update" [
 #
 # PUT /v3/projects/{id}/services/irker
 # operationId: putV3ProjectsIdServicesIrker
-export def "projects-services-irker update" [
+export def "put-v3-projects-id-services-irker" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10606,7 +10606,7 @@ export def "projects-services-irker update" [
 #
 # PUT /v3/projects/{id}/services/jira
 # operationId: putV3ProjectsIdServicesJira
-export def "projects-services-jira update" [
+export def "put-v3-projects-id-services-jira" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10653,7 +10653,7 @@ export def "projects-services-jira update" [
 #
 # PUT /v3/projects/{id}/services/kubernetes
 # operationId: putV3ProjectsIdServicesKubernetes
-export def "projects-services-kubernetes update" [
+export def "put-v3-projects-id-services-kubernetes" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10697,7 +10697,7 @@ export def "projects-services-kubernetes update" [
 #
 # PUT /v3/projects/{id}/services/mattermost
 # operationId: putV3ProjectsIdServicesMattermost
-export def "projects-services-mattermost update" [
+export def "put-v3-projects-id-services-mattermost" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10747,7 +10747,7 @@ export def "projects-services-mattermost update" [
 #
 # PUT /v3/projects/{id}/services/mattermost-slash-commands
 # operationId: putV3ProjectsIdServicesMattermostSlashCommands
-export def "projects-services-mattermost-slash-commands update" [
+export def "put-v3-projects-id-services-mattermost-slash-commands" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10788,7 +10788,7 @@ export def "projects-services-mattermost-slash-commands update" [
 #
 # POST /v3/projects/{id}/services/mattermost_slash_commands/trigger
 # operationId: postV3ProjectsIdServicesMattermostSlashCommandsTrigger
-export def "projects-services-mattermost-slash-commands-trigger create" [
+export def "post-v3-projects-id-services-mattermost-slash-commands-trigger" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10829,7 +10829,7 @@ export def "projects-services-mattermost-slash-commands-trigger create" [
 #
 # PUT /v3/projects/{id}/services/pipelines-email
 # operationId: putV3ProjectsIdServicesPipelinesEmail
-export def "projects-services-pipelines-email update" [
+export def "put-v3-projects-id-services-pipelines-email" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10872,7 +10872,7 @@ export def "projects-services-pipelines-email update" [
 #
 # PUT /v3/projects/{id}/services/pivotaltracker
 # operationId: putV3ProjectsIdServicesPivotaltracker
-export def "projects-services-pivotaltracker update" [
+export def "put-v3-projects-id-services-pivotaltracker" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10915,7 +10915,7 @@ export def "projects-services-pivotaltracker update" [
 #
 # PUT /v3/projects/{id}/services/pushover
 # operationId: putV3ProjectsIdServicesPushover
-export def "projects-services-pushover update" [
+export def "put-v3-projects-id-services-pushover" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -10961,7 +10961,7 @@ export def "projects-services-pushover update" [
 #
 # PUT /v3/projects/{id}/services/redmine
 # operationId: putV3ProjectsIdServicesRedmine
-export def "projects-services-redmine update" [
+export def "put-v3-projects-id-services-redmine" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11006,7 +11006,7 @@ export def "projects-services-redmine update" [
 #
 # PUT /v3/projects/{id}/services/slack
 # operationId: putV3ProjectsIdServicesSlack
-export def "projects-services-slack update" [
+export def "put-v3-projects-id-services-slack" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11058,7 +11058,7 @@ export def "projects-services-slack update" [
 #
 # PUT /v3/projects/{id}/services/slack-slash-commands
 # operationId: putV3ProjectsIdServicesSlackSlashCommands
-export def "projects-services-slack-slash-commands update" [
+export def "put-v3-projects-id-services-slack-slash-commands" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11099,7 +11099,7 @@ export def "projects-services-slack-slash-commands update" [
 #
 # POST /v3/projects/{id}/services/slack_slash_commands/trigger
 # operationId: postV3ProjectsIdServicesSlackSlashCommandsTrigger
-export def "projects-services-slack-slash-commands-trigger create" [
+export def "post-v3-projects-id-services-slack-slash-commands-trigger" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11140,7 +11140,7 @@ export def "projects-services-slack-slash-commands-trigger create" [
 #
 # PUT /v3/projects/{id}/services/teamcity
 # operationId: putV3ProjectsIdServicesTeamcity
-export def "projects-services-teamcity update" [
+export def "put-v3-projects-id-services-teamcity" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11185,7 +11185,7 @@ export def "projects-services-teamcity update" [
 #
 # DELETE /v3/projects/{id}/services/{service_slug}
 # operationId: deleteV3ProjectsIdServicesServiceSlug
-export def "projects-services delete" [
+export def "delete-v3-projects-id-services-service-slug" [
   id: int
   service_slug: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -11223,7 +11223,7 @@ export def "projects-services delete" [
 #
 # GET /v3/projects/{id}/services/{service_slug}
 # operationId: getV3ProjectsIdServicesServiceSlug
-export def "projects-services get" [
+export def "get-v3-projects-id-services-service-slug" [
   id: int
   service_slug: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -11261,7 +11261,7 @@ export def "projects-services get" [
 #
 # POST /v3/projects/{id}/share
 # operationId: postV3ProjectsIdShare
-export def "projects-share create" [
+export def "post-v3-projects-id-share" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11303,7 +11303,7 @@ export def "projects-share create" [
 # DELETE /v3/projects/{id}/share/{group_id}
 #
 # operationId: deleteV3ProjectsIdShareGroupId
-export def "projects-share delete" [
+export def "delete-v3-projects-id-share-group-id" [
   id: string
   group_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -11341,7 +11341,7 @@ export def "projects-share delete" [
 #
 # GET /v3/projects/{id}/snippets
 # operationId: getV3ProjectsIdSnippets
-export def "projects-snippets list" [
+export def "get-v3-projects-id-snippets" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11380,7 +11380,7 @@ export def "projects-snippets list" [
 #
 # POST /v3/projects/{id}/snippets
 # operationId: postV3ProjectsIdSnippets
-export def "projects-snippets create" [
+export def "post-v3-projects-id-snippets" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -11424,7 +11424,7 @@ export def "projects-snippets create" [
 #
 # GET /v3/projects/{id}/snippets/{noteable_id}/notes
 # operationId: getV3ProjectsIdSnippetsNoteableIdNotes
-export def "projects-snippets-notes list" [
+export def "get-v3-projects-id-snippets-noteable-id-notes" [
   id: string
   noteable_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -11465,7 +11465,7 @@ export def "projects-snippets-notes list" [
 #
 # POST /v3/projects/{id}/snippets/{noteable_id}/notes
 # operationId: postV3ProjectsIdSnippetsNoteableIdNotes
-export def "projects-snippets-notes create" [
+export def "post-v3-projects-id-snippets-noteable-id-notes" [
   id: string
   noteable_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -11509,7 +11509,7 @@ export def "projects-snippets-notes create" [
 #
 # DELETE /v3/projects/{id}/snippets/{noteable_id}/notes/{note_id}
 # operationId: deleteV3ProjectsIdSnippetsNoteableIdNotesNoteId
-export def "projects-snippets-notes delete" [
+export def "delete-v3-projects-id-snippets-noteable-id-notes-note-id" [
   id: string
   noteable_id: int
   note_id: int
@@ -11549,7 +11549,7 @@ export def "projects-snippets-notes delete" [
 #
 # GET /v3/projects/{id}/snippets/{noteable_id}/notes/{note_id}
 # operationId: getV3ProjectsIdSnippetsNoteableIdNotesNoteId
-export def "projects-snippets-notes get" [
+export def "get-v3-projects-id-snippets-noteable-id-notes-note-id" [
   id: string
   noteable_id: int
   note_id: int
@@ -11589,7 +11589,7 @@ export def "projects-snippets-notes get" [
 #
 # PUT /v3/projects/{id}/snippets/{noteable_id}/notes/{note_id}
 # operationId: putV3ProjectsIdSnippetsNoteableIdNotesNoteId
-export def "projects-snippets-notes update" [
+export def "put-v3-projects-id-snippets-noteable-id-notes-note-id" [
   id: string
   noteable_id: int
   note_id: int
@@ -11634,7 +11634,7 @@ export def "projects-snippets-notes update" [
 #
 # DELETE /v3/projects/{id}/snippets/{snippet_id}
 # operationId: deleteV3ProjectsIdSnippetsSnippetId
-export def "projects-snippets delete" [
+export def "delete-v3-projects-id-snippets-snippet-id" [
   id: string
   snippet_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -11672,7 +11672,7 @@ export def "projects-snippets delete" [
 #
 # GET /v3/projects/{id}/snippets/{snippet_id}
 # operationId: getV3ProjectsIdSnippetsSnippetId
-export def "projects-snippets get" [
+export def "get-v3-projects-id-snippets-snippet-id" [
   id: string
   snippet_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -11710,7 +11710,7 @@ export def "projects-snippets get" [
 #
 # PUT /v3/projects/{id}/snippets/{snippet_id}
 # operationId: putV3ProjectsIdSnippetsSnippetId
-export def "projects-snippets update" [
+export def "put-v3-projects-id-snippets-snippet-id" [
   id: string
   snippet_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -11756,7 +11756,7 @@ export def "projects-snippets update" [
 #
 # GET /v3/projects/{id}/snippets/{snippet_id}/award_emoji
 # operationId: getV3ProjectsIdSnippetsSnippetIdAwardEmoji
-export def "projects-snippets-award-emoji list" [
+export def "get-v3-projects-id-snippets-snippet-id-award-emoji" [
   id: string
   snippet_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -11797,7 +11797,7 @@ export def "projects-snippets-award-emoji list" [
 #
 # POST /v3/projects/{id}/snippets/{snippet_id}/award_emoji
 # operationId: postV3ProjectsIdSnippetsSnippetIdAwardEmoji
-export def "projects-snippets-award-emoji create" [
+export def "post-v3-projects-id-snippets-snippet-id-award-emoji" [
   id: int
   snippet_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -11840,7 +11840,7 @@ export def "projects-snippets-award-emoji create" [
 #
 # DELETE /v3/projects/{id}/snippets/{snippet_id}/award_emoji/{award_id}
 # operationId: deleteV3ProjectsIdSnippetsSnippetIdAwardEmojiAwardId
-export def "projects-snippets-award-emoji delete" [
+export def "delete-v3-projects-id-snippets-snippet-id-award-emoji-award-id" [
   id: int
   snippet_id: int
   award_id: int
@@ -11880,7 +11880,7 @@ export def "projects-snippets-award-emoji delete" [
 #
 # GET /v3/projects/{id}/snippets/{snippet_id}/award_emoji/{award_id}
 # operationId: getV3ProjectsIdSnippetsSnippetIdAwardEmojiAwardId
-export def "projects-snippets-award-emoji get" [
+export def "get-v3-projects-id-snippets-snippet-id-award-emoji-award-id" [
   id: int
   snippet_id: int
   award_id: int
@@ -11920,7 +11920,7 @@ export def "projects-snippets-award-emoji get" [
 #
 # GET /v3/projects/{id}/snippets/{snippet_id}/notes/{note_id}/award_emoji
 # operationId: getV3ProjectsIdSnippetsSnippetIdNotesNoteIdAwardEmoji
-export def "projects-snippets-notes-award-emoji list" [
+export def "get-v3-projects-id-snippets-snippet-id-notes-note-id-award-emoji" [
   id: int
   snippet_id: int
   note_id: int
@@ -11963,7 +11963,7 @@ export def "projects-snippets-notes-award-emoji list" [
 #
 # POST /v3/projects/{id}/snippets/{snippet_id}/notes/{note_id}/award_emoji
 # operationId: postV3ProjectsIdSnippetsSnippetIdNotesNoteIdAwardEmoji
-export def "projects-snippets-notes-award-emoji create" [
+export def "post-v3-projects-id-snippets-snippet-id-notes-note-id-award-emoji" [
   id: int
   snippet_id: int
   note_id: int
@@ -12008,7 +12008,7 @@ export def "projects-snippets-notes-award-emoji create" [
 #
 # DELETE /v3/projects/{id}/snippets/{snippet_id}/notes/{note_id}/award_emoji/{award_id}
 # operationId: deleteV3ProjectsIdSnippetsSnippetIdNotesNoteIdAwardEmojiAwardId
-export def "projects-snippets-notes-award-emoji delete" [
+export def "delete-v3-projects-id-snippets-snippet-id-notes-note-id-award-emoji-award-id" [
   id: int
   snippet_id: int
   note_id: int
@@ -12050,7 +12050,7 @@ export def "projects-snippets-notes-award-emoji delete" [
 #
 # GET /v3/projects/{id}/snippets/{snippet_id}/notes/{note_id}/award_emoji/{award_id}
 # operationId: getV3ProjectsIdSnippetsSnippetIdNotesNoteIdAwardEmojiAwardId
-export def "projects-snippets-notes-award-emoji get" [
+export def "get-v3-projects-id-snippets-snippet-id-notes-note-id-award-emoji-award-id" [
   id: int
   snippet_id: int
   note_id: int
@@ -12092,7 +12092,7 @@ export def "projects-snippets-notes-award-emoji get" [
 #
 # GET /v3/projects/{id}/snippets/{snippet_id}/raw
 # operationId: getV3ProjectsIdSnippetsSnippetIdRaw
-export def "projects-snippets-raw get" [
+export def "get-v3-projects-id-snippets-snippet-id-raw" [
   id: string
   snippet_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -12130,7 +12130,7 @@ export def "projects-snippets-raw get" [
 #
 # DELETE /v3/projects/{id}/star
 # operationId: deleteV3ProjectsIdStar
-export def "projects-star delete" [
+export def "delete-v3-projects-id-star" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12166,7 +12166,7 @@ export def "projects-star delete" [
 #
 # POST /v3/projects/{id}/star
 # operationId: postV3ProjectsIdStar
-export def "projects-star create" [
+export def "post-v3-projects-id-star" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12202,7 +12202,7 @@ export def "projects-star create" [
 #
 # POST /v3/projects/{id}/statuses/{sha}
 # operationId: postV3ProjectsIdStatusesSha
-export def "projects-statuses create" [
+export def "post-v3-projects-id-statuses-sha" [
   id: string
   sha: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -12250,7 +12250,7 @@ export def "projects-statuses create" [
 #
 # GET /v3/projects/{id}/triggers
 # operationId: getV3ProjectsIdTriggers
-export def "projects-triggers list" [
+export def "get-v3-projects-id-triggers" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12289,7 +12289,7 @@ export def "projects-triggers list" [
 #
 # POST /v3/projects/{id}/triggers
 # operationId: postV3ProjectsIdTriggers
-export def "projects-triggers create" [
+export def "post-v3-projects-id-triggers" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12325,7 +12325,7 @@ export def "projects-triggers create" [
 #
 # DELETE /v3/projects/{id}/triggers/{token}
 # operationId: deleteV3ProjectsIdTriggersToken
-export def "projects-triggers delete" [
+export def "delete-v3-projects-id-triggers-token" [
   id: string
   token_arg: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -12363,7 +12363,7 @@ export def "projects-triggers delete" [
 #
 # GET /v3/projects/{id}/triggers/{token}
 # operationId: getV3ProjectsIdTriggersToken
-export def "projects-triggers get" [
+export def "get-v3-projects-id-triggers-token" [
   id: string
   token_arg: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -12401,7 +12401,7 @@ export def "projects-triggers get" [
 #
 # POST /v3/projects/{id}/unarchive
 # operationId: postV3ProjectsIdUnarchive
-export def "projects-unarchive create" [
+export def "post-v3-projects-id-unarchive" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12437,7 +12437,7 @@ export def "projects-unarchive create" [
 #
 # POST /v3/projects/{id}/uploads
 # operationId: postV3ProjectsIdUploads
-export def "projects-uploads create" [
+export def "post-v3-projects-id-uploads" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12479,7 +12479,7 @@ export def "projects-uploads create" [
 #
 # GET /v3/projects/{id}/users
 # operationId: getV3ProjectsIdUsers
-export def "projects-users get" [
+export def "get-v3-projects-id-users" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12519,7 +12519,7 @@ export def "projects-users get" [
 #
 # GET /v3/projects/{id}/variables
 # operationId: getV3ProjectsIdVariables
-export def "projects-variables list" [
+export def "get-v3-projects-id-variables" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12558,7 +12558,7 @@ export def "projects-variables list" [
 #
 # POST /v3/projects/{id}/variables
 # operationId: postV3ProjectsIdVariables
-export def "projects-variables create" [
+export def "post-v3-projects-id-variables" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12600,7 +12600,7 @@ export def "projects-variables create" [
 #
 # DELETE /v3/projects/{id}/variables/{key}
 # operationId: deleteV3ProjectsIdVariablesKey
-export def "projects-variables delete" [
+export def "delete-v3-projects-id-variables-key" [
   id: string
   key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -12638,7 +12638,7 @@ export def "projects-variables delete" [
 #
 # GET /v3/projects/{id}/variables/{key}
 # operationId: getV3ProjectsIdVariablesKey
-export def "projects-variables get" [
+export def "get-v3-projects-id-variables-key" [
   id: string
   key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -12676,7 +12676,7 @@ export def "projects-variables get" [
 #
 # PUT /v3/projects/{id}/variables/{key}
 # operationId: putV3ProjectsIdVariablesKey
-export def "projects-variables update" [
+export def "put-v3-projects-id-variables-key" [
   id: string
   key: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -12719,7 +12719,7 @@ export def "projects-variables update" [
 #
 # GET /v3/runners
 # operationId: getV3Runners
-export def "runners list" [
+export def "get-v3-runners" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12757,7 +12757,7 @@ export def "runners list" [
 #
 # GET /v3/runners/all
 # operationId: getV3RunnersAll
-export def "runners-all get" [
+export def "get-v3-runners-all" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12795,7 +12795,7 @@ export def "runners-all get" [
 #
 # DELETE /v3/runners/{id}
 # operationId: deleteV3RunnersId
-export def "runners delete" [
+export def "delete-v3-runners-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12831,7 +12831,7 @@ export def "runners delete" [
 #
 # GET /v3/runners/{id}
 # operationId: getV3RunnersId
-export def "runners get" [
+export def "get-v3-runners-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12867,7 +12867,7 @@ export def "runners get" [
 #
 # PUT /v3/runners/{id}
 # operationId: putV3RunnersId
-export def "runners update" [
+export def "put-v3-runners-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -12912,7 +12912,7 @@ export def "runners update" [
 #
 # POST /v3/session
 # operationId: postV3Session
-export def "session create" [
+export def "post-v3-session" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12953,7 +12953,7 @@ export def "session create" [
 #
 # GET /v3/sidekiq/compound_metrics
 # operationId: getV3SidekiqCompoundMetrics
-export def "sidekiq-compound-metrics get" [
+export def "get-v3-sidekiq-compound-metrics" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -12987,7 +12987,7 @@ export def "sidekiq-compound-metrics get" [
 #
 # GET /v3/sidekiq/job_stats
 # operationId: getV3SidekiqJobStats
-export def "sidekiq-job-stats get" [
+export def "get-v3-sidekiq-job-stats" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -13021,7 +13021,7 @@ export def "sidekiq-job-stats get" [
 #
 # GET /v3/sidekiq/process_metrics
 # operationId: getV3SidekiqProcessMetrics
-export def "sidekiq-process-metrics get" [
+export def "get-v3-sidekiq-process-metrics" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -13055,7 +13055,7 @@ export def "sidekiq-process-metrics get" [
 #
 # GET /v3/sidekiq/queue_metrics
 # operationId: getV3SidekiqQueueMetrics
-export def "sidekiq-queue-metrics get" [
+export def "get-v3-sidekiq-queue-metrics" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -13089,7 +13089,7 @@ export def "sidekiq-queue-metrics get" [
 #
 # GET /v3/snippets
 # operationId: getV3Snippets
-export def "snippets list" [
+export def "get-v3-snippets" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -13126,7 +13126,7 @@ export def "snippets list" [
 #
 # POST /v3/snippets
 # operationId: postV3Snippets
-export def "snippets create" [
+export def "post-v3-snippets" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -13168,7 +13168,7 @@ export def "snippets create" [
 #
 # GET /v3/snippets/public
 # operationId: getV3SnippetsPublic
-export def "snippets-public get" [
+export def "get-v3-snippets-public" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -13205,7 +13205,7 @@ export def "snippets-public get" [
 #
 # DELETE /v3/snippets/{id}
 # operationId: deleteV3SnippetsId
-export def "snippets delete" [
+export def "delete-v3-snippets-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -13241,7 +13241,7 @@ export def "snippets delete" [
 #
 # GET /v3/snippets/{id}
 # operationId: getV3SnippetsId
-export def "snippets get" [
+export def "get-v3-snippets-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -13277,7 +13277,7 @@ export def "snippets get" [
 #
 # PUT /v3/snippets/{id}
 # operationId: putV3SnippetsId
-export def "snippets update" [
+export def "put-v3-snippets-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -13321,7 +13321,7 @@ export def "snippets update" [
 #
 # GET /v3/snippets/{id}/raw
 # operationId: getV3SnippetsIdRaw
-export def "snippets-raw get" [
+export def "get-v3-snippets-id-raw" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -13357,7 +13357,7 @@ export def "snippets-raw get" [
 #
 # GET /v3/templates/dockerfiles
 # operationId: getV3TemplatesDockerfiles
-export def "templates-dockerfiles list" [
+export def "get-v3-templates-dockerfiles" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -13391,7 +13391,7 @@ export def "templates-dockerfiles list" [
 #
 # GET /v3/templates/dockerfiles/{name}
 # operationId: getV3TemplatesDockerfilesName
-export def "templates-dockerfiles get" [
+export def "get-v3-templates-dockerfiles-name" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -13427,7 +13427,7 @@ export def "templates-dockerfiles get" [
 #
 # GET /v3/templates/gitignores
 # operationId: getV3TemplatesGitignores
-export def "templates-gitignores list" [
+export def "get-v3-templates-gitignores" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -13461,7 +13461,7 @@ export def "templates-gitignores list" [
 #
 # GET /v3/templates/gitignores/{name}
 # operationId: getV3TemplatesGitignoresName
-export def "templates-gitignores get" [
+export def "get-v3-templates-gitignores-name" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -13497,7 +13497,7 @@ export def "templates-gitignores get" [
 #
 # GET /v3/templates/gitlab_ci_ymls
 # operationId: getV3TemplatesGitlabCiYmls
-export def "templates-gitlab-ci-ymls list" [
+export def "get-v3-templates-gitlab-ci-ymls" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -13531,7 +13531,7 @@ export def "templates-gitlab-ci-ymls list" [
 #
 # GET /v3/templates/gitlab_ci_ymls/{name}
 # operationId: getV3TemplatesGitlabCiYmlsName
-export def "templates-gitlab-ci-ymls get" [
+export def "get-v3-templates-gitlab-ci-ymls-name" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -13567,7 +13567,7 @@ export def "templates-gitlab-ci-ymls get" [
 #
 # GET /v3/templates/licenses
 # operationId: getV3TemplatesLicenses
-export def "templates-licenses list" [
+export def "get-v3-templates-licenses" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -13603,7 +13603,7 @@ export def "templates-licenses list" [
 #
 # GET /v3/templates/licenses/{name}
 # operationId: getV3TemplatesLicensesName
-export def "templates-licenses get" [
+export def "get-v3-templates-licenses-name" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -13639,7 +13639,7 @@ export def "templates-licenses get" [
 #
 # DELETE /v3/todos
 # operationId: deleteV3Todos
-export def "todos delete" [
+export def "delete-v3-todos" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -13673,7 +13673,7 @@ export def "todos delete" [
 #
 # GET /v3/todos
 # operationId: getV3Todos
-export def "todos get" [
+export def "get-v3-todos" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -13710,7 +13710,7 @@ export def "todos get" [
 #
 # DELETE /v3/todos/{id}
 # operationId: deleteV3TodosId
-export def "todos delete-by-id" [
+export def "delete-v3-todos-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -13746,7 +13746,7 @@ export def "todos delete-by-id" [
 #
 # GET /v3/user
 # operationId: getV3User
-export def "user get" [
+export def "get-v3-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -13780,7 +13780,7 @@ export def "user get" [
 #
 # GET /v3/user/emails
 # operationId: getV3UserEmails
-export def "user-emails list" [
+export def "get-v3-user-emails" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -13814,7 +13814,7 @@ export def "user-emails list" [
 #
 # POST /v3/user/emails
 # operationId: postV3UserEmails
-export def "user-emails create" [
+export def "post-v3-user-emails" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -13853,7 +13853,7 @@ export def "user-emails create" [
 #
 # DELETE /v3/user/emails/{email_id}
 # operationId: deleteV3UserEmailsEmailId
-export def "user-emails delete" [
+export def "delete-v3-user-emails-email-id" [
   email_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -13889,7 +13889,7 @@ export def "user-emails delete" [
 #
 # GET /v3/user/emails/{email_id}
 # operationId: getV3UserEmailsEmailId
-export def "user-emails get" [
+export def "get-v3-user-emails-email-id" [
   email_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -13925,7 +13925,7 @@ export def "user-emails get" [
 #
 # GET /v3/user/keys
 # operationId: getV3UserKeys
-export def "user-keys list" [
+export def "get-v3-user-keys" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -13959,7 +13959,7 @@ export def "user-keys list" [
 #
 # POST /v3/user/keys
 # operationId: postV3UserKeys
-export def "user-keys create" [
+export def "post-v3-user-keys" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -13999,7 +13999,7 @@ export def "user-keys create" [
 #
 # DELETE /v3/user/keys/{key_id}
 # operationId: deleteV3UserKeysKeyId
-export def "user-keys delete" [
+export def "delete-v3-user-keys-key-id" [
   key_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -14035,7 +14035,7 @@ export def "user-keys delete" [
 #
 # GET /v3/user/keys/{key_id}
 # operationId: getV3UserKeysKeyId
-export def "user-keys get" [
+export def "get-v3-user-keys-key-id" [
   key_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -14071,7 +14071,7 @@ export def "user-keys get" [
 #
 # GET /v3/users
 # operationId: getV3Users
-export def "users list" [
+export def "get-v3-users" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -14113,7 +14113,7 @@ export def "users list" [
 #
 # POST /v3/users
 # operationId: postV3Users
-export def "users create" [
+export def "post-v3-users" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -14169,7 +14169,7 @@ export def "users create" [
 #
 # DELETE /v3/users/{id}
 # operationId: deleteV3UsersId
-export def "users delete" [
+export def "delete-v3-users-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -14205,7 +14205,7 @@ export def "users delete" [
 #
 # GET /v3/users/{id}
 # operationId: getV3UsersId
-export def "users get" [
+export def "get-v3-users-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -14241,7 +14241,7 @@ export def "users get" [
 #
 # PUT /v3/users/{id}
 # operationId: putV3UsersId
-export def "users update" [
+export def "put-v3-users-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -14299,7 +14299,7 @@ export def "users update" [
 #
 # PUT /v3/users/{id}/block
 # operationId: putV3UsersIdBlock
-export def "users-block update" [
+export def "put-v3-users-id-block" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -14335,7 +14335,7 @@ export def "users-block update" [
 #
 # GET /v3/users/{id}/emails
 # operationId: getV3UsersIdEmails
-export def "users-emails get" [
+export def "get-v3-users-id-emails" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -14371,7 +14371,7 @@ export def "users-emails get" [
 #
 # POST /v3/users/{id}/emails
 # operationId: postV3UsersIdEmails
-export def "users-emails create" [
+export def "post-v3-users-id-emails" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -14412,7 +14412,7 @@ export def "users-emails create" [
 #
 # DELETE /v3/users/{id}/emails/{email_id}
 # operationId: deleteV3UsersIdEmailsEmailId
-export def "users-emails delete" [
+export def "delete-v3-users-id-emails-email-id" [
   id: int
   email_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -14450,7 +14450,7 @@ export def "users-emails delete" [
 #
 # GET /v3/users/{id}/events
 # operationId: getV3UsersIdEvents
-export def "users-events get" [
+export def "get-v3-users-id-events" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -14489,7 +14489,7 @@ export def "users-events get" [
 #
 # GET /v3/users/{id}/keys
 # operationId: getV3UsersIdKeys
-export def "users-keys get" [
+export def "get-v3-users-id-keys" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -14525,7 +14525,7 @@ export def "users-keys get" [
 #
 # POST /v3/users/{id}/keys
 # operationId: postV3UsersIdKeys
-export def "users-keys create" [
+export def "post-v3-users-id-keys" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -14567,7 +14567,7 @@ export def "users-keys create" [
 #
 # DELETE /v3/users/{id}/keys/{key_id}
 # operationId: deleteV3UsersIdKeysKeyId
-export def "users-keys delete" [
+export def "delete-v3-users-id-keys-key-id" [
   id: int
   key_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -14605,7 +14605,7 @@ export def "users-keys delete" [
 #
 # PUT /v3/users/{id}/unblock
 # operationId: putV3UsersIdUnblock
-export def "users-unblock update" [
+export def "put-v3-users-id-unblock" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -14641,7 +14641,7 @@ export def "users-unblock update" [
 #
 # GET /v3/version
 # operationId: getV3Version
-export def "version get" [
+export def "get-v3-version" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

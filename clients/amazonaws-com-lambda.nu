@@ -132,7 +132,7 @@ def list-completer [] { ["ALL"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "2018-10-31-layers-versions-policy create-permission" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "add-layer-version-permission" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -156,7 +156,7 @@ export def commands []: nothing -> table {
 #
 # POST /2018-10-31/layers/{LayerName}/versions/{VersionNumber}/policy
 # operationId: AddLayerVersionPermission
-export def "2018-10-31-layers-versions-policy create-permission" [
+export def "add-layer-version-permission" [
   layer_name: string
   version_number: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -212,7 +212,7 @@ export def "2018-10-31-layers-versions-policy create-permission" [
 #
 # GET /2018-10-31/layers/{LayerName}/versions/{VersionNumber}/policy
 # operationId: GetLayerVersionPolicy
-export def "2018-10-31-layers-versions-policy get" [
+export def "get-layer-version-policy" [
   layer_name: string
   version_number: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -259,7 +259,7 @@ export def "2018-10-31-layers-versions-policy get" [
 #
 # POST /2015-03-31/functions/{FunctionName}/policy
 # operationId: AddPermission
-export def "2015-03-31-functions-policy create-permission" [
+export def "add-permission" [
   function_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -318,7 +318,7 @@ export def "2015-03-31-functions-policy create-permission" [
 #
 # GET /2015-03-31/functions/{FunctionName}/policy
 # operationId: GetPolicy
-export def "2015-03-31-functions-policy get" [
+export def "get-policy" [
   function_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -366,7 +366,7 @@ export def "2015-03-31-functions-policy get" [
 # POST /2015-03-31/functions/{FunctionName}/aliases
 # operationId: CreateAlias
 # --RoutingConfig shape: {AdditionalVersionWeights?: any}
-export def "2015-03-31-functions-aliases create-alias" [
+export def "create-alias" [
   function_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -418,7 +418,7 @@ export def "2015-03-31-functions-aliases create-alias" [
 #
 # GET /2015-03-31/functions/{FunctionName}/aliases
 # operationId: ListAliases
-export def "2015-03-31-functions-aliases list" [
+export def "list-aliases" [
   function_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -469,7 +469,7 @@ export def "2015-03-31-functions-aliases list" [
 # operationId: CreateCodeSigningConfig
 # --AllowedPublishers shape: {SigningProfileVersionArns?: any}
 # --CodeSigningPolicies shape: {UntrustedArtifactOnDeployment?: any}
-export def "2020-04-22-code-signing-configs create" [
+export def "create-code-signing-config" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -518,7 +518,7 @@ export def "2020-04-22-code-signing-configs create" [
 #
 # GET /2020-04-22/code-signing-configs/
 # operationId: ListCodeSigningConfigs
-export def "2020-04-22-code-signing-configs list" [
+export def "list-code-signing-configs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -572,7 +572,7 @@ export def "2020-04-22-code-signing-configs list" [
 # --SelfManagedKafkaEventSourceConfig shape: {ConsumerGroupId?: any}
 # --ScalingConfig shape: {MaximumConcurrency?: any}
 # --DocumentDBEventSourceConfig shape: {DatabaseName?: any, CollectionName?: any, FullDocument?: any}
-export def "2015-03-31-event-source-mappings create" [
+export def "create-event-source-mapping" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -641,7 +641,7 @@ export def "2015-03-31-event-source-mappings create" [
 #
 # GET /2015-03-31/event-source-mappings/
 # operationId: ListEventSourceMappings
-export def "2015-03-31-event-source-mappings list" [
+export def "list-event-source-mappings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -698,7 +698,7 @@ export def "2015-03-31-event-source-mappings list" [
 # --ImageConfig shape: {EntryPoint?: any, Command?: any, WorkingDirectory?: any}
 # --EphemeralStorage shape: {Size?: any}
 # --SnapStart shape: {ApplyOn?: any}
-export def "2015-03-31-functions create" [
+export def "create-function" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -768,7 +768,7 @@ export def "2015-03-31-functions create" [
 # POST /2021-10-31/functions/{FunctionName}/url
 # operationId: CreateFunctionUrlConfig
 # --Cors shape: {AllowCredentials?: any, AllowHeaders?: any, AllowMethods?: any, AllowOrigins?: any, ExposeHeaders?: any, MaxAge?: any}
-export def "2021-10-31-functions-url create-config" [
+export def "create-function-url-config" [
   function_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -821,7 +821,7 @@ export def "2021-10-31-functions-url create-config" [
 #
 # DELETE /2021-10-31/functions/{FunctionName}/url
 # operationId: DeleteFunctionUrlConfig
-export def "2021-10-31-functions-url delete-config" [
+export def "delete-function-url-config" [
   function_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -868,7 +868,7 @@ export def "2021-10-31-functions-url delete-config" [
 #
 # GET /2021-10-31/functions/{FunctionName}/url
 # operationId: GetFunctionUrlConfig
-export def "2021-10-31-functions-url get-config" [
+export def "get-function-url-config" [
   function_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -916,7 +916,7 @@ export def "2021-10-31-functions-url get-config" [
 # PUT /2021-10-31/functions/{FunctionName}/url
 # operationId: UpdateFunctionUrlConfig
 # --Cors shape: {AllowCredentials?: any, AllowHeaders?: any, AllowMethods?: any, AllowOrigins?: any, ExposeHeaders?: any, MaxAge?: any}
-export def "2021-10-31-functions-url update-config" [
+export def "update-function-url-config" [
   function_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -969,7 +969,7 @@ export def "2021-10-31-functions-url update-config" [
 #
 # DELETE /2015-03-31/functions/{FunctionName}/aliases/{Name}
 # operationId: DeleteAlias
-export def "2015-03-31-functions-aliases delete-alias" [
+export def "delete-alias" [
   function_name: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1016,7 +1016,7 @@ export def "2015-03-31-functions-aliases delete-alias" [
 #
 # GET /2015-03-31/functions/{FunctionName}/aliases/{Name}
 # operationId: GetAlias
-export def "2015-03-31-functions-aliases get-alias" [
+export def "get-alias" [
   function_name: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1064,7 +1064,7 @@ export def "2015-03-31-functions-aliases get-alias" [
 # PUT /2015-03-31/functions/{FunctionName}/aliases/{Name}
 # operationId: UpdateAlias
 # --RoutingConfig shape: {AdditionalVersionWeights?: any}
-export def "2015-03-31-functions-aliases update-alias" [
+export def "update-alias" [
   function_name: string
   name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1118,7 +1118,7 @@ export def "2015-03-31-functions-aliases update-alias" [
 #
 # DELETE /2020-04-22/code-signing-configs/{CodeSigningConfigArn}
 # operationId: DeleteCodeSigningConfig
-export def "2020-04-22-code-signing-configs delete" [
+export def "delete-code-signing-config" [
   code_signing_config_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1163,7 +1163,7 @@ export def "2020-04-22-code-signing-configs delete" [
 #
 # GET /2020-04-22/code-signing-configs/{CodeSigningConfigArn}
 # operationId: GetCodeSigningConfig
-export def "2020-04-22-code-signing-configs get" [
+export def "get-code-signing-config" [
   code_signing_config_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1210,7 +1210,7 @@ export def "2020-04-22-code-signing-configs get" [
 # operationId: UpdateCodeSigningConfig
 # --AllowedPublishers shape: {SigningProfileVersionArns?: any}
 # --CodeSigningPolicies shape: {UntrustedArtifactOnDeployment?: any}
-export def "2020-04-22-code-signing-configs update" [
+export def "update-code-signing-config" [
   code_signing_config_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1261,7 +1261,7 @@ export def "2020-04-22-code-signing-configs update" [
 #
 # DELETE /2015-03-31/event-source-mappings/{UUID}
 # operationId: DeleteEventSourceMapping
-export def "2015-03-31-event-source-mappings delete" [
+export def "delete-event-source-mapping" [
   uuid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1306,7 +1306,7 @@ export def "2015-03-31-event-source-mappings delete" [
 #
 # GET /2015-03-31/event-source-mappings/{UUID}
 # operationId: GetEventSourceMapping
-export def "2015-03-31-event-source-mappings get" [
+export def "get-event-source-mapping" [
   uuid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1356,7 +1356,7 @@ export def "2015-03-31-event-source-mappings get" [
 # --SourceAccessConfigurations item shape: {Type?: any, URI?: any}
 # --ScalingConfig shape: {MaximumConcurrency?: any}
 # --DocumentDBEventSourceConfig shape: {DatabaseName?: any, CollectionName?: any, FullDocument?: any}
-export def "2015-03-31-event-source-mappings update" [
+export def "update-event-source-mapping" [
   uuid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1419,7 +1419,7 @@ export def "2015-03-31-event-source-mappings update" [
 #
 # DELETE /2015-03-31/functions/{FunctionName}
 # operationId: DeleteFunction
-export def "2015-03-31-functions delete" [
+export def "delete-function" [
   function_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1466,7 +1466,7 @@ export def "2015-03-31-functions delete" [
 #
 # GET /2015-03-31/functions/{FunctionName}
 # operationId: GetFunction
-export def "2015-03-31-functions get" [
+export def "get-function" [
   function_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1513,7 +1513,7 @@ export def "2015-03-31-functions get" [
 #
 # DELETE /2020-06-30/functions/{FunctionName}/code-signing-config
 # operationId: DeleteFunctionCodeSigningConfig
-export def "2020-06-30-functions-code-signing-config delete" [
+export def "delete-function-code-signing-config" [
   function_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1558,7 +1558,7 @@ export def "2020-06-30-functions-code-signing-config delete" [
 #
 # GET /2020-06-30/functions/{FunctionName}/code-signing-config
 # operationId: GetFunctionCodeSigningConfig
-export def "2020-06-30-functions-code-signing-config get" [
+export def "get-function-code-signing-config" [
   function_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1603,7 +1603,7 @@ export def "2020-06-30-functions-code-signing-config get" [
 #
 # PUT /2020-06-30/functions/{FunctionName}/code-signing-config
 # operationId: PutFunctionCodeSigningConfig
-export def "2020-06-30-functions-code-signing-config update" [
+export def "put-function-code-signing-config" [
   function_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1652,7 +1652,7 @@ export def "2020-06-30-functions-code-signing-config update" [
 #
 # DELETE /2017-10-31/functions/{FunctionName}/concurrency
 # operationId: DeleteFunctionConcurrency
-export def "2017-10-31-functions-concurrency delete" [
+export def "delete-function-concurrency" [
   function_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1697,7 +1697,7 @@ export def "2017-10-31-functions-concurrency delete" [
 #
 # PUT /2017-10-31/functions/{FunctionName}/concurrency
 # operationId: PutFunctionConcurrency
-export def "2017-10-31-functions-concurrency update" [
+export def "put-function-concurrency" [
   function_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1746,7 +1746,7 @@ export def "2017-10-31-functions-concurrency update" [
 #
 # DELETE /2019-09-25/functions/{FunctionName}/event-invoke-config
 # operationId: DeleteFunctionEventInvokeConfig
-export def "2019-09-25-functions-event-invoke-config delete" [
+export def "delete-function-event-invoke-config" [
   function_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1793,7 +1793,7 @@ export def "2019-09-25-functions-event-invoke-config delete" [
 #
 # GET /2019-09-25/functions/{FunctionName}/event-invoke-config
 # operationId: GetFunctionEventInvokeConfig
-export def "2019-09-25-functions-event-invoke-config get" [
+export def "get-function-event-invoke-config" [
   function_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1841,7 +1841,7 @@ export def "2019-09-25-functions-event-invoke-config get" [
 # PUT /2019-09-25/functions/{FunctionName}/event-invoke-config
 # operationId: PutFunctionEventInvokeConfig
 # --DestinationConfig shape: {OnSuccess?: any, OnFailure?: any}
-export def "2019-09-25-functions-event-invoke-config update-by-function-name" [
+export def "put-function-event-invoke-config" [
   function_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1895,7 +1895,7 @@ export def "2019-09-25-functions-event-invoke-config update-by-function-name" [
 # POST /2019-09-25/functions/{FunctionName}/event-invoke-config
 # operationId: UpdateFunctionEventInvokeConfig
 # --DestinationConfig shape: {OnSuccess?: any, OnFailure?: any}
-export def "2019-09-25-functions-event-invoke-config update-by-function-name-1" [
+export def "update-function-event-invoke-config" [
   function_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1948,7 +1948,7 @@ export def "2019-09-25-functions-event-invoke-config update-by-function-name-1" 
 #
 # DELETE /2018-10-31/layers/{LayerName}/versions/{VersionNumber}
 # operationId: DeleteLayerVersion
-export def "2018-10-31-layers-versions delete" [
+export def "delete-layer-version" [
   layer_name: string
   version_number: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -1995,7 +1995,7 @@ export def "2018-10-31-layers-versions delete" [
 #
 # GET /2018-10-31/layers/{LayerName}/versions/{VersionNumber}
 # operationId: GetLayerVersion
-export def "2018-10-31-layers-versions get" [
+export def "get-layer-version" [
   layer_name: string
   version_number: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -2042,7 +2042,7 @@ export def "2018-10-31-layers-versions get" [
 #
 # DELETE /2019-09-30/functions/{FunctionName}/provisioned-concurrency
 # operationId: DeleteProvisionedConcurrencyConfig
-export def "2019-09-30-functions-provisioned-concurrency delete-config" [
+export def "delete-provisioned-concurrency-config" [
   function_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2089,7 +2089,7 @@ export def "2019-09-30-functions-provisioned-concurrency delete-config" [
 #
 # GET /2019-09-30/functions/{FunctionName}/provisioned-concurrency
 # operationId: GetProvisionedConcurrencyConfig
-export def "2019-09-30-functions-provisioned-concurrency get-config" [
+export def "get-provisioned-concurrency-config" [
   function_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2136,7 +2136,7 @@ export def "2019-09-30-functions-provisioned-concurrency get-config" [
 #
 # PUT /2019-09-30/functions/{FunctionName}/provisioned-concurrency
 # operationId: PutProvisionedConcurrencyConfig
-export def "2019-09-30-functions-provisioned-concurrency update-config" [
+export def "put-provisioned-concurrency-config" [
   function_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2187,7 +2187,7 @@ export def "2019-09-30-functions-provisioned-concurrency update-config" [
 #
 # GET /2016-08-19/account-settings/
 # operationId: GetAccountSettings
-export def "2016-08-19-account-settings get" [
+export def "get-account-settings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2230,7 +2230,7 @@ export def "2016-08-19-account-settings get" [
 #
 # GET /2019-09-30/functions/{FunctionName}/concurrency
 # operationId: GetFunctionConcurrency
-export def "2019-09-30-functions-concurrency get" [
+export def "get-function-concurrency" [
   function_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2275,7 +2275,7 @@ export def "2019-09-30-functions-concurrency get" [
 #
 # GET /2015-03-31/functions/{FunctionName}/configuration
 # operationId: GetFunctionConfiguration
-export def "2015-03-31-functions-configuration get" [
+export def "get-function-configuration" [
   function_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2330,7 +2330,7 @@ export def "2015-03-31-functions-configuration get" [
 # --ImageConfig shape: {EntryPoint?: any, Command?: any, WorkingDirectory?: any}
 # --EphemeralStorage shape: {Size?: any}
 # --SnapStart shape: {ApplyOn?: any}
-export def "2015-03-31-functions-configuration update" [
+export def "update-function-configuration" [
   function_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2395,7 +2395,7 @@ export def "2015-03-31-functions-configuration update" [
 #
 # GET /2018-10-31/layers
 # operationId: GetLayerVersionByArn
-export def "2018-10-31-layers get-version-by-arn" [
+export def "get-layer-version-by-arn" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2441,7 +2441,7 @@ export def "2018-10-31-layers get-version-by-arn" [
 #
 # GET /2021-07-20/functions/{FunctionName}/runtime-management-config
 # operationId: GetRuntimeManagementConfig
-export def "2021-07-20-functions-runtime-management-config get" [
+export def "get-runtime-management-config" [
   function_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2488,7 +2488,7 @@ export def "2021-07-20-functions-runtime-management-config get" [
 #
 # PUT /2021-07-20/functions/{FunctionName}/runtime-management-config
 # operationId: PutRuntimeManagementConfig
-export def "2021-07-20-functions-runtime-management-config update" [
+export def "put-runtime-management-config" [
   function_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2540,7 +2540,7 @@ export def "2021-07-20-functions-runtime-management-config update" [
 #
 # POST /2015-03-31/functions/{FunctionName}/invocations
 # operationId: Invoke
-export def "2015-03-31-functions-invocations create-invoke" [
+export def "invoke" [
   function_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2596,7 +2596,7 @@ export def "2015-03-31-functions-invocations create-invoke" [
 # DEPRECATED
 # operationId: InvokeAsync
 @deprecated
-export def "2014-11-13-functions-invoke-async create" [
+export def "invoke-async" [
   function_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2645,7 +2645,7 @@ export def "2014-11-13-functions-invoke-async create" [
 #
 # POST /2021-11-15/functions/{FunctionName}/response-streaming-invocations
 # operationId: InvokeWithResponseStream
-export def "2021-11-15-functions-response-streaming-invocations create-invoke-with-stream" [
+export def "invoke-with-response-stream" [
   function_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2699,7 +2699,7 @@ export def "2021-11-15-functions-response-streaming-invocations create-invoke-wi
 #
 # GET /2019-09-25/functions/{FunctionName}/event-invoke-config/list
 # operationId: ListFunctionEventInvokeConfigs
-export def "2019-09-25-functions-event-invoke-config-list list" [
+export def "list-function-event-invoke-configs" [
   function_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2747,7 +2747,7 @@ export def "2019-09-25-functions-event-invoke-config-list list" [
 #
 # GET /2021-10-31/functions/{FunctionName}/urls
 # operationId: ListFunctionUrlConfigs
-export def "2021-10-31-functions-urls list-configs" [
+export def "list-function-url-configs" [
   function_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2795,7 +2795,7 @@ export def "2021-10-31-functions-urls list-configs" [
 #
 # GET /2015-03-31/functions/
 # operationId: ListFunctions
-export def "2015-03-31-functions list" [
+export def "list-functions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2843,7 +2843,7 @@ export def "2015-03-31-functions list" [
 #
 # GET /2020-04-22/code-signing-configs/{CodeSigningConfigArn}/functions
 # operationId: ListFunctionsByCodeSigningConfig
-export def "2020-04-22-code-signing-configs-functions list" [
+export def "list-functions-by-code-signing-config" [
   code_signing_config_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2891,7 +2891,7 @@ export def "2020-04-22-code-signing-configs-functions list" [
 #
 # GET /2018-10-31/layers/{LayerName}/versions
 # operationId: ListLayerVersions
-export def "2018-10-31-layers-versions list" [
+export def "list-layer-versions" [
   layer_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2942,7 +2942,7 @@ export def "2018-10-31-layers-versions list" [
 # POST /2018-10-31/layers/{LayerName}/versions
 # operationId: PublishLayerVersion
 # --Content shape: {S3Bucket?: any, S3Key?: any, S3ObjectVersion?: any, ZipFile?: any}
-export def "2018-10-31-layers-versions publish" [
+export def "publish-layer-version" [
   layer_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2995,7 +2995,7 @@ export def "2018-10-31-layers-versions publish" [
 #
 # GET /2018-10-31/layers
 # operationId: ListLayers
-export def "2018-10-31-layers list" [
+export def "list-layers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3043,7 +3043,7 @@ export def "2018-10-31-layers list" [
 #
 # GET /2019-09-30/functions/{FunctionName}/provisioned-concurrency
 # operationId: ListProvisionedConcurrencyConfigs
-export def "2019-09-30-functions-provisioned-concurrency list-configs" [
+export def "list-provisioned-concurrency-configs" [
   function_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3092,7 +3092,7 @@ export def "2019-09-30-functions-provisioned-concurrency list-configs" [
 #
 # GET /2017-03-31/tags/{ARN}
 # operationId: ListTags
-export def "2017-03-31-tags list" [
+export def "list-tags" [
   arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3137,7 +3137,7 @@ export def "2017-03-31-tags list" [
 #
 # POST /2017-03-31/tags/{ARN}
 # operationId: TagResource
-export def "2017-03-31-tags tag-resource" [
+export def "tag-resource" [
   arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3186,7 +3186,7 @@ export def "2017-03-31-tags tag-resource" [
 #
 # GET /2015-03-31/functions/{FunctionName}/versions
 # operationId: ListVersionsByFunction
-export def "2015-03-31-functions-versions list" [
+export def "list-versions-by-function" [
   function_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3234,7 +3234,7 @@ export def "2015-03-31-functions-versions list" [
 #
 # POST /2015-03-31/functions/{FunctionName}/versions
 # operationId: PublishVersion
-export def "2015-03-31-functions-versions publish" [
+export def "publish-version" [
   function_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3285,7 +3285,7 @@ export def "2015-03-31-functions-versions publish" [
 #
 # DELETE /2018-10-31/layers/{LayerName}/versions/{VersionNumber}/policy/{StatementId}
 # operationId: RemoveLayerVersionPermission
-export def "2018-10-31-layers-versions-policy delete-permission" [
+export def "remove-layer-version-permission" [
   layer_name: string
   version_number: int
   statement_id: string
@@ -3336,7 +3336,7 @@ export def "2018-10-31-layers-versions-policy delete-permission" [
 #
 # DELETE /2015-03-31/functions/{FunctionName}/policy/{StatementId}
 # operationId: RemovePermission
-export def "2015-03-31-functions-policy delete-permission" [
+export def "remove-permission" [
   function_name: string
   statement_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3386,7 +3386,7 @@ export def "2015-03-31-functions-policy delete-permission" [
 #
 # DELETE /2017-03-31/tags/{ARN}
 # operationId: UntagResource
-export def "2017-03-31-tags untag-resource" [
+export def "untag-resource" [
   arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3433,7 +3433,7 @@ export def "2017-03-31-tags untag-resource" [
 #
 # PUT /2015-03-31/functions/{FunctionName}/code
 # operationId: UpdateFunctionCode
-export def "2015-03-31-functions-code update" [
+export def "update-function-code" [
   function_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

@@ -135,7 +135,7 @@ def reschedule-type-completer [] { ["IMMEDIATE" "NEXT_AVAILABLE_WINDOW" "RESCHED
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "projects delete" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "redis-projects-locations-operations-delete" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -159,7 +159,7 @@ export def commands []: nothing -> table {
 #
 # DELETE /v1/{name}
 # operationId: redis.projects.locations.operations.delete
-export def "projects delete" [
+export def "redis-projects-locations-operations-delete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -207,7 +207,7 @@ export def "projects delete" [
 #
 # GET /v1/{name}
 # operationId: redis.projects.locations.operations.get
-export def "projects get" [
+export def "redis-projects-locations-operations-get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -259,7 +259,7 @@ export def "projects get" [
 # --maintenanceSchedule shape: {canReschedule?: bool}
 # --persistenceConfig shape: {persistenceMode?: "PERSISTENCE_MODE_UNSPECIFIED"|"DISABLED"|"RDB", rdbSnapshotPeriod?: "SNAPSHOT_PERIOD_UNSPECIFIED"|"ONE_HOUR"|"SIX_HOURS"|"TWELVE_HOURS"|"TWENTY_FOUR_HOURS", rdbSnapshotStartTime?: string}
 # --serverCaCerts item shape: {cert?: string, serialNumber?: string, sha1Fingerprint?: string}
-export def "projects update" [
+export def "redis-projects-locations-instances-patch" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -335,7 +335,7 @@ export def "projects update" [
 #
 # GET /v1/{name}/authString
 # operationId: redis.projects.locations.instances.getAuthString
-export def "auth-string get" [
+export def "redis-projects-locations-instances-get-auth-string" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -383,7 +383,7 @@ export def "auth-string get" [
 #
 # GET /v1/{name}/locations
 # operationId: redis.projects.locations.list
-export def "locations list" [
+export def "redis-projects-locations-list" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -434,7 +434,7 @@ export def "locations list" [
 #
 # GET /v1/{name}/operations
 # operationId: redis.projects.locations.operations.list
-export def "operations list" [
+export def "redis-projects-locations-operations-list" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -485,7 +485,7 @@ export def "operations list" [
 #
 # POST /v1/{name}:cancel
 # operationId: redis.projects.locations.operations.cancel
-export def "projects cancel" [
+export def "redis-projects-locations-operations-cancel" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -534,7 +534,7 @@ export def "projects cancel" [
 # POST /v1/{name}:export
 # operationId: redis.projects.locations.instances.export
 # --outputConfig shape: {gcsDestination?: record}
-export def "projects export" [
+export def "redis-projects-locations-instances-export" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -586,7 +586,7 @@ export def "projects export" [
 #
 # POST /v1/{name}:failover
 # operationId: redis.projects.locations.instances.failover
-export def "projects create-failover" [
+export def "redis-projects-locations-instances-failover" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -639,7 +639,7 @@ export def "projects create-failover" [
 # POST /v1/{name}:import
 # operationId: redis.projects.locations.instances.import
 # --inputConfig shape: {gcsSource?: record}
-export def "projects import" [
+export def "redis-projects-locations-instances-import" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -691,7 +691,7 @@ export def "projects import" [
 #
 # POST /v1/{name}:rescheduleMaintenance
 # operationId: redis.projects.locations.instances.rescheduleMaintenance
-export def "projects create-reschedule-maintenance" [
+export def "redis-projects-locations-instances-reschedule-maintenance" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -744,7 +744,7 @@ export def "projects create-reschedule-maintenance" [
 #
 # POST /v1/{name}:upgrade
 # operationId: redis.projects.locations.instances.upgrade
-export def "projects create-upgrade" [
+export def "redis-projects-locations-instances-upgrade" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -796,7 +796,7 @@ export def "projects create-upgrade" [
 #
 # GET /v1/{parent}/instances
 # operationId: redis.projects.locations.instances.list
-export def "instances list" [
+export def "redis-projects-locations-instances-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -850,7 +850,7 @@ export def "instances list" [
 # --maintenanceSchedule shape: {canReschedule?: bool}
 # --persistenceConfig shape: {persistenceMode?: "PERSISTENCE_MODE_UNSPECIFIED"|"DISABLED"|"RDB", rdbSnapshotPeriod?: "SNAPSHOT_PERIOD_UNSPECIFIED"|"ONE_HOUR"|"SIX_HOURS"|"TWELVE_HOURS"|"TWENTY_FOUR_HOURS", rdbSnapshotStartTime?: string}
 # --serverCaCerts item shape: {cert?: string, serialNumber?: string, sha1Fingerprint?: string}
-export def "instances create" [
+export def "redis-projects-locations-instances-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)

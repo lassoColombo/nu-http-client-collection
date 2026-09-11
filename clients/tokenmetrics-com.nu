@@ -97,7 +97,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "correlation get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "correlation" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -121,7 +121,7 @@ export def commands []: nothing -> table {
 #
 # GET /v1/correlation
 # operationId: correlation
-export def "correlation get" [
+export def "correlation" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -158,7 +158,7 @@ export def "correlation get" [
 #
 # GET /v1/indices
 # operationId: indices
-export def "indices get" [
+export def "indices" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -199,7 +199,7 @@ export def "indices get" [
 #
 # GET /v1/investor-grades
 # operationId: investorGrades
-export def "investor-grades get" [
+export def "investor-grades" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -238,7 +238,7 @@ export def "investor-grades get" [
 #
 # GET /v1/market-indicator
 # operationId: marketIndicator
-export def "market-indicator get" [
+export def "market-indicator" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -276,7 +276,7 @@ export def "market-indicator get" [
 #
 # GET /v1/price
 # operationId: price
-export def "price get" [
+export def "price" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -316,7 +316,7 @@ export def "price get" [
 #
 # GET /v1/price-prediction
 # operationId: pricePrediction
-export def "price-prediction get" [
+export def "price-prediction" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -354,7 +354,7 @@ export def "price-prediction get" [
 #
 # GET /v1/quantmetrics-tier-1
 # operationId: quantmetricsTier1
-export def "quantmetrics-tier-1 get-tier1" [
+export def "quantmetrics-tier1" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -392,7 +392,7 @@ export def "quantmetrics-tier-1 get-tier1" [
 #
 # GET /v1/quantmetrics-tier-2
 # operationId: quantmetricsTier2
-export def "quantmetrics-tier-2 get-tier2" [
+export def "quantmetrics-tier2" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -430,7 +430,7 @@ export def "quantmetrics-tier-2 get-tier2" [
 #
 # GET /v1/resistance-support
 # operationId: resistanceSupport
-export def "resistance-support get" [
+export def "resistance-support" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -469,7 +469,7 @@ export def "resistance-support get" [
 #
 # GET /v1/scenario-analysis
 # operationId: scenarioAnalysis
-export def "scenario-analysis get" [
+export def "scenario-analysis" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -506,7 +506,7 @@ export def "scenario-analysis get" [
 #
 # GET /v1/sentiments
 # operationId: sentiments
-export def "sentiments get" [
+export def "sentiments" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -545,7 +545,7 @@ export def "sentiments get" [
 #
 # GET /v1/tokens
 # operationId: tokens
-export def "tokens get" [
+export def "tokens" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -583,7 +583,7 @@ export def "tokens get" [
 #
 # GET /v1/trader-grades
 # operationId: traderGrades
-export def "trader-grades get" [
+export def "trader-grades" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -622,7 +622,7 @@ export def "trader-grades get" [
 #
 # GET /v1/trading-indicator
 # operationId: tradingIndicator
-export def "trading-indicator get" [
+export def "trading-indicator" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

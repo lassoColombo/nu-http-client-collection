@@ -118,7 +118,7 @@ def content-type-completer [] { ["ACCESS_POLICY" "CONTENT_TYPE_UNSPECIFIED" "IAM
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "v1p7beta1 get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "cloudasset-operations-get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -142,7 +142,7 @@ export def commands []: nothing -> table {
 #
 # GET /v1p7beta1/{name}
 # operationId: cloudasset.operations.get
-export def "v1p7beta1 get" [
+export def "cloudasset-operations-get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -191,7 +191,7 @@ export def "v1p7beta1 get" [
 # POST /v1p7beta1/{parent}:exportAssets
 # operationId: cloudasset.exportAssets
 # --outputConfig shape: {bigqueryDestination?: record, gcsDestination?: record}
-export def "v1p7beta1 export-assets" [
+export def "cloudasset-export-assets" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)

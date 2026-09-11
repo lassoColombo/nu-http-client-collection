@@ -106,7 +106,7 @@ def radius-completer [] { ["500"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "bus-positions get-5476362a281d830c946a3d6e" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "5476362a281d830c946a3d6e" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -130,7 +130,7 @@ export def commands []: nothing -> table {
 #
 # GET /BusPositions
 # operationId: 5476362a281d830c946a3d6e
-export def "bus-positions get-5476362a281d830c946a3d6e" [
+export def "5476362a281d830c946a3d6e" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -169,7 +169,7 @@ export def "bus-positions get-5476362a281d830c946a3d6e" [
 #
 # GET /RouteDetails
 # operationId: 5476362a281d830c946a3d6f
-export def "route-details get-5476362a281d830c946a3d6f" [
+export def "5476362a281d830c946a3d6f" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -206,7 +206,7 @@ export def "route-details get-5476362a281d830c946a3d6f" [
 #
 # GET /RouteSchedule
 # operationId: 5476362a281d830c946a3d71
-export def "route-schedule get-5476362a281d830c946a3d71" [
+export def "5476362a281d830c946a3d71" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -244,7 +244,7 @@ export def "route-schedule get-5476362a281d830c946a3d71" [
 #
 # GET /Routes
 # operationId: 5476362a281d830c946a3d70
-export def "routes get-5476362a281d830c946a3d70" [
+export def "5476362a281d830c946a3d70" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -278,7 +278,7 @@ export def "routes get-5476362a281d830c946a3d70" [
 #
 # GET /StopSchedule
 # operationId: 5476362a281d830c946a3d72
-export def "stop-schedule get-5476362a281d830c946a3d72" [
+export def "5476362a281d830c946a3d72" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -315,7 +315,7 @@ export def "stop-schedule get-5476362a281d830c946a3d72" [
 #
 # GET /Stops
 # operationId: 5476362a281d830c946a3d73
-export def "stops get-5476362a281d830c946a3d73" [
+export def "5476362a281d830c946a3d73" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -353,7 +353,7 @@ export def "stops get-5476362a281d830c946a3d73" [
 #
 # GET /json/jBusPositions
 # operationId: 5476362a281d830c946a3d68
-export def "json-j-bus-positions get-5476362a281d830c946a3d68" [
+export def "5476362a281d830c946a3d68" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -392,7 +392,7 @@ export def "json-j-bus-positions get-5476362a281d830c946a3d68" [
 #
 # GET /json/jRouteDetails
 # operationId: 5476362a281d830c946a3d69
-export def "json-j-route-details get-5476362a281d830c946a3d69" [
+export def "5476362a281d830c946a3d69" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -429,7 +429,7 @@ export def "json-j-route-details get-5476362a281d830c946a3d69" [
 #
 # GET /json/jRouteSchedule
 # operationId: 5476362a281d830c946a3d6b
-export def "json-j-route-schedule get-5476362a281d830c946a3d6b" [
+export def "5476362a281d830c946a3d6b" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -467,7 +467,7 @@ export def "json-j-route-schedule get-5476362a281d830c946a3d6b" [
 #
 # GET /json/jRoutes
 # operationId: 5476362a281d830c946a3d6a
-export def "json-j-routes get-5476362a281d830c946a3d6a" [
+export def "5476362a281d830c946a3d6a" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -501,7 +501,7 @@ export def "json-j-routes get-5476362a281d830c946a3d6a" [
 #
 # GET /json/jStopSchedule
 # operationId: 5476362a281d830c946a3d6c
-export def "json-j-stop-schedule get-5476362a281d830c946a3d6c" [
+export def "5476362a281d830c946a3d6c" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -538,7 +538,7 @@ export def "json-j-stop-schedule get-5476362a281d830c946a3d6c" [
 #
 # GET /json/jStops
 # operationId: 5476362a281d830c946a3d6d
-export def "json-j-stops get-5476362a281d830c946a3d6d" [
+export def "5476362a281d830c946a3d6d" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

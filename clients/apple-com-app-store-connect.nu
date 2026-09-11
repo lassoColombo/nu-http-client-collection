@@ -116,7 +116,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "age-rating-declarations update-instance" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "age-rating-declarations-update-instance" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -140,7 +140,7 @@ export def commands []: nothing -> table {
 #
 # operationId: ageRatingDeclarations-update_instance
 # --data shape: {attributes?: record, id: string, type: "ageRatingDeclarations"}
-export def "age-rating-declarations update-instance" [
+export def "age-rating-declarations-update-instance" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -179,7 +179,7 @@ export def "age-rating-declarations update-instance" [
 # GET /v1/appCategories
 #
 # operationId: appCategories-get_collection
-export def "app-categories get-collection" [
+export def "app-categories-get-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -219,7 +219,7 @@ export def "app-categories get-collection" [
 # GET /v1/appCategories/{id}
 #
 # operationId: appCategories-get_instance
-export def "app-categories get-instance" [
+export def "app-categories-get-instance" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -258,7 +258,7 @@ export def "app-categories get-instance" [
 # GET /v1/appCategories/{id}/parent
 #
 # operationId: appCategories-parent-get_to_one_related
-export def "app-categories-parent get-to-one-related" [
+export def "app-categories-parent-get-to-one-related" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -295,7 +295,7 @@ export def "app-categories-parent get-to-one-related" [
 # GET /v1/appCategories/{id}/subcategories
 #
 # operationId: appCategories-subcategories-get_to_many_related
-export def "app-categories-subcategories get-to-many-related" [
+export def "app-categories-subcategories-get-to-many-related" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -333,7 +333,7 @@ export def "app-categories-subcategories get-to-many-related" [
 # GET /v1/appEncryptionDeclarations
 #
 # operationId: appEncryptionDeclarations-get_collection
-export def "app-encryption-declarations get-collection" [
+export def "app-encryption-declarations-get-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -374,7 +374,7 @@ export def "app-encryption-declarations get-collection" [
 # GET /v1/appEncryptionDeclarations/{id}
 #
 # operationId: appEncryptionDeclarations-get_instance
-export def "app-encryption-declarations get-instance" [
+export def "app-encryption-declarations-get-instance" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -413,7 +413,7 @@ export def "app-encryption-declarations get-instance" [
 # GET /v1/appEncryptionDeclarations/{id}/app
 #
 # operationId: appEncryptionDeclarations-app-get_to_one_related
-export def "app-encryption-declarations-app get-to-one-related" [
+export def "app-encryption-declarations-app-get-to-one-related" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -451,7 +451,7 @@ export def "app-encryption-declarations-app get-to-one-related" [
 #
 # operationId: appEncryptionDeclarations-builds-create_to_many_relationship
 # --data item shape: {id: string, type: "builds"}
-export def "app-encryption-declarations-relationships-builds create-to-many" [
+export def "app-encryption-declarations-builds-create-to-many-relationship" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -491,7 +491,7 @@ export def "app-encryption-declarations-relationships-builds create-to-many" [
 #
 # operationId: appInfoLocalizations-create_instance
 # --data shape: {attributes: record, relationships: record, type: "appInfoLocalizations"}
-export def "app-info-localizations create-instance" [
+export def "app-info-localizations-create-instance" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -528,7 +528,7 @@ export def "app-info-localizations create-instance" [
 # DELETE /v1/appInfoLocalizations/{id}
 #
 # operationId: appInfoLocalizations-delete_instance
-export def "app-info-localizations delete-instance" [
+export def "app-info-localizations-delete-instance" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -563,7 +563,7 @@ export def "app-info-localizations delete-instance" [
 # GET /v1/appInfoLocalizations/{id}
 #
 # operationId: appInfoLocalizations-get_instance
-export def "app-info-localizations get-instance" [
+export def "app-info-localizations-get-instance" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -602,7 +602,7 @@ export def "app-info-localizations get-instance" [
 #
 # operationId: appInfoLocalizations-update_instance
 # --data shape: {attributes?: record, id: string, type: "appInfoLocalizations"}
-export def "app-info-localizations update-instance" [
+export def "app-info-localizations-update-instance" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -641,7 +641,7 @@ export def "app-info-localizations update-instance" [
 # GET /v1/appInfos/{id}
 #
 # operationId: appInfos-get_instance
-export def "app-infos get-instance" [
+export def "app-infos-get-instance" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -684,7 +684,7 @@ export def "app-infos get-instance" [
 #
 # operationId: appInfos-update_instance
 # --data shape: {id: string, relationships?: record, type: "appInfos"}
-export def "app-infos update-instance" [
+export def "app-infos-update-instance" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -723,7 +723,7 @@ export def "app-infos update-instance" [
 # GET /v1/appInfos/{id}/ageRatingDeclaration
 #
 # operationId: appInfos-ageRatingDeclaration-get_to_one_related
-export def "app-infos-age-rating-declaration get-to-one-related" [
+export def "app-infos-age-rating-declaration-get-to-one-related" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -760,7 +760,7 @@ export def "app-infos-age-rating-declaration get-to-one-related" [
 # GET /v1/appInfos/{id}/appInfoLocalizations
 #
 # operationId: appInfos-appInfoLocalizations-get_to_many_related
-export def "app-infos-app-info-localizations get-to-many-related" [
+export def "app-infos-app-info-localizations-get-to-many-related" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -801,7 +801,7 @@ export def "app-infos-app-info-localizations get-to-many-related" [
 # GET /v1/appInfos/{id}/primaryCategory
 #
 # operationId: appInfos-primaryCategory-get_to_one_related
-export def "app-infos-primary-category get-to-one-related" [
+export def "app-infos-primary-category-get-to-one-related" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -838,7 +838,7 @@ export def "app-infos-primary-category get-to-one-related" [
 # GET /v1/appInfos/{id}/primarySubcategoryOne
 #
 # operationId: appInfos-primarySubcategoryOne-get_to_one_related
-export def "app-infos-primary-subcategory-one get-to-related" [
+export def "app-infos-primary-subcategory-one-get-to-one-related" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -875,7 +875,7 @@ export def "app-infos-primary-subcategory-one get-to-related" [
 # GET /v1/appInfos/{id}/primarySubcategoryTwo
 #
 # operationId: appInfos-primarySubcategoryTwo-get_to_one_related
-export def "app-infos-primary-subcategory-two get-to-one-related" [
+export def "app-infos-primary-subcategory-two-get-to-one-related" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -912,7 +912,7 @@ export def "app-infos-primary-subcategory-two get-to-one-related" [
 # GET /v1/appInfos/{id}/secondaryCategory
 #
 # operationId: appInfos-secondaryCategory-get_to_one_related
-export def "app-infos-secondary-category get-to-one-related" [
+export def "app-infos-secondary-category-get-to-one-related" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -949,7 +949,7 @@ export def "app-infos-secondary-category get-to-one-related" [
 # GET /v1/appInfos/{id}/secondarySubcategoryOne
 #
 # operationId: appInfos-secondarySubcategoryOne-get_to_one_related
-export def "app-infos-secondary-subcategory-one get-to-related" [
+export def "app-infos-secondary-subcategory-one-get-to-one-related" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -986,7 +986,7 @@ export def "app-infos-secondary-subcategory-one get-to-related" [
 # GET /v1/appInfos/{id}/secondarySubcategoryTwo
 #
 # operationId: appInfos-secondarySubcategoryTwo-get_to_one_related
-export def "app-infos-secondary-subcategory-two get-to-one-related" [
+export def "app-infos-secondary-subcategory-two-get-to-one-related" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1024,7 +1024,7 @@ export def "app-infos-secondary-subcategory-two get-to-one-related" [
 #
 # operationId: appPreOrders-create_instance
 # --data shape: {attributes?: record, relationships: record, type: "appPreOrders"}
-export def "app-pre-orders create-instance" [
+export def "app-pre-orders-create-instance" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1061,7 +1061,7 @@ export def "app-pre-orders create-instance" [
 # DELETE /v1/appPreOrders/{id}
 #
 # operationId: appPreOrders-delete_instance
-export def "app-pre-orders delete-instance" [
+export def "app-pre-orders-delete-instance" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1096,7 +1096,7 @@ export def "app-pre-orders delete-instance" [
 # GET /v1/appPreOrders/{id}
 #
 # operationId: appPreOrders-get_instance
-export def "app-pre-orders get-instance" [
+export def "app-pre-orders-get-instance" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1135,7 +1135,7 @@ export def "app-pre-orders get-instance" [
 #
 # operationId: appPreOrders-update_instance
 # --data shape: {attributes?: record, id: string, type: "appPreOrders"}
-export def "app-pre-orders update-instance" [
+export def "app-pre-orders-update-instance" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1175,7 +1175,7 @@ export def "app-pre-orders update-instance" [
 #
 # operationId: appPreviewSets-create_instance
 # --data shape: {attributes: record, relationships: record, type: "appPreviewSets"}
-export def "app-preview-sets create-instance" [
+export def "app-preview-sets-create-instance" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1212,7 +1212,7 @@ export def "app-preview-sets create-instance" [
 # DELETE /v1/appPreviewSets/{id}
 #
 # operationId: appPreviewSets-delete_instance
-export def "app-preview-sets delete-instance" [
+export def "app-preview-sets-delete-instance" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1247,7 +1247,7 @@ export def "app-preview-sets delete-instance" [
 # GET /v1/appPreviewSets/{id}
 #
 # operationId: appPreviewSets-get_instance
-export def "app-preview-sets get-instance" [
+export def "app-preview-sets-get-instance" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1287,7 +1287,7 @@ export def "app-preview-sets get-instance" [
 # GET /v1/appPreviewSets/{id}/appPreviews
 #
 # operationId: appPreviewSets-appPreviews-get_to_many_related
-export def "app-preview-sets-app-previews get-to-many-related" [
+export def "app-preview-sets-app-previews-get-to-many-related" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1327,7 +1327,7 @@ export def "app-preview-sets-app-previews get-to-many-related" [
 # GET /v1/appPreviewSets/{id}/relationships/appPreviews
 #
 # operationId: appPreviewSets-appPreviews-get_to_many_relationship
-export def "app-preview-sets-relationships-app-previews get-to-many" [
+export def "app-preview-sets-app-previews-get-to-many-relationship" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1365,7 +1365,7 @@ export def "app-preview-sets-relationships-app-previews get-to-many" [
 #
 # operationId: appPreviewSets-appPreviews-replace_to_many_relationship
 # --data item shape: {id: string, type: "appPreviews"}
-export def "app-preview-sets-relationships-app-previews update-to-many" [
+export def "app-preview-sets-app-previews-replace-to-many-relationship" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1405,7 +1405,7 @@ export def "app-preview-sets-relationships-app-previews update-to-many" [
 #
 # operationId: appPreviews-create_instance
 # --data shape: {attributes: record, relationships: record, type: "appPreviews"}
-export def "app-previews create-instance" [
+export def "app-previews-create-instance" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1442,7 +1442,7 @@ export def "app-previews create-instance" [
 # DELETE /v1/appPreviews/{id}
 #
 # operationId: appPreviews-delete_instance
-export def "app-previews delete-instance" [
+export def "app-previews-delete-instance" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1477,7 +1477,7 @@ export def "app-previews delete-instance" [
 # GET /v1/appPreviews/{id}
 #
 # operationId: appPreviews-get_instance
-export def "app-previews get-instance" [
+export def "app-previews-get-instance" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1516,7 +1516,7 @@ export def "app-previews get-instance" [
 #
 # operationId: appPreviews-update_instance
 # --data shape: {attributes?: record, id: string, type: "appPreviews"}
-export def "app-previews update-instance" [
+export def "app-previews-update-instance" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1555,7 +1555,7 @@ export def "app-previews update-instance" [
 # GET /v1/appPricePoints
 #
 # operationId: appPricePoints-get_collection
-export def "app-price-points get-collection" [
+export def "app-price-points-get-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1595,7 +1595,7 @@ export def "app-price-points get-collection" [
 # GET /v1/appPricePoints/{id}
 #
 # operationId: appPricePoints-get_instance
-export def "app-price-points get-instance" [
+export def "app-price-points-get-instance" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1634,7 +1634,7 @@ export def "app-price-points get-instance" [
 # GET /v1/appPricePoints/{id}/territory
 #
 # operationId: appPricePoints-territory-get_to_one_related
-export def "app-price-points-territory get-to-one-related" [
+export def "app-price-points-territory-get-to-one-related" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1671,7 +1671,7 @@ export def "app-price-points-territory get-to-one-related" [
 # GET /v1/appPriceTiers
 #
 # operationId: appPriceTiers-get_collection
-export def "app-price-tiers get-collection" [
+export def "app-price-tiers-get-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1711,7 +1711,7 @@ export def "app-price-tiers get-collection" [
 # GET /v1/appPriceTiers/{id}
 #
 # operationId: appPriceTiers-get_instance
-export def "app-price-tiers get-instance" [
+export def "app-price-tiers-get-instance" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1751,7 +1751,7 @@ export def "app-price-tiers get-instance" [
 # GET /v1/appPriceTiers/{id}/pricePoints
 #
 # operationId: appPriceTiers-pricePoints-get_to_many_related
-export def "app-price-tiers-price-points get-to-many-related" [
+export def "app-price-tiers-price-points-get-to-many-related" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1789,7 +1789,7 @@ export def "app-price-tiers-price-points get-to-many-related" [
 # GET /v1/appPrices/{id}
 #
 # operationId: appPrices-get_instance
-export def "app-prices get-instance" [
+export def "app-prices-get-instance" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1828,7 +1828,7 @@ export def "app-prices get-instance" [
 #
 # operationId: appScreenshotSets-create_instance
 # --data shape: {attributes: record, relationships: record, type: "appScreenshotSets"}
-export def "app-screenshot-sets create-instance" [
+export def "app-screenshot-sets-create-instance" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1865,7 +1865,7 @@ export def "app-screenshot-sets create-instance" [
 # DELETE /v1/appScreenshotSets/{id}
 #
 # operationId: appScreenshotSets-delete_instance
-export def "app-screenshot-sets delete-instance" [
+export def "app-screenshot-sets-delete-instance" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1900,7 +1900,7 @@ export def "app-screenshot-sets delete-instance" [
 # GET /v1/appScreenshotSets/{id}
 #
 # operationId: appScreenshotSets-get_instance
-export def "app-screenshot-sets get-instance" [
+export def "app-screenshot-sets-get-instance" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1940,7 +1940,7 @@ export def "app-screenshot-sets get-instance" [
 # GET /v1/appScreenshotSets/{id}/appScreenshots
 #
 # operationId: appScreenshotSets-appScreenshots-get_to_many_related
-export def "app-screenshot-sets-app-screenshots get-to-many-related" [
+export def "app-screenshot-sets-app-screenshots-get-to-many-related" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1980,7 +1980,7 @@ export def "app-screenshot-sets-app-screenshots get-to-many-related" [
 # GET /v1/appScreenshotSets/{id}/relationships/appScreenshots
 #
 # operationId: appScreenshotSets-appScreenshots-get_to_many_relationship
-export def "app-screenshot-sets-relationships-app-screenshots get-to-many" [
+export def "app-screenshot-sets-app-screenshots-get-to-many-relationship" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2018,7 +2018,7 @@ export def "app-screenshot-sets-relationships-app-screenshots get-to-many" [
 #
 # operationId: appScreenshotSets-appScreenshots-replace_to_many_relationship
 # --data item shape: {id: string, type: "appScreenshots"}
-export def "app-screenshot-sets-relationships-app-screenshots update-to-many" [
+export def "app-screenshot-sets-app-screenshots-replace-to-many-relationship" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2058,7 +2058,7 @@ export def "app-screenshot-sets-relationships-app-screenshots update-to-many" [
 #
 # operationId: appScreenshots-create_instance
 # --data shape: {attributes: record, relationships: record, type: "appScreenshots"}
-export def "app-screenshots create-instance" [
+export def "app-screenshots-create-instance" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2095,7 +2095,7 @@ export def "app-screenshots create-instance" [
 # DELETE /v1/appScreenshots/{id}
 #
 # operationId: appScreenshots-delete_instance
-export def "app-screenshots delete-instance" [
+export def "app-screenshots-delete-instance" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2130,7 +2130,7 @@ export def "app-screenshots delete-instance" [
 # GET /v1/appScreenshots/{id}
 #
 # operationId: appScreenshots-get_instance
-export def "app-screenshots get-instance" [
+export def "app-screenshots-get-instance" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2169,7 +2169,7 @@ export def "app-screenshots get-instance" [
 #
 # operationId: appScreenshots-update_instance
 # --data shape: {attributes?: record, id: string, type: "appScreenshots"}
-export def "app-screenshots update-instance" [
+export def "app-screenshots-update-instance" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2209,7 +2209,7 @@ export def "app-screenshots update-instance" [
 #
 # operationId: appStoreReviewAttachments-create_instance
 # --data shape: {attributes: record, relationships: record, type: "appStoreReviewAttachments"}
-export def "app-store-review-attachments create-instance" [
+export def "app-store-review-attachments-create-instance" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2246,7 +2246,7 @@ export def "app-store-review-attachments create-instance" [
 # DELETE /v1/appStoreReviewAttachments/{id}
 #
 # operationId: appStoreReviewAttachments-delete_instance
-export def "app-store-review-attachments delete-instance" [
+export def "app-store-review-attachments-delete-instance" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2281,7 +2281,7 @@ export def "app-store-review-attachments delete-instance" [
 # GET /v1/appStoreReviewAttachments/{id}
 #
 # operationId: appStoreReviewAttachments-get_instance
-export def "app-store-review-attachments get-instance" [
+export def "app-store-review-attachments-get-instance" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2320,7 +2320,7 @@ export def "app-store-review-attachments get-instance" [
 #
 # operationId: appStoreReviewAttachments-update_instance
 # --data shape: {attributes?: record, id: string, type: "appStoreReviewAttachments"}
-export def "app-store-review-attachments update-instance" [
+export def "app-store-review-attachments-update-instance" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2360,7 +2360,7 @@ export def "app-store-review-attachments update-instance" [
 #
 # operationId: appStoreReviewDetails-create_instance
 # --data shape: {attributes?: record, relationships: record, type: "appStoreReviewDetails"}
-export def "app-store-review-details create-instance" [
+export def "app-store-review-details-create-instance" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2397,7 +2397,7 @@ export def "app-store-review-details create-instance" [
 # GET /v1/appStoreReviewDetails/{id}
 #
 # operationId: appStoreReviewDetails-get_instance
-export def "app-store-review-details get-instance" [
+export def "app-store-review-details-get-instance" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2438,7 +2438,7 @@ export def "app-store-review-details get-instance" [
 #
 # operationId: appStoreReviewDetails-update_instance
 # --data shape: {attributes?: record, id: string, type: "appStoreReviewDetails"}
-export def "app-store-review-details update-instance" [
+export def "app-store-review-details-update-instance" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2477,7 +2477,7 @@ export def "app-store-review-details update-instance" [
 # GET /v1/appStoreReviewDetails/{id}/appStoreReviewAttachments
 #
 # operationId: appStoreReviewDetails-appStoreReviewAttachments-get_to_many_related
-export def "app-store-review-details-app-store-review-attachments get-to-many-related" [
+export def "app-store-review-details-app-store-review-attachments-get-to-many-related" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2518,7 +2518,7 @@ export def "app-store-review-details-app-store-review-attachments get-to-many-re
 #
 # operationId: appStoreVersionLocalizations-create_instance
 # --data shape: {attributes: record, relationships: record, type: "appStoreVersionLocalizations"}
-export def "app-store-version-localizations create-instance" [
+export def "app-store-version-localizations-create-instance" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2555,7 +2555,7 @@ export def "app-store-version-localizations create-instance" [
 # DELETE /v1/appStoreVersionLocalizations/{id}
 #
 # operationId: appStoreVersionLocalizations-delete_instance
-export def "app-store-version-localizations delete-instance" [
+export def "app-store-version-localizations-delete-instance" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2590,7 +2590,7 @@ export def "app-store-version-localizations delete-instance" [
 # GET /v1/appStoreVersionLocalizations/{id}
 #
 # operationId: appStoreVersionLocalizations-get_instance
-export def "app-store-version-localizations get-instance" [
+export def "app-store-version-localizations-get-instance" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2633,7 +2633,7 @@ export def "app-store-version-localizations get-instance" [
 #
 # operationId: appStoreVersionLocalizations-update_instance
 # --data shape: {attributes?: record, id: string, type: "appStoreVersionLocalizations"}
-export def "app-store-version-localizations update-instance" [
+export def "app-store-version-localizations-update-instance" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2672,7 +2672,7 @@ export def "app-store-version-localizations update-instance" [
 # GET /v1/appStoreVersionLocalizations/{id}/appPreviewSets
 #
 # operationId: appStoreVersionLocalizations-appPreviewSets-get_to_many_related
-export def "app-store-version-localizations-app-preview-sets get-to-many-related" [
+export def "app-store-version-localizations-app-preview-sets-get-to-many-related" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2714,7 +2714,7 @@ export def "app-store-version-localizations-app-preview-sets get-to-many-related
 # GET /v1/appStoreVersionLocalizations/{id}/appScreenshotSets
 #
 # operationId: appStoreVersionLocalizations-appScreenshotSets-get_to_many_related
-export def "app-store-version-localizations-app-screenshot-sets get-to-many-related" [
+export def "app-store-version-localizations-app-screenshot-sets-get-to-many-related" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2757,7 +2757,7 @@ export def "app-store-version-localizations-app-screenshot-sets get-to-many-rela
 #
 # operationId: appStoreVersionPhasedReleases-create_instance
 # --data shape: {attributes?: record, relationships: record, type: "appStoreVersionPhasedReleases"}
-export def "app-store-version-phased-releases create-instance" [
+export def "app-store-version-phased-releases-create-instance" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2794,7 +2794,7 @@ export def "app-store-version-phased-releases create-instance" [
 # DELETE /v1/appStoreVersionPhasedReleases/{id}
 #
 # operationId: appStoreVersionPhasedReleases-delete_instance
-export def "app-store-version-phased-releases delete-instance" [
+export def "app-store-version-phased-releases-delete-instance" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2830,7 +2830,7 @@ export def "app-store-version-phased-releases delete-instance" [
 #
 # operationId: appStoreVersionPhasedReleases-update_instance
 # --data shape: {attributes?: record, id: string, type: "appStoreVersionPhasedReleases"}
-export def "app-store-version-phased-releases update-instance" [
+export def "app-store-version-phased-releases-update-instance" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2870,7 +2870,7 @@ export def "app-store-version-phased-releases update-instance" [
 #
 # operationId: appStoreVersionSubmissions-create_instance
 # --data shape: {relationships: record, type: "appStoreVersionSubmissions"}
-export def "app-store-version-submissions create-instance" [
+export def "app-store-version-submissions-create-instance" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2907,7 +2907,7 @@ export def "app-store-version-submissions create-instance" [
 # DELETE /v1/appStoreVersionSubmissions/{id}
 #
 # operationId: appStoreVersionSubmissions-delete_instance
-export def "app-store-version-submissions delete-instance" [
+export def "app-store-version-submissions-delete-instance" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2943,7 +2943,7 @@ export def "app-store-version-submissions delete-instance" [
 #
 # operationId: appStoreVersions-create_instance
 # --data shape: {attributes: record, relationships: record, type: "appStoreVersions"}
-export def "app-store-versions create-instance" [
+export def "app-store-versions-create-instance" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2980,7 +2980,7 @@ export def "app-store-versions create-instance" [
 # DELETE /v1/appStoreVersions/{id}
 #
 # operationId: appStoreVersions-delete_instance
-export def "app-store-versions delete-instance" [
+export def "app-store-versions-delete-instance" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3016,7 +3016,7 @@ export def "app-store-versions delete-instance" [
 #
 # operationId: appStoreVersions-get_instance
 @deprecated --flag fields-age-rating-declarations
-export def "app-store-versions get-instance" [
+export def "app-store-versions-get-instance" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3064,7 +3064,7 @@ export def "app-store-versions get-instance" [
 #
 # operationId: appStoreVersions-update_instance
 # --data shape: {attributes?: record, id: string, relationships?: record, type: "appStoreVersions"}
-export def "app-store-versions update-instance" [
+export def "app-store-versions-update-instance" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3106,7 +3106,7 @@ export def "app-store-versions update-instance" [
 # operationId: appStoreVersions-ageRatingDeclaration-get_to_one_related
 @deprecated
 @deprecated --flag fields-age-rating-declarations
-export def "app-store-versions-age-rating-declaration get-to-one-related" [
+export def "app-store-versions-age-rating-declaration-get-to-one-related" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3143,7 +3143,7 @@ export def "app-store-versions-age-rating-declaration get-to-one-related" [
 # GET /v1/appStoreVersions/{id}/appStoreReviewDetail
 #
 # operationId: appStoreVersions-appStoreReviewDetail-get_to_one_related
-export def "app-store-versions-app-store-review-detail get-to-one-related" [
+export def "app-store-versions-app-store-review-detail-get-to-one-related" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3183,7 +3183,7 @@ export def "app-store-versions-app-store-review-detail get-to-one-related" [
 # GET /v1/appStoreVersions/{id}/appStoreVersionLocalizations
 #
 # operationId: appStoreVersions-appStoreVersionLocalizations-get_to_many_related
-export def "app-store-versions-app-store-version-localizations get-to-many-related" [
+export def "app-store-versions-app-store-version-localizations-get-to-many-related" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3221,7 +3221,7 @@ export def "app-store-versions-app-store-version-localizations get-to-many-relat
 # GET /v1/appStoreVersions/{id}/appStoreVersionPhasedRelease
 #
 # operationId: appStoreVersions-appStoreVersionPhasedRelease-get_to_one_related
-export def "app-store-versions-app-store-version-phased-release get-to-one-related" [
+export def "app-store-versions-app-store-version-phased-release-get-to-one-related" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3258,7 +3258,7 @@ export def "app-store-versions-app-store-version-phased-release get-to-one-relat
 # GET /v1/appStoreVersions/{id}/appStoreVersionSubmission
 #
 # operationId: appStoreVersions-appStoreVersionSubmission-get_to_one_related
-export def "app-store-versions-app-store-version-submission get-to-one-related" [
+export def "app-store-versions-app-store-version-submission-get-to-one-related" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3297,7 +3297,7 @@ export def "app-store-versions-app-store-version-submission get-to-one-related" 
 # GET /v1/appStoreVersions/{id}/build
 #
 # operationId: appStoreVersions-build-get_to_one_related
-export def "app-store-versions-build get-to-one-related" [
+export def "app-store-versions-build-get-to-one-related" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3334,7 +3334,7 @@ export def "app-store-versions-build get-to-one-related" [
 # GET /v1/appStoreVersions/{id}/idfaDeclaration
 #
 # operationId: appStoreVersions-idfaDeclaration-get_to_one_related
-export def "app-store-versions-idfa-declaration get-to-one-related" [
+export def "app-store-versions-idfa-declaration-get-to-one-related" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3371,7 +3371,7 @@ export def "app-store-versions-idfa-declaration get-to-one-related" [
 # GET /v1/appStoreVersions/{id}/relationships/build
 #
 # operationId: appStoreVersions-build-get_to_one_relationship
-export def "app-store-versions-relationships-build get-to-one" [
+export def "app-store-versions-build-get-to-one-relationship" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3407,7 +3407,7 @@ export def "app-store-versions-relationships-build get-to-one" [
 #
 # operationId: appStoreVersions-build-update_to_one_relationship
 # --data shape: {id: string, type: "builds"}
-export def "app-store-versions-relationships-build update-to-one" [
+export def "app-store-versions-build-update-to-one-relationship" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3446,7 +3446,7 @@ export def "app-store-versions-relationships-build update-to-one" [
 # GET /v1/appStoreVersions/{id}/routingAppCoverage
 #
 # operationId: appStoreVersions-routingAppCoverage-get_to_one_related
-export def "app-store-versions-routing-app-coverage get-to-one-related" [
+export def "app-store-versions-routing-app-coverage-get-to-one-related" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3483,7 +3483,7 @@ export def "app-store-versions-routing-app-coverage get-to-one-related" [
 # GET /v1/apps
 #
 # operationId: apps-get_collection
-export def "apps get-collection" [
+export def "apps-get-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3554,7 +3554,7 @@ export def "apps get-collection" [
 # GET /v1/apps/{id}
 #
 # operationId: apps-get_instance
-export def "apps get-instance" [
+export def "apps-get-instance" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3618,7 +3618,7 @@ export def "apps get-instance" [
 #
 # operationId: apps-update_instance
 # --data shape: {attributes?: record, id: string, relationships?: record, type: "apps"}
-export def "apps update-instance" [
+export def "apps-update-instance" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3657,7 +3657,7 @@ export def "apps update-instance" [
 # GET /v1/apps/{id}/appInfos
 #
 # operationId: apps-appInfos-get_to_many_related
-export def "apps-app-infos get-to-many-related" [
+export def "apps-app-infos-get-to-many-related" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3700,7 +3700,7 @@ export def "apps-app-infos get-to-many-related" [
 # GET /v1/apps/{id}/appStoreVersions
 #
 # operationId: apps-appStoreVersions-get_to_many_related
-export def "apps-app-store-versions get-to-many-related" [
+export def "apps-app-store-versions-get-to-many-related" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3752,7 +3752,7 @@ export def "apps-app-store-versions get-to-many-related" [
 # GET /v1/apps/{id}/availableTerritories
 #
 # operationId: apps-availableTerritories-get_to_many_related
-export def "apps-available-territories get-to-many-related" [
+export def "apps-available-territories-get-to-many-related" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3790,7 +3790,7 @@ export def "apps-available-territories get-to-many-related" [
 # GET /v1/apps/{id}/betaAppLocalizations
 #
 # operationId: apps-betaAppLocalizations-get_to_many_related
-export def "apps-beta-app-localizations get-to-many-related" [
+export def "apps-beta-app-localizations-get-to-many-related" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3828,7 +3828,7 @@ export def "apps-beta-app-localizations get-to-many-related" [
 # GET /v1/apps/{id}/betaAppReviewDetail
 #
 # operationId: apps-betaAppReviewDetail-get_to_one_related
-export def "apps-beta-app-review-detail get-to-one-related" [
+export def "apps-beta-app-review-detail-get-to-one-related" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3865,7 +3865,7 @@ export def "apps-beta-app-review-detail get-to-one-related" [
 # GET /v1/apps/{id}/betaGroups
 #
 # operationId: apps-betaGroups-get_to_many_related
-export def "apps-beta-groups get-to-many-related" [
+export def "apps-beta-groups-get-to-many-related" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3903,7 +3903,7 @@ export def "apps-beta-groups get-to-many-related" [
 # GET /v1/apps/{id}/betaLicenseAgreement
 #
 # operationId: apps-betaLicenseAgreement-get_to_one_related
-export def "apps-beta-license-agreement get-to-one-related" [
+export def "apps-beta-license-agreement-get-to-one-related" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3940,7 +3940,7 @@ export def "apps-beta-license-agreement get-to-one-related" [
 # GET /v1/apps/{id}/builds
 #
 # operationId: apps-builds-get_to_many_related
-export def "apps-builds get-to-many-related" [
+export def "apps-builds-get-to-many-related" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3978,7 +3978,7 @@ export def "apps-builds get-to-many-related" [
 # GET /v1/apps/{id}/endUserLicenseAgreement
 #
 # operationId: apps-endUserLicenseAgreement-get_to_one_related
-export def "apps-end-user-license-agreement get-to-one-related" [
+export def "apps-end-user-license-agreement-get-to-one-related" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4015,7 +4015,7 @@ export def "apps-end-user-license-agreement get-to-one-related" [
 # GET /v1/apps/{id}/gameCenterEnabledVersions
 #
 # operationId: apps-gameCenterEnabledVersions-get_to_many_related
-export def "apps-game-center-enabled-versions get-to-many-related" [
+export def "apps-game-center-enabled-versions-get-to-many-related" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4059,7 +4059,7 @@ export def "apps-game-center-enabled-versions get-to-many-related" [
 # GET /v1/apps/{id}/inAppPurchases
 #
 # operationId: apps-inAppPurchases-get_to_many_related
-export def "apps-in-app-purchases get-to-many-related" [
+export def "apps-in-app-purchases-get-to-many-related" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4102,7 +4102,7 @@ export def "apps-in-app-purchases get-to-many-related" [
 # GET /v1/apps/{id}/perfPowerMetrics
 #
 # operationId: apps-perfPowerMetrics-get_to_many_related
-export def "apps-perf-power-metrics get-to-many-related" [
+export def "apps-perf-power-metrics-get-to-many-related" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4141,7 +4141,7 @@ export def "apps-perf-power-metrics get-to-many-related" [
 # GET /v1/apps/{id}/preOrder
 #
 # operationId: apps-preOrder-get_to_one_related
-export def "apps-pre-order get-to-one-related" [
+export def "apps-pre-order-get-to-one-related" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4178,7 +4178,7 @@ export def "apps-pre-order get-to-one-related" [
 # GET /v1/apps/{id}/preReleaseVersions
 #
 # operationId: apps-preReleaseVersions-get_to_many_related
-export def "apps-pre-release-versions get-to-many-related" [
+export def "apps-pre-release-versions-get-to-many-related" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4216,7 +4216,7 @@ export def "apps-pre-release-versions get-to-many-related" [
 # GET /v1/apps/{id}/prices
 #
 # operationId: apps-prices-get_to_many_related
-export def "apps-prices get-to-many-related" [
+export def "apps-prices-get-to-many-related" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4258,7 +4258,7 @@ export def "apps-prices get-to-many-related" [
 #
 # operationId: apps-betaTesters-delete_to_many_relationship
 # --data item shape: {id: string, type: "betaTesters"}
-export def "apps-relationships-beta-testers delete-to-many" [
+export def "apps-beta-testers-delete-to-many-relationship" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4297,7 +4297,7 @@ export def "apps-relationships-beta-testers delete-to-many" [
 # GET /v1/betaAppLocalizations
 #
 # operationId: betaAppLocalizations-get_collection
-export def "beta-app-localizations get-collection" [
+export def "beta-app-localizations-get-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4338,7 +4338,7 @@ export def "beta-app-localizations get-collection" [
 #
 # operationId: betaAppLocalizations-create_instance
 # --data shape: {attributes: record, relationships: record, type: "betaAppLocalizations"}
-export def "beta-app-localizations create-instance" [
+export def "beta-app-localizations-create-instance" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4375,7 +4375,7 @@ export def "beta-app-localizations create-instance" [
 # DELETE /v1/betaAppLocalizations/{id}
 #
 # operationId: betaAppLocalizations-delete_instance
-export def "beta-app-localizations delete-instance" [
+export def "beta-app-localizations-delete-instance" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4410,7 +4410,7 @@ export def "beta-app-localizations delete-instance" [
 # GET /v1/betaAppLocalizations/{id}
 #
 # operationId: betaAppLocalizations-get_instance
-export def "beta-app-localizations get-instance" [
+export def "beta-app-localizations-get-instance" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4450,7 +4450,7 @@ export def "beta-app-localizations get-instance" [
 #
 # operationId: betaAppLocalizations-update_instance
 # --data shape: {attributes?: record, id: string, type: "betaAppLocalizations"}
-export def "beta-app-localizations update-instance" [
+export def "beta-app-localizations-update-instance" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4489,7 +4489,7 @@ export def "beta-app-localizations update-instance" [
 # GET /v1/betaAppLocalizations/{id}/app
 #
 # operationId: betaAppLocalizations-app-get_to_one_related
-export def "beta-app-localizations-app get-to-one-related" [
+export def "beta-app-localizations-app-get-to-one-related" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4526,7 +4526,7 @@ export def "beta-app-localizations-app get-to-one-related" [
 # GET /v1/betaAppReviewDetails
 #
 # operationId: betaAppReviewDetails-get_collection
-export def "beta-app-review-details get-collection" [
+export def "beta-app-review-details-get-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4565,7 +4565,7 @@ export def "beta-app-review-details get-collection" [
 # GET /v1/betaAppReviewDetails/{id}
 #
 # operationId: betaAppReviewDetails-get_instance
-export def "beta-app-review-details get-instance" [
+export def "beta-app-review-details-get-instance" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4605,7 +4605,7 @@ export def "beta-app-review-details get-instance" [
 #
 # operationId: betaAppReviewDetails-update_instance
 # --data shape: {attributes?: record, id: string, type: "betaAppReviewDetails"}
-export def "beta-app-review-details update-instance" [
+export def "beta-app-review-details-update-instance" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4644,7 +4644,7 @@ export def "beta-app-review-details update-instance" [
 # GET /v1/betaAppReviewDetails/{id}/app
 #
 # operationId: betaAppReviewDetails-app-get_to_one_related
-export def "beta-app-review-details-app get-to-one-related" [
+export def "beta-app-review-details-app-get-to-one-related" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4681,7 +4681,7 @@ export def "beta-app-review-details-app get-to-one-related" [
 # GET /v1/betaAppReviewSubmissions
 #
 # operationId: betaAppReviewSubmissions-get_collection
-export def "beta-app-review-submissions get-collection" [
+export def "beta-app-review-submissions-get-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4722,7 +4722,7 @@ export def "beta-app-review-submissions get-collection" [
 #
 # operationId: betaAppReviewSubmissions-create_instance
 # --data shape: {relationships: record, type: "betaAppReviewSubmissions"}
-export def "beta-app-review-submissions create-instance" [
+export def "beta-app-review-submissions-create-instance" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4759,7 +4759,7 @@ export def "beta-app-review-submissions create-instance" [
 # GET /v1/betaAppReviewSubmissions/{id}
 #
 # operationId: betaAppReviewSubmissions-get_instance
-export def "beta-app-review-submissions get-instance" [
+export def "beta-app-review-submissions-get-instance" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4798,7 +4798,7 @@ export def "beta-app-review-submissions get-instance" [
 # GET /v1/betaAppReviewSubmissions/{id}/build
 #
 # operationId: betaAppReviewSubmissions-build-get_to_one_related
-export def "beta-app-review-submissions-build get-to-one-related" [
+export def "beta-app-review-submissions-build-get-to-one-related" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4835,7 +4835,7 @@ export def "beta-app-review-submissions-build get-to-one-related" [
 # GET /v1/betaBuildLocalizations
 #
 # operationId: betaBuildLocalizations-get_collection
-export def "beta-build-localizations get-collection" [
+export def "beta-build-localizations-get-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4876,7 +4876,7 @@ export def "beta-build-localizations get-collection" [
 #
 # operationId: betaBuildLocalizations-create_instance
 # --data shape: {attributes: record, relationships: record, type: "betaBuildLocalizations"}
-export def "beta-build-localizations create-instance" [
+export def "beta-build-localizations-create-instance" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4913,7 +4913,7 @@ export def "beta-build-localizations create-instance" [
 # DELETE /v1/betaBuildLocalizations/{id}
 #
 # operationId: betaBuildLocalizations-delete_instance
-export def "beta-build-localizations delete-instance" [
+export def "beta-build-localizations-delete-instance" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4948,7 +4948,7 @@ export def "beta-build-localizations delete-instance" [
 # GET /v1/betaBuildLocalizations/{id}
 #
 # operationId: betaBuildLocalizations-get_instance
-export def "beta-build-localizations get-instance" [
+export def "beta-build-localizations-get-instance" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4988,7 +4988,7 @@ export def "beta-build-localizations get-instance" [
 #
 # operationId: betaBuildLocalizations-update_instance
 # --data shape: {attributes?: record, id: string, type: "betaBuildLocalizations"}
-export def "beta-build-localizations update-instance" [
+export def "beta-build-localizations-update-instance" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5027,7 +5027,7 @@ export def "beta-build-localizations update-instance" [
 # GET /v1/betaBuildLocalizations/{id}/build
 #
 # operationId: betaBuildLocalizations-build-get_to_one_related
-export def "beta-build-localizations-build get-to-one-related" [
+export def "beta-build-localizations-build-get-to-one-related" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5064,7 +5064,7 @@ export def "beta-build-localizations-build get-to-one-related" [
 # GET /v1/betaGroups
 #
 # operationId: betaGroups-get_collection
-export def "beta-groups get-collection" [
+export def "beta-groups-get-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5116,7 +5116,7 @@ export def "beta-groups get-collection" [
 #
 # operationId: betaGroups-create_instance
 # --data shape: {attributes: record, relationships: record, type: "betaGroups"}
-export def "beta-groups create-instance" [
+export def "beta-groups-create-instance" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5153,7 +5153,7 @@ export def "beta-groups create-instance" [
 # DELETE /v1/betaGroups/{id}
 #
 # operationId: betaGroups-delete_instance
-export def "beta-groups delete-instance" [
+export def "beta-groups-delete-instance" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5188,7 +5188,7 @@ export def "beta-groups delete-instance" [
 # GET /v1/betaGroups/{id}
 #
 # operationId: betaGroups-get_instance
-export def "beta-groups get-instance" [
+export def "beta-groups-get-instance" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5232,7 +5232,7 @@ export def "beta-groups get-instance" [
 #
 # operationId: betaGroups-update_instance
 # --data shape: {attributes?: record, id: string, type: "betaGroups"}
-export def "beta-groups update-instance" [
+export def "beta-groups-update-instance" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5271,7 +5271,7 @@ export def "beta-groups update-instance" [
 # GET /v1/betaGroups/{id}/app
 #
 # operationId: betaGroups-app-get_to_one_related
-export def "beta-groups-app get-to-one-related" [
+export def "beta-groups-app-get-to-one-related" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5308,7 +5308,7 @@ export def "beta-groups-app get-to-one-related" [
 # GET /v1/betaGroups/{id}/betaTesters
 #
 # operationId: betaGroups-betaTesters-get_to_many_related
-export def "beta-groups-beta-testers get-to-many-related" [
+export def "beta-groups-beta-testers-get-to-many-related" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5346,7 +5346,7 @@ export def "beta-groups-beta-testers get-to-many-related" [
 # GET /v1/betaGroups/{id}/builds
 #
 # operationId: betaGroups-builds-get_to_many_related
-export def "beta-groups-builds get-to-many-related" [
+export def "beta-groups-builds-get-to-many-related" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5385,7 +5385,7 @@ export def "beta-groups-builds get-to-many-related" [
 #
 # operationId: betaGroups-betaTesters-delete_to_many_relationship
 # --data item shape: {id: string, type: "betaTesters"}
-export def "beta-groups-relationships-beta-testers delete-to-many" [
+export def "beta-groups-beta-testers-delete-to-many-relationship" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5424,7 +5424,7 @@ export def "beta-groups-relationships-beta-testers delete-to-many" [
 # GET /v1/betaGroups/{id}/relationships/betaTesters
 #
 # operationId: betaGroups-betaTesters-get_to_many_relationship
-export def "beta-groups-relationships-beta-testers get-to-many" [
+export def "beta-groups-beta-testers-get-to-many-relationship" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5462,7 +5462,7 @@ export def "beta-groups-relationships-beta-testers get-to-many" [
 #
 # operationId: betaGroups-betaTesters-create_to_many_relationship
 # --data item shape: {id: string, type: "betaTesters"}
-export def "beta-groups-relationships-beta-testers create-to-many" [
+export def "beta-groups-beta-testers-create-to-many-relationship" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5502,7 +5502,7 @@ export def "beta-groups-relationships-beta-testers create-to-many" [
 #
 # operationId: betaGroups-builds-delete_to_many_relationship
 # --data item shape: {id: string, type: "builds"}
-export def "beta-groups-relationships-builds delete-to-many" [
+export def "beta-groups-builds-delete-to-many-relationship" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5541,7 +5541,7 @@ export def "beta-groups-relationships-builds delete-to-many" [
 # GET /v1/betaGroups/{id}/relationships/builds
 #
 # operationId: betaGroups-builds-get_to_many_relationship
-export def "beta-groups-relationships-builds get-to-many" [
+export def "beta-groups-builds-get-to-many-relationship" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5579,7 +5579,7 @@ export def "beta-groups-relationships-builds get-to-many" [
 #
 # operationId: betaGroups-builds-create_to_many_relationship
 # --data item shape: {id: string, type: "builds"}
-export def "beta-groups-relationships-builds create-to-many" [
+export def "beta-groups-builds-create-to-many-relationship" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5618,7 +5618,7 @@ export def "beta-groups-relationships-builds create-to-many" [
 # GET /v1/betaLicenseAgreements
 #
 # operationId: betaLicenseAgreements-get_collection
-export def "beta-license-agreements get-collection" [
+export def "beta-license-agreements-get-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5657,7 +5657,7 @@ export def "beta-license-agreements get-collection" [
 # GET /v1/betaLicenseAgreements/{id}
 #
 # operationId: betaLicenseAgreements-get_instance
-export def "beta-license-agreements get-instance" [
+export def "beta-license-agreements-get-instance" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5697,7 +5697,7 @@ export def "beta-license-agreements get-instance" [
 #
 # operationId: betaLicenseAgreements-update_instance
 # --data shape: {attributes?: record, id: string, type: "betaLicenseAgreements"}
-export def "beta-license-agreements update-instance" [
+export def "beta-license-agreements-update-instance" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5736,7 +5736,7 @@ export def "beta-license-agreements update-instance" [
 # GET /v1/betaLicenseAgreements/{id}/app
 #
 # operationId: betaLicenseAgreements-app-get_to_one_related
-export def "beta-license-agreements-app get-to-one-related" [
+export def "beta-license-agreements-app-get-to-one-related" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5774,7 +5774,7 @@ export def "beta-license-agreements-app get-to-one-related" [
 #
 # operationId: betaTesterInvitations-create_instance
 # --data shape: {relationships: record, type: "betaTesterInvitations"}
-export def "beta-tester-invitations create-instance" [
+export def "beta-tester-invitations-create-instance" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5811,7 +5811,7 @@ export def "beta-tester-invitations create-instance" [
 # GET /v1/betaTesters
 #
 # operationId: betaTesters-get_collection
-export def "beta-testers get-collection" [
+export def "beta-testers-get-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5863,7 +5863,7 @@ export def "beta-testers get-collection" [
 #
 # operationId: betaTesters-create_instance
 # --data shape: {attributes: record, relationships?: record, type: "betaTesters"}
-export def "beta-testers create-instance" [
+export def "beta-testers-create-instance" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5900,7 +5900,7 @@ export def "beta-testers create-instance" [
 # DELETE /v1/betaTesters/{id}
 #
 # operationId: betaTesters-delete_instance
-export def "beta-testers delete-instance" [
+export def "beta-testers-delete-instance" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5935,7 +5935,7 @@ export def "beta-testers delete-instance" [
 # GET /v1/betaTesters/{id}
 #
 # operationId: betaTesters-get_instance
-export def "beta-testers get-instance" [
+export def "beta-testers-get-instance" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5979,7 +5979,7 @@ export def "beta-testers get-instance" [
 # GET /v1/betaTesters/{id}/apps
 #
 # operationId: betaTesters-apps-get_to_many_related
-export def "beta-testers-apps get-to-many-related" [
+export def "beta-testers-apps-get-to-many-related" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6017,7 +6017,7 @@ export def "beta-testers-apps get-to-many-related" [
 # GET /v1/betaTesters/{id}/betaGroups
 #
 # operationId: betaTesters-betaGroups-get_to_many_related
-export def "beta-testers-beta-groups get-to-many-related" [
+export def "beta-testers-beta-groups-get-to-many-related" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6055,7 +6055,7 @@ export def "beta-testers-beta-groups get-to-many-related" [
 # GET /v1/betaTesters/{id}/builds
 #
 # operationId: betaTesters-builds-get_to_many_related
-export def "beta-testers-builds get-to-many-related" [
+export def "beta-testers-builds-get-to-many-related" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6094,7 +6094,7 @@ export def "beta-testers-builds get-to-many-related" [
 #
 # operationId: betaTesters-apps-delete_to_many_relationship
 # --data item shape: {id: string, type: "apps"}
-export def "beta-testers-relationships-apps delete-to-many" [
+export def "beta-testers-apps-delete-to-many-relationship" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6133,7 +6133,7 @@ export def "beta-testers-relationships-apps delete-to-many" [
 # GET /v1/betaTesters/{id}/relationships/apps
 #
 # operationId: betaTesters-apps-get_to_many_relationship
-export def "beta-testers-relationships-apps get-to-many" [
+export def "beta-testers-apps-get-to-many-relationship" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6171,7 +6171,7 @@ export def "beta-testers-relationships-apps get-to-many" [
 #
 # operationId: betaTesters-betaGroups-delete_to_many_relationship
 # --data item shape: {id: string, type: "betaGroups"}
-export def "beta-testers-relationships-beta-groups delete-to-many" [
+export def "beta-testers-beta-groups-delete-to-many-relationship" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6210,7 +6210,7 @@ export def "beta-testers-relationships-beta-groups delete-to-many" [
 # GET /v1/betaTesters/{id}/relationships/betaGroups
 #
 # operationId: betaTesters-betaGroups-get_to_many_relationship
-export def "beta-testers-relationships-beta-groups get-to-many" [
+export def "beta-testers-beta-groups-get-to-many-relationship" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6248,7 +6248,7 @@ export def "beta-testers-relationships-beta-groups get-to-many" [
 #
 # operationId: betaTesters-betaGroups-create_to_many_relationship
 # --data item shape: {id: string, type: "betaGroups"}
-export def "beta-testers-relationships-beta-groups create-to-many" [
+export def "beta-testers-beta-groups-create-to-many-relationship" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6288,7 +6288,7 @@ export def "beta-testers-relationships-beta-groups create-to-many" [
 #
 # operationId: betaTesters-builds-delete_to_many_relationship
 # --data item shape: {id: string, type: "builds"}
-export def "beta-testers-relationships-builds delete-to-many" [
+export def "beta-testers-builds-delete-to-many-relationship" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6327,7 +6327,7 @@ export def "beta-testers-relationships-builds delete-to-many" [
 # GET /v1/betaTesters/{id}/relationships/builds
 #
 # operationId: betaTesters-builds-get_to_many_relationship
-export def "beta-testers-relationships-builds get-to-many" [
+export def "beta-testers-builds-get-to-many-relationship" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6365,7 +6365,7 @@ export def "beta-testers-relationships-builds get-to-many" [
 #
 # operationId: betaTesters-builds-create_to_many_relationship
 # --data item shape: {id: string, type: "builds"}
-export def "beta-testers-relationships-builds create-to-many" [
+export def "beta-testers-builds-create-to-many-relationship" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6404,7 +6404,7 @@ export def "beta-testers-relationships-builds create-to-many" [
 # GET /v1/buildBetaDetails
 #
 # operationId: buildBetaDetails-get_collection
-export def "build-beta-details get-collection" [
+export def "build-beta-details-get-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6444,7 +6444,7 @@ export def "build-beta-details get-collection" [
 # GET /v1/buildBetaDetails/{id}
 #
 # operationId: buildBetaDetails-get_instance
-export def "build-beta-details get-instance" [
+export def "build-beta-details-get-instance" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6484,7 +6484,7 @@ export def "build-beta-details get-instance" [
 #
 # operationId: buildBetaDetails-update_instance
 # --data shape: {attributes?: record, id: string, type: "buildBetaDetails"}
-export def "build-beta-details update-instance" [
+export def "build-beta-details-update-instance" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6523,7 +6523,7 @@ export def "build-beta-details update-instance" [
 # GET /v1/buildBetaDetails/{id}/build
 #
 # operationId: buildBetaDetails-build-get_to_one_related
-export def "build-beta-details-build get-to-one-related" [
+export def "build-beta-details-build-get-to-one-related" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6561,7 +6561,7 @@ export def "build-beta-details-build get-to-one-related" [
 #
 # operationId: buildBetaNotifications-create_instance
 # --data shape: {relationships: record, type: "buildBetaNotifications"}
-export def "build-beta-notifications create-instance" [
+export def "build-beta-notifications-create-instance" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6598,7 +6598,7 @@ export def "build-beta-notifications create-instance" [
 # GET /v1/builds
 #
 # operationId: builds-get_collection
-export def "builds get-collection" [
+export def "builds-get-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6662,7 +6662,7 @@ export def "builds get-collection" [
 # GET /v1/builds/{id}
 #
 # operationId: builds-get_instance
-export def "builds get-instance" [
+export def "builds-get-instance" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6715,7 +6715,7 @@ export def "builds get-instance" [
 #
 # operationId: builds-update_instance
 # --data shape: {attributes?: record, id: string, relationships?: record, type: "builds"}
-export def "builds update-instance" [
+export def "builds-update-instance" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6754,7 +6754,7 @@ export def "builds update-instance" [
 # GET /v1/builds/{id}/app
 #
 # operationId: builds-app-get_to_one_related
-export def "builds-app get-to-one-related" [
+export def "builds-app-get-to-one-related" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6791,7 +6791,7 @@ export def "builds-app get-to-one-related" [
 # GET /v1/builds/{id}/appEncryptionDeclaration
 #
 # operationId: builds-appEncryptionDeclaration-get_to_one_related
-export def "builds-app-encryption-declaration get-to-one-related" [
+export def "builds-app-encryption-declaration-get-to-one-related" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6828,7 +6828,7 @@ export def "builds-app-encryption-declaration get-to-one-related" [
 # GET /v1/builds/{id}/appStoreVersion
 #
 # operationId: builds-appStoreVersion-get_to_one_related
-export def "builds-app-store-version get-to-one-related" [
+export def "builds-app-store-version-get-to-one-related" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6865,7 +6865,7 @@ export def "builds-app-store-version get-to-one-related" [
 # GET /v1/builds/{id}/betaAppReviewSubmission
 #
 # operationId: builds-betaAppReviewSubmission-get_to_one_related
-export def "builds-beta-app-review-submission get-to-one-related" [
+export def "builds-beta-app-review-submission-get-to-one-related" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6902,7 +6902,7 @@ export def "builds-beta-app-review-submission get-to-one-related" [
 # GET /v1/builds/{id}/betaBuildLocalizations
 #
 # operationId: builds-betaBuildLocalizations-get_to_many_related
-export def "builds-beta-build-localizations get-to-many-related" [
+export def "builds-beta-build-localizations-get-to-many-related" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6940,7 +6940,7 @@ export def "builds-beta-build-localizations get-to-many-related" [
 # GET /v1/builds/{id}/buildBetaDetail
 #
 # operationId: builds-buildBetaDetail-get_to_one_related
-export def "builds-build-beta-detail get-to-one-related" [
+export def "builds-build-beta-detail-get-to-one-related" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6977,7 +6977,7 @@ export def "builds-build-beta-detail get-to-one-related" [
 # GET /v1/builds/{id}/diagnosticSignatures
 #
 # operationId: builds-diagnosticSignatures-get_to_many_related
-export def "builds-diagnostic-signatures get-to-many-related" [
+export def "builds-diagnostic-signatures-get-to-many-related" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7016,7 +7016,7 @@ export def "builds-diagnostic-signatures get-to-many-related" [
 # GET /v1/builds/{id}/icons
 #
 # operationId: builds-icons-get_to_many_related
-export def "builds-icons get-to-many-related" [
+export def "builds-icons-get-to-many-related" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7054,7 +7054,7 @@ export def "builds-icons get-to-many-related" [
 # GET /v1/builds/{id}/individualTesters
 #
 # operationId: builds-individualTesters-get_to_many_related
-export def "builds-individual-testers get-to-many-related" [
+export def "builds-individual-testers-get-to-many-related" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7092,7 +7092,7 @@ export def "builds-individual-testers get-to-many-related" [
 # GET /v1/builds/{id}/perfPowerMetrics
 #
 # operationId: builds-perfPowerMetrics-get_to_many_related
-export def "builds-perf-power-metrics get-to-many-related" [
+export def "builds-perf-power-metrics-get-to-many-related" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7131,7 +7131,7 @@ export def "builds-perf-power-metrics get-to-many-related" [
 # GET /v1/builds/{id}/preReleaseVersion
 #
 # operationId: builds-preReleaseVersion-get_to_one_related
-export def "builds-pre-release-version get-to-one-related" [
+export def "builds-pre-release-version-get-to-one-related" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7168,7 +7168,7 @@ export def "builds-pre-release-version get-to-one-related" [
 # GET /v1/builds/{id}/relationships/appEncryptionDeclaration
 #
 # operationId: builds-appEncryptionDeclaration-get_to_one_relationship
-export def "builds-relationships-app-encryption-declaration get-to-one" [
+export def "builds-app-encryption-declaration-get-to-one-relationship" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7204,7 +7204,7 @@ export def "builds-relationships-app-encryption-declaration get-to-one" [
 #
 # operationId: builds-appEncryptionDeclaration-update_to_one_relationship
 # --data shape: {id: string, type: "appEncryptionDeclarations"}
-export def "builds-relationships-app-encryption-declaration update-to-one" [
+export def "builds-app-encryption-declaration-update-to-one-relationship" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7244,7 +7244,7 @@ export def "builds-relationships-app-encryption-declaration update-to-one" [
 #
 # operationId: builds-betaGroups-delete_to_many_relationship
 # --data item shape: {id: string, type: "betaGroups"}
-export def "builds-relationships-beta-groups delete-to-many" [
+export def "builds-beta-groups-delete-to-many-relationship" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7284,7 +7284,7 @@ export def "builds-relationships-beta-groups delete-to-many" [
 #
 # operationId: builds-betaGroups-create_to_many_relationship
 # --data item shape: {id: string, type: "betaGroups"}
-export def "builds-relationships-beta-groups create-to-many" [
+export def "builds-beta-groups-create-to-many-relationship" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7324,7 +7324,7 @@ export def "builds-relationships-beta-groups create-to-many" [
 #
 # operationId: builds-individualTesters-delete_to_many_relationship
 # --data item shape: {id: string, type: "betaTesters"}
-export def "builds-relationships-individual-testers delete-to-many" [
+export def "builds-individual-testers-delete-to-many-relationship" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7363,7 +7363,7 @@ export def "builds-relationships-individual-testers delete-to-many" [
 # GET /v1/builds/{id}/relationships/individualTesters
 #
 # operationId: builds-individualTesters-get_to_many_relationship
-export def "builds-relationships-individual-testers get-to-many" [
+export def "builds-individual-testers-get-to-many-relationship" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7401,7 +7401,7 @@ export def "builds-relationships-individual-testers get-to-many" [
 #
 # operationId: builds-individualTesters-create_to_many_relationship
 # --data item shape: {id: string, type: "betaTesters"}
-export def "builds-relationships-individual-testers create-to-many" [
+export def "builds-individual-testers-create-to-many-relationship" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7441,7 +7441,7 @@ export def "builds-relationships-individual-testers create-to-many" [
 #
 # operationId: bundleIdCapabilities-create_instance
 # --data shape: {attributes: record, relationships: record, type: "bundleIdCapabilities"}
-export def "bundle-id-capabilities create-instance" [
+export def "bundle-id-capabilities-create-instance" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7478,7 +7478,7 @@ export def "bundle-id-capabilities create-instance" [
 # DELETE /v1/bundleIdCapabilities/{id}
 #
 # operationId: bundleIdCapabilities-delete_instance
-export def "bundle-id-capabilities delete-instance" [
+export def "bundle-id-capabilities-delete-instance" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7514,7 +7514,7 @@ export def "bundle-id-capabilities delete-instance" [
 #
 # operationId: bundleIdCapabilities-update_instance
 # --data shape: {attributes?: record, id: string, type: "bundleIdCapabilities"}
-export def "bundle-id-capabilities update-instance" [
+export def "bundle-id-capabilities-update-instance" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7553,7 +7553,7 @@ export def "bundle-id-capabilities update-instance" [
 # GET /v1/bundleIds
 #
 # operationId: bundleIds-get_collection
-export def "bundle-ids get-collection" [
+export def "bundle-ids-get-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7602,7 +7602,7 @@ export def "bundle-ids get-collection" [
 #
 # operationId: bundleIds-create_instance
 # --data shape: {attributes: record, type: "bundleIds"}
-export def "bundle-ids create-instance" [
+export def "bundle-ids-create-instance" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7639,7 +7639,7 @@ export def "bundle-ids create-instance" [
 # DELETE /v1/bundleIds/{id}
 #
 # operationId: bundleIds-delete_instance
-export def "bundle-ids delete-instance" [
+export def "bundle-ids-delete-instance" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7674,7 +7674,7 @@ export def "bundle-ids delete-instance" [
 # GET /v1/bundleIds/{id}
 #
 # operationId: bundleIds-get_instance
-export def "bundle-ids get-instance" [
+export def "bundle-ids-get-instance" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7718,7 +7718,7 @@ export def "bundle-ids get-instance" [
 #
 # operationId: bundleIds-update_instance
 # --data shape: {attributes?: record, id: string, type: "bundleIds"}
-export def "bundle-ids update-instance" [
+export def "bundle-ids-update-instance" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7757,7 +7757,7 @@ export def "bundle-ids update-instance" [
 # GET /v1/bundleIds/{id}/app
 #
 # operationId: bundleIds-app-get_to_one_related
-export def "bundle-ids-app get-to-one-related" [
+export def "bundle-ids-app-get-to-one-related" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7794,7 +7794,7 @@ export def "bundle-ids-app get-to-one-related" [
 # GET /v1/bundleIds/{id}/bundleIdCapabilities
 #
 # operationId: bundleIds-bundleIdCapabilities-get_to_many_related
-export def "bundle-ids-bundle-id-capabilities get-to-many-related" [
+export def "bundle-ids-bundle-id-capabilities-get-to-many-related" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7832,7 +7832,7 @@ export def "bundle-ids-bundle-id-capabilities get-to-many-related" [
 # GET /v1/bundleIds/{id}/profiles
 #
 # operationId: bundleIds-profiles-get_to_many_related
-export def "bundle-ids-profiles get-to-many-related" [
+export def "bundle-ids-profiles-get-to-many-related" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7870,7 +7870,7 @@ export def "bundle-ids-profiles get-to-many-related" [
 # GET /v1/certificates
 #
 # operationId: certificates-get_collection
-export def "certificates get-collection" [
+export def "certificates-get-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7912,7 +7912,7 @@ export def "certificates get-collection" [
 #
 # operationId: certificates-create_instance
 # --data shape: {attributes: record, type: "certificates"}
-export def "certificates create-instance" [
+export def "certificates-create-instance" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7949,7 +7949,7 @@ export def "certificates create-instance" [
 # DELETE /v1/certificates/{id}
 #
 # operationId: certificates-delete_instance
-export def "certificates delete-instance" [
+export def "certificates-delete-instance" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7984,7 +7984,7 @@ export def "certificates delete-instance" [
 # GET /v1/certificates/{id}
 #
 # operationId: certificates-get_instance
-export def "certificates get-instance" [
+export def "certificates-get-instance" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8021,7 +8021,7 @@ export def "certificates get-instance" [
 # GET /v1/devices
 #
 # operationId: devices-get_collection
-export def "devices get-collection" [
+export def "devices-get-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8064,7 +8064,7 @@ export def "devices get-collection" [
 #
 # operationId: devices-create_instance
 # --data shape: {attributes: record, type: "devices"}
-export def "devices create-instance" [
+export def "devices-create-instance" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8101,7 +8101,7 @@ export def "devices create-instance" [
 # GET /v1/devices/{id}
 #
 # operationId: devices-get_instance
-export def "devices get-instance" [
+export def "devices-get-instance" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8139,7 +8139,7 @@ export def "devices get-instance" [
 #
 # operationId: devices-update_instance
 # --data shape: {attributes?: record, id: string, type: "devices"}
-export def "devices update-instance" [
+export def "devices-update-instance" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8178,7 +8178,7 @@ export def "devices update-instance" [
 # GET /v1/diagnosticSignatures/{id}/logs
 #
 # operationId: diagnosticSignatures-logs-get_to_many_related
-export def "diagnostic-signatures-logs get-to-many-related" [
+export def "diagnostic-signatures-logs-get-to-many-related" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8216,7 +8216,7 @@ export def "diagnostic-signatures-logs get-to-many-related" [
 #
 # operationId: endUserLicenseAgreements-create_instance
 # --data shape: {attributes: record, relationships: record, type: "endUserLicenseAgreements"}
-export def "end-user-license-agreements create-instance" [
+export def "end-user-license-agreements-create-instance" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8253,7 +8253,7 @@ export def "end-user-license-agreements create-instance" [
 # DELETE /v1/endUserLicenseAgreements/{id}
 #
 # operationId: endUserLicenseAgreements-delete_instance
-export def "end-user-license-agreements delete-instance" [
+export def "end-user-license-agreements-delete-instance" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8288,7 +8288,7 @@ export def "end-user-license-agreements delete-instance" [
 # GET /v1/endUserLicenseAgreements/{id}
 #
 # operationId: endUserLicenseAgreements-get_instance
-export def "end-user-license-agreements get-instance" [
+export def "end-user-license-agreements-get-instance" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8329,7 +8329,7 @@ export def "end-user-license-agreements get-instance" [
 #
 # operationId: endUserLicenseAgreements-update_instance
 # --data shape: {attributes?: record, id: string, relationships?: record, type: "endUserLicenseAgreements"}
-export def "end-user-license-agreements update-instance" [
+export def "end-user-license-agreements-update-instance" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8368,7 +8368,7 @@ export def "end-user-license-agreements update-instance" [
 # GET /v1/endUserLicenseAgreements/{id}/territories
 #
 # operationId: endUserLicenseAgreements-territories-get_to_many_related
-export def "end-user-license-agreements-territories get-to-many-related" [
+export def "end-user-license-agreements-territories-get-to-many-related" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8406,7 +8406,7 @@ export def "end-user-license-agreements-territories get-to-many-related" [
 # GET /v1/financeReports
 #
 # operationId: financeReports-get_collection
-export def "finance-reports get-collection" [
+export def "finance-reports-get-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8444,7 +8444,7 @@ export def "finance-reports get-collection" [
 # GET /v1/gameCenterEnabledVersions/{id}/compatibleVersions
 #
 # operationId: gameCenterEnabledVersions-compatibleVersions-get_to_many_related
-export def "game-center-enabled-versions-compatible-versions get-to-many-related" [
+export def "game-center-enabled-versions-compatible-versions-get-to-many-related" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8490,7 +8490,7 @@ export def "game-center-enabled-versions-compatible-versions get-to-many-related
 #
 # operationId: gameCenterEnabledVersions-compatibleVersions-delete_to_many_relationship
 # --data item shape: {id: string, type: "gameCenterEnabledVersions"}
-export def "game-center-enabled-versions-relationships-compatible-versions delete-to-many" [
+export def "game-center-enabled-versions-compatible-versions-delete-to-many-relationship" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8529,7 +8529,7 @@ export def "game-center-enabled-versions-relationships-compatible-versions delet
 # GET /v1/gameCenterEnabledVersions/{id}/relationships/compatibleVersions
 #
 # operationId: gameCenterEnabledVersions-compatibleVersions-get_to_many_relationship
-export def "game-center-enabled-versions-relationships-compatible-versions get-to-many" [
+export def "game-center-enabled-versions-compatible-versions-get-to-many-relationship" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8567,7 +8567,7 @@ export def "game-center-enabled-versions-relationships-compatible-versions get-t
 #
 # operationId: gameCenterEnabledVersions-compatibleVersions-replace_to_many_relationship
 # --data item shape: {id: string, type: "gameCenterEnabledVersions"}
-export def "game-center-enabled-versions-relationships-compatible-versions update-to-many" [
+export def "game-center-enabled-versions-compatible-versions-replace-to-many-relationship" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8607,7 +8607,7 @@ export def "game-center-enabled-versions-relationships-compatible-versions updat
 #
 # operationId: gameCenterEnabledVersions-compatibleVersions-create_to_many_relationship
 # --data item shape: {id: string, type: "gameCenterEnabledVersions"}
-export def "game-center-enabled-versions-relationships-compatible-versions create-to-many" [
+export def "game-center-enabled-versions-compatible-versions-create-to-many-relationship" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8647,7 +8647,7 @@ export def "game-center-enabled-versions-relationships-compatible-versions creat
 #
 # operationId: idfaDeclarations-create_instance
 # --data shape: {attributes: record, relationships: record, type: "idfaDeclarations"}
-export def "idfa-declarations create-instance" [
+export def "idfa-declarations-create-instance" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8684,7 +8684,7 @@ export def "idfa-declarations create-instance" [
 # DELETE /v1/idfaDeclarations/{id}
 #
 # operationId: idfaDeclarations-delete_instance
-export def "idfa-declarations delete-instance" [
+export def "idfa-declarations-delete-instance" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8720,7 +8720,7 @@ export def "idfa-declarations delete-instance" [
 #
 # operationId: idfaDeclarations-update_instance
 # --data shape: {attributes?: record, id: string, type: "idfaDeclarations"}
-export def "idfa-declarations update-instance" [
+export def "idfa-declarations-update-instance" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8759,7 +8759,7 @@ export def "idfa-declarations update-instance" [
 # GET /v1/inAppPurchases/{id}
 #
 # operationId: inAppPurchases-get_instance
-export def "in-app-purchases get-instance" [
+export def "in-app-purchases-get-instance" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8798,7 +8798,7 @@ export def "in-app-purchases get-instance" [
 # GET /v1/preReleaseVersions
 #
 # operationId: preReleaseVersions-get_collection
-export def "pre-release-versions get-collection" [
+export def "pre-release-versions-get-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8845,7 +8845,7 @@ export def "pre-release-versions get-collection" [
 # GET /v1/preReleaseVersions/{id}
 #
 # operationId: preReleaseVersions-get_instance
-export def "pre-release-versions get-instance" [
+export def "pre-release-versions-get-instance" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8886,7 +8886,7 @@ export def "pre-release-versions get-instance" [
 # GET /v1/preReleaseVersions/{id}/app
 #
 # operationId: preReleaseVersions-app-get_to_one_related
-export def "pre-release-versions-app get-to-one-related" [
+export def "pre-release-versions-app-get-to-one-related" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8923,7 +8923,7 @@ export def "pre-release-versions-app get-to-one-related" [
 # GET /v1/preReleaseVersions/{id}/builds
 #
 # operationId: preReleaseVersions-builds-get_to_many_related
-export def "pre-release-versions-builds get-to-many-related" [
+export def "pre-release-versions-builds-get-to-many-related" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8961,7 +8961,7 @@ export def "pre-release-versions-builds get-to-many-related" [
 # GET /v1/profiles
 #
 # operationId: profiles-get_collection
-export def "profiles get-collection" [
+export def "profiles-get-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9009,7 +9009,7 @@ export def "profiles get-collection" [
 #
 # operationId: profiles-create_instance
 # --data shape: {attributes: record, relationships: record, type: "profiles"}
-export def "profiles create-instance" [
+export def "profiles-create-instance" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9046,7 +9046,7 @@ export def "profiles create-instance" [
 # DELETE /v1/profiles/{id}
 #
 # operationId: profiles-delete_instance
-export def "profiles delete-instance" [
+export def "profiles-delete-instance" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9081,7 +9081,7 @@ export def "profiles delete-instance" [
 # GET /v1/profiles/{id}
 #
 # operationId: profiles-get_instance
-export def "profiles get-instance" [
+export def "profiles-get-instance" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9124,7 +9124,7 @@ export def "profiles get-instance" [
 # GET /v1/profiles/{id}/bundleId
 #
 # operationId: profiles-bundleId-get_to_one_related
-export def "profiles-bundle-id get-to-one-related" [
+export def "profiles-bundle-id-get-to-one-related" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9161,7 +9161,7 @@ export def "profiles-bundle-id get-to-one-related" [
 # GET /v1/profiles/{id}/certificates
 #
 # operationId: profiles-certificates-get_to_many_related
-export def "profiles-certificates get-to-many-related" [
+export def "profiles-certificates-get-to-many-related" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9199,7 +9199,7 @@ export def "profiles-certificates get-to-many-related" [
 # GET /v1/profiles/{id}/devices
 #
 # operationId: profiles-devices-get_to_many_related
-export def "profiles-devices get-to-many-related" [
+export def "profiles-devices-get-to-many-related" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9238,7 +9238,7 @@ export def "profiles-devices get-to-many-related" [
 #
 # operationId: routingAppCoverages-create_instance
 # --data shape: {attributes: record, relationships: record, type: "routingAppCoverages"}
-export def "routing-app-coverages create-instance" [
+export def "routing-app-coverages-create-instance" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9275,7 +9275,7 @@ export def "routing-app-coverages create-instance" [
 # DELETE /v1/routingAppCoverages/{id}
 #
 # operationId: routingAppCoverages-delete_instance
-export def "routing-app-coverages delete-instance" [
+export def "routing-app-coverages-delete-instance" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9310,7 +9310,7 @@ export def "routing-app-coverages delete-instance" [
 # GET /v1/routingAppCoverages/{id}
 #
 # operationId: routingAppCoverages-get_instance
-export def "routing-app-coverages get-instance" [
+export def "routing-app-coverages-get-instance" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9349,7 +9349,7 @@ export def "routing-app-coverages get-instance" [
 #
 # operationId: routingAppCoverages-update_instance
 # --data shape: {attributes?: record, id: string, type: "routingAppCoverages"}
-export def "routing-app-coverages update-instance" [
+export def "routing-app-coverages-update-instance" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9388,7 +9388,7 @@ export def "routing-app-coverages update-instance" [
 # GET /v1/salesReports
 #
 # operationId: salesReports-get_collection
-export def "sales-reports get-collection" [
+export def "sales-reports-get-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9428,7 +9428,7 @@ export def "sales-reports get-collection" [
 # GET /v1/territories
 #
 # operationId: territories-get_collection
-export def "territories get-collection" [
+export def "territories-get-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9464,7 +9464,7 @@ export def "territories get-collection" [
 # GET /v1/userInvitations
 #
 # operationId: userInvitations-get_collection
-export def "user-invitations get-collection" [
+export def "user-invitations-get-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9508,7 +9508,7 @@ export def "user-invitations get-collection" [
 #
 # operationId: userInvitations-create_instance
 # --data shape: {attributes: record, relationships?: record, type: "userInvitations"}
-export def "user-invitations create-instance" [
+export def "user-invitations-create-instance" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9545,7 +9545,7 @@ export def "user-invitations create-instance" [
 # DELETE /v1/userInvitations/{id}
 #
 # operationId: userInvitations-delete_instance
-export def "user-invitations delete-instance" [
+export def "user-invitations-delete-instance" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9580,7 +9580,7 @@ export def "user-invitations delete-instance" [
 # GET /v1/userInvitations/{id}
 #
 # operationId: userInvitations-get_instance
-export def "user-invitations get-instance" [
+export def "user-invitations-get-instance" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9620,7 +9620,7 @@ export def "user-invitations get-instance" [
 # GET /v1/userInvitations/{id}/visibleApps
 #
 # operationId: userInvitations-visibleApps-get_to_many_related
-export def "user-invitations-visible-apps get-to-many-related" [
+export def "user-invitations-visible-apps-get-to-many-related" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9658,7 +9658,7 @@ export def "user-invitations-visible-apps get-to-many-related" [
 # GET /v1/users
 #
 # operationId: users-get_collection
-export def "users get-collection" [
+export def "users-get-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9701,7 +9701,7 @@ export def "users get-collection" [
 # DELETE /v1/users/{id}
 #
 # operationId: users-delete_instance
-export def "users delete-instance" [
+export def "users-delete-instance" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9736,7 +9736,7 @@ export def "users delete-instance" [
 # GET /v1/users/{id}
 #
 # operationId: users-get_instance
-export def "users get-instance" [
+export def "users-get-instance" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9777,7 +9777,7 @@ export def "users get-instance" [
 #
 # operationId: users-update_instance
 # --data shape: {attributes?: record, id: string, relationships?: record, type: "users"}
-export def "users update-instance" [
+export def "users-update-instance" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9817,7 +9817,7 @@ export def "users update-instance" [
 #
 # operationId: users-visibleApps-delete_to_many_relationship
 # --data item shape: {id: string, type: "apps"}
-export def "users-relationships-visible-apps delete-to-many" [
+export def "users-visible-apps-delete-to-many-relationship" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9856,7 +9856,7 @@ export def "users-relationships-visible-apps delete-to-many" [
 # GET /v1/users/{id}/relationships/visibleApps
 #
 # operationId: users-visibleApps-get_to_many_relationship
-export def "users-relationships-visible-apps get-to-many" [
+export def "users-visible-apps-get-to-many-relationship" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9894,7 +9894,7 @@ export def "users-relationships-visible-apps get-to-many" [
 #
 # operationId: users-visibleApps-replace_to_many_relationship
 # --data item shape: {id: string, type: "apps"}
-export def "users-relationships-visible-apps update-to-many" [
+export def "users-visible-apps-replace-to-many-relationship" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9934,7 +9934,7 @@ export def "users-relationships-visible-apps update-to-many" [
 #
 # operationId: users-visibleApps-create_to_many_relationship
 # --data item shape: {id: string, type: "apps"}
-export def "users-relationships-visible-apps create-to-many" [
+export def "users-visible-apps-create-to-many-relationship" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9973,7 +9973,7 @@ export def "users-relationships-visible-apps create-to-many" [
 # GET /v1/users/{id}/visibleApps
 #
 # operationId: users-visibleApps-get_to_many_related
-export def "users-visible-apps get-to-many-related" [
+export def "users-visible-apps-get-to-many-related" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

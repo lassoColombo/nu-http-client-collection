@@ -149,7 +149,7 @@ def status-completer [] { ["DELIVERED" "FAILED" "FAILED_OPTOUT" "FAILED_REFUNDED
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "rest-account-balance get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-balance" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -173,7 +173,7 @@ export def commands []: nothing -> table {
 #
 # GET /api/rest/v1/account/balance
 # operationId: getBalance
-export def "rest-account-balance get" [
+export def "get-balance" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -208,7 +208,7 @@ export def "rest-account-balance get" [
 #
 # GET /api/rest/v1/account/statistics
 # operationId: getStatistics
-export def "rest-account-statistics get" [
+export def "get-statistics" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -250,7 +250,7 @@ export def "rest-account-statistics get" [
 #
 # POST /api/rest/v1/account/transfer
 # operationId: transfer
-export def "rest-account-transfer create" [
+export def "transfer" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -291,7 +291,7 @@ export def "rest-account-transfer create" [
 #
 # GET /api/rest/v1/account/user
 # operationId: search
-export def "rest-account-user list" [
+export def "search" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -327,7 +327,7 @@ export def "rest-account-user list" [
 # create
 #
 # PUT /api/rest/v1/account/user
-export def "rest-account-user update" [
+export def "put-api-rest-v1-account-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -373,7 +373,7 @@ export def "rest-account-user update" [
 #
 # GET /api/rest/v1/account/user/{userId}
 # operationId: getUser
-export def "rest-account-user get" [
+export def "get-user" [
   user_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -409,7 +409,7 @@ export def "rest-account-user get" [
 # update
 #
 # POST /api/rest/v1/account/user/{userId}
-export def "rest-account-user create" [
+export def "post-api-rest-v1-account-user-user-id" [
   user_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -456,7 +456,7 @@ export def "rest-account-user create" [
 # all
 #
 # GET /api/rest/v1/contacts/all
-export def "rest-contacts-all get" [
+export def "get-api-rest-v1-contacts-all" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -491,7 +491,7 @@ export def "rest-contacts-all get" [
 #
 # POST /api/rest/v1/contacts/create
 # --links item shape: {href?: string, rel?: string, templated?: bool}
-export def "rest-contacts-create create" [
+export def "post-api-rest-v1-contacts-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -534,7 +534,7 @@ export def "rest-contacts-create create" [
 # delete
 #
 # DELETE /api/rest/v1/contacts/{contactId}
-export def "rest-contacts delete" [
+export def "delete-api-rest-v1-contacts-contact-id" [
   contact_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -570,7 +570,7 @@ export def "rest-contacts delete" [
 # get
 #
 # GET /api/rest/v1/contacts/{contactId}
-export def "rest-contacts get" [
+export def "get-api-rest-v1-contacts-contact-id" [
   contact_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -607,7 +607,7 @@ export def "rest-contacts get" [
 #
 # POST /api/rest/v1/contacts/{contactId}
 # --links item shape: {href?: string, rel?: string, templated?: bool}
-export def "rest-contacts create" [
+export def "post-api-rest-v1-contacts-contact-id" [
   contact_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -652,7 +652,7 @@ export def "rest-contacts create" [
 # removeFromGroup
 #
 # GET /api/rest/v1/contacts/{contactId}/addFromGroup/{groupId}
-export def "rest-contacts-add-from-group get" [
+export def "get-api-rest-v1-contacts-contact-id-add-from-group-group-id" [
   contact_id: string
   group_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -690,7 +690,7 @@ export def "rest-contacts-add-from-group get" [
 # removeFromGroup
 #
 # POST /api/rest/v1/contacts/{contactId}/addFromGroup/{groupId}
-export def "rest-contacts-add-from-group create" [
+export def "post-api-rest-v1-contacts-contact-id-add-from-group-group-id" [
   contact_id: string
   group_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -728,7 +728,7 @@ export def "rest-contacts-add-from-group create" [
 # addToGroup
 #
 # GET /api/rest/v1/contacts/{contactId}/addToGroup/{groupId}
-export def "rest-contacts-add-to-group get" [
+export def "get-api-rest-v1-contacts-contact-id-add-to-group-group-id" [
   contact_id: string
   group_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -766,7 +766,7 @@ export def "rest-contacts-add-to-group get" [
 # addToGroup
 #
 # POST /api/rest/v1/contacts/{contactId}/addToGroup/{groupId}
-export def "rest-contacts-add-to-group create" [
+export def "post-api-rest-v1-contacts-contact-id-add-to-group-group-id" [
   contact_id: string
   group_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -804,7 +804,7 @@ export def "rest-contacts-add-to-group create" [
 # all
 #
 # GET /api/rest/v1/groups/all
-export def "rest-groups-all get" [
+export def "get-api-rest-v1-groups-all" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -839,7 +839,7 @@ export def "rest-groups-all get" [
 #
 # POST /api/rest/v1/groups/create
 # --links item shape: {href?: string, rel?: string, templated?: bool}
-export def "rest-groups-create create" [
+export def "post-api-rest-v1-groups-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -879,7 +879,7 @@ export def "rest-groups-create create" [
 # delete
 #
 # DELETE /api/rest/v1/groups/{groupId}
-export def "rest-groups delete" [
+export def "delete-api-rest-v1-groups-group-id" [
   group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -915,7 +915,7 @@ export def "rest-groups delete" [
 # get
 #
 # GET /api/rest/v1/groups/{groupId}
-export def "rest-groups get" [
+export def "get-api-rest-v1-groups-group-id" [
   group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -952,7 +952,7 @@ export def "rest-groups get" [
 #
 # POST /api/rest/v1/groups/{groupId}
 # --links item shape: {href?: string, rel?: string, templated?: bool}
-export def "rest-groups create" [
+export def "post-api-rest-v1-groups-group-id" [
   group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -994,7 +994,7 @@ export def "rest-groups create" [
 # addContact
 #
 # GET /api/rest/v1/groups/{groupId}/addContact/{contactId}
-export def "rest-groups-add-contact get" [
+export def "get-api-rest-v1-groups-group-id-add-contact-contact-id" [
   group_id: string
   contact_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1032,7 +1032,7 @@ export def "rest-groups-add-contact get" [
 # addContact
 #
 # POST /api/rest/v1/groups/{groupId}/addContact/{contactId}
-export def "rest-groups-add-contact create" [
+export def "post-api-rest-v1-groups-group-id-add-contact-contact-id" [
   group_id: string
   contact_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1070,7 +1070,7 @@ export def "rest-groups-add-contact create" [
 # removeContact
 #
 # GET /api/rest/v1/groups/{groupId}/removeContact/{contactId}
-export def "rest-groups-remove-contact get" [
+export def "get-api-rest-v1-groups-group-id-remove-contact-contact-id" [
   group_id: string
   contact_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1108,7 +1108,7 @@ export def "rest-groups-remove-contact get" [
 # removeContact
 #
 # POST /api/rest/v1/groups/{groupId}/removeContact/{contactId}
-export def "rest-groups-remove-contact create" [
+export def "post-api-rest-v1-groups-group-id-remove-contact-contact-id" [
   group_id: string
   contact_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1146,7 +1146,7 @@ export def "rest-groups-remove-contact create" [
 # all
 #
 # GET /api/rest/v1/messages/all
-export def "rest-messages-all get" [
+export def "get-api-rest-v1-messages-all" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1198,7 +1198,7 @@ export def "rest-messages-all get" [
 #
 # POST /api/rest/v1/messages/analyse/full
 # operationId: analyse-full
-export def "rest-messages-analyse-full create" [
+export def "analyse-full" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1238,7 +1238,7 @@ export def "rest-messages-analyse-full create" [
 #
 # POST /api/rest/v1/messages/analyse/message-credit-cost
 # operationId: analyse-message-credit-cost
-export def "rest-messages-analyse-message-credit-cost create" [
+export def "analyse-message-credit-cost" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1278,7 +1278,7 @@ export def "rest-messages-analyse-message-credit-cost create" [
 #
 # POST /api/rest/v1/messages/analyse/message-encoding
 # operationId: analyse-message-encoding
-export def "rest-messages-analyse-message-encoding create" [
+export def "analyse-message-encoding" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1318,7 +1318,7 @@ export def "rest-messages-analyse-message-encoding create" [
 #
 # POST /api/rest/v1/messages/analyse/message-length
 # operationId: analyse-message-length
-export def "rest-messages-analyse-message-length create" [
+export def "analyse-message-length" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1358,7 +1358,7 @@ export def "rest-messages-analyse-message-length create" [
 #
 # POST /api/rest/v1/messages/analyse/message-length-within-max-allowed
 # operationId: analyse-
-export def "rest-messages-analyse-message-length-within-max-allowed create" [
+export def "analyse" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1398,7 +1398,7 @@ export def "rest-messages-analyse-message-length-within-max-allowed create" [
 #
 # POST /api/rest/v1/messages/analyse/number-of-messages
 # operationId: analyse-number-of-messages
-export def "rest-messages-analyse-number-of-messages create" [
+export def "analyse-number-of-messages" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1437,7 +1437,7 @@ export def "rest-messages-analyse-number-of-messages create" [
 # delete
 #
 # DELETE /api/rest/v1/messages/{messageId}
-export def "rest-messages delete" [
+export def "delete-api-rest-v1-messages-message-id" [
   message_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1473,7 +1473,7 @@ export def "rest-messages delete" [
 # get
 #
 # GET /api/rest/v1/messages/{messageId}
-export def "rest-messages get" [
+export def "get-api-rest-v1-messages-message-id" [
   message_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1509,7 +1509,7 @@ export def "rest-messages get" [
 # markRead
 #
 # POST /api/rest/v1/messages/{messageId}/markRead
-export def "rest-messages-mark-read create" [
+export def "post-api-rest-v1-messages-message-id-mark-read" [
   message_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1545,7 +1545,7 @@ export def "rest-messages-mark-read create" [
 # markRead
 #
 # PUT /api/rest/v1/messages/{messageId}/markRead
-export def "rest-messages-mark-read update" [
+export def "put-api-rest-v1-messages-message-id-mark-read" [
   message_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1581,7 +1581,7 @@ export def "rest-messages-mark-read update" [
 # markUnread
 #
 # POST /api/rest/v1/messages/{messageId}/markUnread
-export def "rest-messages-mark-unread create" [
+export def "post-api-rest-v1-messages-message-id-mark-unread" [
   message_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1617,7 +1617,7 @@ export def "rest-messages-mark-unread create" [
 # markUnread
 #
 # PUT /api/rest/v1/messages/{messageId}/markUnread
-export def "rest-messages-mark-unread update" [
+export def "put-api-rest-v1-messages-message-id-mark-unread" [
   message_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1653,7 +1653,7 @@ export def "rest-messages-mark-unread update" [
 # send
 #
 # GET /api/rest/v1/sms/send
-export def "rest-sms-send get" [
+export def "get-api-rest-v1-sms-send" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1687,7 +1687,7 @@ export def "rest-sms-send get" [
 # send
 #
 # POST /api/rest/v1/sms/send
-export def "rest-sms-send create" [
+export def "post-api-rest-v1-sms-send" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1729,7 +1729,7 @@ export def "rest-sms-send create" [
 # send-bulk
 #
 # GET /api/rest/v1/sms/send-bulk
-export def "rest-sms-send-bulk get" [
+export def "get-api-rest-v1-sms-send-bulk" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1764,7 +1764,7 @@ export def "rest-sms-send-bulk get" [
 #
 # POST /api/rest/v1/sms/send-bulk
 # --sendSmsRequests item shape: {campaign?: string, dataField?: string, dateToSend?: string, message?: string, recipientNumber?: string}
-export def "rest-sms-send-bulk create" [
+export def "post-api-rest-v1-sms-send-bulk" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1804,7 +1804,7 @@ export def "rest-sms-send-bulk create" [
 # send-url-parameters
 #
 # GET /api/rest/v1/sms/send-url-parameters
-export def "rest-sms-send-url-parameters get" [
+export def "get-api-rest-v1-sms-send-url-parameters" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1844,7 +1844,7 @@ export def "rest-sms-send-url-parameters get" [
 # send-url-parameters
 #
 # POST /api/rest/v1/sms/send-url-parameters
-export def "rest-sms-send-url-parameters create" [
+export def "post-api-rest-v1-sms-send-url-parameters" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1884,7 +1884,7 @@ export def "rest-sms-send-url-parameters create" [
 # send-url
 #
 # GET /api/rest/v1/sms/send-url/{token}
-export def "rest-sms-send-url get" [
+export def "get-api-rest-v1-sms-send-url-token" [
   token_arg: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1926,7 +1926,7 @@ export def "rest-sms-send-url get" [
 # send-url
 #
 # POST /api/rest/v1/sms/send-url/{token}
-export def "rest-sms-send-url create" [
+export def "post-api-rest-v1-sms-send-url-token" [
   token_arg: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1968,7 +1968,7 @@ export def "rest-sms-send-url create" [
 # all
 #
 # GET /api/rest/v1/templates/all
-export def "rest-templates-all get" [
+export def "get-api-rest-v1-templates-all" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2002,7 +2002,7 @@ export def "rest-templates-all get" [
 # delete
 #
 # DELETE /api/rest/v1/templates/{templateId}
-export def "rest-templates delete" [
+export def "delete-api-rest-v1-templates-template-id" [
   template_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2038,7 +2038,7 @@ export def "rest-templates delete" [
 # get
 #
 # GET /api/rest/v1/templates/{templateId}
-export def "rest-templates get" [
+export def "get-api-rest-v1-templates-template-id" [
   template_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2074,7 +2074,7 @@ export def "rest-templates get" [
 # all
 #
 # GET /api/rest/v1/voice/all
-export def "rest-voice-all get" [
+export def "get-api-rest-v1-voice-all" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2120,7 +2120,7 @@ export def "rest-voice-all get" [
 #
 # POST /api/rest/v1/voice/single-audio
 # operationId: single-audio
-export def "rest-voice-single-audio create" [
+export def "single-audio" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2168,7 +2168,7 @@ export def "rest-voice-single-audio create" [
 #
 # POST /api/rest/v1/voice/single-text
 # operationId: single-text
-export def "rest-voice-single-text create" [
+export def "single-text" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2213,7 +2213,7 @@ export def "rest-voice-single-text create" [
 # delete
 #
 # DELETE /api/rest/v1/voice/{messageId}
-export def "rest-voice delete" [
+export def "delete-api-rest-v1-voice-message-id" [
   message_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2249,7 +2249,7 @@ export def "rest-voice delete" [
 # get
 #
 # GET /api/rest/v1/voice/{messageId}
-export def "rest-voice get" [
+export def "get-api-rest-v1-voice-message-id" [
   message_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

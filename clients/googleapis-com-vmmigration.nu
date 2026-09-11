@@ -132,7 +132,7 @@ def time-frame-completer [] { ["MONTH" "TIME_FRAME_UNSPECIFIED" "WEEK" "YEAR"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "v1alpha1 create-upgrade-appliance" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "vmmigration-projects-locations-sources-datacenter-connectors-upgrade-appliance" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -156,7 +156,7 @@ export def commands []: nothing -> table {
 #
 # POST /v1alpha1/{datacenterConnector}:upgradeAppliance
 # operationId: vmmigration.projects.locations.sources.datacenterConnectors.upgradeAppliance
-export def "v1alpha1 create-upgrade-appliance" [
+export def "vmmigration-projects-locations-sources-datacenter-connectors-upgrade-appliance" [
   datacenter_connector: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -208,7 +208,7 @@ export def "v1alpha1 create-upgrade-appliance" [
 #
 # POST /v1alpha1/{group}:addGroupMigration
 # operationId: vmmigration.projects.locations.groups.addGroupMigration
-export def "v1alpha1 create-migration" [
+export def "vmmigration-projects-locations-groups-add-group-migration" [
   group: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -260,7 +260,7 @@ export def "v1alpha1 create-migration" [
 #
 # POST /v1alpha1/{group}:removeGroupMigration
 # operationId: vmmigration.projects.locations.groups.removeGroupMigration
-export def "v1alpha1 delete-migration" [
+export def "vmmigration-projects-locations-groups-remove-group-migration" [
   group: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -312,7 +312,7 @@ export def "v1alpha1 delete-migration" [
 #
 # POST /v1alpha1/{migratingVm}:finalizeMigration
 # operationId: vmmigration.projects.locations.sources.migratingVms.finalizeMigration
-export def "v1alpha1 finalize-migration" [
+export def "vmmigration-projects-locations-sources-migrating-vms-finalize-migration" [
   migrating_vm: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -364,7 +364,7 @@ export def "v1alpha1 finalize-migration" [
 #
 # POST /v1alpha1/{migratingVm}:pauseMigration
 # operationId: vmmigration.projects.locations.sources.migratingVms.pauseMigration
-export def "v1alpha1 pause-migration" [
+export def "vmmigration-projects-locations-sources-migrating-vms-pause-migration" [
   migrating_vm: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -416,7 +416,7 @@ export def "v1alpha1 pause-migration" [
 #
 # POST /v1alpha1/{migratingVm}:resumeMigration
 # operationId: vmmigration.projects.locations.sources.migratingVms.resumeMigration
-export def "v1alpha1 create-resume-migration" [
+export def "vmmigration-projects-locations-sources-migrating-vms-resume-migration" [
   migrating_vm: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -468,7 +468,7 @@ export def "v1alpha1 create-resume-migration" [
 #
 # POST /v1alpha1/{migratingVm}:startMigration
 # operationId: vmmigration.projects.locations.sources.migratingVms.startMigration
-export def "v1alpha1 start-migration" [
+export def "vmmigration-projects-locations-sources-migrating-vms-start-migration" [
   migrating_vm: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -520,7 +520,7 @@ export def "v1alpha1 start-migration" [
 #
 # DELETE /v1alpha1/{name}
 # operationId: vmmigration.projects.locations.targetProjects.delete
-export def "v1alpha1 delete" [
+export def "vmmigration-projects-locations-target-projects-delete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -569,7 +569,7 @@ export def "v1alpha1 delete" [
 #
 # GET /v1alpha1/{name}
 # operationId: vmmigration.projects.locations.targetProjects.get
-export def "v1alpha1 get" [
+export def "vmmigration-projects-locations-target-projects-get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -618,7 +618,7 @@ export def "v1alpha1 get" [
 #
 # PATCH /v1alpha1/{name}
 # operationId: vmmigration.projects.locations.targetProjects.patch
-export def "v1alpha1 update" [
+export def "vmmigration-projects-locations-target-projects-patch" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -673,7 +673,7 @@ export def "v1alpha1 update" [
 #
 # GET /v1alpha1/{name}/locations
 # operationId: vmmigration.projects.locations.list
-export def "v1alpha1-locations list" [
+export def "vmmigration-projects-locations-list" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -724,7 +724,7 @@ export def "v1alpha1-locations list" [
 #
 # GET /v1alpha1/{name}/operations
 # operationId: vmmigration.projects.locations.operations.list
-export def "v1alpha1-operations list" [
+export def "vmmigration-projects-locations-operations-list" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -775,7 +775,7 @@ export def "v1alpha1-operations list" [
 #
 # POST /v1alpha1/{name}:cancel
 # operationId: vmmigration.projects.locations.sources.migratingVms.cutoverJobs.cancel
-export def "v1alpha1 cancel" [
+export def "vmmigration-projects-locations-sources-migrating-vms-cutover-jobs-cancel" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -827,7 +827,7 @@ export def "v1alpha1 cancel" [
 #
 # GET /v1alpha1/{parent}/cloneJobs
 # operationId: vmmigration.projects.locations.sources.migratingVms.cloneJobs.list
-export def "v1alpha1-clone-jobs list" [
+export def "vmmigration-projects-locations-sources-migrating-vms-clone-jobs-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -884,7 +884,7 @@ export def "v1alpha1-clone-jobs list" [
 # --error shape: {code?: int, details?: list, message?: string}
 # --steps item shape: {adaptingOs?: record, endTime?: string, instantiatingMigratedVm?: record, preparingVmDisks?: record, startTime?: string}
 # --targetDetails shape: {appliedLicense?: record, computeScheduling?: record, diskType?: "DISK_TYPE_UNSPECIFIED"|"STANDARD"|"BALANCED"|"SSD", externalIp?: string, internalIp?: string, labels?: record, licenseType?: "DEFAULT"|"PAYG"|"BYOL", machineType?: string, machineTypeSeries?: string, metadata?: record, name?: string, network?: string, networkInterfaces?: list, networkTags?: list<string>, secureBoot?: bool, serviceAccount?: string, subnetwork?: string, targetProject?: string, zone?: string}
-export def "v1alpha1-clone-jobs create" [
+export def "vmmigration-projects-locations-sources-migrating-vms-clone-jobs-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -941,7 +941,7 @@ export def "v1alpha1-clone-jobs create" [
 #
 # GET /v1alpha1/{parent}/cutoverJobs
 # operationId: vmmigration.projects.locations.sources.migratingVms.cutoverJobs.list
-export def "v1alpha1-cutover-jobs list" [
+export def "vmmigration-projects-locations-sources-migrating-vms-cutover-jobs-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -998,7 +998,7 @@ export def "v1alpha1-cutover-jobs list" [
 # --error shape: {code?: int, details?: list, message?: string}
 # --steps item shape: {endTime?: string, finalSync?: record, instantiatingMigratedVm?: record, preparingVmDisks?: record, previousReplicationCycle?: record, shuttingDownSourceVm?: record, startTime?: string}
 # --targetDetails shape: {appliedLicense?: record, computeScheduling?: record, diskType?: "DISK_TYPE_UNSPECIFIED"|"STANDARD"|"BALANCED"|"SSD", externalIp?: string, internalIp?: string, labels?: record, licenseType?: "DEFAULT"|"PAYG"|"BYOL", machineType?: string, machineTypeSeries?: string, metadata?: record, name?: string, network?: string, networkInterfaces?: list, networkTags?: list<string>, secureBoot?: bool, serviceAccount?: string, subnetwork?: string, targetProject?: string, zone?: string}
-export def "v1alpha1-cutover-jobs create" [
+export def "vmmigration-projects-locations-sources-migrating-vms-cutover-jobs-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1055,7 +1055,7 @@ export def "v1alpha1-cutover-jobs create" [
 #
 # GET /v1alpha1/{parent}/datacenterConnectors
 # operationId: vmmigration.projects.locations.sources.datacenterConnectors.list
-export def "v1alpha1-datacenter-connectors list" [
+export def "vmmigration-projects-locations-sources-datacenter-connectors-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1110,7 +1110,7 @@ export def "v1alpha1-datacenter-connectors list" [
 # --availableVersions shape: {inPlaceUpdate?: record, newDeployableAppliance?: record}
 # --error shape: {code?: int, details?: list, message?: string}
 # --upgradeStatus shape: {error?: record, previousVersion?: string, startTime?: string, state?: "STATE_UNSPECIFIED"|"RUNNING"|"FAILED"|"SUCCEEDED", version?: string}
-export def "v1alpha1-datacenter-connectors create" [
+export def "vmmigration-projects-locations-sources-datacenter-connectors-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1169,7 +1169,7 @@ export def "v1alpha1-datacenter-connectors create" [
 #
 # GET /v1alpha1/{parent}/groups
 # operationId: vmmigration.projects.locations.groups.list
-export def "v1alpha1-groups list" [
+export def "vmmigration-projects-locations-groups-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1221,7 +1221,7 @@ export def "v1alpha1-groups list" [
 #
 # POST /v1alpha1/{parent}/groups
 # operationId: vmmigration.projects.locations.groups.create
-export def "v1alpha1-groups create" [
+export def "vmmigration-projects-locations-groups-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1276,7 +1276,7 @@ export def "v1alpha1-groups create" [
 #
 # GET /v1alpha1/{parent}/migratingVms
 # operationId: vmmigration.projects.locations.sources.migratingVms.list
-export def "v1alpha1-migrating-vms list" [
+export def "vmmigration-projects-locations-sources-migrating-vms-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1340,7 +1340,7 @@ export def "v1alpha1-migrating-vms list" [
 # --recentCloneJobs item shape: {computeEngineTargetDetails?: record, computeEngineVmDetails?: record, error?: record, targetDetails?: record}
 # --recentCutoverJobs item shape: {computeEngineTargetDetails?: record, computeEngineVmDetails?: record, error?: record, targetDetails?: record}
 # --targetDefaults shape: {appliedLicense?: record, computeScheduling?: record, diskType?: "DISK_TYPE_UNSPECIFIED"|"STANDARD"|"BALANCED"|"SSD", externalIp?: string, internalIp?: string, labels?: record, licenseType?: "DEFAULT"|"PAYG"|"BYOL", machineType?: string, machineTypeSeries?: string, metadata?: record, name?: string, network?: string, networkInterfaces?: list, networkTags?: list<string>, secureBoot?: bool, serviceAccount?: string, subnetwork?: string, targetProject?: string, zone?: string}
-export def "v1alpha1-migrating-vms create" [
+export def "vmmigration-projects-locations-sources-migrating-vms-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1407,7 +1407,7 @@ export def "v1alpha1-migrating-vms create" [
 #
 # GET /v1alpha1/{parent}/replicationCycles
 # operationId: vmmigration.projects.locations.sources.migratingVms.replicationCycles.list
-export def "v1alpha1-replication-cycles list" [
+export def "vmmigration-projects-locations-sources-migrating-vms-replication-cycles-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1459,7 +1459,7 @@ export def "v1alpha1-replication-cycles list" [
 #
 # GET /v1alpha1/{parent}/sources
 # operationId: vmmigration.projects.locations.sources.list
-export def "v1alpha1-sources list" [
+export def "vmmigration-projects-locations-sources-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1514,7 +1514,7 @@ export def "v1alpha1-sources list" [
 # --aws shape: {accessKeyCreds?: record, awsRegion?: string, error?: record, inventorySecurityGroupNames?: list<string>, inventoryTagList?: list, migrationResourcesUserTags?: record}
 # --error shape: {code?: int, details?: list, message?: string}
 # --vmware shape: {password?: string, thumbprint?: string, username?: string, vcenterIp?: string}
-export def "v1alpha1-sources create" [
+export def "vmmigration-projects-locations-sources-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1572,7 +1572,7 @@ export def "v1alpha1-sources create" [
 #
 # GET /v1alpha1/{parent}/targetProjects
 # operationId: vmmigration.projects.locations.targetProjects.list
-export def "v1alpha1-target-projects list" [
+export def "vmmigration-projects-locations-target-projects-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1624,7 +1624,7 @@ export def "v1alpha1-target-projects list" [
 #
 # POST /v1alpha1/{parent}/targetProjects
 # operationId: vmmigration.projects.locations.targetProjects.create
-export def "v1alpha1-target-projects create" [
+export def "vmmigration-projects-locations-target-projects-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1679,7 +1679,7 @@ export def "v1alpha1-target-projects create" [
 #
 # GET /v1alpha1/{parent}/utilizationReports
 # operationId: vmmigration.projects.locations.sources.utilizationReports.list
-export def "v1alpha1-utilization-reports list" [
+export def "vmmigration-projects-locations-sources-utilization-reports-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1734,7 +1734,7 @@ export def "v1alpha1-utilization-reports list" [
 # operationId: vmmigration.projects.locations.sources.utilizationReports.create
 # --error shape: {code?: int, details?: list, message?: string}
 # --vms item shape: {utilization?: record, vmId?: string, vmwareVmDetails?: record}
-export def "v1alpha1-utilization-reports create" [
+export def "vmmigration-projects-locations-sources-utilization-reports-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1791,7 +1791,7 @@ export def "v1alpha1-utilization-reports create" [
 #
 # GET /v1alpha1/{source}:fetchInventory
 # operationId: vmmigration.projects.locations.sources.fetchInventory
-export def "v1alpha1 get-inventory" [
+export def "vmmigration-projects-locations-sources-fetch-inventory" [
   source: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)

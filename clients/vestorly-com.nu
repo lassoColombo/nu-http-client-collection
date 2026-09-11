@@ -118,7 +118,7 @@ def type-completer [] { ["bounce" "click" "content_posted" "create_post" "delete
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "advisors find" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "find-advisor-by-id" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -142,7 +142,7 @@ export def commands []: nothing -> table {
 #
 # GET /advisors/{id}
 # operationId: findAdvisorByID
-export def "advisors find" [
+export def "find-advisor-by-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -181,7 +181,7 @@ export def "advisors find" [
 #
 # GET /article_phrases
 # operationId: findArticlePhrases
-export def "article-phrases find" [
+export def "find-article-phrases" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -221,7 +221,7 @@ export def "article-phrases find" [
 #
 # GET /articles
 # operationId: findArticles
-export def "articles list" [
+export def "find-articles" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -262,7 +262,7 @@ export def "articles list" [
 #
 # GET /articles/{id}
 # operationId: findArticleByID
-export def "articles find" [
+export def "find-article-by-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -301,7 +301,7 @@ export def "articles find" [
 #
 # GET /custom_feed_filters
 # operationId: findCustomFeedFilters
-export def "custom-feed-filters list" [
+export def "find-custom-feed-filters" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -338,7 +338,7 @@ export def "custom-feed-filters list" [
 #
 # POST /custom_feed_filters
 # operationId: createCustomFeedFilter
-export def "custom-feed-filters create" [
+export def "create-custom-feed-filter" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -380,7 +380,7 @@ export def "custom-feed-filters create" [
 #
 # DELETE /custom_feed_filters/{id}
 # operationId: deleteCustomFeedFilter
-export def "custom-feed-filters delete" [
+export def "delete-custom-feed-filter" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -419,7 +419,7 @@ export def "custom-feed-filters delete" [
 #
 # GET /custom_feed_filters/{id}
 # operationId: findCustomFeedFilterByID
-export def "custom-feed-filters find" [
+export def "find-custom-feed-filter-by-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -458,7 +458,7 @@ export def "custom-feed-filters find" [
 #
 # PUT /custom_feed_filters/{id}
 # operationId: updateCustomFeedFilterById
-export def "custom-feed-filters update" [
+export def "update-custom-feed-filter-by-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -502,7 +502,7 @@ export def "custom-feed-filters update" [
 #
 # GET /custom_feeds
 # operationId: findCustomFeeds
-export def "custom-feeds list" [
+export def "find-custom-feeds" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -539,7 +539,7 @@ export def "custom-feeds list" [
 #
 # POST /custom_feeds
 # operationId: createCustomFeed
-export def "custom-feeds create" [
+export def "create-custom-feed" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -590,7 +590,7 @@ export def "custom-feeds create" [
 #
 # DELETE /custom_feeds/{id}
 # operationId: deleteCustomFeed
-export def "custom-feeds delete" [
+export def "delete-custom-feed" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -629,7 +629,7 @@ export def "custom-feeds delete" [
 #
 # GET /custom_feeds/{id}
 # operationId: findCustomFeedByID
-export def "custom-feeds find" [
+export def "find-custom-feed-by-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -668,7 +668,7 @@ export def "custom-feeds find" [
 #
 # PUT /custom_feeds/{id}
 # operationId: updateCategoryById
-export def "custom-feeds update-category" [
+export def "update-category-by-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -721,7 +721,7 @@ export def "custom-feeds update-category" [
 #
 # GET /custom_feeds/{id}/articles
 # operationId: findCustomFeedArticles
-export def "custom-feeds-articles find" [
+export def "find-custom-feed-articles" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -765,7 +765,7 @@ export def "custom-feeds-articles find" [
 #
 # POST /custom_feeds/{id}/duplicates
 # operationId: duplicateCustomFeed
-export def "custom-feeds-duplicates create" [
+export def "duplicate-custom-feed" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -804,7 +804,7 @@ export def "custom-feeds-duplicates create" [
 #
 # GET /events
 # operationId: findEvents
-export def "events list" [
+export def "find-events" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -842,7 +842,7 @@ export def "events list" [
 # POST /events
 # operationId: createEvent
 # --event_content shape: {_id?: string, content_field?: string, content_id?: string, content_type?: string, created_at?: string, slug?: string, updated_at?: string}
-export def "events create" [
+export def "create-event" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -893,7 +893,7 @@ export def "events create" [
 #
 # GET /events/{id}
 # operationId: findEventByID
-export def "events find" [
+export def "find-event-by-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -932,7 +932,7 @@ export def "events find" [
 #
 # GET /groups
 # operationId: findGroups
-export def "groups list" [
+export def "find-groups" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -969,7 +969,7 @@ export def "groups list" [
 #
 # POST /groups
 # operationId: createGroup
-export def "groups create" [
+export def "create-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1018,7 +1018,7 @@ export def "groups create" [
 #
 # DELETE /groups/{id}
 # operationId: deleteGroup
-export def "groups delete" [
+export def "delete-group" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1057,7 +1057,7 @@ export def "groups delete" [
 #
 # GET /groups/{id}
 # operationId: findGroupByID
-export def "groups find" [
+export def "find-group-by-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1096,7 +1096,7 @@ export def "groups find" [
 #
 # PUT /groups/{id}
 # operationId: updateGroupById
-export def "groups update" [
+export def "update-group-by-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1147,7 +1147,7 @@ export def "groups update" [
 #
 # GET /member_events
 # operationId: findMemberEvents
-export def "member-events find" [
+export def "find-member-events" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1184,7 +1184,7 @@ export def "member-events find" [
 #
 # GET /member_reports
 # operationId: findMemberReports
-export def "member-reports find" [
+export def "find-member-reports" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1221,7 +1221,7 @@ export def "member-reports find" [
 #
 # GET /members
 # operationId: findMembers
-export def "members list" [
+export def "find-members" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1260,7 +1260,7 @@ export def "members list" [
 #
 # POST /members
 # operationId: createMember
-export def "members create" [
+export def "create-member" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1344,7 +1344,7 @@ export def "members create" [
 #
 # GET /members/{id}
 # operationId: findMemberByID
-export def "members find" [
+export def "find-member-by-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1383,7 +1383,7 @@ export def "members find" [
 #
 # PUT /members/{id}
 # operationId: updateMemberByID
-export def "members update" [
+export def "update-member-by-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1469,7 +1469,7 @@ export def "members update" [
 #
 # GET /newsletter_settings
 # operationId: findNewsletterSettings
-export def "newsletter-settings list" [
+export def "find-newsletter-settings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1506,7 +1506,7 @@ export def "newsletter-settings list" [
 #
 # GET /newsletter_settings/{id}
 # operationId: findNewsletterSettingsByID
-export def "newsletter-settings find" [
+export def "find-newsletter-settings-by-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1546,7 +1546,7 @@ export def "newsletter-settings find" [
 # PUT /newsletter_settings/{id}
 # operationId: updateNewsletterSettingsByID
 # --newsletter_setting shape: {_id: string, banner_color?: string, body_html?: string, email_accent_color?: string, email_day_of_week?: int, email_hour?: int, email_status?: string, facebook_active_wall?: string, footer_email_font?: string, footer_html?: string, footer_image_url?: string, group_id?: string, header_background_color?: string, header_image_url?: string, intro_text?: string, linkedin_active_wall?: string, montage_enabled?: bool, montage_facebook_image_url?: string, montage_linkedin_image_url?: string, ... (12 more fields)}
-export def "newsletter-settings update" [
+export def "update-newsletter-settings-by-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1589,7 +1589,7 @@ export def "newsletter-settings update" [
 #
 # GET /newsletters
 # operationId: findNewsletters
-export def "newsletters find" [
+export def "find-newsletters" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1626,7 +1626,7 @@ export def "newsletters find" [
 #
 # GET /newsletters/{id}
 # operationId: getNewsletterByID
-export def "newsletters get" [
+export def "get-newsletter-by-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1665,7 +1665,7 @@ export def "newsletters get" [
 #
 # PUT /newsletters/{id}
 # operationId: updateNewsletterByID
-export def "newsletters update" [
+export def "update-newsletter-by-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1712,7 +1712,7 @@ export def "newsletters update" [
 #
 # GET /posts
 # operationId: findPosts
-export def "posts find" [
+export def "find-posts" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1752,7 +1752,7 @@ export def "posts find" [
 #
 # POST /posts
 # operationId: createPost
-export def "posts create" [
+export def "create-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1829,7 +1829,7 @@ export def "posts create" [
 #
 # GET /posts/{id}
 # operationId: getPostByID
-export def "posts get" [
+export def "get-post-by-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1868,7 +1868,7 @@ export def "posts get" [
 #
 # PUT /posts/{id}
 # operationId: updatePostByID
-export def "posts update" [
+export def "update-post-by-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1949,7 +1949,7 @@ export def "posts update" [
 #
 # GET /seed_custom_feeds
 # operationId: findSeedCustomFeeds
-export def "seed-custom-feeds list" [
+export def "find-seed-custom-feeds" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1986,7 +1986,7 @@ export def "seed-custom-feeds list" [
 #
 # POST /seed_custom_feeds
 # operationId: createSeedCustomFeed
-export def "seed-custom-feeds create" [
+export def "create-seed-custom-feed" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2032,7 +2032,7 @@ export def "seed-custom-feeds create" [
 #
 # DELETE /seed_custom_feeds/{id}
 # operationId: deleteSeedCustomFeed
-export def "seed-custom-feeds delete" [
+export def "delete-seed-custom-feed" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2071,7 +2071,7 @@ export def "seed-custom-feeds delete" [
 #
 # GET /seed_custom_feeds/{id}
 # operationId: findSeedCustomFeedByID
-export def "seed-custom-feeds find" [
+export def "find-seed-custom-feed-by-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2110,7 +2110,7 @@ export def "seed-custom-feeds find" [
 #
 # PUT /seed_custom_feeds/{id}
 # operationId: updateSeedCustomFeedById
-export def "seed-custom-feeds update" [
+export def "update-seed-custom-feed-by-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2158,7 +2158,7 @@ export def "seed-custom-feeds update" [
 #
 # POST /sessions
 # operationId: login
-export def "sessions create-login" [
+export def "login" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2195,7 +2195,7 @@ export def "sessions create-login" [
 #
 # DELETE /sessions/{id}
 # operationId: logout
-export def "sessions delete-logout" [
+export def "logout" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2233,7 +2233,7 @@ export def "sessions delete-logout" [
 #
 # GET /sources
 # operationId: findSources
-export def "sources find" [
+export def "find-sources" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2270,7 +2270,7 @@ export def "sources find" [
 #
 # POST /sources
 # operationId: createSource
-export def "sources create" [
+export def "create-source" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2316,7 +2316,7 @@ export def "sources create" [
 #
 # GET /sources/{id}
 # operationId: getSourceByID
-export def "sources get" [
+export def "get-source-by-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2355,7 +2355,7 @@ export def "sources get" [
 #
 # PUT /sources/{id}
 # operationId: updateSourceByID
-export def "sources update" [
+export def "update-source-by-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

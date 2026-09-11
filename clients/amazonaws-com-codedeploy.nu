@@ -147,7 +147,7 @@ def x-amz-target-completer-46 [] { ["CodeDeploy_20141006.UpdateDeploymentGroup"]
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "api create-tags-to-on-premises-instances" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "add-tags-to-on-premises-instances" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -171,7 +171,7 @@ export def commands []: nothing -> table {
 #
 # POST /
 # operationId: AddTagsToOnPremisesInstances
-export def "api create-tags-to-on-premises-instances" [
+export def "add-tags-to-on-premises-instances" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -220,7 +220,7 @@ export def "api create-tags-to-on-premises-instances" [
 #
 # POST /
 # operationId: BatchGetApplicationRevisions
-export def "api get-batch-application-revisions" [
+export def "batch-get-application-revisions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -269,7 +269,7 @@ export def "api get-batch-application-revisions" [
 #
 # POST /
 # operationId: BatchGetApplications
-export def "api get-batch-applications" [
+export def "batch-get-applications" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -317,7 +317,7 @@ export def "api get-batch-applications" [
 #
 # POST /
 # operationId: BatchGetDeploymentGroups
-export def "api get-batch-deployment-groups" [
+export def "batch-get-deployment-groups" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -368,7 +368,7 @@ export def "api get-batch-deployment-groups" [
 # DEPRECATED
 # operationId: BatchGetDeploymentInstances
 @deprecated
-export def "api get-batch-deployment-instances" [
+export def "batch-get-deployment-instances" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -417,7 +417,7 @@ export def "api get-batch-deployment-instances" [
 #
 # POST /
 # operationId: BatchGetDeploymentTargets
-export def "api get-batch-deployment-targets" [
+export def "batch-get-deployment-targets" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -466,7 +466,7 @@ export def "api get-batch-deployment-targets" [
 #
 # POST /
 # operationId: BatchGetDeployments
-export def "api get-batch-deployments" [
+export def "batch-get-deployments" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -514,7 +514,7 @@ export def "api get-batch-deployments" [
 #
 # POST /
 # operationId: BatchGetOnPremisesInstances
-export def "api get-batch-on-premises-instances" [
+export def "batch-get-on-premises-instances" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -562,7 +562,7 @@ export def "api get-batch-on-premises-instances" [
 #
 # POST /
 # operationId: ContinueDeployment
-export def "api create-continue-deployment" [
+export def "continue-deployment" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -611,7 +611,7 @@ export def "api create-continue-deployment" [
 #
 # POST /
 # operationId: CreateApplication
-export def "api create-application" [
+export def "create-application" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -661,7 +661,7 @@ export def "api create-application" [
 #
 # POST /
 # operationId: CreateDeployment
-export def "api create-deployment" [
+export def "create-deployment" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -719,7 +719,7 @@ export def "api create-deployment" [
 #
 # POST /
 # operationId: CreateDeploymentConfig
-export def "api create-deployment-config" [
+export def "create-deployment-config" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -770,7 +770,7 @@ export def "api create-deployment-config" [
 #
 # POST /
 # operationId: CreateDeploymentGroup
-export def "api create-deployment-group" [
+export def "create-deployment-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -835,7 +835,7 @@ export def "api create-deployment-group" [
 #
 # POST /
 # operationId: DeleteApplication
-export def "api delete-application" [
+export def "delete-application" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -883,7 +883,7 @@ export def "api delete-application" [
 #
 # POST /
 # operationId: DeleteDeploymentConfig
-export def "api delete-deployment-config" [
+export def "delete-deployment-config" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -931,7 +931,7 @@ export def "api delete-deployment-config" [
 #
 # POST /
 # operationId: DeleteDeploymentGroup
-export def "api delete-deployment-group" [
+export def "delete-deployment-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -980,7 +980,7 @@ export def "api delete-deployment-group" [
 #
 # POST /
 # operationId: DeleteGitHubAccountToken
-export def "api delete-git-hub-account-token" [
+export def "delete-git-hub-account-token" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1028,7 +1028,7 @@ export def "api delete-git-hub-account-token" [
 #
 # POST /
 # operationId: DeleteResourcesByExternalId
-export def "api delete-resources-by-external" [
+export def "delete-resources-by-external-id" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1076,7 +1076,7 @@ export def "api delete-resources-by-external" [
 #
 # POST /
 # operationId: DeregisterOnPremisesInstance
-export def "api create-deregister-on-premises-instance" [
+export def "deregister-on-premises-instance" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1124,7 +1124,7 @@ export def "api create-deregister-on-premises-instance" [
 #
 # POST /
 # operationId: GetApplication
-export def "api get-application" [
+export def "get-application" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1172,7 +1172,7 @@ export def "api get-application" [
 #
 # POST /
 # operationId: GetApplicationRevision
-export def "api get-application-revision" [
+export def "get-application-revision" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1221,7 +1221,7 @@ export def "api get-application-revision" [
 #
 # POST /
 # operationId: GetDeployment
-export def "api get-deployment" [
+export def "get-deployment" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1269,7 +1269,7 @@ export def "api get-deployment" [
 #
 # POST /
 # operationId: GetDeploymentConfig
-export def "api get-deployment-config" [
+export def "get-deployment-config" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1317,7 +1317,7 @@ export def "api get-deployment-config" [
 #
 # POST /
 # operationId: GetDeploymentGroup
-export def "api get-deployment-group" [
+export def "get-deployment-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1368,7 +1368,7 @@ export def "api get-deployment-group" [
 # DEPRECATED
 # operationId: GetDeploymentInstance
 @deprecated
-export def "api get-deployment-instance" [
+export def "get-deployment-instance" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1417,7 +1417,7 @@ export def "api get-deployment-instance" [
 #
 # POST /
 # operationId: GetDeploymentTarget
-export def "api get-deployment-target" [
+export def "get-deployment-target" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1466,7 +1466,7 @@ export def "api get-deployment-target" [
 #
 # POST /
 # operationId: GetOnPremisesInstance
-export def "api get-on-premises-instance" [
+export def "get-on-premises-instance" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1514,7 +1514,7 @@ export def "api get-on-premises-instance" [
 #
 # POST /
 # operationId: ListApplicationRevisions
-export def "api list-application-revisions" [
+export def "list-application-revisions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1570,7 +1570,7 @@ export def "api list-application-revisions" [
 #
 # POST /
 # operationId: ListApplications
-export def "api list-applications" [
+export def "list-applications" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1620,7 +1620,7 @@ export def "api list-applications" [
 #
 # POST /
 # operationId: ListDeploymentConfigs
-export def "api list-deployment-configs" [
+export def "list-deployment-configs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1670,7 +1670,7 @@ export def "api list-deployment-configs" [
 #
 # POST /
 # operationId: ListDeploymentGroups
-export def "api list-deployment-groups" [
+export def "list-deployment-groups" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1723,7 +1723,7 @@ export def "api list-deployment-groups" [
 # DEPRECATED
 # operationId: ListDeploymentInstances
 @deprecated
-export def "api list-deployment-instances" [
+export def "list-deployment-instances" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1776,7 +1776,7 @@ export def "api list-deployment-instances" [
 #
 # POST /
 # operationId: ListDeploymentTargets
-export def "api list-deployment-targets" [
+export def "list-deployment-targets" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1826,7 +1826,7 @@ export def "api list-deployment-targets" [
 #
 # POST /
 # operationId: ListDeployments
-export def "api list-deployments" [
+export def "list-deployments" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1881,7 +1881,7 @@ export def "api list-deployments" [
 #
 # POST /
 # operationId: ListGitHubAccountTokenNames
-export def "api list-git-hub-account-token-names" [
+export def "list-git-hub-account-token-names" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1929,7 +1929,7 @@ export def "api list-git-hub-account-token-names" [
 #
 # POST /
 # operationId: ListOnPremisesInstances
-export def "api list-on-premises-instances" [
+export def "list-on-premises-instances" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1979,7 +1979,7 @@ export def "api list-on-premises-instances" [
 #
 # POST /
 # operationId: ListTagsForResource
-export def "api list-tags-for-resource" [
+export def "list-tags-for-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2028,7 +2028,7 @@ export def "api list-tags-for-resource" [
 #
 # POST /
 # operationId: PutLifecycleEventHookExecutionStatus
-export def "api update-lifecycle-event-hook-execution-status" [
+export def "put-lifecycle-event-hook-execution-status" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2078,7 +2078,7 @@ export def "api update-lifecycle-event-hook-execution-status" [
 #
 # POST /
 # operationId: RegisterApplicationRevision
-export def "api create-application-revision" [
+export def "register-application-revision" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2128,7 +2128,7 @@ export def "api create-application-revision" [
 #
 # POST /
 # operationId: RegisterOnPremisesInstance
-export def "api create-on-premises-instance" [
+export def "register-on-premises-instance" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2178,7 +2178,7 @@ export def "api create-on-premises-instance" [
 #
 # POST /
 # operationId: RemoveTagsFromOnPremisesInstances
-export def "api delete-tags-from-on-premises-instances" [
+export def "remove-tags-from-on-premises-instances" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2229,7 +2229,7 @@ export def "api delete-tags-from-on-premises-instances" [
 # DEPRECATED
 # operationId: SkipWaitTimeForInstanceTermination
 @deprecated
-export def "api wait-skip-time-for-instance-termination" [
+export def "skip-wait-time-for-instance-termination" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2277,7 +2277,7 @@ export def "api wait-skip-time-for-instance-termination" [
 #
 # POST /
 # operationId: StopDeployment
-export def "api stop-deployment" [
+export def "stop-deployment" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2326,7 +2326,7 @@ export def "api stop-deployment" [
 #
 # POST /
 # operationId: TagResource
-export def "api tag-resource" [
+export def "tag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2375,7 +2375,7 @@ export def "api tag-resource" [
 #
 # POST /
 # operationId: UntagResource
-export def "api untag-resource" [
+export def "untag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2424,7 +2424,7 @@ export def "api untag-resource" [
 #
 # POST /
 # operationId: UpdateApplication
-export def "api update-application" [
+export def "update-application" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2473,7 +2473,7 @@ export def "api update-application" [
 #
 # POST /
 # operationId: UpdateDeploymentGroup
-export def "api update-deployment-group" [
+export def "update-deployment-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

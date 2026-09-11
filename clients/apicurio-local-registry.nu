@@ -125,7 +125,7 @@ def state-completer [] { ["DEPRECATED" "DISABLED" "ENABLED"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "admin-artifact-types list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "list-artifact-types" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -149,7 +149,7 @@ export def commands []: nothing -> table {
 #
 # GET /admin/artifactTypes
 # operationId: listArtifactTypes
-export def "admin-artifact-types list" [
+export def "list-artifact-types" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -183,7 +183,7 @@ export def "admin-artifact-types list" [
 #
 # GET /admin/config/properties
 # operationId: listConfigProperties
-export def "admin-config-properties list" [
+export def "list-config-properties" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -217,7 +217,7 @@ export def "admin-config-properties list" [
 #
 # DELETE /admin/config/properties/{propertyName}
 # operationId: resetConfigProperty
-export def "admin-config-properties reset-property" [
+export def "reset-config-property" [
   property_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -253,7 +253,7 @@ export def "admin-config-properties reset-property" [
 #
 # GET /admin/config/properties/{propertyName}
 # operationId: getConfigProperty
-export def "admin-config-properties get-property" [
+export def "get-config-property" [
   property_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -289,7 +289,7 @@ export def "admin-config-properties get-property" [
 #
 # PUT /admin/config/properties/{propertyName}
 # operationId: updateConfigProperty
-export def "admin-config-properties update-property" [
+export def "update-config-property" [
   property_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -329,7 +329,7 @@ export def "admin-config-properties update-property" [
 #
 # GET /admin/export
 # operationId: exportData
-export def "admin-export export-data" [
+export def "export-data" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -366,7 +366,7 @@ export def "admin-export export-data" [
 #
 # POST /admin/import
 # operationId: importData
-export def "admin-import import-data" [
+export def "import-data" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -408,7 +408,7 @@ export def "admin-import import-data" [
 #
 # GET /admin/loggers
 # operationId: listLogConfigurations
-export def "admin-loggers list-log-configurations" [
+export def "list-log-configurations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -442,7 +442,7 @@ export def "admin-loggers list-log-configurations" [
 #
 # DELETE /admin/loggers/{logger}
 # operationId: removeLogConfiguration
-export def "admin-loggers delete-log-configuration" [
+export def "remove-log-configuration" [
   logger: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -478,7 +478,7 @@ export def "admin-loggers delete-log-configuration" [
 #
 # GET /admin/loggers/{logger}
 # operationId: getLogConfiguration
-export def "admin-loggers get-log-configuration" [
+export def "get-log-configuration" [
   logger: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -514,7 +514,7 @@ export def "admin-loggers get-log-configuration" [
 #
 # PUT /admin/loggers/{logger}
 # operationId: setLogConfiguration
-export def "admin-loggers update-log-configuration" [
+export def "set-log-configuration" [
   logger: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -554,7 +554,7 @@ export def "admin-loggers update-log-configuration" [
 #
 # GET /admin/roleMappings
 # operationId: listRoleMappings
-export def "admin-role-mappings list" [
+export def "list-role-mappings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -588,7 +588,7 @@ export def "admin-role-mappings list" [
 #
 # POST /admin/roleMappings
 # operationId: createRoleMapping
-export def "admin-role-mappings create" [
+export def "create-role-mapping" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -628,7 +628,7 @@ export def "admin-role-mappings create" [
 #
 # DELETE /admin/roleMappings/{principalId}
 # operationId: deleteRoleMapping
-export def "admin-role-mappings delete" [
+export def "delete-role-mapping" [
   principal_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -664,7 +664,7 @@ export def "admin-role-mappings delete" [
 #
 # GET /admin/roleMappings/{principalId}
 # operationId: getRoleMapping
-export def "admin-role-mappings get" [
+export def "get-role-mapping" [
   principal_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -700,7 +700,7 @@ export def "admin-role-mappings get" [
 #
 # PUT /admin/roleMappings/{principalId}
 # operationId: updateRoleMapping
-export def "admin-role-mappings update" [
+export def "update-role-mapping" [
   principal_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -740,7 +740,7 @@ export def "admin-role-mappings update" [
 #
 # DELETE /admin/rules
 # operationId: deleteAllGlobalRules
-export def "admin-rules delete-list-global" [
+export def "delete-all-global-rules" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -774,7 +774,7 @@ export def "admin-rules delete-list-global" [
 #
 # GET /admin/rules
 # operationId: listGlobalRules
-export def "admin-rules list-global" [
+export def "list-global-rules" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -808,7 +808,7 @@ export def "admin-rules list-global" [
 #
 # POST /admin/rules
 # operationId: createGlobalRule
-export def "admin-rules create-global" [
+export def "create-global-rule" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -847,7 +847,7 @@ export def "admin-rules create-global" [
 #
 # DELETE /admin/rules/{rule}
 # operationId: deleteGlobalRule
-export def "admin-rules delete-global" [
+export def "delete-global-rule" [
   rule: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -883,7 +883,7 @@ export def "admin-rules delete-global" [
 #
 # GET /admin/rules/{rule}
 # operationId: getGlobalRuleConfig
-export def "admin-rules get-global-config" [
+export def "get-global-rule-config" [
   rule: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -919,7 +919,7 @@ export def "admin-rules get-global-config" [
 #
 # PUT /admin/rules/{rule}
 # operationId: updateGlobalRuleConfig
-export def "admin-rules update-global-config" [
+export def "update-global-rule-config" [
   rule: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -960,7 +960,7 @@ export def "admin-rules update-global-config" [
 #
 # GET /groups
 # operationId: listGroups
-export def "groups list" [
+export def "list-groups" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -999,7 +999,7 @@ export def "groups list" [
 #
 # POST /groups
 # operationId: createGroup
-export def "groups create" [
+export def "create-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1039,7 +1039,7 @@ export def "groups create" [
 #
 # DELETE /groups/{groupId}
 # operationId: deleteGroupById
-export def "groups delete" [
+export def "delete-group-by-id" [
   group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1075,7 +1075,7 @@ export def "groups delete" [
 #
 # GET /groups/{groupId}
 # operationId: getGroupById
-export def "groups get" [
+export def "get-group-by-id" [
   group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1111,7 +1111,7 @@ export def "groups get" [
 #
 # DELETE /groups/{groupId}/artifacts
 # operationId: deleteArtifactsInGroup
-export def "groups-artifacts delete-by-group-id" [
+export def "delete-artifacts-in-group" [
   group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1147,7 +1147,7 @@ export def "groups-artifacts delete-by-group-id" [
 #
 # GET /groups/{groupId}/artifacts
 # operationId: listArtifactsInGroup
-export def "groups-artifacts list" [
+export def "list-artifacts-in-group" [
   group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1188,7 +1188,7 @@ export def "groups-artifacts list" [
 #
 # POST /groups/{groupId}/artifacts
 # operationId: createArtifact
-export def "groups-artifacts create" [
+export def "create-artifact" [
   group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1242,7 +1242,7 @@ export def "groups-artifacts create" [
 #
 # DELETE /groups/{groupId}/artifacts/{artifactId}
 # operationId: deleteArtifact
-export def "groups-artifacts delete-by-group-id-artifact-id" [
+export def "delete-artifact" [
   group_id: string
   artifact_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1280,7 +1280,7 @@ export def "groups-artifacts delete-by-group-id-artifact-id" [
 #
 # GET /groups/{groupId}/artifacts/{artifactId}
 # operationId: getLatestArtifact
-export def "groups-artifacts get-latest" [
+export def "get-latest-artifact" [
   group_id: string
   artifact_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1320,7 +1320,7 @@ export def "groups-artifacts get-latest" [
 #
 # PUT /groups/{groupId}/artifacts/{artifactId}
 # operationId: updateArtifact
-export def "groups-artifacts update" [
+export def "update-artifact" [
   group_id: string
   artifact_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1369,7 +1369,7 @@ export def "groups-artifacts update" [
 #
 # GET /groups/{groupId}/artifacts/{artifactId}/meta
 # operationId: getArtifactMetaData
-export def "groups-artifacts-meta get-data" [
+export def "get-artifact-meta-data" [
   group_id: string
   artifact_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1407,7 +1407,7 @@ export def "groups-artifacts-meta get-data" [
 #
 # POST /groups/{groupId}/artifacts/{artifactId}/meta
 # operationId: getArtifactVersionMetaDataByContent
-export def "groups-artifacts-meta get-version-data-by-content" [
+export def "get-artifact-version-meta-data-by-content" [
   group_id: string
   artifact_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1451,7 +1451,7 @@ export def "groups-artifacts-meta get-version-data-by-content" [
 #
 # PUT /groups/{groupId}/artifacts/{artifactId}/meta
 # operationId: updateArtifactMetaData
-export def "groups-artifacts-meta update-data" [
+export def "update-artifact-meta-data" [
   group_id: string
   artifact_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1496,7 +1496,7 @@ export def "groups-artifacts-meta update-data" [
 #
 # GET /groups/{groupId}/artifacts/{artifactId}/owner
 # operationId: getArtifactOwner
-export def "groups-artifacts-owner get" [
+export def "get-artifact-owner" [
   group_id: string
   artifact_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1534,7 +1534,7 @@ export def "groups-artifacts-owner get" [
 #
 # PUT /groups/{groupId}/artifacts/{artifactId}/owner
 # operationId: updateArtifactOwner
-export def "groups-artifacts-owner update" [
+export def "update-artifact-owner" [
   group_id: string
   artifact_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1576,7 +1576,7 @@ export def "groups-artifacts-owner update" [
 #
 # DELETE /groups/{groupId}/artifacts/{artifactId}/rules
 # operationId: deleteArtifactRules
-export def "groups-artifacts-rules delete-by-group-id-artifact-id" [
+export def "delete-artifact-rules" [
   group_id: string
   artifact_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1614,7 +1614,7 @@ export def "groups-artifacts-rules delete-by-group-id-artifact-id" [
 #
 # GET /groups/{groupId}/artifacts/{artifactId}/rules
 # operationId: listArtifactRules
-export def "groups-artifacts-rules list" [
+export def "list-artifact-rules" [
   group_id: string
   artifact_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1652,7 +1652,7 @@ export def "groups-artifacts-rules list" [
 #
 # POST /groups/{groupId}/artifacts/{artifactId}/rules
 # operationId: createArtifactRule
-export def "groups-artifacts-rules create" [
+export def "create-artifact-rule" [
   group_id: string
   artifact_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1695,7 +1695,7 @@ export def "groups-artifacts-rules create" [
 #
 # DELETE /groups/{groupId}/artifacts/{artifactId}/rules/{rule}
 # operationId: deleteArtifactRule
-export def "groups-artifacts-rules delete-by-group-id-artifact-id-rule" [
+export def "delete-artifact-rule" [
   group_id: string
   artifact_id: string
   rule: string
@@ -1735,7 +1735,7 @@ export def "groups-artifacts-rules delete-by-group-id-artifact-id-rule" [
 #
 # GET /groups/{groupId}/artifacts/{artifactId}/rules/{rule}
 # operationId: getArtifactRuleConfig
-export def "groups-artifacts-rules get-config" [
+export def "get-artifact-rule-config" [
   group_id: string
   artifact_id: string
   rule: string
@@ -1775,7 +1775,7 @@ export def "groups-artifacts-rules get-config" [
 #
 # PUT /groups/{groupId}/artifacts/{artifactId}/rules/{rule}
 # operationId: updateArtifactRuleConfig
-export def "groups-artifacts-rules update-config" [
+export def "update-artifact-rule-config" [
   group_id: string
   artifact_id: string
   rule: string
@@ -1820,7 +1820,7 @@ export def "groups-artifacts-rules update-config" [
 #
 # PUT /groups/{groupId}/artifacts/{artifactId}/state
 # operationId: updateArtifactState
-export def "groups-artifacts-state update" [
+export def "update-artifact-state" [
   group_id: string
   artifact_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1862,7 +1862,7 @@ export def "groups-artifacts-state update" [
 #
 # PUT /groups/{groupId}/artifacts/{artifactId}/test
 # operationId: testUpdateArtifact
-export def "groups-artifacts-test update" [
+export def "test-update-artifact" [
   group_id: string
   artifact_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1904,7 +1904,7 @@ export def "groups-artifacts-test update" [
 #
 # GET /groups/{groupId}/artifacts/{artifactId}/versions
 # operationId: listArtifactVersions
-export def "groups-artifacts-versions list" [
+export def "list-artifact-versions" [
   group_id: string
   artifact_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1945,7 +1945,7 @@ export def "groups-artifacts-versions list" [
 #
 # POST /groups/{groupId}/artifacts/{artifactId}/versions
 # operationId: createArtifactVersion
-export def "groups-artifacts-versions create" [
+export def "create-artifact-version" [
   group_id: string
   artifact_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1994,7 +1994,7 @@ export def "groups-artifacts-versions create" [
 #
 # GET /groups/{groupId}/artifacts/{artifactId}/versions/{version}
 # operationId: getArtifactVersion
-export def "groups-artifacts-versions get" [
+export def "get-artifact-version" [
   group_id: string
   artifact_id: string
   version: string
@@ -2036,7 +2036,7 @@ export def "groups-artifacts-versions get" [
 #
 # DELETE /groups/{groupId}/artifacts/{artifactId}/versions/{version}/meta
 # operationId: deleteArtifactVersionMetaData
-export def "groups-artifacts-versions-meta delete-data" [
+export def "delete-artifact-version-meta-data" [
   group_id: string
   artifact_id: string
   version: string
@@ -2076,7 +2076,7 @@ export def "groups-artifacts-versions-meta delete-data" [
 #
 # GET /groups/{groupId}/artifacts/{artifactId}/versions/{version}/meta
 # operationId: getArtifactVersionMetaData
-export def "groups-artifacts-versions-meta get-data" [
+export def "get-artifact-version-meta-data" [
   group_id: string
   artifact_id: string
   version: string
@@ -2116,7 +2116,7 @@ export def "groups-artifacts-versions-meta get-data" [
 #
 # PUT /groups/{groupId}/artifacts/{artifactId}/versions/{version}/meta
 # operationId: updateArtifactVersionMetaData
-export def "groups-artifacts-versions-meta update-data" [
+export def "update-artifact-version-meta-data" [
   group_id: string
   artifact_id: string
   version: string
@@ -2163,7 +2163,7 @@ export def "groups-artifacts-versions-meta update-data" [
 #
 # GET /groups/{groupId}/artifacts/{artifactId}/versions/{version}/references
 # operationId: getArtifactVersionReferences
-export def "groups-artifacts-versions-references get" [
+export def "get-artifact-version-references" [
   group_id: string
   artifact_id: string
   version: string
@@ -2203,7 +2203,7 @@ export def "groups-artifacts-versions-references get" [
 #
 # PUT /groups/{groupId}/artifacts/{artifactId}/versions/{version}/state
 # operationId: updateArtifactVersionState
-export def "groups-artifacts-versions-state update" [
+export def "update-artifact-version-state" [
   group_id: string
   artifact_id: string
   version: string
@@ -2247,7 +2247,7 @@ export def "groups-artifacts-versions-state update" [
 #
 # GET /ids/contentHashes/{contentHash}/
 # operationId: getContentByHash
-export def "ids-content-hashes get-by-hash" [
+export def "get-content-by-hash" [
   content_hash: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2283,7 +2283,7 @@ export def "ids-content-hashes get-by-hash" [
 #
 # GET /ids/contentHashes/{contentHash}/references
 # operationId: referencesByContentHash
-export def "ids-content-hashes-references get-by-hash" [
+export def "references-by-content-hash" [
   content_hash: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2319,7 +2319,7 @@ export def "ids-content-hashes-references get-by-hash" [
 #
 # GET /ids/contentIds/{contentId}/
 # operationId: getContentById
-export def "ids-content-ids get" [
+export def "get-content-by-id" [
   content_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2355,7 +2355,7 @@ export def "ids-content-ids get" [
 #
 # GET /ids/contentIds/{contentId}/references
 # operationId: referencesByContentId
-export def "ids-content-ids-references get" [
+export def "references-by-content-id" [
   content_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2391,7 +2391,7 @@ export def "ids-content-ids-references get" [
 #
 # GET /ids/globalIds/{globalId}
 # operationId: getContentByGlobalId
-export def "ids-global-ids get-content" [
+export def "get-content-by-global-id" [
   global_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2429,7 +2429,7 @@ export def "ids-global-ids get-content" [
 #
 # GET /ids/globalIds/{globalId}/references
 # operationId: referencesByGlobalId
-export def "ids-global-ids-references get" [
+export def "references-by-global-id" [
   global_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2465,7 +2465,7 @@ export def "ids-global-ids-references get" [
 #
 # GET /search/artifacts
 # operationId: searchArtifacts
-export def "search-artifacts list" [
+export def "search-artifacts" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2511,7 +2511,7 @@ export def "search-artifacts list" [
 #
 # POST /search/artifacts
 # operationId: searchArtifactsByContent
-export def "search-artifacts list-by-content" [
+export def "search-artifacts-by-content" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2556,7 +2556,7 @@ export def "search-artifacts list-by-content" [
 #
 # GET /system/info
 # operationId: getSystemInfo
-export def "system-info get" [
+export def "get-system-info" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2590,7 +2590,7 @@ export def "system-info get" [
 #
 # GET /system/limits
 # operationId: getResourceLimits
-export def "system-limits get-resource" [
+export def "get-resource-limits" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2624,7 +2624,7 @@ export def "system-limits get-resource" [
 #
 # GET /users/me
 # operationId: getCurrentUserInfo
-export def "users-me get" [
+export def "get-current-user-info" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

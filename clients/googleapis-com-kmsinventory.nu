@@ -111,7 +111,7 @@ def alt-completer [] { ["json" "media" "proto"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "protected-resources-summary get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "kmsinventory-projects-locations-key-rings-crypto-keys-get-protected-resources-summary" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -135,7 +135,7 @@ export def commands []: nothing -> table {
 #
 # GET /v1/{name}/protectedResourcesSummary
 # operationId: kmsinventory.projects.locations.keyRings.cryptoKeys.getProtectedResourcesSummary
-export def "protected-resources-summary get" [
+export def "kmsinventory-projects-locations-key-rings-crypto-keys-get-protected-resources-summary" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -183,7 +183,7 @@ export def "protected-resources-summary get" [
 #
 # GET /v1/{parent}/cryptoKeys
 # operationId: kmsinventory.projects.cryptoKeys.list
-export def "crypto-keys list" [
+export def "kmsinventory-projects-crypto-keys-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -233,7 +233,7 @@ export def "crypto-keys list" [
 #
 # GET /v1/{scope}/protectedResources:search
 # operationId: kmsinventory.organizations.protectedResources.search
-export def "protected-resources-search list" [
+export def "kmsinventory-organizations-protected-resources-search" [
   scope: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)

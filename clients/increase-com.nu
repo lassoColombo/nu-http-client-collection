@@ -157,7 +157,7 @@ def status-completer-5 [] { ["accepted" "rejected"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "account-numbers list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "list-account-numbers" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -181,7 +181,7 @@ export def commands []: nothing -> table {
 #
 # GET /account_numbers
 # operationId: list_account_numbers
-export def "account-numbers list" [
+export def "list-account-numbers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -220,7 +220,7 @@ export def "account-numbers list" [
 #
 # POST /account_numbers
 # operationId: create_an_account_number
-export def "account-numbers create" [
+export def "create-an-account-number" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -259,7 +259,7 @@ export def "account-numbers create" [
 #
 # GET /account_numbers/{account_number_id}
 # operationId: retrieve_an_account_number
-export def "account-numbers get" [
+export def "retrieve-an-account-number" [
   account_number_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -295,7 +295,7 @@ export def "account-numbers get" [
 #
 # PATCH /account_numbers/{account_number_id}
 # operationId: update_an_account_number
-export def "account-numbers update" [
+export def "update-an-account-number" [
   account_number_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -336,7 +336,7 @@ export def "account-numbers update" [
 #
 # GET /account_statements
 # operationId: list_account_statements
-export def "account-statements list" [
+export def "list-account-statements" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -378,7 +378,7 @@ export def "account-statements list" [
 #
 # GET /account_statements/{account_statement_id}
 # operationId: retrieve_an_account_statement
-export def "account-statements get" [
+export def "retrieve-an-account-statement" [
   account_statement_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -414,7 +414,7 @@ export def "account-statements get" [
 #
 # GET /account_transfers
 # operationId: list_account_transfers
-export def "account-transfers list" [
+export def "list-account-transfers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -456,7 +456,7 @@ export def "account-transfers list" [
 #
 # POST /account_transfers
 # operationId: create_an_account_transfer
-export def "account-transfers create" [
+export def "create-an-account-transfer" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -498,7 +498,7 @@ export def "account-transfers create" [
 #
 # GET /account_transfers/{account_transfer_id}
 # operationId: retrieve_an_account_transfer
-export def "account-transfers get" [
+export def "retrieve-an-account-transfer" [
   account_transfer_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -534,7 +534,7 @@ export def "account-transfers get" [
 #
 # POST /account_transfers/{account_transfer_id}/approve
 # operationId: approve_an_account_transfer
-export def "account-transfers-approve approve" [
+export def "approve-an-account-transfer" [
   account_transfer_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -570,7 +570,7 @@ export def "account-transfers-approve approve" [
 #
 # POST /account_transfers/{account_transfer_id}/cancel
 # operationId: cancel_an_account_transfer
-export def "account-transfers-cancel cancel" [
+export def "cancel-an-account-transfer" [
   account_transfer_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -606,7 +606,7 @@ export def "account-transfers-cancel cancel" [
 #
 # GET /accounts
 # operationId: list_accounts
-export def "accounts list" [
+export def "list-accounts" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -645,7 +645,7 @@ export def "accounts list" [
 #
 # POST /accounts
 # operationId: create_an_account
-export def "accounts create" [
+export def "create-an-account" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -685,7 +685,7 @@ export def "accounts create" [
 #
 # GET /accounts/{account_id}
 # operationId: retrieve_an_account
-export def "accounts get" [
+export def "retrieve-an-account" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -721,7 +721,7 @@ export def "accounts get" [
 #
 # PATCH /accounts/{account_id}
 # operationId: update_an_account
-export def "accounts update" [
+export def "update-an-account" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -761,7 +761,7 @@ export def "accounts update" [
 #
 # POST /accounts/{account_id}/close
 # operationId: close_an_account
-export def "accounts-close close" [
+export def "close-an-account" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -797,7 +797,7 @@ export def "accounts-close close" [
 #
 # GET /ach_prenotifications
 # operationId: list_ach_prenotifications
-export def "ach-prenotifications list" [
+export def "list-ach-prenotifications" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -838,7 +838,7 @@ export def "ach-prenotifications list" [
 #
 # POST /ach_prenotifications
 # operationId: create_an_ach_prenotification
-export def "ach-prenotifications create" [
+export def "create-an-ach-prenotification" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -887,7 +887,7 @@ export def "ach-prenotifications create" [
 #
 # GET /ach_prenotifications/{ach_prenotification_id}
 # operationId: retrieve_an_ach_prenotification
-export def "ach-prenotifications get" [
+export def "retrieve-an-ach-prenotification" [
   ach_prenotification_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -923,7 +923,7 @@ export def "ach-prenotifications get" [
 #
 # GET /ach_transfers
 # operationId: list_ach_transfers
-export def "ach-transfers list" [
+export def "list-ach-transfers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -966,7 +966,7 @@ export def "ach-transfers list" [
 #
 # POST /ach_transfers
 # operationId: create_an_ach_transfer
-export def "ach-transfers create" [
+export def "create-an-ach-transfer" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1020,7 +1020,7 @@ export def "ach-transfers create" [
 #
 # GET /ach_transfers/{ach_transfer_id}
 # operationId: retrieve_an_ach_transfer
-export def "ach-transfers get" [
+export def "retrieve-an-ach-transfer" [
   ach_transfer_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1056,7 +1056,7 @@ export def "ach-transfers get" [
 #
 # POST /ach_transfers/{ach_transfer_id}/approve
 # operationId: approve_an_ach_transfer
-export def "ach-transfers-approve approve" [
+export def "approve-an-ach-transfer" [
   ach_transfer_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1092,7 +1092,7 @@ export def "ach-transfers-approve approve" [
 #
 # POST /ach_transfers/{ach_transfer_id}/cancel
 # operationId: cancel_a_pending_ach_transfer
-export def "ach-transfers-cancel cancel-pending" [
+export def "cancel-a-pending-ach-transfer" [
   ach_transfer_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1128,7 +1128,7 @@ export def "ach-transfers-cancel cancel-pending" [
 #
 # GET /card_disputes
 # operationId: list_card_disputes
-export def "card-disputes list" [
+export def "list-card-disputes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1170,7 +1170,7 @@ export def "card-disputes list" [
 #
 # POST /card_disputes
 # operationId: create_a_card_dispute
-export def "card-disputes create" [
+export def "create-a-card-dispute" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1209,7 +1209,7 @@ export def "card-disputes create" [
 #
 # GET /card_disputes/{card_dispute_id}
 # operationId: retrieve_a_card_dispute
-export def "card-disputes get" [
+export def "retrieve-a-card-dispute" [
   card_dispute_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1245,7 +1245,7 @@ export def "card-disputes get" [
 #
 # GET /card_profiles
 # operationId: list_card_profiles
-export def "card-profiles list" [
+export def "list-card-profiles" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1284,7 +1284,7 @@ export def "card-profiles list" [
 # POST /card_profiles
 # operationId: create_a_card_profile
 # --digital_wallets shape: {app_icon_file_id: string, background_image_file_id: string, card_description: string, contact_email?: string, contact_phone?: string, contact_website?: string, issuer_name: string, text_color?: record}
-export def "card-profiles create" [
+export def "create-a-card-profile" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1323,7 +1323,7 @@ export def "card-profiles create" [
 #
 # GET /card_profiles/{card_profile_id}
 # operationId: retrieve_a_card_profile
-export def "card-profiles get" [
+export def "retrieve-a-card-profile" [
   card_profile_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1359,7 +1359,7 @@ export def "card-profiles get" [
 #
 # GET /cards
 # operationId: list_cards
-export def "cards list" [
+export def "list-cards" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1403,7 +1403,7 @@ export def "cards list" [
 # operationId: create_a_card
 # --billing_address shape: {city: string, line1: string, line2?: string, postal_code: string, state: string}
 # --digital_wallet shape: {card_profile_id?: string, email?: string, phone?: string}
-export def "cards create" [
+export def "create-a-card" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1444,7 +1444,7 @@ export def "cards create" [
 #
 # GET /cards/{card_id}
 # operationId: retrieve_a_card
-export def "cards get" [
+export def "retrieve-a-card" [
   card_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1482,7 +1482,7 @@ export def "cards get" [
 # operationId: update_a_card
 # --billing_address shape: {city: string, line1: string, line2?: string, postal_code: string, state: string}
 # --digital_wallet shape: {card_profile_id?: string, email?: string, phone?: string}
-export def "cards update" [
+export def "update-a-card" [
   card_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1525,7 +1525,7 @@ export def "cards update" [
 #
 # GET /cards/{card_id}/details
 # operationId: retrieve_sensitive_details_for_a_card
-export def "cards-details get-sensitive" [
+export def "retrieve-sensitive-details-for-a-card" [
   card_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1561,7 +1561,7 @@ export def "cards-details get-sensitive" [
 #
 # GET /check_deposits
 # operationId: list_check_deposits
-export def "check-deposits list" [
+export def "list-check-deposits" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1603,7 +1603,7 @@ export def "check-deposits list" [
 #
 # POST /check_deposits
 # operationId: create_a_check_deposit
-export def "check-deposits create" [
+export def "create-a-check-deposit" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1645,7 +1645,7 @@ export def "check-deposits create" [
 #
 # GET /check_deposits/{check_deposit_id}
 # operationId: retrieve_a_check_deposit
-export def "check-deposits get" [
+export def "retrieve-a-check-deposit" [
   check_deposit_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1681,7 +1681,7 @@ export def "check-deposits get" [
 #
 # GET /check_transfers
 # operationId: list_check_transfers
-export def "check-transfers list" [
+export def "list-check-transfers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1724,7 +1724,7 @@ export def "check-transfers list" [
 # POST /check_transfers
 # operationId: create_a_check_transfer
 # --return_address shape: {city: string, line1: string, line2?: string, name: string, state: string, zip: string}
-export def "check-transfers create" [
+export def "create-a-check-transfer" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1773,7 +1773,7 @@ export def "check-transfers create" [
 #
 # GET /check_transfers/{check_transfer_id}
 # operationId: retrieve_a_check_transfer
-export def "check-transfers get" [
+export def "retrieve-a-check-transfer" [
   check_transfer_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1809,7 +1809,7 @@ export def "check-transfers get" [
 #
 # POST /check_transfers/{check_transfer_id}/approve
 # operationId: approve_a_check_transfer
-export def "check-transfers-approve approve" [
+export def "approve-a-check-transfer" [
   check_transfer_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1845,7 +1845,7 @@ export def "check-transfers-approve approve" [
 #
 # POST /check_transfers/{check_transfer_id}/cancel
 # operationId: cancel_a_pending_check_transfer
-export def "check-transfers-cancel cancel-pending" [
+export def "cancel-a-pending-check-transfer" [
   check_transfer_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1881,7 +1881,7 @@ export def "check-transfers-cancel cancel-pending" [
 #
 # POST /check_transfers/{check_transfer_id}/stop_payment
 # operationId: request_a_stop_payment_on_a_check_transfer
-export def "check-transfers-stop-payment request" [
+export def "request-a-stop-payment-on-a-check-transfer" [
   check_transfer_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1917,7 +1917,7 @@ export def "check-transfers-stop-payment request" [
 #
 # GET /declined_transactions
 # operationId: list_declined_transactions
-export def "declined-transactions list" [
+export def "list-declined-transactions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1960,7 +1960,7 @@ export def "declined-transactions list" [
 #
 # GET /declined_transactions/{declined_transaction_id}
 # operationId: retrieve_a_declined_transaction
-export def "declined-transactions get" [
+export def "retrieve-a-declined-transaction" [
   declined_transaction_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1996,7 +1996,7 @@ export def "declined-transactions get" [
 #
 # GET /digital_wallet_tokens
 # operationId: list_digital_wallet_tokens
-export def "digital-wallet-tokens list" [
+export def "list-digital-wallet-tokens" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2038,7 +2038,7 @@ export def "digital-wallet-tokens list" [
 #
 # GET /digital_wallet_tokens/{digital_wallet_token_id}
 # operationId: retrieve_a_digital_wallet_token
-export def "digital-wallet-tokens get" [
+export def "retrieve-a-digital-wallet-token" [
   digital_wallet_token_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2074,7 +2074,7 @@ export def "digital-wallet-tokens get" [
 #
 # GET /documents
 # operationId: list_documents
-export def "documents list" [
+export def "list-documents" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2117,7 +2117,7 @@ export def "documents list" [
 #
 # GET /documents/{document_id}
 # operationId: retrieve_a_document
-export def "documents get" [
+export def "retrieve-a-document" [
   document_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2153,7 +2153,7 @@ export def "documents get" [
 #
 # GET /entities
 # operationId: list_entities
-export def "entities list" [
+export def "list-entities" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2195,7 +2195,7 @@ export def "entities list" [
 # --natural_person shape: {address: record, confirmed_no_us_tax_id?: bool, date_of_birth: string, identification: record, name: string}
 # --supplemental_documents item shape: {file_id: string}
 # --trust shape: {address: record, category: "revocable"|"irrevocable", formation_document_file_id?: string, formation_state?: string, grantor?: record, name: string, tax_identifier?: string, trustees: list}
-export def "entities create-entity" [
+export def "create-an-entity" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2240,7 +2240,7 @@ export def "entities create-entity" [
 #
 # GET /entities/{entity_id}
 # operationId: retrieve_an_entity
-export def "entities get" [
+export def "retrieve-an-entity" [
   entity_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2276,7 +2276,7 @@ export def "entities get" [
 #
 # POST /entities/{entity_id}/supplemental_documents
 # operationId: create_a_supplemental_document_for_an_entity
-export def "entities-supplemental-documents create" [
+export def "create-a-supplemental-document-for-an-entity" [
   entity_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2316,7 +2316,7 @@ export def "entities-supplemental-documents create" [
 #
 # GET /event_subscriptions
 # operationId: list_event_subscriptions
-export def "event-subscriptions list" [
+export def "list-event-subscriptions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2353,7 +2353,7 @@ export def "event-subscriptions list" [
 #
 # POST /event_subscriptions
 # operationId: create_an_event_subscription
-export def "event-subscriptions create" [
+export def "create-an-event-subscription" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2393,7 +2393,7 @@ export def "event-subscriptions create" [
 #
 # GET /event_subscriptions/{event_subscription_id}
 # operationId: retrieve_an_event_subscription
-export def "event-subscriptions get" [
+export def "retrieve-an-event-subscription" [
   event_subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2429,7 +2429,7 @@ export def "event-subscriptions get" [
 #
 # PATCH /event_subscriptions/{event_subscription_id}
 # operationId: update_an_event_subscription
-export def "event-subscriptions update" [
+export def "update-an-event-subscription" [
   event_subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2469,7 +2469,7 @@ export def "event-subscriptions update" [
 #
 # GET /events
 # operationId: list_events
-export def "events list" [
+export def "list-events" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2512,7 +2512,7 @@ export def "events list" [
 #
 # GET /events/{event_id}
 # operationId: retrieve_an_event
-export def "events get" [
+export def "retrieve-an-event" [
   event_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2548,7 +2548,7 @@ export def "events get" [
 #
 # GET /external_accounts
 # operationId: list_external_accounts
-export def "external-accounts list" [
+export def "list-external-accounts" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2586,7 +2586,7 @@ export def "external-accounts list" [
 #
 # POST /external_accounts
 # operationId: create_an_external_account
-export def "external-accounts create" [
+export def "create-an-external-account" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2627,7 +2627,7 @@ export def "external-accounts create" [
 #
 # GET /external_accounts/{external_account_id}
 # operationId: retrieve_an_external_account
-export def "external-accounts get" [
+export def "retrieve-an-external-account" [
   external_account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2663,7 +2663,7 @@ export def "external-accounts get" [
 #
 # PATCH /external_accounts/{external_account_id}
 # operationId: update_an_external_account
-export def "external-accounts update" [
+export def "update-an-external-account" [
   external_account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2704,7 +2704,7 @@ export def "external-accounts update" [
 #
 # GET /files
 # operationId: list_files
-export def "files list" [
+export def "list-files" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2746,7 +2746,7 @@ export def "files list" [
 #
 # POST /files
 # operationId: create_a_file
-export def "files create" [
+export def "create-a-file" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2788,7 +2788,7 @@ export def "files create" [
 #
 # GET /files/{file_id}
 # operationId: retrieve_a_file
-export def "files get" [
+export def "retrieve-a-file" [
   file_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2824,7 +2824,7 @@ export def "files get" [
 #
 # GET /groups/current
 # operationId: retrieve_group_details
-export def "groups-current get-details" [
+export def "retrieve-group-details" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2858,7 +2858,7 @@ export def "groups-current get-details" [
 #
 # GET /inbound_ach_transfer_returns
 # operationId: list_inbound_ach_transfer_returns
-export def "inbound-ach-transfer-returns list" [
+export def "list-inbound-ach-transfer-returns" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2895,7 +2895,7 @@ export def "inbound-ach-transfer-returns list" [
 #
 # POST /inbound_ach_transfer_returns
 # operationId: create_an_ach_return
-export def "inbound-ach-transfer-returns create" [
+export def "create-an-ach-return" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2934,7 +2934,7 @@ export def "inbound-ach-transfer-returns create" [
 #
 # GET /inbound_ach_transfer_returns/{inbound_ach_transfer_return_id}
 # operationId: retrieve_an_inbound_ach_transfer_return
-export def "inbound-ach-transfer-returns get" [
+export def "retrieve-an-inbound-ach-transfer-return" [
   inbound_ach_transfer_return_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2970,7 +2970,7 @@ export def "inbound-ach-transfer-returns get" [
 #
 # GET /inbound_wire_drawdown_requests
 # operationId: list_inbound_wire_drawdown_requests
-export def "inbound-wire-drawdown-requests list" [
+export def "list-inbound-wire-drawdown-requests" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3007,7 +3007,7 @@ export def "inbound-wire-drawdown-requests list" [
 #
 # GET /inbound_wire_drawdown_requests/{inbound_wire_drawdown_request_id}
 # operationId: retrieve_an_inbound_wire_drawdown_request
-export def "inbound-wire-drawdown-requests get" [
+export def "retrieve-an-inbound-wire-drawdown-request" [
   inbound_wire_drawdown_request_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3043,7 +3043,7 @@ export def "inbound-wire-drawdown-requests get" [
 #
 # GET /limits
 # operationId: list_limits
-export def "limits list" [
+export def "list-limits" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3082,7 +3082,7 @@ export def "limits list" [
 #
 # POST /limits
 # operationId: create_a_limit
-export def "limits create" [
+export def "create-a-limit" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3123,7 +3123,7 @@ export def "limits create" [
 #
 # GET /limits/{limit_id}
 # operationId: retrieve_a_limit
-export def "limits get" [
+export def "retrieve-a-limit" [
   limit_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3159,7 +3159,7 @@ export def "limits get" [
 #
 # PATCH /limits/{limit_id}
 # operationId: update_a_limit
-export def "limits update" [
+export def "update-a-limit" [
   limit_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3199,7 +3199,7 @@ export def "limits update" [
 #
 # GET /oauth_connections
 # operationId: list_oauth_connections
-export def "oauth-connections list" [
+export def "list-oauth-connections" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3236,7 +3236,7 @@ export def "oauth-connections list" [
 #
 # GET /oauth_connections/{oauth_connection_id}
 # operationId: retrieve_an_oauth_connection
-export def "oauth-connections get" [
+export def "retrieve-an-oauth-connection" [
   oauth_connection_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3272,7 +3272,7 @@ export def "oauth-connections get" [
 #
 # GET /pending_transactions
 # operationId: list_pending_transactions
-export def "pending-transactions list" [
+export def "list-pending-transactions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3313,7 +3313,7 @@ export def "pending-transactions list" [
 #
 # GET /pending_transactions/{pending_transaction_id}
 # operationId: retrieve_a_pending_transaction
-export def "pending-transactions get" [
+export def "retrieve-a-pending-transaction" [
   pending_transaction_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3349,7 +3349,7 @@ export def "pending-transactions get" [
 #
 # GET /real_time_decisions/{real_time_decision_id}
 # operationId: retrieve_a_real_time_decision
-export def "real-time-decisions get" [
+export def "retrieve-a-real-time-decision" [
   real_time_decision_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3388,7 +3388,7 @@ export def "real-time-decisions get" [
 # --card_authorization shape: {decision: "approve"|"decline"}
 # --digital_wallet_authentication shape: {result: "success"|"failure"}
 # --digital_wallet_token shape: {approval?: record, decline?: record}
-export def "real-time-decisions-action create" [
+export def "action-a-real-time-decision" [
   real_time_decision_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3430,7 +3430,7 @@ export def "real-time-decisions-action create" [
 #
 # GET /routing_numbers
 # operationId: list_routing_numbers
-export def "routing-numbers list" [
+export def "list-routing-numbers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3468,7 +3468,7 @@ export def "routing-numbers list" [
 #
 # POST /simulations/account_statements
 # operationId: simulate_an_account_statement_being_created
-export def "simulations-account-statements create-simulate-being-created" [
+export def "simulate-an-account-statement-being-created" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3506,7 +3506,7 @@ export def "simulations-account-statements create-simulate-being-created" [
 #
 # POST /simulations/account_transfers/{account_transfer_id}/complete
 # operationId: complete_a_sandbox_account_transfer
-export def "simulations-account-transfers-complete complete-sandbox" [
+export def "complete-a-sandbox-account-transfer" [
   account_transfer_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3542,7 +3542,7 @@ export def "simulations-account-transfers-complete complete-sandbox" [
 #
 # POST /simulations/ach_transfers/{ach_transfer_id}/return
 # operationId: return_a_sandbox_ach_transfer
-export def "simulations-ach-transfers-return create-sandbox" [
+export def "return-a-sandbox-ach-transfer" [
   ach_transfer_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3582,7 +3582,7 @@ export def "simulations-ach-transfers-return create-sandbox" [
 #
 # POST /simulations/ach_transfers/{ach_transfer_id}/submit
 # operationId: submit_a_sandbox_ach_transfer
-export def "simulations-ach-transfers-submit submit-sandbox" [
+export def "submit-a-sandbox-ach-transfer" [
   ach_transfer_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3618,7 +3618,7 @@ export def "simulations-ach-transfers-submit submit-sandbox" [
 #
 # POST /simulations/card_authorizations
 # operationId: simulate_an_authorization_on_a_card
-export def "simulations-card-authorizations create-simulate" [
+export def "simulate-an-authorization-on-a-card" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3658,7 +3658,7 @@ export def "simulations-card-authorizations create-simulate" [
 #
 # POST /simulations/card_disputes/{card_dispute_id}/action
 # operationId: simulates_advancing_the_state_of_a_card_dispute
-export def "simulations-card-disputes-action create-simulates-advancing-state" [
+export def "simulates-advancing-the-state-of-a-card-dispute" [
   card_dispute_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3699,7 +3699,7 @@ export def "simulations-card-disputes-action create-simulates-advancing-state" [
 #
 # POST /simulations/card_refunds
 # operationId: simulate_a_refund_on_a_card
-export def "simulations-card-refunds create-simulate" [
+export def "simulate-a-refund-on-a-card" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3737,7 +3737,7 @@ export def "simulations-card-refunds create-simulate" [
 #
 # POST /simulations/card_settlements
 # operationId: simulate_settling_a_card_authorization
-export def "simulations-card-settlements create-simulate-settling-authorization" [
+export def "simulate-settling-a-card-authorization" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3777,7 +3777,7 @@ export def "simulations-card-settlements create-simulate-settling-authorization"
 #
 # POST /simulations/check_deposits/{check_deposit_id}/reject
 # operationId: reject_a_sandbox_check_deposit
-export def "simulations-check-deposits-reject reject-sandbox" [
+export def "reject-a-sandbox-check-deposit" [
   check_deposit_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3813,7 +3813,7 @@ export def "simulations-check-deposits-reject reject-sandbox" [
 #
 # POST /simulations/check_deposits/{check_deposit_id}/return
 # operationId: return_a_sandbox_check_deposit
-export def "simulations-check-deposits-return check-sandbox" [
+export def "return-a-sandbox-check-deposit" [
   check_deposit_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3849,7 +3849,7 @@ export def "simulations-check-deposits-return check-sandbox" [
 #
 # POST /simulations/check_deposits/{check_deposit_id}/submit
 # operationId: submit_a_sandbox_check_deposit
-export def "simulations-check-deposits-submit submit-sandbox" [
+export def "submit-a-sandbox-check-deposit" [
   check_deposit_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3885,7 +3885,7 @@ export def "simulations-check-deposits-submit submit-sandbox" [
 #
 # POST /simulations/check_transfers/{check_transfer_id}/deposit
 # operationId: deposit_a_sandbox_check_transfer
-export def "simulations-check-transfers-deposit check-sandbox" [
+export def "deposit-a-sandbox-check-transfer" [
   check_transfer_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3921,7 +3921,7 @@ export def "simulations-check-transfers-deposit check-sandbox" [
 #
 # POST /simulations/check_transfers/{check_transfer_id}/mail
 # operationId: mail_a_sandbox_check_transfer
-export def "simulations-check-transfers-mail check-sandbox" [
+export def "mail-a-sandbox-check-transfer" [
   check_transfer_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3957,7 +3957,7 @@ export def "simulations-check-transfers-mail check-sandbox" [
 #
 # POST /simulations/digital_wallet_token_requests
 # operationId: simulate_digital_wallet_provisioning_for_a_card
-export def "simulations-digital-wallet-token-requests create-simulate-provisioning-for-card" [
+export def "simulate-digital-wallet-provisioning-for-a-card" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3995,7 +3995,7 @@ export def "simulations-digital-wallet-token-requests create-simulate-provisioni
 #
 # POST /simulations/documents
 # operationId: simulate_a_tax_document_being_created
-export def "simulations-documents create-simulate-tax-being-created" [
+export def "simulate-a-tax-document-being-created" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4033,7 +4033,7 @@ export def "simulations-documents create-simulate-tax-being-created" [
 #
 # POST /simulations/inbound_ach_transfers
 # operationId: simulate_an_ach_transfer_to_your_account
-export def "simulations-inbound-ach-transfers create-simulate-to-your-account" [
+export def "simulate-an-ach-transfer-to-your-account" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4077,7 +4077,7 @@ export def "simulations-inbound-ach-transfers create-simulate-to-your-account" [
 #
 # POST /simulations/inbound_real_time_payments_transfers
 # operationId: simulate_a_real_time_payments_transfer_to_your_account
-export def "simulations-inbound-real-time-payments-transfers create-simulate-to-your-account" [
+export def "simulate-a-real-time-payments-transfer-to-your-account" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4121,7 +4121,7 @@ export def "simulations-inbound-real-time-payments-transfers create-simulate-to-
 #
 # POST /simulations/inbound_wire_drawdown_requests
 # operationId: simulate_an_inbound_wire_drawdown_request_being_created
-export def "simulations-inbound-wire-drawdown-requests request-simulate-being-created" [
+export def "simulate-an-inbound-wire-drawdown-request-being-created" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4178,7 +4178,7 @@ export def "simulations-inbound-wire-drawdown-requests request-simulate-being-cr
 #
 # POST /simulations/inbound_wire_transfers
 # operationId: simulate_a_wire_transfer_to_your_account
-export def "simulations-inbound-wire-transfers create-simulate-to-your-account" [
+export def "simulate-a-wire-transfer-to-your-account" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4230,7 +4230,7 @@ export def "simulations-inbound-wire-transfers create-simulate-to-your-account" 
 #
 # POST /simulations/wire_transfers/{wire_transfer_id}/reverse
 # operationId: reverse_a_sandbox_wire_transfer
-export def "simulations-wire-transfers-reverse create-sandbox" [
+export def "reverse-a-sandbox-wire-transfer" [
   wire_transfer_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4266,7 +4266,7 @@ export def "simulations-wire-transfers-reverse create-sandbox" [
 #
 # POST /simulations/wire_transfers/{wire_transfer_id}/submit
 # operationId: submit_a_sandbox_wire_transfer
-export def "simulations-wire-transfers-submit submit-sandbox" [
+export def "submit-a-sandbox-wire-transfer" [
   wire_transfer_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4302,7 +4302,7 @@ export def "simulations-wire-transfers-submit submit-sandbox" [
 #
 # GET /transactions
 # operationId: list_transactions
-export def "transactions list" [
+export def "list-transactions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4346,7 +4346,7 @@ export def "transactions list" [
 #
 # GET /transactions/{transaction_id}
 # operationId: retrieve_a_transaction
-export def "transactions get" [
+export def "retrieve-a-transaction" [
   transaction_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4382,7 +4382,7 @@ export def "transactions get" [
 #
 # GET /wire_drawdown_requests
 # operationId: list_wire_drawdown_requests
-export def "wire-drawdown-requests list" [
+export def "list-wire-drawdown-requests" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4419,7 +4419,7 @@ export def "wire-drawdown-requests list" [
 #
 # POST /wire_drawdown_requests
 # operationId: create_a_wire_drawdown_request
-export def "wire-drawdown-requests create" [
+export def "create-a-wire-drawdown-request" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4465,7 +4465,7 @@ export def "wire-drawdown-requests create" [
 #
 # GET /wire_drawdown_requests/{wire_drawdown_request_id}
 # operationId: retrieve_a_wire_drawdown_request
-export def "wire-drawdown-requests get" [
+export def "retrieve-a-wire-drawdown-request" [
   wire_drawdown_request_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4501,7 +4501,7 @@ export def "wire-drawdown-requests get" [
 #
 # GET /wire_transfers
 # operationId: list_wire_transfers
-export def "wire-transfers list" [
+export def "list-wire-transfers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4544,7 +4544,7 @@ export def "wire-transfers list" [
 #
 # POST /wire_transfers
 # operationId: create_a_wire_transfer
-export def "wire-transfers create" [
+export def "create-a-wire-transfer" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4592,7 +4592,7 @@ export def "wire-transfers create" [
 #
 # GET /wire_transfers/{wire_transfer_id}
 # operationId: retrieve_a_wire_transfer
-export def "wire-transfers get" [
+export def "retrieve-a-wire-transfer" [
   wire_transfer_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4628,7 +4628,7 @@ export def "wire-transfers get" [
 #
 # POST /wire_transfers/{wire_transfer_id}/approve
 # operationId: approve_a_wire_transfer
-export def "wire-transfers-approve approve" [
+export def "approve-a-wire-transfer" [
   wire_transfer_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4664,7 +4664,7 @@ export def "wire-transfers-approve approve" [
 #
 # POST /wire_transfers/{wire_transfer_id}/cancel
 # operationId: cancel_a_pending_wire_transfer
-export def "wire-transfers-cancel cancel-pending" [
+export def "cancel-a-pending-wire-transfer" [
   wire_transfer_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

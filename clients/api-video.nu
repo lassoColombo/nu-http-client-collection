@@ -148,7 +148,7 @@ def sort-by-completer-1 [] { ["createdAt" "ttl"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "account get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-account" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -174,7 +174,7 @@ export def commands []: nothing -> table {
 # DEPRECATED
 # operationId: GET_account
 @deprecated
-export def "account get" [
+export def "get-account" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -208,7 +208,7 @@ export def "account get" [
 #
 # GET /analytics/live-streams/{liveStreamId}
 # operationId: GET_analytics-live-streams-liveStreamId
-export def "analytics-live-streams get" [
+export def "get-analytics-live-streams-live-stream-id" [
   live_stream_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -248,7 +248,7 @@ export def "analytics-live-streams get" [
 #
 # GET /analytics/sessions/{sessionId}/events
 # operationId: GET_analytics-sessions-sessionId-events
-export def "analytics-sessions-events get" [
+export def "get-analytics-sessions-session-id-events" [
   session_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -287,7 +287,7 @@ export def "analytics-sessions-events get" [
 #
 # GET /analytics/videos/{videoId}
 # operationId: GET_analytics-videos-videoId
-export def "analytics-videos get" [
+export def "get-analytics-videos-video-id" [
   video_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -328,7 +328,7 @@ export def "analytics-videos get" [
 #
 # POST /auth/api-key
 # operationId: POST_auth-api-key
-export def "auth-api-key create" [
+export def "post-auth-api-key" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -366,7 +366,7 @@ export def "auth-api-key create" [
 #
 # POST /auth/refresh
 # operationId: POST_auth-refresh
-export def "auth-refresh create" [
+export def "post-auth-refresh" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -404,7 +404,7 @@ export def "auth-refresh create" [
 #
 # GET /live-streams
 # operationId: GET_live-streams
-export def "live-streams list" [
+export def "get-live-streams" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -445,7 +445,7 @@ export def "live-streams list" [
 #
 # POST /live-streams
 # operationId: POST_live-streams
-export def "live-streams create" [
+export def "post-live-streams" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -486,7 +486,7 @@ export def "live-streams create" [
 #
 # DELETE /live-streams/{liveStreamId}
 # operationId: DELETE_live-streams-liveStreamId
-export def "live-streams delete" [
+export def "delete-live-streams-live-stream-id" [
   live_stream_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -522,7 +522,7 @@ export def "live-streams delete" [
 #
 # GET /live-streams/{liveStreamId}
 # operationId: GET_live-streams-liveStreamId
-export def "live-streams get" [
+export def "get-live-streams-live-stream-id" [
   live_stream_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -558,7 +558,7 @@ export def "live-streams get" [
 #
 # PATCH /live-streams/{liveStreamId}
 # operationId: PATCH_live-streams-liveStreamId
-export def "live-streams update" [
+export def "patch-live-streams-live-stream-id" [
   live_stream_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -601,7 +601,7 @@ export def "live-streams update" [
 #
 # DELETE /live-streams/{liveStreamId}/thumbnail
 # operationId: DELETE_live-streams-liveStreamId-thumbnail
-export def "live-streams-thumbnail delete" [
+export def "delete-live-streams-live-stream-id-thumbnail" [
   live_stream_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -637,7 +637,7 @@ export def "live-streams-thumbnail delete" [
 #
 # POST /live-streams/{liveStreamId}/thumbnail
 # operationId: POST_live-streams-liveStreamId-thumbnail
-export def "live-streams-thumbnail create" [
+export def "post-live-streams-live-stream-id-thumbnail" [
   live_stream_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -679,7 +679,7 @@ export def "live-streams-thumbnail create" [
 #
 # GET /players
 # operationId: GET_players
-export def "players list" [
+export def "get-players" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -718,7 +718,7 @@ export def "players list" [
 #
 # POST /players
 # operationId: POST_players
-export def "players create" [
+export def "post-players" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -769,7 +769,7 @@ export def "players create" [
 #
 # DELETE /players/{playerId}
 # operationId: DELETE_players-playerId
-export def "players delete" [
+export def "delete-players-player-id" [
   player_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -805,7 +805,7 @@ export def "players delete" [
 #
 # GET /players/{playerId}
 # operationId: GET_players-playerId
-export def "players get" [
+export def "get-players-player-id" [
   player_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -841,7 +841,7 @@ export def "players get" [
 #
 # PATCH /players/{playerId}
 # operationId: PATCH_players-playerId
-export def "players update" [
+export def "patch-players-player-id" [
   player_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -894,7 +894,7 @@ export def "players update" [
 #
 # DELETE /players/{playerId}/logo
 # operationId: DELETE_players-playerId-logo
-export def "players-logo delete" [
+export def "delete-players-player-id-logo" [
   player_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -930,7 +930,7 @@ export def "players-logo delete" [
 #
 # POST /players/{playerId}/logo
 # operationId: POST_players-playerId-logo
-export def "players-logo create" [
+export def "post-players-player-id-logo" [
   player_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -973,7 +973,7 @@ export def "players-logo create" [
 #
 # POST /upload
 # operationId: POST_upload
-export def "upload create" [
+export def "post-upload" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1019,7 +1019,7 @@ export def "upload create" [
 #
 # GET /upload-tokens
 # operationId: GET_upload-tokens
-export def "upload-tokens list" [
+export def "get-upload-tokens" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1058,7 +1058,7 @@ export def "upload-tokens list" [
 #
 # POST /upload-tokens
 # operationId: POST_upload-tokens
-export def "upload-tokens create" [
+export def "post-upload-tokens" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1096,7 +1096,7 @@ export def "upload-tokens create" [
 #
 # DELETE /upload-tokens/{uploadToken}
 # operationId: DELETE_upload-tokens-uploadToken
-export def "upload-tokens delete" [
+export def "delete-upload-tokens-upload-token" [
   upload_token: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1132,7 +1132,7 @@ export def "upload-tokens delete" [
 #
 # GET /upload-tokens/{uploadToken}
 # operationId: GET_upload-tokens-uploadToken
-export def "upload-tokens get" [
+export def "get-upload-tokens-upload-token" [
   upload_token: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1168,7 +1168,7 @@ export def "upload-tokens get" [
 #
 # GET /videos
 # operationId: LIST-videos
-export def "videos list" [
+export def "list-videos" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1213,7 +1213,7 @@ export def "videos list" [
 # POST /videos
 # operationId: POST-video
 # --metadata item shape: {key?: string, value?: string}
-export def "videos create" [
+export def "post-video" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1260,7 +1260,7 @@ export def "videos create" [
 #
 # DELETE /videos/{videoId}
 # operationId: DELETE-video
-export def "videos delete" [
+export def "delete-video" [
   video_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1296,7 +1296,7 @@ export def "videos delete" [
 #
 # GET /videos/{videoId}
 # operationId: GET-video
-export def "videos get" [
+export def "get-video" [
   video_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1333,7 +1333,7 @@ export def "videos get" [
 # PATCH /videos/{videoId}
 # operationId: PATCH-video
 # --metadata item shape: {key?: string, value?: string}
-export def "videos update" [
+export def "patch-video" [
   video_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1380,7 +1380,7 @@ export def "videos update" [
 #
 # GET /videos/{videoId}/captions
 # operationId: GET_videos-videoId-captions
-export def "videos-captions list" [
+export def "get-videos-video-id-captions" [
   video_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1419,7 +1419,7 @@ export def "videos-captions list" [
 #
 # DELETE /videos/{videoId}/captions/{language}
 # operationId: DELETE_videos-videoId-captions-language
-export def "videos-captions delete" [
+export def "delete-videos-video-id-captions-language" [
   video_id: string
   language: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1457,7 +1457,7 @@ export def "videos-captions delete" [
 #
 # GET /videos/{videoId}/captions/{language}
 # operationId: GET_videos-videoId-captions-language
-export def "videos-captions get" [
+export def "get-videos-video-id-captions-language" [
   video_id: string
   language: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1495,7 +1495,7 @@ export def "videos-captions get" [
 #
 # PATCH /videos/{videoId}/captions/{language}
 # operationId: PATCH_videos-videoId-captions-language
-export def "videos-captions update" [
+export def "patch-videos-video-id-captions-language" [
   video_id: string
   language: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1537,7 +1537,7 @@ export def "videos-captions update" [
 #
 # POST /videos/{videoId}/captions/{language}
 # operationId: POST_videos-videoId-captions-language
-export def "videos-captions create" [
+export def "post-videos-video-id-captions-language" [
   video_id: string
   language: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1581,7 +1581,7 @@ export def "videos-captions create" [
 #
 # GET /videos/{videoId}/chapters
 # operationId: GET_videos-videoId-chapters
-export def "videos-chapters list" [
+export def "get-videos-video-id-chapters" [
   video_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1620,7 +1620,7 @@ export def "videos-chapters list" [
 #
 # DELETE /videos/{videoId}/chapters/{language}
 # operationId: DELETE_videos-videoId-chapters-language
-export def "videos-chapters delete" [
+export def "delete-videos-video-id-chapters-language" [
   video_id: string
   language: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1658,7 +1658,7 @@ export def "videos-chapters delete" [
 #
 # GET /videos/{videoId}/chapters/{language}
 # operationId: GET_videos-videoId-chapters-language
-export def "videos-chapters get" [
+export def "get-videos-video-id-chapters-language" [
   video_id: string
   language: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1696,7 +1696,7 @@ export def "videos-chapters get" [
 #
 # POST /videos/{videoId}/chapters/{language}
 # operationId: POST_videos-videoId-chapters-language
-export def "videos-chapters create" [
+export def "post-videos-video-id-chapters-language" [
   video_id: string
   language: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1740,7 +1740,7 @@ export def "videos-chapters create" [
 #
 # POST /videos/{videoId}/source
 # operationId: POST_videos-videoId-source
-export def "videos-source create" [
+export def "post-videos-video-id-source" [
   video_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1785,7 +1785,7 @@ export def "videos-source create" [
 #
 # GET /videos/{videoId}/status
 # operationId: GET-video-status
-export def "videos-status get" [
+export def "get-video-status" [
   video_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1821,7 +1821,7 @@ export def "videos-status get" [
 #
 # PATCH /videos/{videoId}/thumbnail
 # operationId: PATCH_videos-videoId-thumbnail
-export def "videos-thumbnail update" [
+export def "patch-videos-video-id-thumbnail" [
   video_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1861,7 +1861,7 @@ export def "videos-thumbnail update" [
 #
 # POST /videos/{videoId}/thumbnail
 # operationId: POST_videos-videoId-thumbnail
-export def "videos-thumbnail create" [
+export def "post-videos-video-id-thumbnail" [
   video_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1903,7 +1903,7 @@ export def "videos-thumbnail create" [
 #
 # GET /webhooks
 # operationId: LIST-webhooks
-export def "webhooks list" [
+export def "list-webhooks" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1941,7 +1941,7 @@ export def "webhooks list" [
 #
 # POST /webhooks
 # operationId: POST-webhooks
-export def "webhooks create" [
+export def "post-webhooks" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1980,7 +1980,7 @@ export def "webhooks create" [
 #
 # DELETE /webhooks/{webhookId}
 # operationId: DELETE-webhook
-export def "webhooks delete" [
+export def "delete-webhook" [
   webhook_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2016,7 +2016,7 @@ export def "webhooks delete" [
 #
 # GET /webhooks/{webhookId}
 # operationId: GET-Webhook
-export def "webhooks get" [
+export def "get-webhook" [
   webhook_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

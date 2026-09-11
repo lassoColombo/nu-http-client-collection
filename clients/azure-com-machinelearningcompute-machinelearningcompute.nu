@@ -122,7 +122,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-machine-learning-compute-operations list-available" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "machine-learning-compute-list-available-operations" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -146,7 +146,7 @@ export def commands []: nothing -> table {
 #
 # GET /providers/Microsoft.MachineLearningCompute/operations
 # operationId: MachineLearningCompute_ListAvailableOperations
-export def "providers-microsoft-machine-learning-compute-operations list-available" [
+export def "machine-learning-compute-list-available-operations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -182,7 +182,7 @@ export def "providers-microsoft-machine-learning-compute-operations list-availab
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.MachineLearningCompute/operationalizationClusters
 # operationId: OperationalizationClusters_ListBySubscriptionId
-export def "subscriptions-providers-microsoft-machine-learning-compute-operationalization-clusters list" [
+export def "operationalization-clusters-list-by-subscription-id" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -221,7 +221,7 @@ export def "subscriptions-providers-microsoft-machine-learning-compute-operation
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MachineLearningCompute/operationalizationClusters
 # operationId: OperationalizationClusters_ListByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-machine-learning-compute-operationalization-clusters list" [
+export def "operationalization-clusters-list-by-resource-group" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -262,7 +262,7 @@ export def "subscriptions-resource-groups-providers-microsoft-machine-learning-c
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MachineLearningCompute/operationalizationClusters/{clusterName}
 # operationId: OperationalizationClusters_Delete
-export def "subscriptions-resource-groups-providers-microsoft-machine-learning-compute-operationalization-clusters delete" [
+export def "operationalization-clusters-delete" [
   subscription_id: string
   resource_group_name: string
   cluster_name: string
@@ -305,7 +305,7 @@ export def "subscriptions-resource-groups-providers-microsoft-machine-learning-c
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MachineLearningCompute/operationalizationClusters/{clusterName}
 # operationId: OperationalizationClusters_Get
-export def "subscriptions-resource-groups-providers-microsoft-machine-learning-compute-operationalization-clusters get" [
+export def "operationalization-clusters-get" [
   subscription_id: string
   resource_group_name: string
   cluster_name: string
@@ -347,7 +347,7 @@ export def "subscriptions-resource-groups-providers-microsoft-machine-learning-c
 #
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MachineLearningCompute/operationalizationClusters/{clusterName}
 # operationId: OperationalizationClusters_Update
-export def "subscriptions-resource-groups-providers-microsoft-machine-learning-compute-operationalization-clusters update" [
+export def "operationalization-clusters-update" [
   subscription_id: string
   resource_group_name: string
   cluster_name: string
@@ -394,7 +394,7 @@ export def "subscriptions-resource-groups-providers-microsoft-machine-learning-c
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MachineLearningCompute/operationalizationClusters/{clusterName}
 # operationId: OperationalizationClusters_CreateOrUpdate
 # --properties shape: {appInsights?: record, clusterType: "ACS"|"Local", containerRegistry?: record, containerService?: record, description?: string, globalServiceConfiguration?: record, storageAccount?: record}
-export def "subscriptions-resource-groups-providers-microsoft-machine-learning-compute-operationalization-clusters create-or-update" [
+export def "operationalization-clusters-create-or-update" [
   subscription_id: string
   resource_group_name: string
   cluster_name: string
@@ -442,7 +442,7 @@ export def "subscriptions-resource-groups-providers-microsoft-machine-learning-c
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MachineLearningCompute/operationalizationClusters/{clusterName}/checkSystemServicesUpdatesAvailable
 # operationId: OperationalizationClusters_CheckSystemServicesUpdatesAvailable
-export def "subscriptions-resource-groups-providers-microsoft-machine-learning-compute-operationalization-clusters-check-system-services-updates-available check" [
+export def "operationalization-clusters-check-system-services-updates-available" [
   subscription_id: string
   resource_group_name: string
   cluster_name: string
@@ -484,7 +484,7 @@ export def "subscriptions-resource-groups-providers-microsoft-machine-learning-c
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MachineLearningCompute/operationalizationClusters/{clusterName}/listKeys
 # operationId: OperationalizationClusters_ListKeys
-export def "subscriptions-resource-groups-providers-microsoft-machine-learning-compute-operationalization-clusters-list-keys list" [
+export def "operationalization-clusters-list-keys" [
   subscription_id: string
   resource_group_name: string
   cluster_name: string
@@ -526,7 +526,7 @@ export def "subscriptions-resource-groups-providers-microsoft-machine-learning-c
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MachineLearningCompute/operationalizationClusters/{clusterName}/updateSystemServices
 # operationId: OperationalizationClusters_UpdateSystemServices
-export def "subscriptions-resource-groups-providers-microsoft-machine-learning-compute-operationalization-clusters-update-system-services update" [
+export def "operationalization-clusters-update-system-services" [
   subscription_id: string
   resource_group_name: string
   cluster_name: string

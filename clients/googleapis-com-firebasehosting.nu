@@ -139,7 +139,7 @@ def type-completer [] { ["DEPLOY" "ROLLBACK" "SITE_DISABLE" "TYPE_UNSPECIFIED"] 
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "v1beta1 delete" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "firebasehosting-sites-versions-delete" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -163,7 +163,7 @@ export def commands []: nothing -> table {
 #
 # DELETE /v1beta1/{name}
 # operationId: firebasehosting.sites.versions.delete
-export def "v1beta1 delete" [
+export def "firebasehosting-sites-versions-delete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -211,7 +211,7 @@ export def "v1beta1 delete" [
 #
 # GET /v1beta1/{name}
 # operationId: firebasehosting.sites.versions.get
-export def "v1beta1 get" [
+export def "firebasehosting-sites-versions-get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -263,7 +263,7 @@ export def "v1beta1 get" [
 # --createUser shape: {email?: string, imageUrl?: string}
 # --deleteUser shape: {email?: string, imageUrl?: string}
 # --finalizeUser shape: {email?: string, imageUrl?: string}
-export def "v1beta1 update-by-name" [
+export def "firebasehosting-sites-versions-patch" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -329,7 +329,7 @@ export def "v1beta1 update-by-name" [
 # operationId: firebasehosting.sites.domains.update
 # --domainRedirect shape: {domainName?: string, type?: "REDIRECT_TYPE_UNSPECIFIED"|"MOVED_PERMANENTLY"}
 # --provisioning shape: {certChallengeDiscoveredTxt?: list<string>, certChallengeDns?: record, certChallengeHttp?: record, certStatus?: "CERT_STATUS_UNSPECIFIED"|"CERT_PENDING"|"CERT_MISSING"|"CERT_PROCESSING"|"CERT_PROPAGATING"|"CERT_ACTIVE"|"CERT_ERROR", discoveredIps?: list<string>, dnsFetchTime?: string, dnsStatus?: "DNS_STATUS_UNSPECIFIED"|"DNS_PENDING"|"DNS_MISSING"|"DNS_PARTIAL_MATCH"|"DNS_MATCH"|"DNS_EXTRANEOUS_MATCH", expectedIps?: list<string>}
-export def "v1beta1 update-by-name-1" [
+export def "firebasehosting-sites-domains-update" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -386,7 +386,7 @@ export def "v1beta1 update-by-name-1" [
 #
 # GET /v1beta1/{parent}/channels
 # operationId: firebasehosting.sites.channels.list
-export def "v1beta1-channels list" [
+export def "firebasehosting-sites-channels-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -437,7 +437,7 @@ export def "v1beta1-channels list" [
 # POST /v1beta1/{parent}/channels
 # operationId: firebasehosting.sites.channels.create
 # --release shape: {message?: string, name?: string, releaseTime?: string, releaseUser?: record, type?: "TYPE_UNSPECIFIED"|"DEPLOY"|"ROLLBACK"|"SITE_DISABLE", version?: record}
-export def "v1beta1-channels create" [
+export def "firebasehosting-sites-channels-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -495,7 +495,7 @@ export def "v1beta1-channels create" [
 #
 # GET /v1beta1/{parent}/domains
 # operationId: firebasehosting.sites.domains.list
-export def "v1beta1-domains list" [
+export def "firebasehosting-sites-domains-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -547,7 +547,7 @@ export def "v1beta1-domains list" [
 # operationId: firebasehosting.sites.domains.create
 # --domainRedirect shape: {domainName?: string, type?: "REDIRECT_TYPE_UNSPECIFIED"|"MOVED_PERMANENTLY"}
 # --provisioning shape: {certChallengeDiscoveredTxt?: list<string>, certChallengeDns?: record, certChallengeHttp?: record, certStatus?: "CERT_STATUS_UNSPECIFIED"|"CERT_PENDING"|"CERT_MISSING"|"CERT_PROCESSING"|"CERT_PROPAGATING"|"CERT_ACTIVE"|"CERT_ERROR", discoveredIps?: list<string>, dnsFetchTime?: string, dnsStatus?: "DNS_STATUS_UNSPECIFIED"|"DNS_PENDING"|"DNS_MISSING"|"DNS_PARTIAL_MATCH"|"DNS_MATCH"|"DNS_EXTRANEOUS_MATCH", expectedIps?: list<string>}
-export def "v1beta1-domains create" [
+export def "firebasehosting-sites-domains-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -604,7 +604,7 @@ export def "v1beta1-domains create" [
 #
 # GET /v1beta1/{parent}/files
 # operationId: firebasehosting.sites.versions.files.list
-export def "v1beta1-files list" [
+export def "firebasehosting-sites-versions-files-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -655,7 +655,7 @@ export def "v1beta1-files list" [
 #
 # GET /v1beta1/{parent}/releases
 # operationId: firebasehosting.sites.releases.list
-export def "v1beta1-releases list" [
+export def "firebasehosting-sites-releases-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -707,7 +707,7 @@ export def "v1beta1-releases list" [
 # operationId: firebasehosting.sites.releases.create
 # --releaseUser shape: {email?: string, imageUrl?: string}
 # --version shape: {config?: record, createTime?: string, createUser?: record, deleteTime?: string, deleteUser?: record, fileCount?: string, finalizeTime?: string, finalizeUser?: record, labels?: record, name?: string, status?: "VERSION_STATUS_UNSPECIFIED"|"CREATED"|"FINALIZED"|"DELETED"|"ABANDONED"|"EXPIRED"|"CLONING", versionBytes?: string}
-export def "v1beta1-releases create" [
+export def "firebasehosting-sites-releases-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -765,7 +765,7 @@ export def "v1beta1-releases create" [
 #
 # GET /v1beta1/{parent}/sites
 # operationId: firebasehosting.projects.sites.list
-export def "v1beta1-sites list" [
+export def "firebasehosting-projects-sites-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -815,7 +815,7 @@ export def "v1beta1-sites list" [
 #
 # POST /v1beta1/{parent}/sites
 # operationId: firebasehosting.projects.sites.create
-export def "v1beta1-sites create" [
+export def "firebasehosting-projects-sites-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -869,7 +869,7 @@ export def "v1beta1-sites create" [
 #
 # GET /v1beta1/{parent}/versions
 # operationId: firebasehosting.sites.versions.list
-export def "v1beta1-versions list" [
+export def "firebasehosting-sites-versions-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -924,7 +924,7 @@ export def "v1beta1-versions list" [
 # --createUser shape: {email?: string, imageUrl?: string}
 # --deleteUser shape: {email?: string, imageUrl?: string}
 # --finalizeUser shape: {email?: string, imageUrl?: string}
-export def "v1beta1-versions create" [
+export def "firebasehosting-sites-versions-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -991,7 +991,7 @@ export def "v1beta1-versions create" [
 # operationId: firebasehosting.sites.versions.clone
 # --exclude shape: {regexes?: list<string>}
 # --include shape: {regexes?: list<string>}
-export def "v1beta1-versions-clone clone" [
+export def "firebasehosting-sites-versions-clone" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1046,7 +1046,7 @@ export def "v1beta1-versions-clone clone" [
 #
 # POST /v1beta1/{parent}:populateFiles
 # operationId: firebasehosting.sites.versions.populateFiles
-export def "v1beta1 create-populate-files" [
+export def "firebasehosting-sites-versions-populate-files" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)

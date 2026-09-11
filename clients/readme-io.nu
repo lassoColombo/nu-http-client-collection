@@ -148,7 +148,7 @@ def type-completer-1 [] { ["basic" "error" "link"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "projects get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-project" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -172,7 +172,7 @@ export def commands []: nothing -> table {
 #
 # GET /
 # operationId: getProject
-export def "projects get" [
+export def "get-project" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -206,7 +206,7 @@ export def "projects get" [
 #
 # GET /api-specification
 # operationId: getAPISpecification
-export def "api-specification get" [
+export def "get-api-specification" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -246,7 +246,7 @@ export def "api-specification get" [
 #
 # POST /api-specification
 # operationId: uploadAPISpecification
-export def "api-specification upload" [
+export def "upload-api-specification" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -289,7 +289,7 @@ export def "api-specification upload" [
 #
 # DELETE /api-specification/{id}
 # operationId: deleteAPISpecification
-export def "api-specification delete" [
+export def "delete-api-specification" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -325,7 +325,7 @@ export def "api-specification delete" [
 #
 # PUT /api-specification/{id}
 # operationId: updateAPISpecification
-export def "api-specification update" [
+export def "update-api-specification" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -367,7 +367,7 @@ export def "api-specification update" [
 #
 # GET /categories/{slug}
 # operationId: getCategory
-export def "categories get-category" [
+export def "get-category" [
   slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -406,7 +406,7 @@ export def "categories get-category" [
 #
 # GET /categories/{slug}/docs
 # operationId: getCategoryDocs
-export def "categories-docs get-category" [
+export def "get-category-docs" [
   slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -445,7 +445,7 @@ export def "categories-docs get-category" [
 #
 # GET /changelogs
 # operationId: getChangelogs
-export def "changelogs list" [
+export def "get-changelogs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -482,7 +482,7 @@ export def "changelogs list" [
 #
 # POST /changelogs
 # operationId: createChangelog
-export def "changelogs create" [
+export def "create-changelog" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -523,7 +523,7 @@ export def "changelogs create" [
 #
 # DELETE /changelogs/{slug}
 # operationId: deleteChangelog
-export def "changelogs delete" [
+export def "delete-changelog" [
   slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -559,7 +559,7 @@ export def "changelogs delete" [
 #
 # GET /changelogs/{slug}
 # operationId: getChangelog
-export def "changelogs get" [
+export def "get-changelog" [
   slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -595,7 +595,7 @@ export def "changelogs get" [
 #
 # PUT /changelogs/{slug}
 # operationId: updateChangelog
-export def "changelogs update" [
+export def "update-changelog" [
   slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -638,7 +638,7 @@ export def "changelogs update" [
 #
 # GET /custompages
 # operationId: getCustomPages
-export def "custompages get-custom-pages" [
+export def "get-custom-pages" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -675,7 +675,7 @@ export def "custompages get-custom-pages" [
 #
 # POST /custompages
 # operationId: createCustomPage
-export def "custompages create-custom-page" [
+export def "create-custom-page" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -717,7 +717,7 @@ export def "custompages create-custom-page" [
 #
 # DELETE /custompages/{slug}
 # operationId: deleteCustomPage
-export def "custompages delete-custom-page" [
+export def "delete-custom-page" [
   slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -753,7 +753,7 @@ export def "custompages delete-custom-page" [
 #
 # GET /custompages/{slug}
 # operationId: getCustomPage
-export def "custompages get-custom-page" [
+export def "get-custom-page" [
   slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -789,7 +789,7 @@ export def "custompages get-custom-page" [
 #
 # PUT /custompages/{slug}
 # operationId: updateCustomPage
-export def "custompages update-custom-page" [
+export def "update-custom-page" [
   slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -833,7 +833,7 @@ export def "custompages update-custom-page" [
 #
 # POST /docs
 # operationId: createDoc
-export def "docs create" [
+export def "create-doc" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -879,7 +879,7 @@ export def "docs create" [
 #
 # POST /docs/search
 # operationId: searchDocs
-export def "docs-search list" [
+export def "search-docs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -918,7 +918,7 @@ export def "docs-search list" [
 #
 # DELETE /docs/{slug}
 # operationId: deleteDoc
-export def "docs delete" [
+export def "delete-doc" [
   slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -957,7 +957,7 @@ export def "docs delete" [
 #
 # GET /docs/{slug}
 # operationId: getDoc
-export def "docs get" [
+export def "get-doc" [
   slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -996,7 +996,7 @@ export def "docs get" [
 #
 # PUT /docs/{slug}
 # operationId: updateDoc
-export def "docs update" [
+export def "update-doc" [
   slug: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1044,7 +1044,7 @@ export def "docs update" [
 #
 # GET /errors
 # operationId: getErrors
-export def "errors get" [
+export def "get-errors" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1080,7 +1080,7 @@ export def "errors get" [
 # DEPRECATED
 # operationId: uploadSwagger
 @deprecated
-export def "swagger upload" [
+export def "upload-swagger" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1122,7 +1122,7 @@ export def "swagger upload" [
 # DEPRECATED
 # operationId: deleteSwagger
 @deprecated
-export def "swagger delete" [
+export def "delete-swagger" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1160,7 +1160,7 @@ export def "swagger delete" [
 # DEPRECATED
 # operationId: updateSwagger
 @deprecated
-export def "swagger update" [
+export def "update-swagger" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1202,7 +1202,7 @@ export def "swagger update" [
 #
 # GET /version
 # operationId: getVersions
-export def "version list" [
+export def "get-versions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1236,7 +1236,7 @@ export def "version list" [
 #
 # POST /version
 # operationId: createVersion
-export def "version create" [
+export def "create-version" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1280,7 +1280,7 @@ export def "version create" [
 #
 # DELETE /version/{versionId}
 # operationId: deleteVersion
-export def "version delete" [
+export def "delete-version" [
   version_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1316,7 +1316,7 @@ export def "version delete" [
 #
 # GET /version/{versionId}
 # operationId: getVersion
-export def "version get" [
+export def "get-version" [
   version_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1352,7 +1352,7 @@ export def "version get" [
 #
 # PUT /version/{versionId}
 # operationId: updateVersion
-export def "version update" [
+export def "update-version" [
   version_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

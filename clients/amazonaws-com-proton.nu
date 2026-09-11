@@ -184,7 +184,7 @@ def x-amz-target-completer-83 [] { ["AwsProton20200720.UpdateTemplateSyncConfig"
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "api create-accept-environment-account-connection" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "accept-environment-account-connection" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -208,7 +208,7 @@ export def commands []: nothing -> table {
 #
 # POST /
 # operationId: AcceptEnvironmentAccountConnection
-export def "api create-accept-environment-account-connection" [
+export def "accept-environment-account-connection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -256,7 +256,7 @@ export def "api create-accept-environment-account-connection" [
 #
 # POST /
 # operationId: CancelComponentDeployment
-export def "api cancel-component-deployment" [
+export def "cancel-component-deployment" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -304,7 +304,7 @@ export def "api cancel-component-deployment" [
 #
 # POST /
 # operationId: CancelEnvironmentDeployment
-export def "api cancel-environment-deployment" [
+export def "cancel-environment-deployment" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -352,7 +352,7 @@ export def "api cancel-environment-deployment" [
 #
 # POST /
 # operationId: CancelServiceInstanceDeployment
-export def "api cancel-service-instance-deployment" [
+export def "cancel-service-instance-deployment" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -401,7 +401,7 @@ export def "api cancel-service-instance-deployment" [
 #
 # POST /
 # operationId: CancelServicePipelineDeployment
-export def "api cancel-service-pipeline-deployment" [
+export def "cancel-service-pipeline-deployment" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -449,7 +449,7 @@ export def "api cancel-service-pipeline-deployment" [
 #
 # POST /
 # operationId: CreateComponent
-export def "api create-component" [
+export def "create-component" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -506,7 +506,7 @@ export def "api create-component" [
 #
 # POST /
 # operationId: CreateEnvironment
-export def "api create-environment" [
+export def "create-environment" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -565,7 +565,7 @@ export def "api create-environment" [
 #
 # POST /
 # operationId: CreateEnvironmentAccountConnection
-export def "api create-environment-account-connection" [
+export def "create-environment-account-connection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -619,7 +619,7 @@ export def "api create-environment-account-connection" [
 #
 # POST /
 # operationId: CreateEnvironmentTemplate
-export def "api create-environment-template" [
+export def "create-environment-template" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -672,7 +672,7 @@ export def "api create-environment-template" [
 #
 # POST /
 # operationId: CreateEnvironmentTemplateVersion
-export def "api create-environment-template-version" [
+export def "create-environment-template-version" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -725,7 +725,7 @@ export def "api create-environment-template-version" [
 #
 # POST /
 # operationId: CreateRepository
-export def "api create-repository" [
+export def "create-repository" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -777,7 +777,7 @@ export def "api create-repository" [
 #
 # POST /
 # operationId: CreateService
-export def "api create-service" [
+export def "create-service" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -834,7 +834,7 @@ export def "api create-service" [
 #
 # POST /
 # operationId: CreateServiceInstance
-export def "api create-service-instance" [
+export def "create-service-instance" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -888,7 +888,7 @@ export def "api create-service-instance" [
 #
 # POST /
 # operationId: CreateServiceSyncConfig
-export def "api create-service-sync-config" [
+export def "create-service-sync-config" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -940,7 +940,7 @@ export def "api create-service-sync-config" [
 #
 # POST /
 # operationId: CreateServiceTemplate
-export def "api create-service-template" [
+export def "create-service-template" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -993,7 +993,7 @@ export def "api create-service-template" [
 #
 # POST /
 # operationId: CreateServiceTemplateVersion
-export def "api create-service-template-version" [
+export def "create-service-template-version" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1048,7 +1048,7 @@ export def "api create-service-template-version" [
 #
 # POST /
 # operationId: CreateTemplateSyncConfig
-export def "api create-template-sync-config" [
+export def "create-template-sync-config" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1101,7 +1101,7 @@ export def "api create-template-sync-config" [
 #
 # POST /
 # operationId: DeleteComponent
-export def "api delete-component" [
+export def "delete-component" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1149,7 +1149,7 @@ export def "api delete-component" [
 #
 # POST /
 # operationId: DeleteEnvironment
-export def "api delete-environment" [
+export def "delete-environment" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1197,7 +1197,7 @@ export def "api delete-environment" [
 #
 # POST /
 # operationId: DeleteEnvironmentAccountConnection
-export def "api delete-environment-account-connection" [
+export def "delete-environment-account-connection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1245,7 +1245,7 @@ export def "api delete-environment-account-connection" [
 #
 # POST /
 # operationId: DeleteEnvironmentTemplate
-export def "api delete-environment-template" [
+export def "delete-environment-template" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1293,7 +1293,7 @@ export def "api delete-environment-template" [
 #
 # POST /
 # operationId: DeleteEnvironmentTemplateVersion
-export def "api delete-environment-template-version" [
+export def "delete-environment-template-version" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1343,7 +1343,7 @@ export def "api delete-environment-template-version" [
 #
 # POST /
 # operationId: DeleteRepository
-export def "api delete-repository" [
+export def "delete-repository" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1392,7 +1392,7 @@ export def "api delete-repository" [
 #
 # POST /
 # operationId: DeleteService
-export def "api delete-service" [
+export def "delete-service" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1440,7 +1440,7 @@ export def "api delete-service" [
 #
 # POST /
 # operationId: DeleteServiceSyncConfig
-export def "api delete-service-sync-config" [
+export def "delete-service-sync-config" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1488,7 +1488,7 @@ export def "api delete-service-sync-config" [
 #
 # POST /
 # operationId: DeleteServiceTemplate
-export def "api delete-service-template" [
+export def "delete-service-template" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1536,7 +1536,7 @@ export def "api delete-service-template" [
 #
 # POST /
 # operationId: DeleteServiceTemplateVersion
-export def "api delete-service-template-version" [
+export def "delete-service-template-version" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1586,7 +1586,7 @@ export def "api delete-service-template-version" [
 #
 # POST /
 # operationId: DeleteTemplateSyncConfig
-export def "api delete-template-sync-config" [
+export def "delete-template-sync-config" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1635,7 +1635,7 @@ export def "api delete-template-sync-config" [
 #
 # POST /
 # operationId: GetAccountSettings
-export def "api get-account-settings" [
+export def "get-account-settings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1683,7 +1683,7 @@ export def "api get-account-settings" [
 #
 # POST /
 # operationId: GetComponent
-export def "api get-component" [
+export def "get-component" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1731,7 +1731,7 @@ export def "api get-component" [
 #
 # POST /
 # operationId: GetEnvironment
-export def "api get-environment" [
+export def "get-environment" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1779,7 +1779,7 @@ export def "api get-environment" [
 #
 # POST /
 # operationId: GetEnvironmentAccountConnection
-export def "api get-environment-account-connection" [
+export def "get-environment-account-connection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1827,7 +1827,7 @@ export def "api get-environment-account-connection" [
 #
 # POST /
 # operationId: GetEnvironmentTemplate
-export def "api get-environment-template" [
+export def "get-environment-template" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1875,7 +1875,7 @@ export def "api get-environment-template" [
 #
 # POST /
 # operationId: GetEnvironmentTemplateVersion
-export def "api get-environment-template-version" [
+export def "get-environment-template-version" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1925,7 +1925,7 @@ export def "api get-environment-template-version" [
 #
 # POST /
 # operationId: GetRepository
-export def "api get-repository" [
+export def "get-repository" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1974,7 +1974,7 @@ export def "api get-repository" [
 #
 # POST /
 # operationId: GetRepositorySyncStatus
-export def "api get-repository-sync-status" [
+export def "get-repository-sync-status" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2025,7 +2025,7 @@ export def "api get-repository-sync-status" [
 #
 # POST /
 # operationId: GetResourcesSummary
-export def "api get-resources-summary" [
+export def "get-resources-summary" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2073,7 +2073,7 @@ export def "api get-resources-summary" [
 #
 # POST /
 # operationId: GetService
-export def "api get-service" [
+export def "get-service" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2121,7 +2121,7 @@ export def "api get-service" [
 #
 # POST /
 # operationId: GetServiceInstance
-export def "api get-service-instance" [
+export def "get-service-instance" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2170,7 +2170,7 @@ export def "api get-service-instance" [
 #
 # POST /
 # operationId: GetServiceInstanceSyncStatus
-export def "api get-service-instance-sync-status" [
+export def "get-service-instance-sync-status" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2219,7 +2219,7 @@ export def "api get-service-instance-sync-status" [
 #
 # POST /
 # operationId: GetServiceSyncBlockerSummary
-export def "api get-service-sync-blocker-summary" [
+export def "get-service-sync-blocker-summary" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2268,7 +2268,7 @@ export def "api get-service-sync-blocker-summary" [
 #
 # POST /
 # operationId: GetServiceSyncConfig
-export def "api get-service-sync-config" [
+export def "get-service-sync-config" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2316,7 +2316,7 @@ export def "api get-service-sync-config" [
 #
 # POST /
 # operationId: GetServiceTemplate
-export def "api get-service-template" [
+export def "get-service-template" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2364,7 +2364,7 @@ export def "api get-service-template" [
 #
 # POST /
 # operationId: GetServiceTemplateVersion
-export def "api get-service-template-version" [
+export def "get-service-template-version" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2414,7 +2414,7 @@ export def "api get-service-template-version" [
 #
 # POST /
 # operationId: GetTemplateSyncConfig
-export def "api get-template-sync-config" [
+export def "get-template-sync-config" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2463,7 +2463,7 @@ export def "api get-template-sync-config" [
 #
 # POST /
 # operationId: GetTemplateSyncStatus
-export def "api get-template-sync-status" [
+export def "get-template-sync-status" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2513,7 +2513,7 @@ export def "api get-template-sync-status" [
 #
 # POST /
 # operationId: ListComponentOutputs
-export def "api list-component-outputs" [
+export def "list-component-outputs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2564,7 +2564,7 @@ export def "api list-component-outputs" [
 #
 # POST /
 # operationId: ListComponentProvisionedResources
-export def "api list-component-provisioned-resources" [
+export def "list-component-provisioned-resources" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2615,7 +2615,7 @@ export def "api list-component-provisioned-resources" [
 #
 # POST /
 # operationId: ListComponents
-export def "api list-components" [
+export def "list-components" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2670,7 +2670,7 @@ export def "api list-components" [
 #
 # POST /
 # operationId: ListEnvironmentAccountConnections
-export def "api list-environment-account-connections" [
+export def "list-environment-account-connections" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2725,7 +2725,7 @@ export def "api list-environment-account-connections" [
 #
 # POST /
 # operationId: ListEnvironmentOutputs
-export def "api list-environment-outputs" [
+export def "list-environment-outputs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2776,7 +2776,7 @@ export def "api list-environment-outputs" [
 #
 # POST /
 # operationId: ListEnvironmentProvisionedResources
-export def "api list-environment-provisioned-resources" [
+export def "list-environment-provisioned-resources" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2827,7 +2827,7 @@ export def "api list-environment-provisioned-resources" [
 #
 # POST /
 # operationId: ListEnvironmentTemplateVersions
-export def "api list-environment-template-versions" [
+export def "list-environment-template-versions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2881,7 +2881,7 @@ export def "api list-environment-template-versions" [
 #
 # POST /
 # operationId: ListEnvironmentTemplates
-export def "api list-environment-templates" [
+export def "list-environment-templates" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2933,7 +2933,7 @@ export def "api list-environment-templates" [
 #
 # POST /
 # operationId: ListEnvironments
-export def "api list-environments" [
+export def "list-environments" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2986,7 +2986,7 @@ export def "api list-environments" [
 #
 # POST /
 # operationId: ListRepositories
-export def "api list-repositories" [
+export def "list-repositories" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3038,7 +3038,7 @@ export def "api list-repositories" [
 #
 # POST /
 # operationId: ListRepositorySyncDefinitions
-export def "api list-repository-sync-definitions" [
+export def "list-repository-sync-definitions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3091,7 +3091,7 @@ export def "api list-repository-sync-definitions" [
 #
 # POST /
 # operationId: ListServiceInstanceOutputs
-export def "api list-service-instance-outputs" [
+export def "list-service-instance-outputs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3143,7 +3143,7 @@ export def "api list-service-instance-outputs" [
 #
 # POST /
 # operationId: ListServiceInstanceProvisionedResources
-export def "api list-service-instance-provisioned-resources" [
+export def "list-service-instance-provisioned-resources" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3195,7 +3195,7 @@ export def "api list-service-instance-provisioned-resources" [
 #
 # POST /
 # operationId: ListServiceInstances
-export def "api list-service-instances" [
+export def "list-service-instances" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3251,7 +3251,7 @@ export def "api list-service-instances" [
 #
 # POST /
 # operationId: ListServicePipelineOutputs
-export def "api list-service-pipeline-outputs" [
+export def "list-service-pipeline-outputs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3302,7 +3302,7 @@ export def "api list-service-pipeline-outputs" [
 #
 # POST /
 # operationId: ListServicePipelineProvisionedResources
-export def "api list-service-pipeline-provisioned-resources" [
+export def "list-service-pipeline-provisioned-resources" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3353,7 +3353,7 @@ export def "api list-service-pipeline-provisioned-resources" [
 #
 # POST /
 # operationId: ListServiceTemplateVersions
-export def "api list-service-template-versions" [
+export def "list-service-template-versions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3407,7 +3407,7 @@ export def "api list-service-template-versions" [
 #
 # POST /
 # operationId: ListServiceTemplates
-export def "api list-service-templates" [
+export def "list-service-templates" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3459,7 +3459,7 @@ export def "api list-service-templates" [
 #
 # POST /
 # operationId: ListServices
-export def "api list-services" [
+export def "list-services" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3511,7 +3511,7 @@ export def "api list-services" [
 #
 # POST /
 # operationId: ListTagsForResource
-export def "api list-tags-for-resource" [
+export def "list-tags-for-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3564,7 +3564,7 @@ export def "api list-tags-for-resource" [
 #
 # POST /
 # operationId: NotifyResourceDeploymentStatusChange
-export def "api notify-resource-deployment-status-change" [
+export def "notify-resource-deployment-status-change" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3616,7 +3616,7 @@ export def "api notify-resource-deployment-status-change" [
 #
 # POST /
 # operationId: RejectEnvironmentAccountConnection
-export def "api reject-environment-account-connection" [
+export def "reject-environment-account-connection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3664,7 +3664,7 @@ export def "api reject-environment-account-connection" [
 #
 # POST /
 # operationId: TagResource
-export def "api tag-resource" [
+export def "tag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3713,7 +3713,7 @@ export def "api tag-resource" [
 #
 # POST /
 # operationId: UntagResource
-export def "api untag-resource" [
+export def "untag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3762,7 +3762,7 @@ export def "api untag-resource" [
 #
 # POST /
 # operationId: UpdateAccountSettings
-export def "api update-account-settings" [
+export def "update-account-settings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3813,7 +3813,7 @@ export def "api update-account-settings" [
 #
 # POST /
 # operationId: UpdateComponent
-export def "api update-component" [
+export def "update-component" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3868,7 +3868,7 @@ export def "api update-component" [
 #
 # POST /
 # operationId: UpdateEnvironment
-export def "api update-environment" [
+export def "update-environment" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3926,7 +3926,7 @@ export def "api update-environment" [
 #
 # POST /
 # operationId: UpdateEnvironmentAccountConnection
-export def "api update-environment-account-connection" [
+export def "update-environment-account-connection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3977,7 +3977,7 @@ export def "api update-environment-account-connection" [
 #
 # POST /
 # operationId: UpdateEnvironmentTemplate
-export def "api update-environment-template" [
+export def "update-environment-template" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4027,7 +4027,7 @@ export def "api update-environment-template" [
 #
 # POST /
 # operationId: UpdateEnvironmentTemplateVersion
-export def "api update-environment-template-version" [
+export def "update-environment-template-version" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4079,7 +4079,7 @@ export def "api update-environment-template-version" [
 #
 # POST /
 # operationId: UpdateService
-export def "api update-service" [
+export def "update-service" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4129,7 +4129,7 @@ export def "api update-service" [
 #
 # POST /
 # operationId: UpdateServiceInstance
-export def "api update-service-instance" [
+export def "update-service-instance" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4183,7 +4183,7 @@ export def "api update-service-instance" [
 #
 # POST /
 # operationId: UpdateServicePipeline
-export def "api update-service-pipeline" [
+export def "update-service-pipeline" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4235,7 +4235,7 @@ export def "api update-service-pipeline" [
 #
 # POST /
 # operationId: UpdateServiceSyncBlocker
-export def "api update-service-sync-blocker" [
+export def "update-service-sync-blocker" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4284,7 +4284,7 @@ export def "api update-service-sync-blocker" [
 #
 # POST /
 # operationId: UpdateServiceSyncConfig
-export def "api update-service-sync-config" [
+export def "update-service-sync-config" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4336,7 +4336,7 @@ export def "api update-service-sync-config" [
 #
 # POST /
 # operationId: UpdateServiceTemplate
-export def "api update-service-template" [
+export def "update-service-template" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4386,7 +4386,7 @@ export def "api update-service-template" [
 #
 # POST /
 # operationId: UpdateServiceTemplateVersion
-export def "api update-service-template-version" [
+export def "update-service-template-version" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4440,7 +4440,7 @@ export def "api update-service-template-version" [
 #
 # POST /
 # operationId: UpdateTemplateSyncConfig
-export def "api update-template-sync-config" [
+export def "update-template-sync-config" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

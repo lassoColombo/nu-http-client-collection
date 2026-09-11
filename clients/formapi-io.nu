@@ -148,7 +148,7 @@ def auth-type-completer [] { ["email_link" "ldap" "none" "oauth" "password" "pho
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "authentication test" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "test-authentication" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -172,7 +172,7 @@ export def commands []: nothing -> table {
 #
 # GET /authentication
 # operationId: testAuthentication
-export def "authentication test" [
+export def "test-authentication" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -206,7 +206,7 @@ export def "authentication test" [
 #
 # GET /combined_submissions
 # operationId: listCombinedSubmissions
-export def "combined-submissions list" [
+export def "list-combined-submissions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -243,7 +243,7 @@ export def "combined-submissions list" [
 #
 # POST /combined_submissions
 # operationId: combineSubmissions
-export def "combined-submissions create-combine" [
+export def "combine-submissions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -285,7 +285,7 @@ export def "combined-submissions create-combine" [
 #
 # DELETE /combined_submissions/{combined_submission_id}
 # operationId: expireCombinedSubmission
-export def "combined-submissions delete-expire" [
+export def "expire-combined-submission" [
   combined_submission_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -321,7 +321,7 @@ export def "combined-submissions delete-expire" [
 #
 # GET /combined_submissions/{combined_submission_id}
 # operationId: getCombinedSubmission
-export def "combined-submissions get" [
+export def "get-combined-submission" [
   combined_submission_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -357,7 +357,7 @@ export def "combined-submissions get" [
 #
 # POST /combined_submissions?v=2
 # operationId: combinePdfs
-export def "combined-submissions-v2 create-combine-pdfs" [
+export def "combine-pdfs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -400,7 +400,7 @@ export def "combined-submissions-v2 create-combine-pdfs" [
 #
 # POST /custom_files
 # operationId: createCustomFileFromUpload
-export def "custom-files create-from-upload" [
+export def "create-custom-file-from-upload" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -438,7 +438,7 @@ export def "custom-files create-from-upload" [
 #
 # GET /data_requests/{data_request_id}
 # operationId: getDataRequest
-export def "data-requests get" [
+export def "get-data-request" [
   data_request_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -474,7 +474,7 @@ export def "data-requests get" [
 #
 # PUT /data_requests/{data_request_id}
 # operationId: updateDataRequest
-export def "data-requests update" [
+export def "update-data-request" [
   data_request_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -526,7 +526,7 @@ export def "data-requests update" [
 #
 # POST /data_requests/{data_request_id}/tokens
 # operationId: createDataRequestToken
-export def "data-requests-tokens create" [
+export def "create-data-request-token" [
   data_request_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -562,7 +562,7 @@ export def "data-requests-tokens create" [
 #
 # GET /folders/
 # operationId: listFolders
-export def "folders list" [
+export def "list-folders" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -599,7 +599,7 @@ export def "folders list" [
 # POST /folders/
 # operationId: createFolder
 # --folder shape: {name: string, parent_folder_id?: string}
-export def "folders create" [
+export def "create-folder" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -637,7 +637,7 @@ export def "folders create" [
 #
 # DELETE /folders/{folder_id}
 # operationId: deleteFolder
-export def "folders delete" [
+export def "delete-folder" [
   folder_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -673,7 +673,7 @@ export def "folders delete" [
 #
 # POST /folders/{folder_id}/move
 # operationId: moveFolderToFolder
-export def "folders-move move" [
+export def "move-folder-to-folder" [
   folder_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -713,7 +713,7 @@ export def "folders-move move" [
 #
 # POST /folders/{folder_id}/rename
 # operationId: renameFolder
-export def "folders-rename rename" [
+export def "rename-folder" [
   folder_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -753,7 +753,7 @@ export def "folders-rename rename" [
 #
 # GET /submissions
 # operationId: listSubmissions
-export def "submissions list" [
+export def "list-submissions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -795,7 +795,7 @@ export def "submissions list" [
 # POST /submissions/batches
 # operationId: batchGeneratePdfs
 # --submissions item shape: {css?: string, data: record, html?: string, metadata?: record, template_id: string, test?: bool}
-export def "submissions-batches generate-batch-pdfs" [
+export def "batch-generate-pdfs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -836,7 +836,7 @@ export def "submissions-batches generate-batch-pdfs" [
 #
 # GET /submissions/batches/{submission_batch_id}
 # operationId: getSubmissionBatch
-export def "submissions-batches get" [
+export def "get-submission-batch" [
   submission_batch_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -874,7 +874,7 @@ export def "submissions-batches get" [
 #
 # DELETE /submissions/{submission_id}
 # operationId: expireSubmission
-export def "submissions delete-expire" [
+export def "expire-submission" [
   submission_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -910,7 +910,7 @@ export def "submissions delete-expire" [
 #
 # GET /submissions/{submission_id}
 # operationId: getSubmission
-export def "submissions get" [
+export def "get-submission" [
   submission_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -948,7 +948,7 @@ export def "submissions get" [
 #
 # GET /templates
 # operationId: listTemplates
-export def "templates list" [
+export def "list-templates" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -987,7 +987,7 @@ export def "templates list" [
 #
 # POST /templates
 # operationId: createPDFTemplate
-export def "templates create-pdf" [
+export def "create-pdf-template" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1029,7 +1029,7 @@ export def "templates create-pdf" [
 #
 # GET /templates/{template_id}
 # operationId: getTemplate
-export def "templates get" [
+export def "get-template" [
   template_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1066,7 +1066,7 @@ export def "templates get" [
 # PUT /templates/{template_id}
 # operationId: updateTemplate
 # --template shape: {allow_additional_properties?: bool, description?: string, editable_submissions?: bool, expiration_interval?: "minutes"|"hours"|"days", expire_after?: float, expire_submissions?: bool, footer_html?: string, header_html?: string, html?: string, name?: string, public_submissions?: bool, public_web_form?: bool, redirect_url?: string, scss?: string, slack_webhook_url?: string, webhook_url?: string}
-export def "templates update" [
+export def "update-template" [
   template_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1107,7 +1107,7 @@ export def "templates update" [
 # PUT /templates/{template_id}/add_fields
 # operationId: addFieldsToTemplate
 # --fields item shape: {alignment?: "left"|"center"|"right", autoCalculateMaxLength?: bool, backgroundColor?: string, backgroundColorFieldName?: string, backgroundColorFieldRequired?: bool, barcodeSymbology?: string, bold?: bool, characterSpacing?: float, checkCharacter?: "&#10003;"|"&#10004;"|"&#10006;"|"&#10007;"|"&#10008;", checkColor?: string, checkColorFieldName?: string, checkColorFieldRequired?: bool, color?: string, colorFieldName?: string, colorFieldRequired?: bool, comb?: bool, combNumberOfCells?: float, ... (69 more fields)}
-export def "templates-add-fields create" [
+export def "add-fields-to-template" [
   template_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1147,7 +1147,7 @@ export def "templates-add-fields create" [
 #
 # POST /templates/{template_id}/copy
 # operationId: copyTemplate
-export def "templates-copy copy" [
+export def "copy-template" [
   template_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1188,7 +1188,7 @@ export def "templates-copy copy" [
 #
 # POST /templates/{template_id}/move
 # operationId: moveTemplateToFolder
-export def "templates-move move-to-folder" [
+export def "move-template-to-folder" [
   template_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1228,7 +1228,7 @@ export def "templates-move move-to-folder" [
 #
 # GET /templates/{template_id}/schema
 # operationId: getTemplateSchema
-export def "templates-schema get" [
+export def "get-template-schema" [
   template_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1263,7 +1263,7 @@ export def "templates-schema get" [
 # List all submissions for a given template
 #
 # GET /templates/{template_id}/submissions
-export def "templates-submissions get" [
+export def "get-templates-template-id-submissions" [
   template_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1307,7 +1307,7 @@ export def "templates-submissions get" [
 # POST /templates/{template_id}/submissions
 # operationId: generatePDF
 # --data_requests item shape: {auth_phone_number_hash?: string, auth_provider?: string, auth_second_factor_type?: "none"|"phone_number"|"totp"|"mobile_push"|"security_key"|"fingerprint", auth_session_id_hash?: string, auth_session_started_at?: string, auth_type: "none"|"password"|"oauth"|"email_link"|"phone_number"|"ldap"|"saml", auth_user_id_hash?: string, auth_username_hash?: string, email: string, fields?: list<string>, metadata?: record, name?: string, order?: int}
-export def "templates-submissions generate-pdf" [
+export def "generate-pdf" [
   template_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1356,7 +1356,7 @@ export def "templates-submissions generate-pdf" [
 # POST /templates/{template_id}/submissions/batch
 # operationId: batchGeneratePdfV1
 # --data_requests item shape: {auth_phone_number_hash?: string, auth_provider?: string, auth_second_factor_type?: "none"|"phone_number"|"totp"|"mobile_push"|"security_key"|"fingerprint", auth_session_id_hash?: string, auth_session_started_at?: string, auth_type: "none"|"password"|"oauth"|"email_link"|"phone_number"|"ldap"|"saml", auth_user_id_hash?: string, auth_username_hash?: string, email: string, fields?: list<string>, metadata?: record, name?: string, order?: int}
-export def "templates-submissions-batch generate-pdf" [
+export def "batch-generate-pdf-v1" [
   template_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1401,7 +1401,7 @@ export def "templates-submissions-batch generate-pdf" [
 #
 # GET /templates/{template_id}?full=true
 # operationId: getFullTemplate
-export def "templates get-full" [
+export def "get-full-template" [
   template_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1438,7 +1438,7 @@ export def "templates get-full" [
 # POST /templates?desc=cached_upload
 # operationId: createPDFTemplateFromUpload
 # --template shape: {allow_additional_properties?: bool, description?: string, document?: record, editable_submissions?: bool, expiration_interval?: "minutes"|"hours"|"days", expire_after?: float, expire_submissions?: bool, footer_html?: string, header_html?: string, html?: string, name: string, public_submissions?: bool, public_web_form?: bool, redirect_url?: string, scss?: string, slack_webhook_url?: string, template_type?: "pdf"|"html", webhook_url?: string}
-export def "templates-desccached-upload create-pdf-template" [
+export def "create-pdf-template-from-upload" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1477,7 +1477,7 @@ export def "templates-desccached-upload create-pdf-template" [
 # POST /templates?desc=html
 # operationId: createHTMLTemplate
 # --template shape: {allow_additional_properties?: bool, description?: string, editable_submissions?: bool, expiration_interval?: "minutes"|"hours"|"days", expire_after?: float, expire_submissions?: bool, footer_html?: string, header_html?: string, html?: string, name: string, public_submissions?: bool, public_web_form?: bool, redirect_url?: string, scss?: string, slack_webhook_url?: string, template_type?: "pdf"|"html", webhook_url?: string}
-export def "templates-deschtml create-html-template" [
+export def "create-html-template" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1515,7 +1515,7 @@ export def "templates-deschtml create-html-template" [
 #
 # GET /uploads/presign
 # operationId: getPresignUrl
-export def "uploads-presign get-url" [
+export def "get-presign-url" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

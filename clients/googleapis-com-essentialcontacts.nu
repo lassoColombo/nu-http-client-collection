@@ -131,7 +131,7 @@ def notification-category-completer [] { ["ALL" "BILLING" "LEGAL" "NOTIFICATION_
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "projects delete" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "essentialcontacts-projects-contacts-delete" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -155,7 +155,7 @@ export def commands []: nothing -> table {
 #
 # DELETE /v1/{name}
 # operationId: essentialcontacts.projects.contacts.delete
-export def "projects delete" [
+export def "essentialcontacts-projects-contacts-delete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -203,7 +203,7 @@ export def "projects delete" [
 #
 # GET /v1/{name}
 # operationId: essentialcontacts.projects.contacts.get
-export def "projects get" [
+export def "essentialcontacts-projects-contacts-get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -251,7 +251,7 @@ export def "projects get" [
 #
 # PATCH /v1/{name}
 # operationId: essentialcontacts.projects.contacts.patch
-export def "projects update" [
+export def "essentialcontacts-projects-contacts-patch" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -308,7 +308,7 @@ export def "projects update" [
 #
 # GET /v1/{parent}/contacts
 # operationId: essentialcontacts.projects.contacts.list
-export def "contacts list" [
+export def "essentialcontacts-projects-contacts-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -358,7 +358,7 @@ export def "contacts list" [
 #
 # POST /v1/{parent}/contacts
 # operationId: essentialcontacts.projects.contacts.create
-export def "contacts create" [
+export def "essentialcontacts-projects-contacts-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -414,7 +414,7 @@ export def "contacts create" [
 #
 # GET /v1/{parent}/contacts:compute
 # operationId: essentialcontacts.projects.contacts.compute
-export def "contacts-compute get" [
+export def "essentialcontacts-projects-contacts-compute" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -465,7 +465,7 @@ export def "contacts-compute get" [
 #
 # POST /v1/{resource}/contacts:sendTestMessage
 # operationId: essentialcontacts.projects.contacts.sendTestMessage
-export def "contacts-send-test-message send" [
+export def "essentialcontacts-projects-contacts-send-test-message" [
   resource: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)

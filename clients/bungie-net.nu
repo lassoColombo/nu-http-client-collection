@@ -105,7 +105,7 @@ def auth-scheme-completer [] { ["x-api-key" "bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "app-api-usage get-application" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "app-get-application-api-usage" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -129,7 +129,7 @@ export def commands []: nothing -> table {
 #
 # GET /App/ApiUsage/{applicationId}/
 # operationId: App.GetApplicationApiUsage
-export def "app-api-usage get-application" [
+export def "app-get-application-api-usage" [
   application_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -168,7 +168,7 @@ export def "app-api-usage get-application" [
 #
 # GET /App/FirstParty/
 # operationId: App.GetBungieApplications
-export def "app-first-party get-bungie-applications" [
+export def "app-get-bungie-applications" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -202,7 +202,7 @@ export def "app-first-party get-bungie-applications" [
 #
 # GET /CommunityContent/Get/{sort}/{mediaFilter}/{page}/
 # operationId: CommunityContent.GetCommunityContent
-export def "community-content-get get" [
+export def "community-content-get-community-content" [
   sort: int
   media_filter: int
   page: int
@@ -242,7 +242,7 @@ export def "community-content-get get" [
 #
 # GET /Content/GetContentById/{id}/{locale}/
 # operationId: Content.GetContentById
-export def "content-get-content-by-id get" [
+export def "content-get-content-by-id" [
   id: int
   locale: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -282,7 +282,7 @@ export def "content-get-content-by-id get" [
 #
 # GET /Content/GetContentByTagAndType/{tag}/{type}/{locale}/
 # operationId: Content.GetContentByTagAndType
-export def "content-get-content-by-tag-and-type get" [
+export def "content-get-content-by-tag-and-type" [
   tag: string
   type: string
   locale: string
@@ -324,7 +324,7 @@ export def "content-get-content-by-tag-and-type get" [
 #
 # GET /Content/GetContentType/{type}/
 # operationId: Content.GetContentType
-export def "content-get-content-type get" [
+export def "content-get-content-type" [
   type: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -360,7 +360,7 @@ export def "content-get-content-type get" [
 #
 # GET /Content/Rss/NewsArticles/{pageToken}/
 # operationId: Content.RssNewsArticles
-export def "content-rss-news-articles get" [
+export def "content-rss-news-articles" [
   page_token: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -399,7 +399,7 @@ export def "content-rss-news-articles get" [
 #
 # GET /Content/Search/{locale}/
 # operationId: Content.SearchContentWithText
-export def "content-search list-with-text" [
+export def "content-search-content-with-text" [
   locale: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -442,7 +442,7 @@ export def "content-search list-with-text" [
 #
 # GET /Content/SearchContentByTagAndType/{tag}/{type}/{locale}/
 # operationId: Content.SearchContentByTagAndType
-export def "content-search-content-by-tag-and-type list" [
+export def "content-search-content-by-tag-and-type" [
   tag: string
   type: string
   locale: string
@@ -486,7 +486,7 @@ export def "content-search-content-by-tag-and-type list" [
 #
 # GET /Content/SearchHelpArticles/{searchtext}/{size}/
 # operationId: Content.SearchHelpArticles
-export def "content-search-help-articles list" [
+export def "content-search-help-articles" [
   searchtext: string
   size: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -524,7 +524,7 @@ export def "content-search-help-articles list" [
 #
 # POST /Destiny2/Actions/Items/EquipItem/
 # operationId: Destiny2.EquipItem
-export def "destiny2-actions-items-equip-item create" [
+export def "destiny2-equip-item" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -558,7 +558,7 @@ export def "destiny2-actions-items-equip-item create" [
 #
 # POST /Destiny2/Actions/Items/EquipItems/
 # operationId: Destiny2.EquipItems
-export def "destiny2-actions-items-equip-items create" [
+export def "destiny2-equip-items" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -592,7 +592,7 @@ export def "destiny2-actions-items-equip-items create" [
 #
 # POST /Destiny2/Actions/Items/InsertSocketPlug/
 # operationId: Destiny2.InsertSocketPlug
-export def "destiny2-actions-items-insert-socket-plug create" [
+export def "destiny2-insert-socket-plug" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -626,7 +626,7 @@ export def "destiny2-actions-items-insert-socket-plug create" [
 #
 # POST /Destiny2/Actions/Items/InsertSocketPlugFree/
 # operationId: Destiny2.InsertSocketPlugFree
-export def "destiny2-actions-items-insert-socket-plug-free create" [
+export def "destiny2-insert-socket-plug-free" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -660,7 +660,7 @@ export def "destiny2-actions-items-insert-socket-plug-free create" [
 #
 # POST /Destiny2/Actions/Items/PullFromPostmaster/
 # operationId: Destiny2.PullFromPostmaster
-export def "destiny2-actions-items-pull-from-post-master pull" [
+export def "destiny2-pull-from-postmaster" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -694,7 +694,7 @@ export def "destiny2-actions-items-pull-from-post-master pull" [
 #
 # POST /Destiny2/Actions/Items/SetLockState/
 # operationId: Destiny2.SetItemLockState
-export def "destiny2-actions-items-set-lock-state update" [
+export def "destiny2-set-item-lock-state" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -728,7 +728,7 @@ export def "destiny2-actions-items-set-lock-state update" [
 #
 # POST /Destiny2/Actions/Items/SetTrackedState/
 # operationId: Destiny2.SetQuestTrackedState
-export def "destiny2-actions-items-set-tracked-state update-quest" [
+export def "destiny2-set-quest-tracked-state" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -762,7 +762,7 @@ export def "destiny2-actions-items-set-tracked-state update-quest" [
 #
 # POST /Destiny2/Actions/Items/TransferItem/
 # operationId: Destiny2.TransferItem
-export def "destiny2-actions-items-transfer-item create" [
+export def "destiny2-transfer-item" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -796,7 +796,7 @@ export def "destiny2-actions-items-transfer-item create" [
 #
 # POST /Destiny2/Actions/Loadouts/ClearLoadout/
 # operationId: Destiny2.ClearLoadout
-export def "destiny2-actions-loadouts-clear-loadout create" [
+export def "destiny2-clear-loadout" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -830,7 +830,7 @@ export def "destiny2-actions-loadouts-clear-loadout create" [
 #
 # POST /Destiny2/Actions/Loadouts/EquipLoadout/
 # operationId: Destiny2.EquipLoadout
-export def "destiny2-actions-loadouts-equip-loadout create" [
+export def "destiny2-equip-loadout" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -864,7 +864,7 @@ export def "destiny2-actions-loadouts-equip-loadout create" [
 #
 # POST /Destiny2/Actions/Loadouts/SnapshotLoadout/
 # operationId: Destiny2.SnapshotLoadout
-export def "destiny2-actions-loadouts-snapshot-loadout create" [
+export def "destiny2-snapshot-loadout" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -898,7 +898,7 @@ export def "destiny2-actions-loadouts-snapshot-loadout create" [
 #
 # POST /Destiny2/Actions/Loadouts/UpdateLoadoutIdentifiers/
 # operationId: Destiny2.UpdateLoadoutIdentifiers
-export def "destiny2-actions-loadouts-update-loadout-identifiers update" [
+export def "destiny2-update-loadout-identifiers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -932,7 +932,7 @@ export def "destiny2-actions-loadouts-update-loadout-identifiers update" [
 #
 # GET /Destiny2/Armory/Search/{type}/{searchTerm}/
 # operationId: Destiny2.SearchDestinyEntities
-export def "destiny2-armory-search list-destiny-entities" [
+export def "destiny2-search-destiny-entities" [
   type: string
   search_term: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -972,7 +972,7 @@ export def "destiny2-armory-search list-destiny-entities" [
 #
 # POST /Destiny2/Awa/AwaProvideAuthorizationResult/
 # operationId: Destiny2.AwaProvideAuthorizationResult
-export def "destiny2-awa-awa-provide-authorization-result create" [
+export def "destiny2-awa-provide-authorization-result" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1006,7 +1006,7 @@ export def "destiny2-awa-awa-provide-authorization-result create" [
 #
 # GET /Destiny2/Awa/GetActionToken/{correlationId}/
 # operationId: Destiny2.AwaGetActionToken
-export def "destiny2-awa-get-action-token get" [
+export def "destiny2-awa-get-action-token" [
   correlation_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1042,7 +1042,7 @@ export def "destiny2-awa-get-action-token get" [
 #
 # POST /Destiny2/Awa/Initialize/
 # operationId: Destiny2.AwaInitializeRequest
-export def "destiny2-awa-initialize request" [
+export def "destiny2-awa-initialize-request" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1076,7 +1076,7 @@ export def "destiny2-awa-initialize request" [
 #
 # GET /Destiny2/Clan/ClanBannerDictionary/
 # operationId: Destiny2.GetClanBannerSource
-export def "destiny2-clan-clan-banner-dictionary get-source" [
+export def "destiny2-get-clan-banner-source" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1110,7 +1110,7 @@ export def "destiny2-clan-clan-banner-dictionary get-source" [
 #
 # GET /Destiny2/Clan/{groupId}/WeeklyRewardState/
 # operationId: Destiny2.GetClanWeeklyRewardState
-export def "destiny2-clan-weekly-reward-state get" [
+export def "destiny2-get-clan-weekly-reward-state" [
   group_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1146,7 +1146,7 @@ export def "destiny2-clan-weekly-reward-state get" [
 #
 # GET /Destiny2/Manifest/
 # operationId: Destiny2.GetDestinyManifest
-export def "destiny2-manifest get-destiny" [
+export def "destiny2-get-destiny-manifest" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1180,7 +1180,7 @@ export def "destiny2-manifest get-destiny" [
 #
 # GET /Destiny2/Manifest/{entityType}/{hashIdentifier}/
 # operationId: Destiny2.GetDestinyEntityDefinition
-export def "destiny2-manifest get-destiny-entity-definition" [
+export def "destiny2-get-destiny-entity-definition" [
   entity_type: string
   hash_identifier: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -1218,7 +1218,7 @@ export def "destiny2-manifest get-destiny-entity-definition" [
 #
 # GET /Destiny2/Milestones/
 # operationId: Destiny2.GetPublicMilestones
-export def "destiny2-milestones get-public" [
+export def "destiny2-get-public-milestones" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1252,7 +1252,7 @@ export def "destiny2-milestones get-public" [
 #
 # GET /Destiny2/Milestones/{milestoneHash}/Content/
 # operationId: Destiny2.GetPublicMilestoneContent
-export def "destiny2-milestones-content get-public" [
+export def "destiny2-get-public-milestone-content" [
   milestone_hash: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1288,7 +1288,7 @@ export def "destiny2-milestones-content get-public" [
 #
 # POST /Destiny2/SearchDestinyPlayerByBungieName/{membershipType}/
 # operationId: Destiny2.SearchDestinyPlayerByBungieName
-export def "destiny2-search-destiny-player-by-bungie-name list" [
+export def "destiny2-search-destiny-player-by-bungie-name" [
   membership_type: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1324,7 +1324,7 @@ export def "destiny2-search-destiny-player-by-bungie-name list" [
 #
 # GET /Destiny2/Stats/AggregateClanStats/{groupId}/
 # operationId: Destiny2.GetClanAggregateStats
-export def "destiny2-stats-aggregate-clan-stats get" [
+export def "destiny2-get-clan-aggregate-stats" [
   group_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1362,7 +1362,7 @@ export def "destiny2-stats-aggregate-clan-stats get" [
 #
 # GET /Destiny2/Stats/Definition/
 # operationId: Destiny2.GetHistoricalStatsDefinition
-export def "destiny2-stats-definition get-historical" [
+export def "destiny2-get-historical-stats-definition" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1396,7 +1396,7 @@ export def "destiny2-stats-definition get-historical" [
 #
 # GET /Destiny2/Stats/Leaderboards/Clans/{groupId}/
 # operationId: Destiny2.GetClanLeaderboards
-export def "destiny2-stats-leaderboards-clans get" [
+export def "destiny2-get-clan-leaderboards" [
   group_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1436,7 +1436,7 @@ export def "destiny2-stats-leaderboards-clans get" [
 #
 # GET /Destiny2/Stats/Leaderboards/{membershipType}/{destinyMembershipId}/{characterId}/
 # operationId: Destiny2.GetLeaderboardsForCharacter
-export def "destiny2-stats-leaderboards get-for-character" [
+export def "destiny2-get-leaderboards-for-character" [
   membership_type: int
   destiny_membership_id: int
   character_id: int
@@ -1480,7 +1480,7 @@ export def "destiny2-stats-leaderboards get-for-character" [
 #
 # GET /Destiny2/Stats/PostGameCarnageReport/{activityId}/
 # operationId: Destiny2.GetPostGameCarnageReport
-export def "destiny2-stats-post-game-carnage-report get" [
+export def "destiny2-get-post-game-carnage-report" [
   activity_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1516,7 +1516,7 @@ export def "destiny2-stats-post-game-carnage-report get" [
 #
 # POST /Destiny2/Stats/PostGameCarnageReport/{activityId}/Report/
 # operationId: Destiny2.ReportOffensivePostGameCarnageReportPlayer
-export def "destiny2-stats-post-game-carnage-report-report create-offensive-player" [
+export def "destiny2-report-offensive-post-game-carnage-report-player" [
   activity_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1552,7 +1552,7 @@ export def "destiny2-stats-post-game-carnage-report-report create-offensive-play
 #
 # GET /Destiny2/Vendors/
 # operationId: Destiny2.GetPublicVendors
-export def "destiny2-vendors get-public" [
+export def "destiny2-get-public-vendors" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1588,7 +1588,7 @@ export def "destiny2-vendors get-public" [
 #
 # GET /Destiny2/{membershipType}/Account/{destinyMembershipId}/Character/{characterId}/Stats/
 # operationId: Destiny2.GetHistoricalStats
-export def "destiny2-account-character-stats get-historical" [
+export def "destiny2-get-historical-stats" [
   membership_type: int
   destiny_membership_id: int
   character_id: int
@@ -1634,7 +1634,7 @@ export def "destiny2-account-character-stats get-historical" [
 #
 # GET /Destiny2/{membershipType}/Account/{destinyMembershipId}/Character/{characterId}/Stats/Activities/
 # operationId: Destiny2.GetActivityHistory
-export def "destiny2-account-character-stats-activities get-activity-history" [
+export def "destiny2-get-activity-history" [
   membership_type: int
   destiny_membership_id: int
   character_id: int
@@ -1678,7 +1678,7 @@ export def "destiny2-account-character-stats-activities get-activity-history" [
 #
 # GET /Destiny2/{membershipType}/Account/{destinyMembershipId}/Character/{characterId}/Stats/AggregateActivityStats/
 # operationId: Destiny2.GetDestinyAggregateActivityStats
-export def "destiny2-account-character-stats-aggregate-activity-stats get-destiny" [
+export def "destiny2-get-destiny-aggregate-activity-stats" [
   membership_type: int
   destiny_membership_id: int
   character_id: int
@@ -1718,7 +1718,7 @@ export def "destiny2-account-character-stats-aggregate-activity-stats get-destin
 #
 # GET /Destiny2/{membershipType}/Account/{destinyMembershipId}/Character/{characterId}/Stats/UniqueWeapons/
 # operationId: Destiny2.GetUniqueWeaponHistory
-export def "destiny2-account-character-stats-unique-weapons get-history" [
+export def "destiny2-get-unique-weapon-history" [
   membership_type: int
   destiny_membership_id: int
   character_id: int
@@ -1758,7 +1758,7 @@ export def "destiny2-account-character-stats-unique-weapons get-history" [
 #
 # GET /Destiny2/{membershipType}/Account/{destinyMembershipId}/Stats/
 # operationId: Destiny2.GetHistoricalStatsForAccount
-export def "destiny2-account-stats get-historical" [
+export def "destiny2-get-historical-stats-for-account" [
   membership_type: int
   destiny_membership_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -1798,7 +1798,7 @@ export def "destiny2-account-stats get-historical" [
 #
 # GET /Destiny2/{membershipType}/Account/{destinyMembershipId}/Stats/Leaderboards/
 # operationId: Destiny2.GetLeaderboards
-export def "destiny2-account-stats-leaderboards get" [
+export def "destiny2-get-leaderboards" [
   membership_type: int
   destiny_membership_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -1840,7 +1840,7 @@ export def "destiny2-account-stats-leaderboards get" [
 #
 # GET /Destiny2/{membershipType}/Profile/{destinyMembershipId}/
 # operationId: Destiny2.GetProfile
-export def "destiny2-profile get" [
+export def "destiny2-get-profile" [
   membership_type: int
   destiny_membership_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -1880,7 +1880,7 @@ export def "destiny2-profile get" [
 #
 # GET /Destiny2/{membershipType}/Profile/{destinyMembershipId}/Character/{characterId}/
 # operationId: Destiny2.GetCharacter
-export def "destiny2-profile-character get" [
+export def "destiny2-get-character" [
   membership_type: int
   destiny_membership_id: int
   character_id: int
@@ -1922,7 +1922,7 @@ export def "destiny2-profile-character get" [
 #
 # GET /Destiny2/{membershipType}/Profile/{destinyMembershipId}/Character/{characterId}/Collectibles/{collectiblePresentationNodeHash}/
 # operationId: Destiny2.GetCollectibleNodeDetails
-export def "destiny2-profile-character-collectibles get-node-details" [
+export def "destiny2-get-collectible-node-details" [
   membership_type: int
   destiny_membership_id: int
   character_id: int
@@ -1966,7 +1966,7 @@ export def "destiny2-profile-character-collectibles get-node-details" [
 #
 # GET /Destiny2/{membershipType}/Profile/{destinyMembershipId}/Character/{characterId}/Vendors/
 # operationId: Destiny2.GetVendors
-export def "destiny2-profile-character-vendors list" [
+export def "destiny2-get-vendors" [
   membership_type: int
   destiny_membership_id: int
   character_id: int
@@ -2009,7 +2009,7 @@ export def "destiny2-profile-character-vendors list" [
 #
 # GET /Destiny2/{membershipType}/Profile/{destinyMembershipId}/Character/{characterId}/Vendors/{vendorHash}/
 # operationId: Destiny2.GetVendor
-export def "destiny2-profile-character-vendors get" [
+export def "destiny2-get-vendor" [
   membership_type: int
   destiny_membership_id: int
   character_id: int
@@ -2053,7 +2053,7 @@ export def "destiny2-profile-character-vendors get" [
 #
 # GET /Destiny2/{membershipType}/Profile/{destinyMembershipId}/Item/{itemInstanceId}/
 # operationId: Destiny2.GetItem
-export def "destiny2-profile-item get" [
+export def "destiny2-get-item" [
   membership_type: int
   destiny_membership_id: int
   item_instance_id: int
@@ -2095,7 +2095,7 @@ export def "destiny2-profile-item get" [
 #
 # GET /Destiny2/{membershipType}/Profile/{membershipId}/LinkedProfiles/
 # operationId: Destiny2.GetLinkedProfiles
-export def "destiny2-profile-linked-profiles get" [
+export def "destiny2-get-linked-profiles" [
   membership_type: int
   membership_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -2135,7 +2135,7 @@ export def "destiny2-profile-linked-profiles get" [
 #
 # GET /Fireteam/Clan/{groupId}/ActiveCount/
 # operationId: Fireteam.GetActivePrivateClanFireteamCount
-export def "fireteam-clan-active-count get-private" [
+export def "fireteam-get-active-private-clan-fireteam-count" [
   group_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2171,7 +2171,7 @@ export def "fireteam-clan-active-count get-private" [
 #
 # GET /Fireteam/Clan/{groupId}/Available/{platform}/{activityType}/{dateRange}/{slotFilter}/{publicOnly}/{page}/
 # operationId: Fireteam.GetAvailableClanFireteams
-export def "fireteam-clan-available get" [
+export def "fireteam-get-available-clan-fireteams" [
   group_id: int
   platform: int
   activity_type: int
@@ -2222,7 +2222,7 @@ export def "fireteam-clan-available get" [
 #
 # GET /Fireteam/Clan/{groupId}/My/{platform}/{includeClosed}/{page}/
 # operationId: Fireteam.GetMyClanFireteams
-export def "fireteam-clan-my get" [
+export def "fireteam-get-my-clan-fireteams" [
   group_id: int
   platform: int
   include_closed: bool
@@ -2267,7 +2267,7 @@ export def "fireteam-clan-my get" [
 #
 # GET /Fireteam/Clan/{groupId}/Summary/{fireteamId}/
 # operationId: Fireteam.GetClanFireteam
-export def "fireteam-clan-summary get" [
+export def "fireteam-get-clan-fireteam" [
   group_id: int
   fireteam_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -2305,7 +2305,7 @@ export def "fireteam-clan-summary get" [
 #
 # GET /Fireteam/Search/Available/{platform}/{activityType}/{dateRange}/{slotFilter}/{page}/
 # operationId: Fireteam.SearchPublicAvailableClanFireteams
-export def "fireteam-search-available list-public-clan" [
+export def "fireteam-search-public-available-clan-fireteams" [
   platform: int
   activity_type: int
   date_range: int
@@ -2352,7 +2352,7 @@ export def "fireteam-search-available list-public-clan" [
 #
 # GET /Forum/GetCoreTopicsPaged/{page}/{sort}/{quickDate}/{categoryFilter}/
 # operationId: Forum.GetCoreTopicsPaged
-export def "forum-get-core-topics-paged get" [
+export def "forum-get-core-topics-paged" [
   page: int
   sort: int
   quick_date: int
@@ -2396,7 +2396,7 @@ export def "forum-get-core-topics-paged get" [
 #
 # GET /Forum/GetForumTagSuggestions/
 # operationId: Forum.GetForumTagSuggestions
-export def "forum-get-forum-tag-suggestions get" [
+export def "forum-get-forum-tag-suggestions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2432,7 +2432,7 @@ export def "forum-get-forum-tag-suggestions get" [
 #
 # GET /Forum/GetPostAndParent/{childPostId}/
 # operationId: Forum.GetPostAndParent
-export def "forum-get-post-and-parent get" [
+export def "forum-get-post-and-parent" [
   child_post_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2470,7 +2470,7 @@ export def "forum-get-post-and-parent get" [
 #
 # GET /Forum/GetPostAndParentAwaitingApproval/{childPostId}/
 # operationId: Forum.GetPostAndParentAwaitingApproval
-export def "forum-get-post-and-parent-awaiting-approval get" [
+export def "forum-get-post-and-parent-awaiting-approval" [
   child_post_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2508,7 +2508,7 @@ export def "forum-get-post-and-parent-awaiting-approval get" [
 #
 # GET /Forum/GetPostsThreadedPaged/{parentPostId}/{page}/{pageSize}/{replySize}/{getParentPost}/{rootThreadMode}/{sortMode}/
 # operationId: Forum.GetPostsThreadedPaged
-export def "forum-get-posts-threaded-paged get" [
+export def "forum-get-posts-threaded-paged" [
   parent_post_id: int
   page: int
   page_size: int
@@ -2558,7 +2558,7 @@ export def "forum-get-posts-threaded-paged get" [
 #
 # GET /Forum/GetPostsThreadedPagedFromChild/{childPostId}/{page}/{pageSize}/{replySize}/{rootThreadMode}/{sortMode}/
 # operationId: Forum.GetPostsThreadedPagedFromChild
-export def "forum-get-posts-threaded-paged-from-child get" [
+export def "forum-get-posts-threaded-paged-from-child" [
   child_post_id: int
   page: int
   page_size: int
@@ -2606,7 +2606,7 @@ export def "forum-get-posts-threaded-paged-from-child get" [
 #
 # GET /Forum/GetTopicForContent/{contentId}/
 # operationId: Forum.GetTopicForContent
-export def "forum-get-topic-for-content get" [
+export def "forum-get-topic-for-content" [
   content_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2642,7 +2642,7 @@ export def "forum-get-topic-for-content get" [
 #
 # GET /Forum/GetTopicsPaged/{page}/{pageSize}/{group}/{sort}/{quickDate}/{categoryFilter}/
 # operationId: Forum.GetTopicsPaged
-export def "forum-get-topics-paged get" [
+export def "forum-get-topics-paged" [
   page: int
   page_size: int
   group: int
@@ -2691,7 +2691,7 @@ export def "forum-get-topics-paged get" [
 #
 # GET /Forum/Poll/{topicId}/
 # operationId: Forum.GetPoll
-export def "forum-poll get" [
+export def "forum-get-poll" [
   topic_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2727,7 +2727,7 @@ export def "forum-poll get" [
 #
 # POST /Forum/Recruit/Summaries/
 # operationId: Forum.GetRecruitmentThreadSummaries
-export def "forum-recruit-summaries get-recruitment-thread" [
+export def "forum-get-recruitment-thread-summaries" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2761,7 +2761,7 @@ export def "forum-recruit-summaries get-recruitment-thread" [
 #
 # GET /GetAvailableLocales/
 # operationId: .GetAvailableLocales
-export def "get-available-locales get" [
+export def "get-available-locales" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2795,7 +2795,7 @@ export def "get-available-locales get" [
 #
 # GET /GlobalAlerts/
 # operationId: .GetGlobalAlerts
-export def "global-alerts get" [
+export def "get-global-alerts" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2831,7 +2831,7 @@ export def "global-alerts get" [
 #
 # GET /GroupV2/GetAvailableAvatars/
 # operationId: GroupV2.GetAvailableAvatars
-export def "group-v2-get-available-avatars get" [
+export def "group-v2-get-available-avatars" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2865,7 +2865,7 @@ export def "group-v2-get-available-avatars get" [
 #
 # GET /GroupV2/GetAvailableThemes/
 # operationId: GroupV2.GetAvailableThemes
-export def "group-v2-get-available-themes get" [
+export def "group-v2-get-available-themes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2899,7 +2899,7 @@ export def "group-v2-get-available-themes get" [
 #
 # GET /GroupV2/GetUserClanInviteSetting/{mType}/
 # operationId: GroupV2.GetUserClanInviteSetting
-export def "group-v2-get-user-clan-invite-setting get" [
+export def "group-v2-get-user-clan-invite-setting" [
   m_type: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2935,7 +2935,7 @@ export def "group-v2-get-user-clan-invite-setting get" [
 #
 # GET /GroupV2/Name/{groupName}/{groupType}/
 # operationId: GroupV2.GetGroupByName
-export def "group-v2-name get" [
+export def "group-v2-get-group-by-name" [
   group_name: string
   group_type: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -2973,7 +2973,7 @@ export def "group-v2-name get" [
 #
 # POST /GroupV2/NameV2/
 # operationId: GroupV2.GetGroupByNameV2
-export def "group-v2-name-v2 get" [
+export def "group-v2-get-group-by-name-v2" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3007,7 +3007,7 @@ export def "group-v2-name-v2 get" [
 #
 # POST /GroupV2/Recommended/{groupType}/{createDateRange}/
 # operationId: GroupV2.GetRecommendedGroups
-export def "group-v2-recommended get" [
+export def "group-v2-get-recommended-groups" [
   group_type: int
   create_date_range: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -3045,7 +3045,7 @@ export def "group-v2-recommended get" [
 #
 # GET /GroupV2/Recover/{membershipType}/{membershipId}/{groupType}/
 # operationId: GroupV2.RecoverGroupForFounder
-export def "group-v2-recover get-for-founder" [
+export def "group-v2-recover-group-for-founder" [
   membership_type: int
   membership_id: int
   group_type: int
@@ -3085,7 +3085,7 @@ export def "group-v2-recover get-for-founder" [
 #
 # POST /GroupV2/Search/
 # operationId: GroupV2.GroupSearch
-export def "group-v2-search list" [
+export def "group-v2-group-search" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3119,7 +3119,7 @@ export def "group-v2-search list" [
 #
 # GET /GroupV2/User/Potential/{membershipType}/{membershipId}/{filter}/{groupType}/
 # operationId: GroupV2.GetPotentialGroupsForMember
-export def "group-v2-user-potential get-for-member" [
+export def "group-v2-get-potential-groups-for-member" [
   membership_type: int
   membership_id: int
   filter: int
@@ -3161,7 +3161,7 @@ export def "group-v2-user-potential get-for-member" [
 #
 # GET /GroupV2/User/{membershipType}/{membershipId}/{filter}/{groupType}/
 # operationId: GroupV2.GetGroupsForMember
-export def "group-v2-user get-for-member" [
+export def "group-v2-get-groups-for-member" [
   membership_type: int
   membership_id: int
   filter: int
@@ -3203,7 +3203,7 @@ export def "group-v2-user get-for-member" [
 #
 # GET /GroupV2/{groupId}/
 # operationId: GroupV2.GetGroup
-export def "group-v2 get" [
+export def "group-v2-get-group" [
   group_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3239,7 +3239,7 @@ export def "group-v2 get" [
 #
 # POST /GroupV2/{groupId}/Admin/AbdicateFoundership/{membershipType}/{founderIdNew}/
 # operationId: GroupV2.AbdicateFoundership
-export def "group-v2-admin-abdicate-foundership create" [
+export def "group-v2-abdicate-foundership" [
   group_id: int
   membership_type: int
   founder_id_new: int
@@ -3279,7 +3279,7 @@ export def "group-v2-admin-abdicate-foundership create" [
 #
 # GET /GroupV2/{groupId}/AdminsAndFounder/
 # operationId: GroupV2.GetAdminsAndFounderOfGroup
-export def "group-v2-admins-and-founder get" [
+export def "group-v2-get-admins-and-founder-of-group" [
   group_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3317,7 +3317,7 @@ export def "group-v2-admins-and-founder get" [
 #
 # GET /GroupV2/{groupId}/Banned/
 # operationId: GroupV2.GetBannedMembersOfGroup
-export def "group-v2-banned get-members" [
+export def "group-v2-get-banned-members-of-group" [
   group_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3355,7 +3355,7 @@ export def "group-v2-banned get-members" [
 #
 # POST /GroupV2/{groupId}/Edit/
 # operationId: GroupV2.EditGroup
-export def "group-v2-edit create" [
+export def "group-v2-edit-group" [
   group_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3391,7 +3391,7 @@ export def "group-v2-edit create" [
 #
 # POST /GroupV2/{groupId}/EditClanBanner/
 # operationId: GroupV2.EditClanBanner
-export def "group-v2-edit-clan-banner create" [
+export def "group-v2-edit-clan-banner" [
   group_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3427,7 +3427,7 @@ export def "group-v2-edit-clan-banner create" [
 #
 # POST /GroupV2/{groupId}/EditFounderOptions/
 # operationId: GroupV2.EditFounderOptions
-export def "group-v2-edit-founder-options create" [
+export def "group-v2-edit-founder-options" [
   group_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3463,7 +3463,7 @@ export def "group-v2-edit-founder-options create" [
 #
 # GET /GroupV2/{groupId}/Members/
 # operationId: GroupV2.GetMembersOfGroup
-export def "group-v2-members get" [
+export def "group-v2-get-members-of-group" [
   group_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3503,7 +3503,7 @@ export def "group-v2-members get" [
 #
 # POST /GroupV2/{groupId}/Members/Approve/{membershipType}/{membershipId}/
 # operationId: GroupV2.ApprovePending
-export def "group-v2-members-approve approve-pending" [
+export def "group-v2-approve-pending" [
   group_id: int
   membership_type: int
   membership_id: int
@@ -3543,7 +3543,7 @@ export def "group-v2-members-approve approve-pending" [
 #
 # POST /GroupV2/{groupId}/Members/ApproveAll/
 # operationId: GroupV2.ApproveAllPending
-export def "group-v2-members-approve-all approve-pending" [
+export def "group-v2-approve-all-pending" [
   group_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3579,7 +3579,7 @@ export def "group-v2-members-approve-all approve-pending" [
 #
 # POST /GroupV2/{groupId}/Members/ApproveList/
 # operationId: GroupV2.ApprovePendingForList
-export def "group-v2-members-approve-list approve-pending" [
+export def "group-v2-approve-pending-for-list" [
   group_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3615,7 +3615,7 @@ export def "group-v2-members-approve-list approve-pending" [
 #
 # POST /GroupV2/{groupId}/Members/DenyAll/
 # operationId: GroupV2.DenyAllPending
-export def "group-v2-members-deny-all list-pending" [
+export def "group-v2-deny-all-pending" [
   group_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3651,7 +3651,7 @@ export def "group-v2-members-deny-all list-pending" [
 #
 # POST /GroupV2/{groupId}/Members/DenyList/
 # operationId: GroupV2.DenyPendingForList
-export def "group-v2-members-deny-list list-pending" [
+export def "group-v2-deny-pending-for-list" [
   group_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3687,7 +3687,7 @@ export def "group-v2-members-deny-list list-pending" [
 #
 # POST /GroupV2/{groupId}/Members/IndividualInvite/{membershipType}/{membershipId}/
 # operationId: GroupV2.IndividualGroupInvite
-export def "group-v2-members-individual-invite create" [
+export def "group-v2-individual-group-invite" [
   group_id: int
   membership_type: int
   membership_id: int
@@ -3727,7 +3727,7 @@ export def "group-v2-members-individual-invite create" [
 #
 # POST /GroupV2/{groupId}/Members/IndividualInviteCancel/{membershipType}/{membershipId}/
 # operationId: GroupV2.IndividualGroupInviteCancel
-export def "group-v2-members-individual-invite-cancel cancel" [
+export def "group-v2-individual-group-invite-cancel" [
   group_id: int
   membership_type: int
   membership_id: int
@@ -3767,7 +3767,7 @@ export def "group-v2-members-individual-invite-cancel cancel" [
 #
 # GET /GroupV2/{groupId}/Members/InvitedIndividuals/
 # operationId: GroupV2.GetInvitedIndividuals
-export def "group-v2-members-invited-individuals get" [
+export def "group-v2-get-invited-individuals" [
   group_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3805,7 +3805,7 @@ export def "group-v2-members-invited-individuals get" [
 #
 # GET /GroupV2/{groupId}/Members/Pending/
 # operationId: GroupV2.GetPendingMemberships
-export def "group-v2-members-pending get-memberships" [
+export def "group-v2-get-pending-memberships" [
   group_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3843,7 +3843,7 @@ export def "group-v2-members-pending get-memberships" [
 #
 # POST /GroupV2/{groupId}/Members/{membershipType}/{membershipId}/Ban/
 # operationId: GroupV2.BanMember
-export def "group-v2-members-ban create" [
+export def "group-v2-ban-member" [
   group_id: int
   membership_type: int
   membership_id: int
@@ -3883,7 +3883,7 @@ export def "group-v2-members-ban create" [
 #
 # POST /GroupV2/{groupId}/Members/{membershipType}/{membershipId}/Kick/
 # operationId: GroupV2.KickMember
-export def "group-v2-members-kick create" [
+export def "group-v2-kick-member" [
   group_id: int
   membership_type: int
   membership_id: int
@@ -3923,7 +3923,7 @@ export def "group-v2-members-kick create" [
 #
 # POST /GroupV2/{groupId}/Members/{membershipType}/{membershipId}/SetMembershipType/{memberType}/
 # operationId: GroupV2.EditGroupMembership
-export def "group-v2-members-set-membership-type create-edit" [
+export def "group-v2-edit-group-membership" [
   group_id: int
   membership_type: int
   membership_id: int
@@ -3965,7 +3965,7 @@ export def "group-v2-members-set-membership-type create-edit" [
 #
 # POST /GroupV2/{groupId}/Members/{membershipType}/{membershipId}/Unban/
 # operationId: GroupV2.UnbanMember
-export def "group-v2-members-unban create" [
+export def "group-v2-unban-member" [
   group_id: int
   membership_type: int
   membership_id: int
@@ -4005,7 +4005,7 @@ export def "group-v2-members-unban create" [
 #
 # GET /GroupV2/{groupId}/OptionalConversations/
 # operationId: GroupV2.GetGroupOptionalConversations
-export def "group-v2-optional-conversations get" [
+export def "group-v2-get-group-optional-conversations" [
   group_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4041,7 +4041,7 @@ export def "group-v2-optional-conversations get" [
 #
 # POST /GroupV2/{groupId}/OptionalConversations/Add/
 # operationId: GroupV2.AddOptionalConversation
-export def "group-v2-optional-conversations-add create" [
+export def "group-v2-add-optional-conversation" [
   group_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4077,7 +4077,7 @@ export def "group-v2-optional-conversations-add create" [
 #
 # POST /GroupV2/{groupId}/OptionalConversations/Edit/{conversationId}/
 # operationId: GroupV2.EditOptionalConversation
-export def "group-v2-optional-conversations-edit create" [
+export def "group-v2-edit-optional-conversation" [
   group_id: int
   conversation_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -4115,7 +4115,7 @@ export def "group-v2-optional-conversations-edit create" [
 #
 # GET /Settings/
 # operationId: .GetCommonSettings
-export def "settings get-common" [
+export def "get-common-settings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4149,7 +4149,7 @@ export def "settings get-common" [
 #
 # GET /Social/Friends/
 # operationId: Social.GetFriendList
-export def "social-friends get-list" [
+export def "social-get-friend-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4183,7 +4183,7 @@ export def "social-friends get-list" [
 #
 # POST /Social/Friends/Add/{membershipId}/
 # operationId: Social.IssueFriendRequest
-export def "social-friends-add request-issue" [
+export def "social-issue-friend-request" [
   membership_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4219,7 +4219,7 @@ export def "social-friends-add request-issue" [
 #
 # POST /Social/Friends/Remove/{membershipId}/
 # operationId: Social.RemoveFriend
-export def "social-friends-remove delete" [
+export def "social-remove-friend" [
   membership_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4255,7 +4255,7 @@ export def "social-friends-remove delete" [
 #
 # GET /Social/Friends/Requests/
 # operationId: Social.GetFriendRequestList
-export def "social-friends-requests get-list" [
+export def "social-get-friend-request-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4289,7 +4289,7 @@ export def "social-friends-requests get-list" [
 #
 # POST /Social/Friends/Requests/Accept/{membershipId}/
 # operationId: Social.AcceptFriendRequest
-export def "social-friends-requests-accept request" [
+export def "social-accept-friend-request" [
   membership_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4325,7 +4325,7 @@ export def "social-friends-requests-accept request" [
 #
 # POST /Social/Friends/Requests/Decline/{membershipId}/
 # operationId: Social.DeclineFriendRequest
-export def "social-friends-requests-decline request" [
+export def "social-decline-friend-request" [
   membership_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4361,7 +4361,7 @@ export def "social-friends-requests-decline request" [
 #
 # POST /Social/Friends/Requests/Remove/{membershipId}/
 # operationId: Social.RemoveFriendRequest
-export def "social-friends-requests-remove delete" [
+export def "social-remove-friend-request" [
   membership_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4397,7 +4397,7 @@ export def "social-friends-requests-remove delete" [
 #
 # GET /Social/PlatformFriends/{friendPlatform}/{page}/
 # operationId: Social.GetPlatformFriendList
-export def "social-platform-friends get-list" [
+export def "social-get-platform-friend-list" [
   friend_platform: int
   page: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4435,7 +4435,7 @@ export def "social-platform-friends get-list" [
 #
 # POST /Tokens/Partner/ApplyMissingOffers/{partnerApplicationId}/{targetBnetMembershipId}/
 # operationId: Tokens.ApplyMissingPartnerOffersWithoutClaim
-export def "tokens-partner-apply-missing-offers create-without-claim" [
+export def "tokens-apply-missing-partner-offers-without-claim" [
   partner_application_id: int
   target_bnet_membership_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -4473,7 +4473,7 @@ export def "tokens-partner-apply-missing-offers create-without-claim" [
 #
 # POST /Tokens/Partner/ClaimOffer/
 # operationId: Tokens.ClaimPartnerOffer
-export def "tokens-partner-claim-offer create" [
+export def "tokens-claim-partner-offer" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4507,7 +4507,7 @@ export def "tokens-partner-claim-offer create" [
 #
 # POST /Tokens/Partner/ForceDropsRepair/
 # operationId: Tokens.ForceDropsRepair
-export def "tokens-partner-force-drops-repair create" [
+export def "tokens-force-drops-repair" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4541,7 +4541,7 @@ export def "tokens-partner-force-drops-repair create" [
 #
 # GET /Tokens/Partner/History/{partnerApplicationId}/{targetBnetMembershipId}/
 # operationId: Tokens.GetPartnerOfferSkuHistory
-export def "tokens-partner-history get-offer-sku" [
+export def "tokens-get-partner-offer-sku-history" [
   partner_application_id: int
   target_bnet_membership_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -4579,7 +4579,7 @@ export def "tokens-partner-history get-offer-sku" [
 #
 # GET /Tokens/Partner/History/{targetBnetMembershipId}/Application/{partnerApplicationId}/
 # operationId: Tokens.GetPartnerRewardHistory
-export def "tokens-partner-history-application get-reward" [
+export def "tokens-get-partner-reward-history" [
   target_bnet_membership_id: int
   partner_application_id: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -4617,7 +4617,7 @@ export def "tokens-partner-history-application get-reward" [
 #
 # GET /Tokens/Rewards/BungieRewards/
 # operationId: Tokens.GetBungieRewardsList
-export def "tokens-rewards-bungie-rewards get-list" [
+export def "tokens-get-bungie-rewards-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4651,7 +4651,7 @@ export def "tokens-rewards-bungie-rewards get-list" [
 #
 # GET /Tokens/Rewards/GetRewardsForPlatformUser/{membershipId}/{membershipType}/
 # operationId: Tokens.GetBungieRewardsForPlatformUser
-export def "tokens-rewards-get-rewards-for-platform-user get-bungie" [
+export def "tokens-get-bungie-rewards-for-platform-user" [
   membership_id: int
   membership_type: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -4689,7 +4689,7 @@ export def "tokens-rewards-get-rewards-for-platform-user get-bungie" [
 #
 # GET /Tokens/Rewards/GetRewardsForUser/{membershipId}/
 # operationId: Tokens.GetBungieRewardsForUser
-export def "tokens-rewards-get-rewards-for-user get-bungie" [
+export def "tokens-get-bungie-rewards-for-user" [
   membership_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4725,7 +4725,7 @@ export def "tokens-rewards-get-rewards-for-user get-bungie" [
 #
 # GET /Trending/Categories/
 # operationId: Trending.GetTrendingCategories
-export def "trending-categories get" [
+export def "trending-get-trending-categories" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4759,7 +4759,7 @@ export def "trending-categories get" [
 #
 # GET /Trending/Categories/{categoryId}/{pageNumber}/
 # operationId: Trending.GetTrendingCategory
-export def "trending-categories get-category" [
+export def "trending-get-trending-category" [
   category_id: string
   page_number: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -4797,7 +4797,7 @@ export def "trending-categories get-category" [
 #
 # GET /Trending/Details/{trendingEntryType}/{identifier}/
 # operationId: Trending.GetTrendingEntryDetail
-export def "trending-details get-entry" [
+export def "trending-get-trending-entry-detail" [
   trending_entry_type: int
   identifier: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4835,7 +4835,7 @@ export def "trending-details get-entry" [
 #
 # GET /User/GetAvailableThemes/
 # operationId: User.GetAvailableThemes
-export def "user-get-available-themes get" [
+export def "user-get-available-themes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4869,7 +4869,7 @@ export def "user-get-available-themes get" [
 #
 # GET /User/GetBungieNetUserById/{id}/
 # operationId: User.GetBungieNetUserById
-export def "user-get-bungie-net-user-by-id get" [
+export def "user-get-bungie-net-user-by-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4905,7 +4905,7 @@ export def "user-get-bungie-net-user-by-id get" [
 #
 # GET /User/GetCredentialTypesForTargetAccount/{membershipId}/
 # operationId: User.GetCredentialTypesForTargetAccount
-export def "user-get-credential-types-for-target-account get" [
+export def "user-get-credential-types-for-target-account" [
   membership_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4941,7 +4941,7 @@ export def "user-get-credential-types-for-target-account get" [
 #
 # GET /User/GetMembershipFromHardLinkedCredential/{crType}/{credential}/
 # operationId: User.GetMembershipFromHardLinkedCredential
-export def "user-get-membership-from-hard-linked-credential get" [
+export def "user-get-membership-from-hard-linked-credential" [
   cr_type: int
   credential: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4979,7 +4979,7 @@ export def "user-get-membership-from-hard-linked-credential get" [
 #
 # GET /User/GetMembershipsById/{membershipId}/{membershipType}/
 # operationId: User.GetMembershipDataById
-export def "user-get-memberships-by-id get-data" [
+export def "user-get-membership-data-by-id" [
   membership_id: int
   membership_type: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -5017,7 +5017,7 @@ export def "user-get-memberships-by-id get-data" [
 #
 # GET /User/GetMembershipsForCurrentUser/
 # operationId: User.GetMembershipDataForCurrentUser
-export def "user-get-memberships-for-current-user get-data" [
+export def "user-get-membership-data-for-current-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5051,7 +5051,7 @@ export def "user-get-memberships-for-current-user get-data" [
 #
 # GET /User/GetSanitizedPlatformDisplayNames/{membershipId}/
 # operationId: User.GetSanitizedPlatformDisplayNames
-export def "user-get-sanitized-platform-display-names get" [
+export def "user-get-sanitized-platform-display-names" [
   membership_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5087,7 +5087,7 @@ export def "user-get-sanitized-platform-display-names get" [
 #
 # POST /User/Search/GlobalName/{page}/
 # operationId: User.SearchByGlobalNamePost
-export def "user-search-global-name create-by" [
+export def "user-search-by-global-name-post" [
   page: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5123,7 +5123,7 @@ export def "user-search-global-name create-by" [
 #
 # GET /User/Search/Prefix/{displayNamePrefix}/{page}/
 # operationId: User.SearchByGlobalNamePrefix
-export def "user-search-prefix list-by-global-name" [
+export def "user-search-by-global-name-prefix" [
   display_name_prefix: string
   page: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -5161,7 +5161,7 @@ export def "user-search-prefix list-by-global-name" [
 #
 # GET /UserSystemOverrides/
 # operationId: .GetUserSystemOverrides
-export def "user-system-overrides get" [
+export def "get-user-system-overrides" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

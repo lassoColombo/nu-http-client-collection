@@ -128,7 +128,7 @@ def type-completer-2 [] { ["allowList" "blockList" "maxUsage" "velocity"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "account-holders create" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "post-account-holders" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -153,7 +153,7 @@ export def commands []: nothing -> table {
 # POST /accountHolders
 # operationId: post-accountHolders
 # --contactDetails shape: {address: record, email: string, phone: record, webAddress?: string}
-export def "account-holders create" [
+export def "post-account-holders" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -197,7 +197,7 @@ export def "account-holders create" [
 #
 # GET /accountHolders/{id}
 # operationId: get-accountHolders-id
-export def "account-holders get" [
+export def "get-account-holders-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -234,7 +234,7 @@ export def "account-holders get" [
 # PATCH /accountHolders/{id}
 # operationId: patch-accountHolders-id
 # --contactDetails shape: {address: record, email: string, phone: record, webAddress?: string}
-export def "account-holders update" [
+export def "patch-account-holders-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -282,7 +282,7 @@ export def "account-holders update" [
 #
 # GET /accountHolders/{id}/balanceAccounts
 # operationId: get-accountHolders-id-balanceAccounts
-export def "account-holders-balance-accounts get" [
+export def "get-account-holders-id-balance-accounts" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -321,7 +321,7 @@ export def "account-holders-balance-accounts get" [
 #
 # POST /balanceAccounts
 # operationId: post-balanceAccounts
-export def "balance-accounts create" [
+export def "post-balance-accounts" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -363,7 +363,7 @@ export def "balance-accounts create" [
 #
 # GET /balanceAccounts/{balanceAccountId}/sweeps
 # operationId: get-balanceAccounts-balanceAccountId-sweeps
-export def "balance-accounts-sweeps list" [
+export def "get-balance-accounts-balance-account-id-sweeps" [
   balance_account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -406,7 +406,7 @@ export def "balance-accounts-sweeps list" [
 # --sweepAmount shape: {currency: string, value: int}
 # --targetAmount shape: {currency: string, value: int}
 # --triggerAmount shape: {currency: string, value: int}
-export def "balance-accounts-sweeps create" [
+export def "post-balance-accounts-balance-account-id-sweeps" [
   balance_account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -456,7 +456,7 @@ export def "balance-accounts-sweeps create" [
 #
 # DELETE /balanceAccounts/{balanceAccountId}/sweeps/{sweepId}
 # operationId: delete-balanceAccounts-balanceAccountId-sweeps-sweepId
-export def "balance-accounts-sweeps delete" [
+export def "delete-balance-accounts-balance-account-id-sweeps-sweep-id" [
   balance_account_id: string
   sweep_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -494,7 +494,7 @@ export def "balance-accounts-sweeps delete" [
 #
 # GET /balanceAccounts/{balanceAccountId}/sweeps/{sweepId}
 # operationId: get-balanceAccounts-balanceAccountId-sweeps-sweepId
-export def "balance-accounts-sweeps get" [
+export def "get-balance-accounts-balance-account-id-sweeps-sweep-id" [
   balance_account_id: string
   sweep_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -536,7 +536,7 @@ export def "balance-accounts-sweeps get" [
 # --sweepAmount shape: {currency: string, value: int}
 # --targetAmount shape: {currency: string, value: int}
 # --triggerAmount shape: {currency: string, value: int}
-export def "balance-accounts-sweeps update" [
+export def "patch-balance-accounts-balance-account-id-sweeps-sweep-id" [
   balance_account_id: string
   sweep_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -588,7 +588,7 @@ export def "balance-accounts-sweeps update" [
 #
 # GET /balanceAccounts/{id}
 # operationId: get-balanceAccounts-id
-export def "balance-accounts get" [
+export def "get-balance-accounts-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -624,7 +624,7 @@ export def "balance-accounts get" [
 #
 # PATCH /balanceAccounts/{id}
 # operationId: patch-balanceAccounts-id
-export def "balance-accounts update" [
+export def "patch-balance-accounts-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -669,7 +669,7 @@ export def "balance-accounts update" [
 #
 # GET /balanceAccounts/{id}/paymentInstruments
 # operationId: get-balanceAccounts-id-paymentInstruments
-export def "balance-accounts-payment-instruments get" [
+export def "get-balance-accounts-id-payment-instruments" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -708,7 +708,7 @@ export def "balance-accounts-payment-instruments get" [
 #
 # GET /balancePlatforms/{id}
 # operationId: get-balancePlatforms-id
-export def "balance-platforms get" [
+export def "get-balance-platforms-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -744,7 +744,7 @@ export def "balance-platforms get" [
 #
 # GET /balancePlatforms/{id}/accountHolders
 # operationId: get-balancePlatforms-id-accountHolders
-export def "balance-platforms-account-holders get" [
+export def "get-balance-platforms-id-account-holders" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -783,7 +783,7 @@ export def "balance-platforms-account-holders get" [
 #
 # GET /grantAccounts/{id}
 # operationId: get-grantAccounts-id
-export def "grant-accounts get" [
+export def "get-grant-accounts-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -819,7 +819,7 @@ export def "grant-accounts get" [
 #
 # GET /grantOffers
 # operationId: get-grantOffers
-export def "grant-offers list" [
+export def "get-grant-offers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -855,7 +855,7 @@ export def "grant-offers list" [
 #
 # GET /grantOffers/{grantOfferId}
 # operationId: get-grantOffers-grantOfferId
-export def "grant-offers get" [
+export def "get-grant-offers-grant-offer-id" [
   grant_offer_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -891,7 +891,7 @@ export def "grant-offers get" [
 #
 # POST /paymentInstrumentGroups
 # operationId: post-paymentInstrumentGroups
-export def "payment-instrument-groups create" [
+export def "post-payment-instrument-groups" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -933,7 +933,7 @@ export def "payment-instrument-groups create" [
 #
 # GET /paymentInstrumentGroups/{id}
 # operationId: get-paymentInstrumentGroups-id
-export def "payment-instrument-groups get" [
+export def "get-payment-instrument-groups-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -969,7 +969,7 @@ export def "payment-instrument-groups get" [
 #
 # GET /paymentInstrumentGroups/{id}/transactionRules
 # operationId: get-paymentInstrumentGroups-id-transactionRules
-export def "payment-instrument-groups-transaction-rules get" [
+export def "get-payment-instrument-groups-id-transaction-rules" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1006,7 +1006,7 @@ export def "payment-instrument-groups-transaction-rules get" [
 # POST /paymentInstruments
 # operationId: post-paymentInstruments
 # --card shape: {authentication?: record, brand: string, brandVariant: string, cardholderName: string, configuration?: record, deliveryContact?: record, formFactor: "physical"|"unknown"|"virtual"}
-export def "payment-instruments create" [
+export def "post-payment-instruments" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1052,7 +1052,7 @@ export def "payment-instruments create" [
 #
 # GET /paymentInstruments/{id}
 # operationId: get-paymentInstruments-id
-export def "payment-instruments get" [
+export def "get-payment-instruments-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1089,7 +1089,7 @@ export def "payment-instruments get" [
 # PATCH /paymentInstruments/{id}
 # operationId: patch-paymentInstruments-id
 # --card shape: {authentication?: record, brand: string, brandVariant: string, cardholderName: string, configuration?: record, deliveryContact?: record, formFactor: "physical"|"unknown"|"virtual"}
-export def "payment-instruments update" [
+export def "patch-payment-instruments-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1133,7 +1133,7 @@ export def "payment-instruments update" [
 #
 # GET /paymentInstruments/{id}/reveal
 # operationId: get-paymentInstruments-id-reveal
-export def "payment-instruments-reveal get" [
+export def "get-payment-instruments-id-reveal" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1169,7 +1169,7 @@ export def "payment-instruments-reveal get" [
 #
 # GET /paymentInstruments/{id}/transactionRules
 # operationId: get-paymentInstruments-id-transactionRules
-export def "payment-instruments-transaction-rules get" [
+export def "get-payment-instruments-id-transaction-rules" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1208,7 +1208,7 @@ export def "payment-instruments-transaction-rules get" [
 # --entityKey shape: {entityReference?: string, entityType?: string}
 # --interval shape: {dayOfMonth?: int, dayOfWeek?: "friday"|"monday"|"saturday"|"sunday"|"thursday"|"tuesday"|"wednesday", duration?: record, timeOfDay?: string, timeZone?: string, type: "daily"|"lifetime"|"monthly"|"perTransaction"|"rolling"|"sliding"|"weekly"}
 # --ruleRestrictions shape: {activeNetworkTokens?: record, brandVariants?: record, countries?: record, dayOfWeek?: record, differentCurrencies?: record, entryModes?: record, internationalTransaction?: record, matchingTransactions?: record, mccs?: record, merchantNames?: record, merchants?: record, processingTypes?: record, timeOfDay?: record, totalAmount?: record}
-export def "transaction-rules create" [
+export def "post-transaction-rules" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1258,7 +1258,7 @@ export def "transaction-rules create" [
 #
 # DELETE /transactionRules/{transactionRuleId}
 # operationId: delete-transactionRules-transactionRuleId
-export def "transaction-rules delete" [
+export def "delete-transaction-rules-transaction-rule-id" [
   transaction_rule_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1294,7 +1294,7 @@ export def "transaction-rules delete" [
 #
 # GET /transactionRules/{transactionRuleId}
 # operationId: get-transactionRules-transactionRuleId
-export def "transaction-rules get" [
+export def "get-transaction-rules-transaction-rule-id" [
   transaction_rule_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1333,7 +1333,7 @@ export def "transaction-rules get" [
 # --entityKey shape: {entityReference?: string, entityType?: string}
 # --interval shape: {dayOfMonth?: int, dayOfWeek?: "friday"|"monday"|"saturday"|"sunday"|"thursday"|"tuesday"|"wednesday", duration?: record, timeOfDay?: string, timeZone?: string, type: "daily"|"lifetime"|"monthly"|"perTransaction"|"rolling"|"sliding"|"weekly"}
 # --ruleRestrictions shape: {activeNetworkTokens?: record, brandVariants?: record, countries?: record, dayOfWeek?: record, differentCurrencies?: record, entryModes?: record, internationalTransaction?: record, matchingTransactions?: record, mccs?: record, merchantNames?: record, merchants?: record, processingTypes?: record, timeOfDay?: record, totalAmount?: record}
-export def "transaction-rules update" [
+export def "patch-transaction-rules-transaction-rule-id" [
   transaction_rule_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1385,7 +1385,7 @@ export def "transaction-rules update" [
 #
 # POST /validateBankAccountIdentification
 # operationId: post-validateBankAccountIdentification
-export def "validate-bank-account-identification create" [
+export def "post-validate-bank-account-identification" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

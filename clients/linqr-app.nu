@@ -142,7 +142,7 @@ def accept-completer-1 [] { ["application/pdf" "application/postscript" "image/j
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "batch-qrcode create-qr-code" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "qr-code-batch-batch-qrcode-post" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -167,7 +167,7 @@ export def commands []: nothing -> table {
 # POST /batch/qrcode
 # operationId: qrCodeBatch_batch_qrcode_post
 # --items item shape: {data: any, image?: any, output?: any, size?: any, style?: any}
-export def "batch-qrcode create-qr-code" [
+export def "qr-code-batch-batch-qrcode-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -207,7 +207,7 @@ export def "batch-qrcode create-qr-code" [
 #
 # GET /images
 # operationId: imageListAll_images_get
-export def "images list" [
+export def "image-list-all-images-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -241,7 +241,7 @@ export def "images list" [
 #
 # POST /images
 # operationId: imageUpload_images_post
-export def "images upload-create" [
+export def "image-upload-images-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -281,7 +281,7 @@ export def "images upload-create" [
 #
 # DELETE /images/{id}
 # operationId: imageDelete_images__id__delete
-export def "images delete" [
+export def "image-delete-images-id-delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -317,7 +317,7 @@ export def "images delete" [
 #
 # GET /images/{id}
 # operationId: imageList_images__id__get
-export def "images list-get" [
+export def "image-list-images-id-get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -353,7 +353,7 @@ export def "images list-get" [
 #
 # POST /qrcode
 # operationId: dispatcher_qrcode_post
-export def "qrcode create-dispatcher" [
+export def "dispatcher-qrcode-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -396,7 +396,7 @@ export def "qrcode create-dispatcher" [
 #
 # POST /qrcode/contact
 # operationId: dispatcher_qrcode_contact_post
-export def "qrcode-contact create-dispatcher" [
+export def "dispatcher-qrcode-contact-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -439,7 +439,7 @@ export def "qrcode-contact create-dispatcher" [
 #
 # POST /qrcode/crypto
 # operationId: dispatcher_qrcode_crypto_post
-export def "qrcode-crypto create-dispatcher" [
+export def "dispatcher-qrcode-crypto-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -482,7 +482,7 @@ export def "qrcode-crypto create-dispatcher" [
 #
 # POST /qrcode/email
 # operationId: dispatcher_qrcode_email_post
-export def "qrcode-email create-dispatcher" [
+export def "dispatcher-qrcode-email-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -525,7 +525,7 @@ export def "qrcode-email create-dispatcher" [
 #
 # POST /qrcode/geo
 # operationId: dispatcher_qrcode_geo_post
-export def "qrcode-geo create-dispatcher" [
+export def "dispatcher-qrcode-geo-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -568,7 +568,7 @@ export def "qrcode-geo create-dispatcher" [
 #
 # POST /qrcode/phone
 # operationId: dispatcher_qrcode_phone_post
-export def "qrcode-phone create-dispatcher" [
+export def "dispatcher-qrcode-phone-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -611,7 +611,7 @@ export def "qrcode-phone create-dispatcher" [
 #
 # POST /qrcode/sms
 # operationId: dispatcher_qrcode_sms_post
-export def "qrcode-sms create-dispatcher" [
+export def "dispatcher-qrcode-sms-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -654,7 +654,7 @@ export def "qrcode-sms create-dispatcher" [
 #
 # POST /qrcode/text
 # operationId: dispatcher_qrcode_text_post
-export def "qrcode-text create-dispatcher" [
+export def "dispatcher-qrcode-text-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -697,7 +697,7 @@ export def "qrcode-text create-dispatcher" [
 #
 # POST /qrcode/wifi
 # operationId: dispatcher_qrcode_wifi_post
-export def "qrcode-wifi create-dispatcher" [
+export def "dispatcher-qrcode-wifi-post" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

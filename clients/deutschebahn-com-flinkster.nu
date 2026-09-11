@@ -97,7 +97,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "areas list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "list-areas" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -121,7 +121,7 @@ export def commands []: nothing -> table {
 #
 # GET /areas
 # operationId: listAreas
-export def "areas list" [
+export def "list-areas" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -165,7 +165,7 @@ export def "areas list" [
 #
 # GET /areas/{areaUID}
 # operationId: getArea
-export def "areas get" [
+export def "get-area" [
   area_uid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -203,7 +203,7 @@ export def "areas get" [
 #
 # GET /bookingproposals
 # operationId: listBookingProposals
-export def "bookingproposals list-booking-proposals" [
+export def "list-booking-proposals" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -248,7 +248,7 @@ export def "bookingproposals list-booking-proposals" [
 #
 # GET /index
 # operationId: getIndex
-export def "index get" [
+export def "get-index" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -282,7 +282,7 @@ export def "index get" [
 #
 # GET /providernetworks/{providernetworkUID}/categories
 # operationId: listCategories
-export def "providernetworks-categories list" [
+export def "list-categories" [
   providernetwork_uid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -320,7 +320,7 @@ export def "providernetworks-categories list" [
 #
 # GET /providernetworks/{providernetworkUID}/categories/{categoryUID}
 # operationId: getCategory
-export def "providernetworks-categories get-category" [
+export def "get-category" [
   providernetwork_uid: string
   category_uid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -360,7 +360,7 @@ export def "providernetworks-categories get-category" [
 #
 # GET /providernetworks/{providernetworkUID}/prices
 # operationId: getPrices
-export def "providernetworks-prices get" [
+export def "get-prices" [
   providernetwork_uid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -396,7 +396,7 @@ export def "providernetworks-prices get" [
 #
 # GET /providernetworks/{providernetworkUID}/rentalobjects/{rentalObjectUID}
 # operationId: getRentalObject
-export def "providernetworks-rentalobjects get-rental-object" [
+export def "get-rental-object" [
   providernetwork_uid: string
   rental_object_uid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -436,7 +436,7 @@ export def "providernetworks-rentalobjects get-rental-object" [
 #
 # GET /providernetworks/{uid}
 # operationId: getProviderNetwork
-export def "providernetworks get-provider-network" [
+export def "get-provider-network" [
   uid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -472,7 +472,7 @@ export def "providernetworks get-provider-network" [
 #
 # GET /providers/{uid}
 # operationId: getProvider
-export def "providers get" [
+export def "get-provider" [
   uid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

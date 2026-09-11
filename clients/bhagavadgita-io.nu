@@ -105,7 +105,7 @@ def language-completer [] { ["hi"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "chapters list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-api-v1-chapters" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -128,7 +128,7 @@ export def commands []: nothing -> table {
 # Get all the 18 Chapters of the Bhagavad Gita.
 #
 # GET /api/v1/chapters
-export def "chapters list" [
+export def "get-api-v1-chapters" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -164,7 +164,7 @@ export def "chapters list" [
 # Get a specific chapter from the Bhagavad Gita.
 #
 # GET /api/v1/chapters/{chapter_number}
-export def "chapters get" [
+export def "get-api-v1-chapters-chapter-number" [
   chapter_number: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -202,7 +202,7 @@ export def "chapters get" [
 # Get all the Verses from a Chapter.
 #
 # GET /api/v1/chapters/{chapter_number}/verses
-export def "chapters-verses list" [
+export def "get-api-v1-chapters-chapter-number-verses" [
   chapter_number: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -240,7 +240,7 @@ export def "chapters-verses list" [
 # Get a particular verse from a chapter.
 #
 # GET /api/v1/chapters/{chapter_number}/verses/{verse_number}
-export def "chapters-verses get" [
+export def "get-api-v1-chapters-chapter-number-verses-verse-number" [
   chapter_number: int
   verse_number: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -280,7 +280,7 @@ export def "chapters-verses get" [
 # Get all the Verses.
 #
 # GET /api/v1/verses
-export def "verses get" [
+export def "get-api-v1-verses" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -316,7 +316,7 @@ export def "verses get" [
 # Send client credentials and get an access token.
 #
 # POST /auth/oauth/token
-export def "auth-oauth-token create" [
+export def "post-auth-oauth-token" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

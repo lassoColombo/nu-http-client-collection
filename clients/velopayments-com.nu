@@ -159,7 +159,7 @@ def include-completer [] { ["payorAndDescendants" "payorOnly"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "authenticate create-velo-auth" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "velo-auth" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -183,7 +183,7 @@ export def commands []: nothing -> table {
 #
 # POST /v1/authenticate
 # operationId: veloAuth
-export def "authenticate create-velo-auth" [
+export def "velo-auth" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -219,7 +219,7 @@ export def "authenticate create-velo-auth" [
 #
 # GET /v1/deltas/fundings
 # operationId: listFundingAuditDeltas
-export def "deltas-fundings list-audit" [
+export def "list-funding-audit-deltas" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -260,7 +260,7 @@ export def "deltas-fundings list-audit" [
 # DEPRECATED
 # operationId: listPaymentChanges
 @deprecated
-export def "deltas-payments list-changes" [
+export def "list-payment-changes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -299,7 +299,7 @@ export def "deltas-payments list-changes" [
 #
 # GET /v1/fundings/{fundingId}
 # operationId: getFundingByIdV1
-export def "fundings get" [
+export def "get-funding-by-id-v1" [
   funding_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -335,7 +335,7 @@ export def "fundings get" [
 #
 # POST /v1/logout
 # operationId: logout
-export def "logout create" [
+export def "logout" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -369,7 +369,7 @@ export def "logout create" [
 #
 # POST /v1/password/reset
 # operationId: resetPassword
-export def "password-reset reset" [
+export def "reset-password" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -407,7 +407,7 @@ export def "password-reset reset" [
 #
 # GET /v1/paymentChannelRules
 # operationId: listPaymentChannelRulesV1
-export def "payment-channel-rules list" [
+export def "list-payment-channel-rules-v1" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -443,7 +443,7 @@ export def "payment-channel-rules list" [
 # DEPRECATED
 # operationId: getFundingsV1
 @deprecated
-export def "paymentaudit-fundings get" [
+export def "get-fundings-v1" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -484,7 +484,7 @@ export def "paymentaudit-fundings get" [
 # DEPRECATED
 # operationId: getPayoutStatsV1
 @deprecated
-export def "paymentaudit-payout-statistics get-stats" [
+export def "get-payout-stats-v1" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -520,7 +520,7 @@ export def "paymentaudit-payout-statistics get-stats" [
 #
 # POST /v1/payments/{paymentId}/withdraw
 # operationId: withdrawPayment
-export def "payments-withdraw create" [
+export def "withdraw-payment" [
   payment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -560,7 +560,7 @@ export def "payments-withdraw create" [
 #
 # GET /v1/payorLinks
 # operationId: payorLinksV1
-export def "payor-links get" [
+export def "payor-links-v1" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -598,7 +598,7 @@ export def "payor-links get" [
 #
 # POST /v1/payorLinks
 # operationId: createPayorLinks
-export def "payor-links create" [
+export def "create-payor-links" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -640,7 +640,7 @@ export def "payor-links create" [
 # DEPRECATED
 # operationId: getPayorByIdV1
 @deprecated
-export def "payors get-by-payor-id" [
+export def "get-payor-by-id-v1" [
   payor_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -676,7 +676,7 @@ export def "payors get-by-payor-id" [
 #
 # POST /v1/payors/{payorId}/applications
 # operationId: payorCreateApplicationV1
-export def "payors-applications create" [
+export def "payor-create-application-v1" [
   payor_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -717,7 +717,7 @@ export def "payors-applications create" [
 #
 # POST /v1/payors/{payorId}/applications/{applicationId}/keys
 # operationId: payorCreateApiKeyV1
-export def "payors-applications-keys create" [
+export def "payor-create-api-key-v1" [
   payor_id: string
   application_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -761,7 +761,7 @@ export def "payors-applications-keys create" [
 #
 # GET /v1/payors/{payorId}/branding
 # operationId: payorGetBranding
-export def "payors-branding get" [
+export def "payor-get-branding" [
   payor_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -797,7 +797,7 @@ export def "payors-branding get" [
 #
 # POST /v1/payors/{payorId}/branding/logos
 # operationId: payorAddPayorLogoV1
-export def "payors-branding-logos create" [
+export def "payor-add-payor-logo-v1" [
   payor_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -839,7 +839,7 @@ export def "payors-branding-logos create" [
 #
 # POST /v1/payors/{payorId}/reminderEmailsUpdate
 # operationId: payorEmailOptOut
-export def "payors-reminder-emails-update create-opt-out" [
+export def "payor-email-opt-out" [
   payor_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -881,7 +881,7 @@ export def "payors-reminder-emails-update create-opt-out" [
 # DEPRECATED
 # operationId: setNotificationsRequest
 @deprecated
-export def "source-accounts-notifications update-request-by-source-account-id" [
+export def "set-notifications-request" [
   source_account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -923,7 +923,7 @@ export def "source-accounts-notifications update-request-by-source-account-id" [
 # DEPRECATED
 # operationId: listSupportedCountriesV1
 @deprecated
-export def "supported-countries list" [
+export def "list-supported-countries-v1" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -957,7 +957,7 @@ export def "supported-countries list" [
 #
 # POST /v1/validate
 # operationId: validateAccessToken
-export def "validate validate-access-token" [
+export def "validate-access-token" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -998,7 +998,7 @@ export def "validate validate-access-token" [
 #
 # GET /v1/webhooks
 # operationId: listWebhooksV1
-export def "webhooks list" [
+export def "list-webhooks-v1" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1036,7 +1036,7 @@ export def "webhooks list" [
 #
 # POST /v1/webhooks
 # operationId: createWebhookV1
-export def "webhooks create" [
+export def "create-webhook-v1" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1078,7 +1078,7 @@ export def "webhooks create" [
 #
 # GET /v1/webhooks/{webhookId}
 # operationId: getWebhookV1
-export def "webhooks get" [
+export def "get-webhook-v1" [
   webhook_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1114,7 +1114,7 @@ export def "webhooks get" [
 #
 # POST /v1/webhooks/{webhookId}
 # operationId: updateWebhookV1
-export def "webhooks update" [
+export def "update-webhook-v1" [
   webhook_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1156,7 +1156,7 @@ export def "webhooks update" [
 # POST /v1/webhooks/{webhookId}/ping
 #
 # operationId: pingWebhookV1
-export def "webhooks-ping ping" [
+export def "ping-webhook-v1" [
   webhook_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1192,7 +1192,7 @@ export def "webhooks-ping ping" [
 #
 # GET /v2/currencies
 # operationId: listSupportedCurrenciesV2
-export def "currencies list-supported" [
+export def "list-supported-currencies-v2" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1226,7 +1226,7 @@ export def "currencies list-supported" [
 #
 # GET /v2/fundingAccounts
 # operationId: getFundingAccountsV2
-export def "funding-accounts list" [
+export def "get-funding-accounts-v2" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1270,7 +1270,7 @@ export def "funding-accounts list" [
 #
 # POST /v2/fundingAccounts
 # operationId: createFundingAccountV2
-export def "funding-accounts create" [
+export def "create-funding-account-v2" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1314,7 +1314,7 @@ export def "funding-accounts create" [
 #
 # GET /v2/fundingAccounts/{fundingAccountId}
 # operationId: getFundingAccountV2
-export def "funding-accounts get" [
+export def "get-funding-account-v2" [
   funding_account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1352,7 +1352,7 @@ export def "funding-accounts get" [
 #
 # GET /v2/payors/{payorId}
 # operationId: getPayorByIdV2
-export def "payors get-by-payor-id-1" [
+export def "get-payor-by-id-v2" [
   payor_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1390,7 +1390,7 @@ export def "payors get-by-payor-id-1" [
 # DEPRECATED
 # operationId: getSourceAccountsV2
 @deprecated
-export def "source-accounts get" [
+export def "get-source-accounts-v2" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1434,7 +1434,7 @@ export def "source-accounts get" [
 # DEPRECATED
 # operationId: getSourceAccountV2
 @deprecated
-export def "source-accounts get-by-source-account-id" [
+export def "get-source-account-v2" [
   source_account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1472,7 +1472,7 @@ export def "source-accounts get-by-source-account-id" [
 # DEPRECATED
 # operationId: createFundingRequestV2
 @deprecated
-export def "source-accounts-funding-request create-by-source-account-id" [
+export def "create-funding-request-v2" [
   source_account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1514,7 +1514,7 @@ export def "source-accounts-funding-request create-by-source-account-id" [
 # DEPRECATED
 # operationId: transferFundsV2
 @deprecated
-export def "source-accounts-transfers create-funds-by-source-account-id" [
+export def "transfer-funds-v2" [
   source_account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1556,7 +1556,7 @@ export def "source-accounts-transfers create-funds-by-source-account-id" [
 #
 # GET /v2/supportedCountries
 # operationId: listSupportedCountriesV2
-export def "supported-countries list-1" [
+export def "list-supported-countries-v2" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1590,7 +1590,7 @@ export def "supported-countries list-1" [
 #
 # GET /v2/users
 # operationId: listUsers
-export def "users list" [
+export def "list-users" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1632,7 +1632,7 @@ export def "users list" [
 #
 # POST /v2/users/invite
 # operationId: inviteUser
-export def "users-invite create" [
+export def "invite-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1680,7 +1680,7 @@ export def "users-invite create" [
 #
 # POST /v2/users/registration/sms
 # operationId: registerSms
-export def "users-registration-sms create" [
+export def "register-sms" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1718,7 +1718,7 @@ export def "users-registration-sms create" [
 #
 # GET /v2/users/self
 # operationId: getSelf
-export def "users-self get" [
+export def "get-self" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1752,7 +1752,7 @@ export def "users-self get" [
 #
 # POST /v2/users/self/mfa/unregister
 # operationId: unregisterMFAForSelf
-export def "users-self-mfa-unregister delete" [
+export def "unregister-mfa-for-self" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1793,7 +1793,7 @@ export def "users-self-mfa-unregister delete" [
 #
 # POST /v2/users/self/password
 # operationId: updatePasswordSelf
-export def "users-self-password update" [
+export def "update-password-self" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1832,7 +1832,7 @@ export def "users-self-password update" [
 #
 # POST /v2/users/self/password/validate
 # operationId: validatePasswordSelf
-export def "users-self-password-validate validate" [
+export def "validate-password-self" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1870,7 +1870,7 @@ export def "users-self-password-validate validate" [
 #
 # POST /v2/users/self/userDetailsUpdate
 # operationId: userDetailsUpdateForSelf
-export def "users-self-user-details-update update" [
+export def "user-details-update-for-self" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1913,7 +1913,7 @@ export def "users-self-user-details-update update" [
 #
 # DELETE /v2/users/{userId}
 # operationId: deleteUserByIdV2
-export def "users delete" [
+export def "delete-user-by-id-v2" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1949,7 +1949,7 @@ export def "users delete" [
 #
 # GET /v2/users/{userId}
 # operationId: getUserByIdV2
-export def "users get" [
+export def "get-user-by-id-v2" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1985,7 +1985,7 @@ export def "users get" [
 #
 # POST /v2/users/{userId}/disable
 # operationId: disableUserV2
-export def "users-disable disable" [
+export def "disable-user-v2" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2021,7 +2021,7 @@ export def "users-disable disable" [
 #
 # POST /v2/users/{userId}/enable
 # operationId: enableUserV2
-export def "users-enable enable" [
+export def "enable-user-v2" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2057,7 +2057,7 @@ export def "users-enable enable" [
 #
 # POST /v2/users/{userId}/mfa/unregister
 # operationId: unregisterMFA
-export def "users-mfa-unregister delete" [
+export def "unregister-mfa" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2098,7 +2098,7 @@ export def "users-mfa-unregister delete" [
 #
 # POST /v2/users/{userId}/roleUpdate
 # operationId: roleUpdate
-export def "users-role-update update" [
+export def "role-update" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2139,7 +2139,7 @@ export def "users-role-update update" [
 #
 # POST /v2/users/{userId}/tokens
 # operationId: resendToken
-export def "users-tokens resend" [
+export def "resend-token" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2180,7 +2180,7 @@ export def "users-tokens resend" [
 #
 # POST /v2/users/{userId}/unlock
 # operationId: unlockUserV2
-export def "users-unlock unlock" [
+export def "unlock-user-v2" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2216,7 +2216,7 @@ export def "users-unlock unlock" [
 #
 # POST /v2/users/{userId}/userDetailsUpdate
 # operationId: userDetailsUpdate
-export def "users-user-details-update update" [
+export def "user-details-update" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2265,7 +2265,7 @@ export def "users-user-details-update update" [
 # DEPRECATED
 # operationId: listPayeesV3
 @deprecated
-export def "payees list" [
+export def "list-payees-v3" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2315,7 +2315,7 @@ export def "payees list" [
 # operationId: createPayeeV3
 # --payees item shape: {address: record, challenge?: record, company?: record, email: string, individual?: record, language?: string, paymentChannel?: record, remoteId: string, type: string}
 @deprecated
-export def "payees create" [
+export def "create-payee-v3" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2356,7 +2356,7 @@ export def "payees create" [
 # DEPRECATED
 # operationId: queryBatchStatusV3
 @deprecated
-export def "payees-batch list-status-by-batch-id" [
+export def "query-batch-status-v3" [
   batch_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2394,7 +2394,7 @@ export def "payees-batch list-status-by-batch-id" [
 # DEPRECATED
 # operationId: listPayeeChangesV3
 @deprecated
-export def "payees-deltas list-changes" [
+export def "list-payee-changes-v3" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2435,7 +2435,7 @@ export def "payees-deltas list-changes" [
 # DEPRECATED
 # operationId: getPayeesInvitationStatusV3
 @deprecated
-export def "payees-payors-invitation-status get-by-payor-id" [
+export def "get-payees-invitation-status-v3" [
   payor_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2478,7 +2478,7 @@ export def "payees-payors-invitation-status get-by-payor-id" [
 # DEPRECATED
 # operationId: deletePayeeByIdV3
 @deprecated
-export def "payees delete-by-payee-id" [
+export def "delete-payee-by-id-v3" [
   payee_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2516,7 +2516,7 @@ export def "payees delete-by-payee-id" [
 # DEPRECATED
 # operationId: getPayeeByIdV3
 @deprecated
-export def "payees get-by-payee-id" [
+export def "get-payee-by-id-v3" [
   payee_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2556,7 +2556,7 @@ export def "payees get-by-payee-id" [
 # DEPRECATED
 # operationId: resendPayeeInviteV3
 @deprecated
-export def "payees-invite resend-by-payee-id" [
+export def "resend-payee-invite-v3" [
   payee_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2602,7 +2602,7 @@ export def "payees-invite resend-by-payee-id" [
 # --company shape: {name: string, operatingName?: string, taxId?: string}
 # --individual shape: {name: any}
 @deprecated
-export def "payees-payee-details-update update-by-payee-id" [
+export def "payee-details-update-v3" [
   payee_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2649,7 +2649,7 @@ export def "payees-payee-details-update update-by-payee-id" [
 # POST /v3/payees/{payeeId}/remoteIdUpdate
 # DEPRECATED
 @deprecated
-export def "payees-remote-id-update create-by-payee-id" [
+export def "post-v3-payees-payee-id-remote-id-update" [
   payee_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2692,7 +2692,7 @@ export def "payees-remote-id-update create-by-payee-id" [
 # DEPRECATED
 # operationId: listPaymentsAuditV3
 @deprecated
-export def "paymentaudit-payments list-audit" [
+export def "list-payments-audit-v3" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2748,7 +2748,7 @@ export def "paymentaudit-payments list-audit" [
 # DEPRECATED
 # operationId: getPaymentDetailsV3
 @deprecated
-export def "paymentaudit-payments get-details-by-payment-id" [
+export def "get-payment-details-v3" [
   payment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2788,7 +2788,7 @@ export def "paymentaudit-payments get-details-by-payment-id" [
 # DEPRECATED
 # operationId: getPayoutsForPayorV3
 @deprecated
-export def "paymentaudit-payouts get-for-payor" [
+export def "get-payouts-for-payor-v3" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2833,7 +2833,7 @@ export def "paymentaudit-payouts get-for-payor" [
 # DEPRECATED
 # operationId: getPaymentsForPayout_PA_V3
 @deprecated
-export def "paymentaudit-payouts get-payments-for-pa" [
+export def "get-payments-for-payout-pa-v3" [
   payout_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2884,7 +2884,7 @@ export def "paymentaudit-payouts get-payments-for-pa" [
 # DEPRECATED
 # operationId: exportTransactionsCSVV3
 @deprecated
-export def "paymentaudit-transactions export-csvv3" [
+export def "export-transactions-csvv3" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2923,7 +2923,7 @@ export def "paymentaudit-transactions export-csvv3" [
 # POST /v3/payouts
 # operationId: submitPayoutV3
 # --payments item shape: {amount: int, currency: string, paymentMemo?: string, paymentMetadata?: string, payorPaymentId?: string, remoteId: string, remoteSystemId?: string, sourceAccountName: string, transmissionType?: "SAME_DAY_ACH"|"WIRE"|"ACH"|"LOCAL"|"SWIFT"}
-export def "payouts submit" [
+export def "submit-payout-v3" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2964,7 +2964,7 @@ export def "payouts submit" [
 #
 # DELETE /v3/payouts/{payoutId}
 # operationId: withdrawPayoutV3
-export def "payouts delete-withdraw" [
+export def "withdraw-payout-v3" [
   payout_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3000,7 +3000,7 @@ export def "payouts delete-withdraw" [
 #
 # GET /v3/payouts/{payoutId}
 # operationId: getPayoutSummaryV3
-export def "payouts get-summary" [
+export def "get-payout-summary-v3" [
   payout_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3036,7 +3036,7 @@ export def "payouts get-summary" [
 #
 # POST /v3/payouts/{payoutId}
 # operationId: instructPayoutV3
-export def "payouts create-instruct" [
+export def "instruct-payout-v3" [
   payout_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3076,7 +3076,7 @@ export def "payouts create-instruct" [
 #
 # GET /v3/payouts/{payoutId}/payments
 # operationId: getPaymentsForPayoutV3
-export def "payouts-payments get" [
+export def "get-payments-for-payout-v3" [
   payout_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3121,7 +3121,7 @@ export def "payouts-payments get" [
 #
 # POST /v3/payouts/{payoutId}/quote
 # operationId: createQuoteForPayoutV3
-export def "payouts-quote create" [
+export def "create-quote-for-payout-v3" [
   payout_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3157,7 +3157,7 @@ export def "payouts-quote create" [
 #
 # DELETE /v3/payouts/{payoutId}/schedule
 # operationId: deschedulePayout
-export def "payouts-schedule delete-deschedule" [
+export def "deschedule-payout" [
   payout_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3193,7 +3193,7 @@ export def "payouts-schedule delete-deschedule" [
 #
 # POST /v3/payouts/{payoutId}/schedule
 # operationId: scheduleForPayout
-export def "payouts-schedule create" [
+export def "schedule-for-payout" [
   payout_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3234,7 +3234,7 @@ export def "payouts-schedule create" [
 #
 # GET /v3/sourceAccounts
 # operationId: getSourceAccountsV3
-export def "source-accounts get-1" [
+export def "get-source-accounts-v3" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3278,7 +3278,7 @@ export def "source-accounts get-1" [
 #
 # DELETE /v3/sourceAccounts/{sourceAccountId}
 # operationId: deleteSourceAccountV3
-export def "source-accounts delete" [
+export def "delete-source-account-v3" [
   source_account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3314,7 +3314,7 @@ export def "source-accounts delete" [
 #
 # GET /v3/sourceAccounts/{sourceAccountId}
 # operationId: getSourceAccountV3
-export def "source-accounts get-by-source-account-id-1" [
+export def "get-source-account-v3" [
   source_account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3350,7 +3350,7 @@ export def "source-accounts get-by-source-account-id-1" [
 #
 # POST /v3/sourceAccounts/{sourceAccountId}/fundingRequest
 # operationId: createFundingRequestV3
-export def "source-accounts-funding-request create-by-source-account-id-1" [
+export def "create-funding-request-v3" [
   source_account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3391,7 +3391,7 @@ export def "source-accounts-funding-request create-by-source-account-id-1" [
 #
 # POST /v3/sourceAccounts/{sourceAccountId}/notifications
 # operationId: setNotificationsRequestV3
-export def "source-accounts-notifications update-request-by-source-account-id-1" [
+export def "set-notifications-request-v3" [
   source_account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3431,7 +3431,7 @@ export def "source-accounts-notifications update-request-by-source-account-id-1"
 #
 # POST /v3/sourceAccounts/{sourceAccountId}/transfers
 # operationId: transferFundsV3
-export def "source-accounts-transfers create-funds-by-source-account-id-1" [
+export def "transfer-funds-v3" [
   source_account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3473,7 +3473,7 @@ export def "source-accounts-transfers create-funds-by-source-account-id-1" [
 #
 # GET /v4/payees
 # operationId: listPayeesV4
-export def "payees list-1" [
+export def "list-payees-v4" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3522,7 +3522,7 @@ export def "payees list-1" [
 # POST /v4/payees
 # operationId: v4CreatePayee
 # --payees item shape: {address: record, challenge?: record, company?: record, email: string, individual?: record, language?: string, paymentChannel?: record, remoteId: string, type: "Individual"|"Company"}
-export def "payees create-1" [
+export def "v4-create-payee" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3561,7 +3561,7 @@ export def "payees create-1" [
 #
 # GET /v4/payees/batch/{batchId}
 # operationId: queryBatchStatusV4
-export def "payees-batch list-status-by-batch-id-1" [
+export def "query-batch-status-v4" [
   batch_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3597,7 +3597,7 @@ export def "payees-batch list-status-by-batch-id-1" [
 #
 # GET /v4/payees/deltas
 # operationId: listPayeeChangesV4
-export def "payees-deltas list-changes-1" [
+export def "list-payee-changes-v4" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3636,7 +3636,7 @@ export def "payees-deltas list-changes-1" [
 #
 # GET /v4/payees/payors/{payorId}/invitationStatus
 # operationId: getPayeesInvitationStatusV4
-export def "payees-payors-invitation-status get-by-payor-id-1" [
+export def "get-payees-invitation-status-v4" [
   payor_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3677,7 +3677,7 @@ export def "payees-payors-invitation-status get-by-payor-id-1" [
 #
 # DELETE /v4/payees/{payeeId}
 # operationId: deletePayeeByIdV4
-export def "payees delete-by-payee-id-1" [
+export def "delete-payee-by-id-v4" [
   payee_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3713,7 +3713,7 @@ export def "payees delete-by-payee-id-1" [
 #
 # GET /v4/payees/{payeeId}
 # operationId: getPayeeByIdV4
-export def "payees get-by-payee-id-1" [
+export def "get-payee-by-id-v4" [
   payee_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3751,7 +3751,7 @@ export def "payees get-by-payee-id-1" [
 #
 # POST /v4/payees/{payeeId}/invite
 # operationId: resendPayeeInviteV4
-export def "payees-invite resend-by-payee-id-1" [
+export def "resend-payee-invite-v4" [
   payee_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3795,7 +3795,7 @@ export def "payees-invite resend-by-payee-id-1" [
 # --challenge shape: {description: string, value: string}
 # --company shape: {name: string, operatingName?: string, taxId?: string}
 # --individual shape: {name: any}
-export def "payees-payee-details-update update-by-payee-id-1" [
+export def "payee-details-update-v4" [
   payee_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3841,7 +3841,7 @@ export def "payees-payee-details-update update-by-payee-id-1" [
 # Update Payee Remote Id
 #
 # POST /v4/payees/{payeeId}/remoteIdUpdate
-export def "payees-remote-id-update create-by-payee-id-1" [
+export def "post-v4-payees-payee-id-remote-id-update" [
   payee_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3882,7 +3882,7 @@ export def "payees-remote-id-update create-by-payee-id-1" [
 #
 # GET /v4/paymentaudit/fundings
 # operationId: getFundingsV4
-export def "paymentaudit-fundings get-1" [
+export def "get-fundings-v4" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3922,7 +3922,7 @@ export def "paymentaudit-fundings get-1" [
 #
 # GET /v4/paymentaudit/payments
 # operationId: listPaymentsAuditV4
-export def "paymentaudit-payments list-audit-1" [
+export def "list-payments-audit-v4" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3983,7 +3983,7 @@ export def "paymentaudit-payments list-audit-1" [
 #
 # GET /v4/paymentaudit/payments/{paymentId}
 # operationId: getPaymentDetailsV4
-export def "paymentaudit-payments get-details-by-payment-id-1" [
+export def "get-payment-details-v4" [
   payment_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4021,7 +4021,7 @@ export def "paymentaudit-payments get-details-by-payment-id-1" [
 #
 # GET /v4/paymentaudit/payoutStatistics
 # operationId: getPayoutStatsV4
-export def "paymentaudit-payout-statistics get-stats-1" [
+export def "get-payout-stats-v4" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4057,7 +4057,7 @@ export def "paymentaudit-payout-statistics get-stats-1" [
 #
 # GET /v4/paymentaudit/payouts
 # operationId: getPayoutsForPayorV4
-export def "paymentaudit-payouts get-for-payor-1" [
+export def "get-payouts-for-payor-v4" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4104,7 +4104,7 @@ export def "paymentaudit-payouts get-for-payor-1" [
 #
 # GET /v4/paymentaudit/payouts/{payoutId}
 # operationId: getPaymentsForPayoutV4
-export def "paymentaudit-payouts get-payments" [
+export def "get-payments-for-payout-v4" [
   payout_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4155,7 +4155,7 @@ export def "paymentaudit-payouts get-payments" [
 #
 # GET /v4/paymentaudit/transactions
 # operationId: exportTransactionsCSVV4
-export def "paymentaudit-transactions export-csvv4" [
+export def "export-transactions-csvv4" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4194,7 +4194,7 @@ export def "paymentaudit-transactions export-csvv4" [
 #
 # GET /v4/payments/deltas
 # operationId: listPaymentChangesV4
-export def "payments-deltas list-changes" [
+export def "list-payment-changes-v4" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

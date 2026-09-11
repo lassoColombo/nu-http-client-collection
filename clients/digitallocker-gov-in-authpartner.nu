@@ -138,7 +138,7 @@ def gender-completer [] { ["F" "M" "T"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "account-1-pushuri push-uri" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "push-uri-to-account-id" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -162,7 +162,7 @@ export def commands []: nothing -> table {
 #
 # POST /account/1/pushuri
 # operationId: Push URI to Account id
-export def "account-1-pushuri push-uri" [
+export def "push-uri-to-account-id" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -211,7 +211,7 @@ export def "account-1-pushuri push-uri" [
 #
 # POST /account/2/verify
 # operationId: Verify Account id
-export def "account-2-verify verify" [
+export def "verify-account-id" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -255,7 +255,7 @@ export def "account-2-verify verify" [
 #
 # GET /oauth2/1/authorize
 # operationId: Get Authorization Code id
-export def "oauth2-1-authorize get-authorization-code" [
+export def "get-authorization-code-id" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -298,7 +298,7 @@ export def "oauth2-1-authorize get-authorization-code" [
 #
 # POST /oauth2/1/code
 # operationId: Get Device Code id
-export def "oauth2-1-code get-device" [
+export def "get-device-code-id" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -339,7 +339,7 @@ export def "oauth2-1-code get-device" [
 #
 # POST /oauth2/1/file/upload
 # operationId: Upload File to Locker id
-export def "oauth2-1-file-upload upload-to-locker" [
+export def "upload-file-to-locker-id" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -381,7 +381,7 @@ export def "oauth2-1-file-upload upload-to-locker" [
 #
 # GET /oauth2/1/file/{uri}
 # operationId: Get File from URI id
-export def "oauth2-1-file get" [
+export def "get-file-from-uri-id" [
   uri: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -418,7 +418,7 @@ export def "oauth2-1-file get" [
 #
 # GET /oauth2/1/files/
 # operationId: Get List of Self Uploaded Documents
-export def "oauth2-1-files list" [
+export def "get-list-of-self-uploaded-documents" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -452,7 +452,7 @@ export def "oauth2-1-files list" [
 #
 # GET /oauth2/1/files/issued
 # operationId: Get List of issued Documents Version1 id
-export def "oauth2-1-files-issued get-list-of-documents-version1" [
+export def "get-list-of-issued-documents-version1-id" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -486,7 +486,7 @@ export def "oauth2-1-files-issued get-list-of-documents-version1" [
 #
 # GET /oauth2/1/files/{id}
 # operationId: Get List of Self Uploaded Documents id
-export def "oauth2-1-files get-list-of-self-uploaded-documents" [
+export def "get-list-of-self-uploaded-documents-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -522,7 +522,7 @@ export def "oauth2-1-files get-list-of-self-uploaded-documents" [
 #
 # POST /oauth2/1/pull/doctype
 # operationId: Get List of Documents Provided by an Issuer id
-export def "oauth2-1-pull-doctype get-list-of-documents-provided-by-issuer" [
+export def "get-list-of-documents-provided-by-an-issuer-id" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -564,7 +564,7 @@ export def "oauth2-1-pull-doctype get-list-of-documents-provided-by-issuer" [
 #
 # POST /oauth2/1/pull/issuers
 # operationId: Get List of Issuers id
-export def "oauth2-1-pull-issuers get-list" [
+export def "get-list-of-issuers-id" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -605,7 +605,7 @@ export def "oauth2-1-pull-issuers get-list" [
 #
 # POST /oauth2/1/pull/parameters
 # operationId: Get Search Parameters for a Document id
-export def "oauth2-1-pull-parameters get-list-for-document" [
+export def "get-search-parameters-for-a-document-id" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -648,7 +648,7 @@ export def "oauth2-1-pull-parameters get-list-for-document" [
 #
 # POST /oauth2/1/pull/pulldocument
 # operationId: Pull Document id
-export def "oauth2-1-pull-pulldocument pull-document" [
+export def "pull-document-id" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -691,7 +691,7 @@ export def "oauth2-1-pull-pulldocument pull-document" [
 #
 # POST /oauth2/1/revoke
 # operationId: get token revocation id
-export def "oauth2-1-revoke get-token-revocation" [
+export def "get-token-revocation-id" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -733,7 +733,7 @@ export def "oauth2-1-revoke get-token-revocation" [
 # --Get access token using authorization code shape: {client_id: string, client_secret: string, code?: string, code_verifier?: string, grant_type: "authorization_code", redirect_uri?: string}
 # --Get access token using device code and OTP shape: {client_id?: string, device_code?: string, dl_otp?: string, grant_type?: string}
 # --Get access token using refresh token shape: {client_id: string, client_secret: string, grant_type: "refresh_token", refresh_token: string}
-export def "oauth2-1-token get-accesstoken" [
+export def "getaccesstoken-id" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -773,7 +773,7 @@ export def "oauth2-1-token get-accesstoken" [
 #
 # GET /oauth2/1/user
 # operationId: Account Detail API id
-export def "oauth2-1-user get-account-detail" [
+export def "account-detail-api-id" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -807,7 +807,7 @@ export def "oauth2-1-user get-account-detail" [
 #
 # GET /oauth2/1/xml/{uri}
 # operationId: Get Certificate Data in XML Format from URI id
-export def "oauth2-1-xml get-certificate-data-in-format" [
+export def "get-certificate-data-in-xml-format-from-uri-id" [
   uri: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -843,7 +843,7 @@ export def "oauth2-1-xml get-certificate-data-in-format" [
 #
 # GET /oauth2/2/files/issued
 # operationId: Get List of issued Documents id
-export def "oauth2-2-files-issued get-list-of-documents" [
+export def "get-list-of-issued-documents-id" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -877,7 +877,7 @@ export def "oauth2-2-files-issued get-list-of-documents" [
 #
 # GET /oauth2/2/xml/eaadhaar
 # operationId: Get e-Aadhaar Data in XML Format id
-export def "oauth2-2-xml-eaadhaar get-e-aadhaar-data-in-format" [
+export def "get-e-aadhaar-data-in-xml-format-id" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -911,7 +911,7 @@ export def "oauth2-2-xml-eaadhaar get-e-aadhaar-data-in-format" [
 #
 # POST /signup/1/demoauthverify
 # operationId: Verify OTP id
-export def "signup-1-demoauthverify verify-otp" [
+export def "verify-otp-id" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -955,7 +955,7 @@ export def "signup-1-demoauthverify verify-otp" [
 #
 # POST /signup/2/demoauth
 # operationId: SIGN UP id
-export def "signup-2-demoauth create-sign-up" [
+export def "sign-up-id" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1005,7 +1005,7 @@ export def "signup-2-demoauth create-sign-up" [
 #
 # POST /statistics/1/counts
 # operationId: Get Statistics id
-export def "statistics-1-counts get" [
+export def "get-statistics-id" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

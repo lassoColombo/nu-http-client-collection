@@ -116,7 +116,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-machine-learning-experimentation-operations list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "operations-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -140,7 +140,7 @@ export def commands []: nothing -> table {
 #
 # GET /providers/Microsoft.MachineLearningExperimentation/operations
 # operationId: Operations_List
-export def "providers-microsoft-machine-learning-experimentation-operations list" [
+export def "operations-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -176,7 +176,7 @@ export def "providers-microsoft-machine-learning-experimentation-operations list
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.MachineLearningExperimentation/accounts
 # operationId: Accounts_List
-export def "subscriptions-providers-microsoft-machine-learning-experimentation-accounts list" [
+export def "accounts-list" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -214,7 +214,7 @@ export def "subscriptions-providers-microsoft-machine-learning-experimentation-a
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MachineLearningExperimentation/accounts
 # operationId: Accounts_ListByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-machine-learning-experimentation-accounts list" [
+export def "accounts-list-by-resource-group" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -254,7 +254,7 @@ export def "subscriptions-resource-groups-providers-microsoft-machine-learning-e
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MachineLearningExperimentation/accounts/{accountName}
 # operationId: Accounts_Delete
-export def "subscriptions-resource-groups-providers-microsoft-machine-learning-experimentation-accounts delete" [
+export def "accounts-delete" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -296,7 +296,7 @@ export def "subscriptions-resource-groups-providers-microsoft-machine-learning-e
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MachineLearningExperimentation/accounts/{accountName}
 # operationId: Accounts_Get
-export def "subscriptions-resource-groups-providers-microsoft-machine-learning-experimentation-accounts get" [
+export def "accounts-get" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -339,7 +339,7 @@ export def "subscriptions-resource-groups-providers-microsoft-machine-learning-e
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MachineLearningExperimentation/accounts/{accountName}
 # operationId: Accounts_Update
 # --properties shape: {description?: string, friendlyName?: string, seats?: string, storageAccountKey?: string}
-export def "subscriptions-resource-groups-providers-microsoft-machine-learning-experimentation-accounts update" [
+export def "accounts-update" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -387,7 +387,7 @@ export def "subscriptions-resource-groups-providers-microsoft-machine-learning-e
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MachineLearningExperimentation/accounts/{accountName}
 # operationId: Accounts_CreateOrUpdate
 # --properties shape: {description?: string, friendlyName?: string, keyVaultId: string, seats?: string, storageAccount: any, vsoAccountId: string}
-export def "subscriptions-resource-groups-providers-microsoft-machine-learning-experimentation-accounts create-or-update" [
+export def "accounts-create-or-update" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -435,7 +435,7 @@ export def "subscriptions-resource-groups-providers-microsoft-machine-learning-e
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MachineLearningExperimentation/accounts/{accountName}/workspaces
 # operationId: Workspaces_ListByAccounts
-export def "subscriptions-resource-groups-providers-microsoft-machine-learning-experimentation-accounts-workspaces list" [
+export def "workspaces-list-by-accounts" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -477,7 +477,7 @@ export def "subscriptions-resource-groups-providers-microsoft-machine-learning-e
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MachineLearningExperimentation/accounts/{accountName}/workspaces/{workspaceName}
 # operationId: Workspaces_Delete
-export def "subscriptions-resource-groups-providers-microsoft-machine-learning-experimentation-accounts-workspaces delete" [
+export def "workspaces-delete" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -521,7 +521,7 @@ export def "subscriptions-resource-groups-providers-microsoft-machine-learning-e
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MachineLearningExperimentation/accounts/{accountName}/workspaces/{workspaceName}
 # operationId: Workspaces_Get
-export def "subscriptions-resource-groups-providers-microsoft-machine-learning-experimentation-accounts-workspaces get" [
+export def "workspaces-get" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -566,7 +566,7 @@ export def "subscriptions-resource-groups-providers-microsoft-machine-learning-e
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MachineLearningExperimentation/accounts/{accountName}/workspaces/{workspaceName}
 # operationId: Workspaces_Update
 # --properties shape: {description?: string, friendlyName?: string}
-export def "subscriptions-resource-groups-providers-microsoft-machine-learning-experimentation-accounts-workspaces update" [
+export def "workspaces-update" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -616,7 +616,7 @@ export def "subscriptions-resource-groups-providers-microsoft-machine-learning-e
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MachineLearningExperimentation/accounts/{accountName}/workspaces/{workspaceName}
 # operationId: Workspaces_CreateOrUpdate
 # --properties shape: {description?: string, friendlyName: string}
-export def "subscriptions-resource-groups-providers-microsoft-machine-learning-experimentation-accounts-workspaces create-or-update" [
+export def "workspaces-create-or-update" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -666,7 +666,7 @@ export def "subscriptions-resource-groups-providers-microsoft-machine-learning-e
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MachineLearningExperimentation/accounts/{accountName}/workspaces/{workspaceName}/projects/{projectName}
 # operationId: Projects_Delete
-export def "subscriptions-resource-groups-providers-microsoft-machine-learning-experimentation-accounts-workspaces-projects delete" [
+export def "projects-delete" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -712,7 +712,7 @@ export def "subscriptions-resource-groups-providers-microsoft-machine-learning-e
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MachineLearningExperimentation/accounts/{accountName}/workspaces/{workspaceName}/projects/{projectName}
 # operationId: Projects_Get
-export def "subscriptions-resource-groups-providers-microsoft-machine-learning-experimentation-accounts-workspaces-projects get" [
+export def "projects-get" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -759,7 +759,7 @@ export def "subscriptions-resource-groups-providers-microsoft-machine-learning-e
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MachineLearningExperimentation/accounts/{accountName}/workspaces/{workspaceName}/projects/{projectName}
 # operationId: Projects_Update
 # --properties shape: {description?: string, friendlyName?: string, gitrepo?: string}
-export def "subscriptions-resource-groups-providers-microsoft-machine-learning-experimentation-accounts-workspaces-projects update" [
+export def "projects-update" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -811,7 +811,7 @@ export def "subscriptions-resource-groups-providers-microsoft-machine-learning-e
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MachineLearningExperimentation/accounts/{accountName}/workspaces/{workspaceName}/projects/{projectName}
 # operationId: Projects_CreateOrUpdate
 # --properties shape: {description?: string, friendlyName: string, gitrepo?: string}
-export def "subscriptions-resource-groups-providers-microsoft-machine-learning-experimentation-accounts-workspaces-projects create-or-update" [
+export def "projects-create-or-update" [
   subscription_id: string
   resource_group_name: string
   account_name: string
@@ -863,7 +863,7 @@ export def "subscriptions-resource-groups-providers-microsoft-machine-learning-e
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MachineLearningExperimentation/accounts/{accountName}/workspaces{workspaceName}/projects
 # operationId: Projects_ListByWorkspace
-export def "subscriptions-resource-groups-providers-microsoft-machine-learning-experimentation-accounts-workspacesworkspace-name-projects list-by-workspace" [
+export def "projects-list-by-workspace" [
   subscription_id: string
   resource_group_name: string
   account_name: string

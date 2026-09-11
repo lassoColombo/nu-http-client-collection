@@ -100,7 +100,7 @@ def accept-completer [] { ["application/json" "application/xml"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "mostemailed get-json" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-mostemailed-section-time-period-json" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -124,7 +124,7 @@ export def commands []: nothing -> table {
 #
 # GET /mostemailed/{section}/{time-period}.json
 # operationId: GET_mostemailed-section-time-period-json
-export def "mostemailed get-json" [
+export def "get-mostemailed-section-time-period-json" [
   section: string
   time_period: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -163,7 +163,7 @@ export def "mostemailed get-json" [
 #
 # GET /mostshared/{section}/{time-period}.json
 # operationId: GET_mostshared-section-time-period-json
-export def "mostshared get-json" [
+export def "get-mostshared-section-time-period-json" [
   section: string
   time_period: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -201,7 +201,7 @@ export def "mostshared get-json" [
 #
 # GET /mostviewed/{section}/{time-period}.json
 # operationId: GET_mostviewed-section-time-period-json
-export def "mostviewed get-json" [
+export def "get-mostviewed-section-time-period-json" [
   section: string
   time_period: string
   --base-url(-b): string@base-url-completer # API base URL

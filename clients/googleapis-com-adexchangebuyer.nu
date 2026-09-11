@@ -136,7 +136,7 @@ def open-auction-status-filter-completer [] { ["approved" "conditionally_approve
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "accounts list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "adexchangebuyer-accounts-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -160,7 +160,7 @@ export def commands []: nothing -> table {
 #
 # GET /accounts
 # operationId: adexchangebuyer.accounts.list
-export def "accounts list" [
+export def "adexchangebuyer-accounts-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -202,7 +202,7 @@ export def "accounts list" [
 #
 # GET /accounts/{id}
 # operationId: adexchangebuyer.accounts.get
-export def "accounts get" [
+export def "adexchangebuyer-accounts-get" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -247,7 +247,7 @@ export def "accounts get" [
 # PATCH /accounts/{id}
 # operationId: adexchangebuyer.accounts.patch
 # --bidderLocation item shape: {bidProtocol?: string, maximumQps?: int, region?: string, url?: string}
-export def "accounts update-by-id" [
+export def "adexchangebuyer-accounts-patch" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -305,7 +305,7 @@ export def "accounts update-by-id" [
 # PUT /accounts/{id}
 # operationId: adexchangebuyer.accounts.update
 # --bidderLocation item shape: {bidProtocol?: string, maximumQps?: int, region?: string, url?: string}
-export def "accounts update-by-id-1" [
+export def "adexchangebuyer-accounts-update" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -362,7 +362,7 @@ export def "accounts update-by-id-1" [
 #
 # GET /billinginfo
 # operationId: adexchangebuyer.billingInfo.list
-export def "billinginfo list" [
+export def "adexchangebuyer-billing-info-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -404,7 +404,7 @@ export def "billinginfo list" [
 #
 # GET /billinginfo/{accountId}
 # operationId: adexchangebuyer.billingInfo.get
-export def "billinginfo list-1" [
+export def "adexchangebuyer-billing-info-get" [
   account_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -448,7 +448,7 @@ export def "billinginfo list-1" [
 #
 # GET /billinginfo/{accountId}/{billingId}
 # operationId: adexchangebuyer.budget.get
-export def "billinginfo get" [
+export def "adexchangebuyer-budget-get" [
   account_id: string
   billing_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -494,7 +494,7 @@ export def "billinginfo get" [
 #
 # PATCH /billinginfo/{accountId}/{billingId}
 # operationId: adexchangebuyer.budget.patch
-export def "billinginfo update-by-account-id-billing-id" [
+export def "adexchangebuyer-budget-patch" [
   account_id: string
   billing_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -549,7 +549,7 @@ export def "billinginfo update-by-account-id-billing-id" [
 #
 # PUT /billinginfo/{accountId}/{billingId}
 # operationId: adexchangebuyer.budget.update
-export def "billinginfo update-by-account-id-billing-id-1" [
+export def "adexchangebuyer-budget-update" [
   account_id: string
   billing_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -604,7 +604,7 @@ export def "billinginfo update-by-account-id-billing-id-1" [
 #
 # GET /creatives
 # operationId: adexchangebuyer.creatives.list
-export def "creatives list" [
+export def "adexchangebuyer-creatives-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -657,7 +657,7 @@ export def "creatives list" [
 # --filteringReasons shape: {date?: string, reasons?: list}
 # --nativeAd shape: {advertiser?: string, appIcon?: record, body?: string, callToAction?: string, clickLinkUrl?: string, clickTrackingUrl?: string, headline?: string, image?: record, impressionTrackingUrl?: list<string>, logo?: record, price?: string, starRating?: float, videoURL?: string}
 # --servingRestrictions item shape: {contexts?: list, disapprovalReasons?: list, reason?: string}
-export def "creatives create" [
+export def "adexchangebuyer-creatives-insert" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -733,7 +733,7 @@ export def "creatives create" [
 #
 # GET /creatives/{accountId}/{buyerCreativeId}
 # operationId: adexchangebuyer.creatives.get
-export def "creatives get" [
+export def "adexchangebuyer-creatives-get" [
   account_id: int
   buyer_creative_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -779,7 +779,7 @@ export def "creatives get" [
 #
 # POST /creatives/{accountId}/{buyerCreativeId}/addDeal/{dealId}
 # operationId: adexchangebuyer.creatives.addDeal
-export def "creatives-add-deal create" [
+export def "adexchangebuyer-creatives-add-deal" [
   account_id: int
   buyer_creative_id: string
   deal_id: string
@@ -827,7 +827,7 @@ export def "creatives-add-deal create" [
 #
 # GET /creatives/{accountId}/{buyerCreativeId}/listDeals
 # operationId: adexchangebuyer.creatives.listDeals
-export def "creatives-list-deals list" [
+export def "adexchangebuyer-creatives-list-deals" [
   account_id: int
   buyer_creative_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -873,7 +873,7 @@ export def "creatives-list-deals list" [
 #
 # POST /creatives/{accountId}/{buyerCreativeId}/removeDeal/{dealId}
 # operationId: adexchangebuyer.creatives.removeDeal
-export def "creatives-remove-deal delete" [
+export def "adexchangebuyer-creatives-remove-deal" [
   account_id: int
   buyer_creative_id: string
   deal_id: string
@@ -921,7 +921,7 @@ export def "creatives-remove-deal delete" [
 #
 # GET /performancereport
 # operationId: adexchangebuyer.performanceReport.list
-export def "performancereport list" [
+export def "adexchangebuyer-performance-report-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -968,7 +968,7 @@ export def "performancereport list" [
 #
 # GET /pretargetingconfigs/{accountId}
 # operationId: adexchangebuyer.pretargetingConfig.list
-export def "pretargetingconfigs list" [
+export def "adexchangebuyer-pretargeting-config-list" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1016,7 +1016,7 @@ export def "pretargetingconfigs list" [
 # --excludedPlacements item shape: {token?: string, type?: string}
 # --placements item shape: {token?: string, type?: string}
 # --videoPlayerSizes item shape: {aspectRatio?: string, minHeight?: string, minWidth?: string}
-export def "pretargetingconfigs create" [
+export def "adexchangebuyer-pretargeting-config-insert" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1090,7 +1090,7 @@ export def "pretargetingconfigs create" [
 #
 # DELETE /pretargetingconfigs/{accountId}/{configId}
 # operationId: adexchangebuyer.pretargetingConfig.delete
-export def "pretargetingconfigs delete" [
+export def "adexchangebuyer-pretargeting-config-delete" [
   account_id: string
   config_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1136,7 +1136,7 @@ export def "pretargetingconfigs delete" [
 #
 # GET /pretargetingconfigs/{accountId}/{configId}
 # operationId: adexchangebuyer.pretargetingConfig.get
-export def "pretargetingconfigs get" [
+export def "adexchangebuyer-pretargeting-config-get" [
   account_id: string
   config_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1186,7 +1186,7 @@ export def "pretargetingconfigs get" [
 # --excludedPlacements item shape: {token?: string, type?: string}
 # --placements item shape: {token?: string, type?: string}
 # --videoPlayerSizes item shape: {aspectRatio?: string, minHeight?: string, minWidth?: string}
-export def "pretargetingconfigs update-by-account-id-config-id" [
+export def "adexchangebuyer-pretargeting-config-patch" [
   account_id: string
   config_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1266,7 +1266,7 @@ export def "pretargetingconfigs update-by-account-id-config-id" [
 # --excludedPlacements item shape: {token?: string, type?: string}
 # --placements item shape: {token?: string, type?: string}
 # --videoPlayerSizes item shape: {aspectRatio?: string, minHeight?: string, minWidth?: string}
-export def "pretargetingconfigs update-by-account-id-config-id-1" [
+export def "adexchangebuyer-pretargeting-config-update" [
   account_id: string
   config_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1343,7 +1343,7 @@ export def "pretargetingconfigs update-by-account-id-config-id-1" [
 # POST /privateauction/{privateAuctionId}/updateproposal
 # operationId: adexchangebuyer.marketplaceprivateauction.updateproposal
 # --note shape: {creatorRole?: string, dealId?: string, kind?: string, note?: string, noteId?: string, proposalId?: string, proposalRevisionNumber?: string, timestampMs?: string}
-export def "privateauction-update-proposal update" [
+export def "adexchangebuyer-marketplaceprivateauction-updateproposal" [
   private_auction_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1394,7 +1394,7 @@ export def "privateauction-update-proposal update" [
 #
 # GET /products/search
 # operationId: adexchangebuyer.products.search
-export def "products-search list" [
+export def "adexchangebuyer-products-search" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -1437,7 +1437,7 @@ export def "products-search list" [
 #
 # GET /products/{productId}
 # operationId: adexchangebuyer.products.get
-export def "products get" [
+export def "adexchangebuyer-products-get" [
   product_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1482,7 +1482,7 @@ export def "products get" [
 # POST /proposals/insert
 # operationId: adexchangebuyer.proposals.insert
 # --proposals item shape: {billedBuyer?: record, buyer?: record, buyerContacts?: list, buyerPrivateData?: record, dbmAdvertiserIds?: list<string>, hasBuyerSignedOff?: bool, hasSellerSignedOff?: bool, inventorySource?: string, isRenegotiating?: bool, isSetupComplete?: bool, kind?: string, labels?: list, lastUpdaterOrCommentorRole?: string, name?: string, negotiationId?: string, originatorRole?: string, privateAuctionId?: string, proposalId?: string, proposalState?: string, revisionNumber?: string, revisionTimeMs?: string, ... (2 more fields)}
-export def "proposals-insert create" [
+export def "adexchangebuyer-proposals-insert" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -1529,7 +1529,7 @@ export def "proposals-insert create" [
 #
 # GET /proposals/search
 # operationId: adexchangebuyer.proposals.search
-export def "proposals-search list" [
+export def "adexchangebuyer-proposals-search" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -1572,7 +1572,7 @@ export def "proposals-search list" [
 #
 # GET /proposals/{proposalId}
 # operationId: adexchangebuyer.proposals.get
-export def "proposals get" [
+export def "adexchangebuyer-proposals-get" [
   proposal_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1616,7 +1616,7 @@ export def "proposals get" [
 #
 # GET /proposals/{proposalId}/deals
 # operationId: adexchangebuyer.marketplacedeals.list
-export def "proposals-deals list" [
+export def "adexchangebuyer-marketplacedeals-list" [
   proposal_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1661,7 +1661,7 @@ export def "proposals-deals list" [
 #
 # POST /proposals/{proposalId}/deals/delete
 # operationId: adexchangebuyer.marketplacedeals.delete
-export def "proposals-deals-delete delete" [
+export def "adexchangebuyer-marketplacedeals-delete" [
   proposal_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1712,7 +1712,7 @@ export def "proposals-deals-delete delete" [
 # POST /proposals/{proposalId}/deals/insert
 # operationId: adexchangebuyer.marketplacedeals.insert
 # --deals item shape: {buyerPrivateData?: record, creationTimeMs?: string, creativePreApprovalPolicy?: string, creativeSafeFrameCompatibility?: string, dealId?: string, dealServingMetadata?: record, deliveryControl?: record, externalDealId?: string, flightEndTimeMs?: string, flightStartTimeMs?: string, inventoryDescription?: string, isRfpTemplate?: bool, isSetupComplete?: bool, kind?: string, lastUpdateTimeMs?: string, makegoodRequestedReason?: string, name?: string, productId?: string, productRevisionNumber?: string, ... (7 more fields)}
-export def "proposals-deals-insert create" [
+export def "adexchangebuyer-marketplacedeals-insert" [
   proposal_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1764,7 +1764,7 @@ export def "proposals-deals-insert create" [
 # operationId: adexchangebuyer.marketplacedeals.update
 # --deals item shape: {buyerPrivateData?: record, creationTimeMs?: string, creativePreApprovalPolicy?: string, creativeSafeFrameCompatibility?: string, dealId?: string, dealServingMetadata?: record, deliveryControl?: record, externalDealId?: string, flightEndTimeMs?: string, flightStartTimeMs?: string, inventoryDescription?: string, isRfpTemplate?: bool, isSetupComplete?: bool, kind?: string, lastUpdateTimeMs?: string, makegoodRequestedReason?: string, name?: string, productId?: string, productRevisionNumber?: string, ... (7 more fields)}
 # --proposal shape: {billedBuyer?: record, buyer?: record, buyerContacts?: list, buyerPrivateData?: record, dbmAdvertiserIds?: list<string>, hasBuyerSignedOff?: bool, hasSellerSignedOff?: bool, inventorySource?: string, isRenegotiating?: bool, isSetupComplete?: bool, kind?: string, labels?: list, lastUpdaterOrCommentorRole?: string, name?: string, negotiationId?: string, originatorRole?: string, privateAuctionId?: string, proposalId?: string, proposalState?: string, revisionNumber?: string, revisionTimeMs?: string, ... (2 more fields)}
-export def "proposals-deals-update update" [
+export def "adexchangebuyer-marketplacedeals-update" [
   proposal_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1815,7 +1815,7 @@ export def "proposals-deals-update update" [
 #
 # GET /proposals/{proposalId}/notes
 # operationId: adexchangebuyer.marketplacenotes.list
-export def "proposals-notes list" [
+export def "adexchangebuyer-marketplacenotes-list" [
   proposal_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1861,7 +1861,7 @@ export def "proposals-notes list" [
 # POST /proposals/{proposalId}/notes/insert
 # operationId: adexchangebuyer.marketplacenotes.insert
 # --notes item shape: {creatorRole?: string, dealId?: string, kind?: string, note?: string, noteId?: string, proposalId?: string, proposalRevisionNumber?: string, timestampMs?: string}
-export def "proposals-notes-insert create" [
+export def "adexchangebuyer-marketplacenotes-insert" [
   proposal_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1909,7 +1909,7 @@ export def "proposals-notes-insert create" [
 #
 # POST /proposals/{proposalId}/setupcomplete
 # operationId: adexchangebuyer.proposals.setupcomplete
-export def "proposals-setupcomplete create" [
+export def "adexchangebuyer-proposals-setupcomplete" [
   proposal_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1960,7 +1960,7 @@ export def "proposals-setupcomplete create" [
 # --labels item shape: {accountId?: string, createTimeMs?: string, deprecatedMarketplaceDealParty?: record, label?: string}
 # --seller shape: {accountId?: string, subAccountId?: string}
 # --sellerContacts item shape: {email?: string, name?: string}
-export def "proposals update-by-proposal-id-revision-number-update-action" [
+export def "adexchangebuyer-proposals-patch" [
   proposal_id: string
   revision_number: string
   update_action: string
@@ -2041,7 +2041,7 @@ export def "proposals update-by-proposal-id-revision-number-update-action" [
 # --labels item shape: {accountId?: string, createTimeMs?: string, deprecatedMarketplaceDealParty?: record, label?: string}
 # --seller shape: {accountId?: string, subAccountId?: string}
 # --sellerContacts item shape: {email?: string, name?: string}
-export def "proposals update-by-proposal-id-revision-number-update-action-1" [
+export def "adexchangebuyer-proposals-update" [
   proposal_id: string
   revision_number: string
   update_action: string
@@ -2115,7 +2115,7 @@ export def "proposals update-by-proposal-id-revision-number-update-action-1" [
 #
 # GET /publisher/{accountId}/profiles
 # operationId: adexchangebuyer.pubprofiles.list
-export def "publisher-profiles list" [
+export def "adexchangebuyer-pubprofiles-list" [
   account_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)

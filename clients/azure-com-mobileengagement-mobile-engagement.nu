@@ -123,7 +123,7 @@ def campaign-type-completer [] { ["Announcement" "DataPush" "NativePush" "Poll"]
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-providers-microsoft-mobile-engagement-app-collections list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "app-collections-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -147,7 +147,7 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.MobileEngagement/appCollections
 # operationId: AppCollections_List
-export def "subscriptions-providers-microsoft-mobile-engagement-app-collections list" [
+export def "app-collections-list" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -185,7 +185,7 @@ export def "subscriptions-providers-microsoft-mobile-engagement-app-collections 
 #
 # POST /subscriptions/{subscriptionId}/providers/Microsoft.MobileEngagement/checkAppCollectionNameAvailability
 # operationId: AppCollections_CheckNameAvailability
-export def "subscriptions-providers-microsoft-mobile-engagement-check-app-collection-name-availability check" [
+export def "app-collections-check-name-availability" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -229,7 +229,7 @@ export def "subscriptions-providers-microsoft-mobile-engagement-check-app-collec
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.MobileEngagement/supportedPlatforms
 # operationId: SupportedPlatforms_List
-export def "subscriptions-providers-microsoft-mobile-engagement-supported-platforms list" [
+export def "supported-platforms-list" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -267,7 +267,7 @@ export def "subscriptions-providers-microsoft-mobile-engagement-supported-platfo
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MobileEngagement/appcollections/{appCollection}/apps
 # operationId: Apps_List
-export def "subscriptions-resource-groups-providers-microsoft-mobile-engagement-appcollections-apps list" [
+export def "apps-list" [
   subscription_id: string
   resource_group_name: string
   app_collection: string
@@ -309,7 +309,7 @@ export def "subscriptions-resource-groups-providers-microsoft-mobile-engagement-
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MobileEngagement/appcollections/{appCollection}/apps/{appName}/campaigns/{kind}
 # operationId: Campaigns_List
-export def "subscriptions-resource-groups-providers-microsoft-mobile-engagement-appcollections-apps-campaigns list" [
+export def "campaigns-list" [
   subscription_id: string
   resource_group_name: string
   app_collection: string
@@ -363,7 +363,7 @@ export def "subscriptions-resource-groups-providers-microsoft-mobile-engagement-
 # --audience shape: {criteria?: record, expression?: string, filters?: list}
 # --questions item shape: {choices?: list, id?: int, localization?: record, title?: string}
 # --notificationOptions shape: {actionText?: string, bigPicture?: string, bigText?: string, sound?: string}
-export def "subscriptions-resource-groups-providers-microsoft-mobile-engagement-appcollections-apps-campaigns create" [
+export def "campaigns-create" [
   subscription_id: string
   resource_group_name: string
   app_collection: string
@@ -441,7 +441,7 @@ export def "subscriptions-resource-groups-providers-microsoft-mobile-engagement-
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MobileEngagement/appcollections/{appCollection}/apps/{appName}/campaigns/{kind}/test
 # operationId: Campaigns_TestNew
 # --data shape: {audience?: record, category?: string, deliveryActivities?: list<string>, deliveryTime?: "any"|"background"|"session", endTime?: string, localization?: record, name?: string, notificationBadge?: bool, notificationCloseable?: bool, notificationIcon?: bool, notificationSound?: bool, notificationType?: "system"|"popup", notificationVibrate?: bool, pushMode?: "real-time"|"one-shot"|"manual", questions?: list, startTime?: string, timezone?: string, ... (11 more fields)}
-export def "subscriptions-resource-groups-providers-microsoft-mobile-engagement-appcollections-apps-campaigns-test test-new" [
+export def "campaigns-test-new" [
   subscription_id: string
   resource_group_name: string
   app_collection: string
@@ -493,7 +493,7 @@ export def "subscriptions-resource-groups-providers-microsoft-mobile-engagement-
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MobileEngagement/appcollections/{appCollection}/apps/{appName}/campaigns/{kind}/{id}
 # operationId: Campaigns_Delete
-export def "subscriptions-resource-groups-providers-microsoft-mobile-engagement-appcollections-apps-campaigns delete" [
+export def "campaigns-delete" [
   subscription_id: string
   resource_group_name: string
   app_collection: string
@@ -541,7 +541,7 @@ export def "subscriptions-resource-groups-providers-microsoft-mobile-engagement-
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MobileEngagement/appcollections/{appCollection}/apps/{appName}/campaigns/{kind}/{id}
 # operationId: Campaigns_Get
-export def "subscriptions-resource-groups-providers-microsoft-mobile-engagement-appcollections-apps-campaigns get" [
+export def "campaigns-get" [
   subscription_id: string
   resource_group_name: string
   app_collection: string
@@ -592,7 +592,7 @@ export def "subscriptions-resource-groups-providers-microsoft-mobile-engagement-
 # --audience shape: {criteria?: record, expression?: string, filters?: list}
 # --questions item shape: {choices?: list, id?: int, localization?: record, title?: string}
 # --notificationOptions shape: {actionText?: string, bigPicture?: string, bigText?: string, sound?: string}
-export def "subscriptions-resource-groups-providers-microsoft-mobile-engagement-appcollections-apps-campaigns update" [
+export def "campaigns-update" [
   subscription_id: string
   resource_group_name: string
   app_collection: string
@@ -671,7 +671,7 @@ export def "subscriptions-resource-groups-providers-microsoft-mobile-engagement-
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MobileEngagement/appcollections/{appCollection}/apps/{appName}/campaigns/{kind}/{id}/activate
 # operationId: Campaigns_Activate
-export def "subscriptions-resource-groups-providers-microsoft-mobile-engagement-appcollections-apps-campaigns-activate create" [
+export def "campaigns-activate" [
   subscription_id: string
   resource_group_name: string
   app_collection: string
@@ -719,7 +719,7 @@ export def "subscriptions-resource-groups-providers-microsoft-mobile-engagement-
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MobileEngagement/appcollections/{appCollection}/apps/{appName}/campaigns/{kind}/{id}/finish
 # operationId: Campaigns_Finish
-export def "subscriptions-resource-groups-providers-microsoft-mobile-engagement-appcollections-apps-campaigns-finish create" [
+export def "campaigns-finish" [
   subscription_id: string
   resource_group_name: string
   app_collection: string
@@ -768,7 +768,7 @@ export def "subscriptions-resource-groups-providers-microsoft-mobile-engagement-
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MobileEngagement/appcollections/{appCollection}/apps/{appName}/campaigns/{kind}/{id}/push
 # operationId: Campaigns_Push
 # --data shape: {audience?: record, category?: string, deliveryActivities?: list<string>, deliveryTime?: "any"|"background"|"session", endTime?: string, localization?: record, name?: string, notificationBadge?: bool, notificationCloseable?: bool, notificationIcon?: bool, notificationSound?: bool, notificationType?: "system"|"popup", notificationVibrate?: bool, pushMode?: "real-time"|"one-shot"|"manual", questions?: list, startTime?: string, timezone?: string, ... (11 more fields)}
-export def "subscriptions-resource-groups-providers-microsoft-mobile-engagement-appcollections-apps-campaigns-push push" [
+export def "campaigns-push" [
   subscription_id: string
   resource_group_name: string
   app_collection: string
@@ -821,7 +821,7 @@ export def "subscriptions-resource-groups-providers-microsoft-mobile-engagement-
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MobileEngagement/appcollections/{appCollection}/apps/{appName}/campaigns/{kind}/{id}/statistics
 # operationId: Campaigns_GetStatistics
-export def "subscriptions-resource-groups-providers-microsoft-mobile-engagement-appcollections-apps-campaigns-statistics get" [
+export def "campaigns-get-statistics" [
   subscription_id: string
   resource_group_name: string
   app_collection: string
@@ -869,7 +869,7 @@ export def "subscriptions-resource-groups-providers-microsoft-mobile-engagement-
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MobileEngagement/appcollections/{appCollection}/apps/{appName}/campaigns/{kind}/{id}/suspend
 # operationId: Campaigns_Suspend
-export def "subscriptions-resource-groups-providers-microsoft-mobile-engagement-appcollections-apps-campaigns-suspend create" [
+export def "campaigns-suspend" [
   subscription_id: string
   resource_group_name: string
   app_collection: string
@@ -917,7 +917,7 @@ export def "subscriptions-resource-groups-providers-microsoft-mobile-engagement-
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MobileEngagement/appcollections/{appCollection}/apps/{appName}/campaigns/{kind}/{id}/test
 # operationId: Campaigns_TestSaved
-export def "subscriptions-resource-groups-providers-microsoft-mobile-engagement-appcollections-apps-campaigns-test test-saved" [
+export def "campaigns-test-saved" [
   subscription_id: string
   resource_group_name: string
   app_collection: string
@@ -970,7 +970,7 @@ export def "subscriptions-resource-groups-providers-microsoft-mobile-engagement-
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MobileEngagement/appcollections/{appCollection}/apps/{appName}/campaignsByName/{kind}/{name}
 # operationId: Campaigns_GetByName
-export def "subscriptions-resource-groups-providers-microsoft-mobile-engagement-appcollections-apps-campaigns-by-name get" [
+export def "campaigns-get-by-name" [
   subscription_id: string
   resource_group_name: string
   app_collection: string
@@ -1018,7 +1018,7 @@ export def "subscriptions-resource-groups-providers-microsoft-mobile-engagement-
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MobileEngagement/appcollections/{appCollection}/apps/{appName}/devices
 # operationId: Devices_List
-export def "subscriptions-resource-groups-providers-microsoft-mobile-engagement-appcollections-apps-devices list" [
+export def "devices-list" [
   subscription_id: string
   resource_group_name: string
   app_collection: string
@@ -1065,7 +1065,7 @@ export def "subscriptions-resource-groups-providers-microsoft-mobile-engagement-
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MobileEngagement/appcollections/{appCollection}/apps/{appName}/devices/exportTasks
 # operationId: ExportTasks_List
-export def "subscriptions-resource-groups-providers-microsoft-mobile-engagement-appcollections-apps-devices-export-tasks list" [
+export def "export-tasks-list" [
   subscription_id: string
   resource_group_name: string
   app_collection: string
@@ -1112,7 +1112,7 @@ export def "subscriptions-resource-groups-providers-microsoft-mobile-engagement-
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MobileEngagement/appcollections/{appCollection}/apps/{appName}/devices/exportTasks/activities
 # operationId: ExportTasks_CreateActivitiesTask
-export def "subscriptions-resource-groups-providers-microsoft-mobile-engagement-appcollections-apps-devices-export-tasks-activities create" [
+export def "export-tasks-create-activities-task" [
   subscription_id: string
   resource_group_name: string
   app_collection: string
@@ -1164,7 +1164,7 @@ export def "subscriptions-resource-groups-providers-microsoft-mobile-engagement-
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MobileEngagement/appcollections/{appCollection}/apps/{appName}/devices/exportTasks/crashes
 # operationId: ExportTasks_CreateCrashesTask
-export def "subscriptions-resource-groups-providers-microsoft-mobile-engagement-appcollections-apps-devices-export-tasks-crashes create" [
+export def "export-tasks-create-crashes-task" [
   subscription_id: string
   resource_group_name: string
   app_collection: string
@@ -1216,7 +1216,7 @@ export def "subscriptions-resource-groups-providers-microsoft-mobile-engagement-
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MobileEngagement/appcollections/{appCollection}/apps/{appName}/devices/exportTasks/errors
 # operationId: ExportTasks_CreateErrorsTask
-export def "subscriptions-resource-groups-providers-microsoft-mobile-engagement-appcollections-apps-devices-export-tasks-errors create" [
+export def "export-tasks-create-errors-task" [
   subscription_id: string
   resource_group_name: string
   app_collection: string
@@ -1268,7 +1268,7 @@ export def "subscriptions-resource-groups-providers-microsoft-mobile-engagement-
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MobileEngagement/appcollections/{appCollection}/apps/{appName}/devices/exportTasks/events
 # operationId: ExportTasks_CreateEventsTask
-export def "subscriptions-resource-groups-providers-microsoft-mobile-engagement-appcollections-apps-devices-export-tasks-events create" [
+export def "export-tasks-create-events-task" [
   subscription_id: string
   resource_group_name: string
   app_collection: string
@@ -1320,7 +1320,7 @@ export def "subscriptions-resource-groups-providers-microsoft-mobile-engagement-
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MobileEngagement/appcollections/{appCollection}/apps/{appName}/devices/exportTasks/feedbackByCampaign
 # operationId: ExportTasks_CreateFeedbackTaskByCampaign
-export def "subscriptions-resource-groups-providers-microsoft-mobile-engagement-appcollections-apps-devices-export-tasks-feedback-by-campaign create" [
+export def "export-tasks-create-feedback-task-by-campaign" [
   subscription_id: string
   resource_group_name: string
   app_collection: string
@@ -1372,7 +1372,7 @@ export def "subscriptions-resource-groups-providers-microsoft-mobile-engagement-
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MobileEngagement/appcollections/{appCollection}/apps/{appName}/devices/exportTasks/feedbackByDate
 # operationId: ExportTasks_CreateFeedbackTaskByDateRange
-export def "subscriptions-resource-groups-providers-microsoft-mobile-engagement-appcollections-apps-devices-export-tasks-feedback-by-date create-range" [
+export def "export-tasks-create-feedback-task-by-date-range" [
   subscription_id: string
   resource_group_name: string
   app_collection: string
@@ -1425,7 +1425,7 @@ export def "subscriptions-resource-groups-providers-microsoft-mobile-engagement-
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MobileEngagement/appcollections/{appCollection}/apps/{appName}/devices/exportTasks/jobs
 # operationId: ExportTasks_CreateJobsTask
-export def "subscriptions-resource-groups-providers-microsoft-mobile-engagement-appcollections-apps-devices-export-tasks-jobs create" [
+export def "export-tasks-create-jobs-task" [
   subscription_id: string
   resource_group_name: string
   app_collection: string
@@ -1477,7 +1477,7 @@ export def "subscriptions-resource-groups-providers-microsoft-mobile-engagement-
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MobileEngagement/appcollections/{appCollection}/apps/{appName}/devices/exportTasks/sessions
 # operationId: ExportTasks_CreateSessionsTask
-export def "subscriptions-resource-groups-providers-microsoft-mobile-engagement-appcollections-apps-devices-export-tasks-sessions create" [
+export def "export-tasks-create-sessions-task" [
   subscription_id: string
   resource_group_name: string
   app_collection: string
@@ -1529,7 +1529,7 @@ export def "subscriptions-resource-groups-providers-microsoft-mobile-engagement-
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MobileEngagement/appcollections/{appCollection}/apps/{appName}/devices/exportTasks/tags
 # operationId: ExportTasks_CreateTagsTask
-export def "subscriptions-resource-groups-providers-microsoft-mobile-engagement-appcollections-apps-devices-export-tasks-tags create" [
+export def "export-tasks-create-tags-task" [
   subscription_id: string
   resource_group_name: string
   app_collection: string
@@ -1579,7 +1579,7 @@ export def "subscriptions-resource-groups-providers-microsoft-mobile-engagement-
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MobileEngagement/appcollections/{appCollection}/apps/{appName}/devices/exportTasks/tokens
 # operationId: ExportTasks_CreateTokensTask
-export def "subscriptions-resource-groups-providers-microsoft-mobile-engagement-appcollections-apps-devices-export-tasks-tokens create" [
+export def "export-tasks-create-tokens-task" [
   subscription_id: string
   resource_group_name: string
   app_collection: string
@@ -1629,7 +1629,7 @@ export def "subscriptions-resource-groups-providers-microsoft-mobile-engagement-
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MobileEngagement/appcollections/{appCollection}/apps/{appName}/devices/exportTasks/{id}
 # operationId: ExportTasks_Get
-export def "subscriptions-resource-groups-providers-microsoft-mobile-engagement-appcollections-apps-devices-export-tasks get" [
+export def "export-tasks-get" [
   subscription_id: string
   resource_group_name: string
   app_collection: string
@@ -1675,7 +1675,7 @@ export def "subscriptions-resource-groups-providers-microsoft-mobile-engagement-
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MobileEngagement/appcollections/{appCollection}/apps/{appName}/devices/importTasks
 # operationId: ImportTasks_List
-export def "subscriptions-resource-groups-providers-microsoft-mobile-engagement-appcollections-apps-devices-import-tasks list" [
+export def "import-tasks-list" [
   subscription_id: string
   resource_group_name: string
   app_collection: string
@@ -1722,7 +1722,7 @@ export def "subscriptions-resource-groups-providers-microsoft-mobile-engagement-
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MobileEngagement/appcollections/{appCollection}/apps/{appName}/devices/importTasks
 # operationId: ImportTasks_Create
-export def "subscriptions-resource-groups-providers-microsoft-mobile-engagement-appcollections-apps-devices-import-tasks create" [
+export def "import-tasks-create" [
   subscription_id: string
   resource_group_name: string
   app_collection: string
@@ -1770,7 +1770,7 @@ export def "subscriptions-resource-groups-providers-microsoft-mobile-engagement-
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MobileEngagement/appcollections/{appCollection}/apps/{appName}/devices/importTasks/{id}
 # operationId: ImportTasks_Get
-export def "subscriptions-resource-groups-providers-microsoft-mobile-engagement-appcollections-apps-devices-import-tasks get" [
+export def "import-tasks-get" [
   subscription_id: string
   resource_group_name: string
   app_collection: string
@@ -1816,7 +1816,7 @@ export def "subscriptions-resource-groups-providers-microsoft-mobile-engagement-
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MobileEngagement/appcollections/{appCollection}/apps/{appName}/devices/tag
 # operationId: Devices_TagByDeviceId
-export def "subscriptions-resource-groups-providers-microsoft-mobile-engagement-appcollections-apps-devices-tag tag" [
+export def "devices-tag-by-device-id" [
   subscription_id: string
   resource_group_name: string
   app_collection: string
@@ -1865,7 +1865,7 @@ export def "subscriptions-resource-groups-providers-microsoft-mobile-engagement-
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MobileEngagement/appcollections/{appCollection}/apps/{appName}/devices/{deviceId}
 # operationId: Devices_GetByDeviceId
-export def "subscriptions-resource-groups-providers-microsoft-mobile-engagement-appcollections-apps-devices get" [
+export def "devices-get-by-device-id" [
   subscription_id: string
   resource_group_name: string
   app_collection: string
@@ -1911,7 +1911,7 @@ export def "subscriptions-resource-groups-providers-microsoft-mobile-engagement-
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MobileEngagement/appcollections/{appCollection}/apps/{appName}/users/tag
 # operationId: Devices_TagByUserId
-export def "subscriptions-resource-groups-providers-microsoft-mobile-engagement-appcollections-apps-users-tag tag-devices" [
+export def "devices-tag-by-user-id" [
   subscription_id: string
   resource_group_name: string
   app_collection: string
@@ -1960,7 +1960,7 @@ export def "subscriptions-resource-groups-providers-microsoft-mobile-engagement-
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.MobileEngagement/appcollections/{appCollection}/apps/{appName}/users/{userId}
 # operationId: Devices_GetByUserId
-export def "subscriptions-resource-groups-providers-microsoft-mobile-engagement-appcollections-apps-users get-devices" [
+export def "devices-get-by-user-id" [
   subscription_id: string
   resource_group_name: string
   app_collection: string

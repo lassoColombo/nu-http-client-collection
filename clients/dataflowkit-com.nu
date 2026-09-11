@@ -109,7 +109,7 @@ def accept-completer-3 [] { ["application/json" "application/x-ndjson" "text/csv
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "convert-url-pdf create" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "url-to-pdf" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -134,7 +134,7 @@ export def commands []: nothing -> table {
 # POST /convert/url/pdf
 # operationId: url-to-pdf
 # --initialCookies item shape: {domain?: string, expirationDate?: float, hostOnly?: bool, httpOnly?: bool, id?: float, name?: string, path?: string, sameSite?: "unspecified"|"strict"|"lax"|"no_restriction", secure?: bool, session?: bool, storeID?: string, value?: string}
-export def "convert-url-pdf create" [
+export def "url-to-pdf" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -190,7 +190,7 @@ export def "convert-url-pdf create" [
 # POST /convert/url/screenshot
 # operationId: url-to-screenshot
 # --initialCookies item shape: {domain?: string, expirationDate?: float, hostOnly?: bool, httpOnly?: bool, id?: float, name?: string, path?: string, sameSite?: "unspecified"|"strict"|"lax"|"no_restriction", secure?: bool, session?: bool, storeID?: string, value?: string}
-export def "convert-url-screenshot create" [
+export def "url-to-screenshot" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -246,7 +246,7 @@ export def "convert-url-screenshot create" [
 # POST /fetch
 # operationId: fetch
 # --initialCookies item shape: {domain?: string, expirationDate?: float, hostOnly?: bool, httpOnly?: bool, id?: float, name?: string, path?: string, sameSite?: "unspecified"|"strict"|"lax"|"no_restriction", secure?: bool, session?: bool, storeID?: string, value?: string}
-export def "fetch get" [
+export def "fetch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -295,7 +295,7 @@ export def "fetch get" [
 # --fields item shape: {attrs: list<string>, details?: any, filters?: list, name: string, selector: string, type: "0"|"1"|"2"}
 # --paginator shape: {nextPageSelector?: string, pageNum?: int}
 # --request shape: {actions?: list, ignoreHTTPStatusErrCodes?: bool, initialCookies?: list, output?: "buffer"|"file", proxy?: string, type: "base"|"chrome", url: string, waitDelay?: float}
-export def "parse create" [
+export def "parse" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -340,7 +340,7 @@ export def "parse create" [
 # POST /serp
 # operationId: serp
 # --fields item shape: {attrs: list<string>, details?: any, filters?: list, name: string, selector: string, type: "0"|"1"|"2"}
-export def "serp create" [
+export def "serp" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

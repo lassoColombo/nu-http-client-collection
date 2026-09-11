@@ -124,7 +124,7 @@ def type-completer [] { ["Microsoft.AppConfiguration/configurationStores"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-app-configuration-operations list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "operations-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -148,7 +148,7 @@ export def commands []: nothing -> table {
 #
 # GET /providers/Microsoft.AppConfiguration/operations
 # operationId: Operations_List
-export def "providers-microsoft-app-configuration-operations list" [
+export def "operations-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -185,7 +185,7 @@ export def "providers-microsoft-app-configuration-operations list" [
 #
 # POST /subscriptions/{subscriptionId}/providers/Microsoft.AppConfiguration/checkNameAvailability
 # operationId: Operations_CheckNameAvailability
-export def "subscriptions-providers-microsoft-app-configuration-check-name-availability check-operations" [
+export def "operations-check-name-availability" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -228,7 +228,7 @@ export def "subscriptions-providers-microsoft-app-configuration-check-name-avail
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.AppConfiguration/configurationStores
 # operationId: ConfigurationStores_List
-export def "subscriptions-providers-microsoft-app-configuration-configuration-stores list" [
+export def "configuration-stores-list" [
   subscription_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -267,7 +267,7 @@ export def "subscriptions-providers-microsoft-app-configuration-configuration-st
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.AppConfiguration/configurationStores
 # operationId: ConfigurationStores_ListByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-app-configuration-configuration-stores list" [
+export def "configuration-stores-list-by-resource-group" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -308,7 +308,7 @@ export def "subscriptions-resource-groups-providers-microsoft-app-configuration-
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.AppConfiguration/configurationStores/{configStoreName}
 # operationId: ConfigurationStores_Delete
-export def "subscriptions-resource-groups-providers-microsoft-app-configuration-configuration-stores delete" [
+export def "configuration-stores-delete" [
   subscription_id: string
   resource_group_name: string
   config_store_name: string
@@ -350,7 +350,7 @@ export def "subscriptions-resource-groups-providers-microsoft-app-configuration-
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.AppConfiguration/configurationStores/{configStoreName}
 # operationId: ConfigurationStores_Get
-export def "subscriptions-resource-groups-providers-microsoft-app-configuration-configuration-stores get" [
+export def "configuration-stores-get" [
   subscription_id: string
   resource_group_name: string
   config_store_name: string
@@ -395,7 +395,7 @@ export def "subscriptions-resource-groups-providers-microsoft-app-configuration-
 # --identity shape: {type?: "None"|"SystemAssigned"|"UserAssigned"|"SystemAssigned, UserAssigned", userAssignedIdentities?: record}
 # --properties shape: {encryption?: record}
 # --sku shape: {name: string}
-export def "subscriptions-resource-groups-providers-microsoft-app-configuration-configuration-stores update" [
+export def "configuration-stores-update" [
   subscription_id: string
   resource_group_name: string
   config_store_name: string
@@ -447,7 +447,7 @@ export def "subscriptions-resource-groups-providers-microsoft-app-configuration-
 # --identity shape: {type?: "None"|"SystemAssigned"|"UserAssigned"|"SystemAssigned, UserAssigned", userAssignedIdentities?: record}
 # --properties shape: {encryption?: record}
 # --sku shape: {name: string}
-export def "subscriptions-resource-groups-providers-microsoft-app-configuration-configuration-stores create" [
+export def "configuration-stores-create" [
   subscription_id: string
   resource_group_name: string
   config_store_name: string
@@ -497,7 +497,7 @@ export def "subscriptions-resource-groups-providers-microsoft-app-configuration-
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.AppConfiguration/configurationStores/{configStoreName}/ListKeys
 # operationId: ConfigurationStores_ListKeys
-export def "subscriptions-resource-groups-providers-microsoft-app-configuration-configuration-stores-list-keys list" [
+export def "configuration-stores-list-keys" [
   subscription_id: string
   resource_group_name: string
   config_store_name: string
@@ -540,7 +540,7 @@ export def "subscriptions-resource-groups-providers-microsoft-app-configuration-
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.AppConfiguration/configurationStores/{configStoreName}/RegenerateKey
 # operationId: ConfigurationStores_RegenerateKey
-export def "subscriptions-resource-groups-providers-microsoft-app-configuration-configuration-stores-regenerate-key create" [
+export def "configuration-stores-regenerate-key" [
   subscription_id: string
   resource_group_name: string
   config_store_name: string
@@ -586,7 +586,7 @@ export def "subscriptions-resource-groups-providers-microsoft-app-configuration-
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.AppConfiguration/configurationStores/{configStoreName}/listKeyValue
 # operationId: ConfigurationStores_ListKeyValue
-export def "subscriptions-resource-groups-providers-microsoft-app-configuration-configuration-stores-list-key-value list" [
+export def "configuration-stores-list-key-value" [
   subscription_id: string
   resource_group_name: string
   config_store_name: string
@@ -633,7 +633,7 @@ export def "subscriptions-resource-groups-providers-microsoft-app-configuration-
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.AppConfiguration/configurationStores/{configStoreName}/privateEndpointConnections
 # operationId: PrivateEndpointConnections_ListByConfigurationStore
-export def "subscriptions-resource-groups-providers-microsoft-app-configuration-configuration-stores-private-endpoint-connections list" [
+export def "private-endpoint-connections-list-by-configuration-store" [
   subscription_id: string
   resource_group_name: string
   config_store_name: string
@@ -675,7 +675,7 @@ export def "subscriptions-resource-groups-providers-microsoft-app-configuration-
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.AppConfiguration/configurationStores/{configStoreName}/privateEndpointConnections/{privateEndpointConnectionName}
 # operationId: PrivateEndpointConnections_Delete
-export def "subscriptions-resource-groups-providers-microsoft-app-configuration-configuration-stores-private-endpoint-connections delete" [
+export def "private-endpoint-connections-delete" [
   subscription_id: string
   resource_group_name: string
   config_store_name: string
@@ -719,7 +719,7 @@ export def "subscriptions-resource-groups-providers-microsoft-app-configuration-
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.AppConfiguration/configurationStores/{configStoreName}/privateEndpointConnections/{privateEndpointConnectionName}
 # operationId: PrivateEndpointConnections_Get
-export def "subscriptions-resource-groups-providers-microsoft-app-configuration-configuration-stores-private-endpoint-connections get" [
+export def "private-endpoint-connections-get" [
   subscription_id: string
   resource_group_name: string
   config_store_name: string
@@ -764,7 +764,7 @@ export def "subscriptions-resource-groups-providers-microsoft-app-configuration-
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.AppConfiguration/configurationStores/{configStoreName}/privateEndpointConnections/{privateEndpointConnectionName}
 # operationId: PrivateEndpointConnections_CreateOrUpdate
 # --properties shape: {privateEndpoint?: record, privateLinkServiceConnectionState: record}
-export def "subscriptions-resource-groups-providers-microsoft-app-configuration-configuration-stores-private-endpoint-connections create-or-update" [
+export def "private-endpoint-connections-create-or-update" [
   subscription_id: string
   resource_group_name: string
   config_store_name: string
@@ -812,7 +812,7 @@ export def "subscriptions-resource-groups-providers-microsoft-app-configuration-
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.AppConfiguration/configurationStores/{configStoreName}/privateLinkResources
 # operationId: PrivateLinkResources_ListByConfigurationStore
-export def "subscriptions-resource-groups-providers-microsoft-app-configuration-configuration-stores-private-link-resources list" [
+export def "private-link-resources-list-by-configuration-store" [
   subscription_id: string
   resource_group_name: string
   config_store_name: string
@@ -854,7 +854,7 @@ export def "subscriptions-resource-groups-providers-microsoft-app-configuration-
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.AppConfiguration/configurationStores/{configStoreName}/privateLinkResources/{groupName}
 # operationId: PrivateLinkResources_Get
-export def "subscriptions-resource-groups-providers-microsoft-app-configuration-configuration-stores-private-link-resources get" [
+export def "private-link-resources-get" [
   subscription_id: string
   resource_group_name: string
   config_store_name: string

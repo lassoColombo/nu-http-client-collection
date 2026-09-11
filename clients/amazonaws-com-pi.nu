@@ -106,7 +106,7 @@ def x-amz-target-completer-5 [] { ["PerformanceInsightsv20180227.ListAvailableRe
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "api get-dimension-keys" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "describe-dimension-keys" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -130,7 +130,7 @@ export def commands []: nothing -> table {
 #
 # POST /
 # operationId: DescribeDimensionKeys
-export def "api get-dimension-keys" [
+export def "describe-dimension-keys" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -192,7 +192,7 @@ export def "api get-dimension-keys" [
 #
 # POST /
 # operationId: GetDimensionKeyDetails
-export def "api get-dimension-key-details" [
+export def "get-dimension-key-details" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -244,7 +244,7 @@ export def "api get-dimension-key-details" [
 #
 # POST /
 # operationId: GetResourceMetadata
-export def "api get-resource-metadata" [
+export def "get-resource-metadata" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -293,7 +293,7 @@ export def "api get-resource-metadata" [
 #
 # POST /
 # operationId: GetResourceMetrics
-export def "api get-resource-metrics" [
+export def "get-resource-metrics" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -352,7 +352,7 @@ export def "api get-resource-metrics" [
 #
 # POST /
 # operationId: ListAvailableResourceDimensions
-export def "api list-available-resource-dimensions" [
+export def "list-available-resource-dimensions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -407,7 +407,7 @@ export def "api list-available-resource-dimensions" [
 #
 # POST /
 # operationId: ListAvailableResourceMetrics
-export def "api list-available-resource-metrics" [
+export def "list-available-resource-metrics" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

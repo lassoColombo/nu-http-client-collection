@@ -147,7 +147,7 @@ def state-completer-4 [] { ["COMPLETE" "GUARDIAN_INVITATION_STATE_UNSPECIFIED" "
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "courses list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "classroom-courses-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -171,7 +171,7 @@ export def commands []: nothing -> table {
 #
 # GET /v1/courses
 # operationId: classroom.courses.list
-export def "courses list" [
+export def "classroom-courses-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -225,7 +225,7 @@ export def "courses list" [
 # --courseMaterialSets item shape: {materials?: list, title?: string}
 # --gradebookSettings shape: {calculationType?: "CALCULATION_TYPE_UNSPECIFIED"|"TOTAL_POINTS"|"WEIGHTED_CATEGORIES", displaySetting?: "DISPLAY_SETTING_UNSPECIFIED"|"SHOW_OVERALL_GRADE"|"HIDE_OVERALL_GRADE"|"SHOW_TEACHERS_ONLY", gradeCategories?: list}
 # --teacherFolder shape: {alternateLink?: string, id?: string, title?: string}
-export def "courses create" [
+export def "classroom-courses-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -293,7 +293,7 @@ export def "courses create" [
 #
 # GET /v1/courses/{courseId}/aliases
 # operationId: classroom.courses.aliases.list
-export def "courses-aliases list" [
+export def "classroom-courses-aliases-list" [
   course_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -343,7 +343,7 @@ export def "courses-aliases list" [
 #
 # POST /v1/courses/{courseId}/aliases
 # operationId: classroom.courses.aliases.create
-export def "courses-aliases create" [
+export def "classroom-courses-aliases-create" [
   course_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -395,7 +395,7 @@ export def "courses-aliases create" [
 #
 # DELETE /v1/courses/{courseId}/aliases/{alias}
 # operationId: classroom.courses.aliases.delete
-export def "courses-aliases delete" [
+export def "classroom-courses-aliases-delete" [
   course_id: string
   alias: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -445,7 +445,7 @@ export def "courses-aliases delete" [
 #
 # GET /v1/courses/{courseId}/announcements
 # operationId: classroom.courses.announcements.list
-export def "courses-announcements list" [
+export def "classroom-courses-announcements-list" [
   course_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -499,7 +499,7 @@ export def "courses-announcements list" [
 # operationId: classroom.courses.announcements.create
 # --individualStudentsOptions shape: {studentIds?: list<string>}
 # --materials item shape: {driveFile?: record, form?: record, link?: record, youtubeVideo?: record}
-export def "courses-announcements create" [
+export def "classroom-courses-announcements-create" [
   course_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -562,7 +562,7 @@ export def "courses-announcements create" [
 #
 # DELETE /v1/courses/{courseId}/announcements/{id}
 # operationId: classroom.courses.announcements.delete
-export def "courses-announcements delete" [
+export def "classroom-courses-announcements-delete" [
   course_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -612,7 +612,7 @@ export def "courses-announcements delete" [
 #
 # GET /v1/courses/{courseId}/announcements/{id}
 # operationId: classroom.courses.announcements.get
-export def "courses-announcements get" [
+export def "classroom-courses-announcements-get" [
   course_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -664,7 +664,7 @@ export def "courses-announcements get" [
 # operationId: classroom.courses.announcements.patch
 # --individualStudentsOptions shape: {studentIds?: list<string>}
 # --materials item shape: {driveFile?: record, form?: record, link?: record, youtubeVideo?: record}
-export def "courses-announcements update" [
+export def "classroom-courses-announcements-patch" [
   course_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -731,7 +731,7 @@ export def "courses-announcements update" [
 # POST /v1/courses/{courseId}/announcements/{id}:modifyAssignees
 # operationId: classroom.courses.announcements.modifyAssignees
 # --modifyIndividualStudentsOptions shape: {addStudentIds?: list<string>, removeStudentIds?: list<string>}
-export def "courses-announcements create-modify-assignees" [
+export def "classroom-courses-announcements-modify-assignees" [
   course_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -786,7 +786,7 @@ export def "courses-announcements create-modify-assignees" [
 #
 # GET /v1/courses/{courseId}/courseWork
 # operationId: classroom.courses.courseWork.list
-export def "courses-course-work list" [
+export def "classroom-courses-course-work-list" [
   course_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -845,7 +845,7 @@ export def "courses-course-work list" [
 # --individualStudentsOptions shape: {studentIds?: list<string>}
 # --materials item shape: {driveFile?: record, form?: record, link?: record, youtubeVideo?: record}
 # --multipleChoiceQuestion shape: {choices?: list<string>}
-export def "courses-course-work create" [
+export def "classroom-courses-course-work-create" [
   course_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -919,7 +919,7 @@ export def "courses-course-work create" [
 #
 # GET /v1/courses/{courseId}/courseWork/{courseWorkId}/studentSubmissions
 # operationId: classroom.courses.courseWork.studentSubmissions.list
-export def "courses-course-work-student-submissions list" [
+export def "classroom-courses-course-work-student-submissions-list" [
   course_id: string
   course_work_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -974,7 +974,7 @@ export def "courses-course-work-student-submissions list" [
 #
 # GET /v1/courses/{courseId}/courseWork/{courseWorkId}/studentSubmissions/{id}
 # operationId: classroom.courses.courseWork.studentSubmissions.get
-export def "courses-course-work-student-submissions get" [
+export def "classroom-courses-course-work-student-submissions-get" [
   course_id: string
   course_work_id: string
   id: string
@@ -1030,7 +1030,7 @@ export def "courses-course-work-student-submissions get" [
 # --multipleChoiceSubmission shape: {answer?: string}
 # --shortAnswerSubmission shape: {answer?: string}
 # --submissionHistory item shape: {gradeHistory?: record, stateHistory?: record}
-export def "courses-course-work-student-submissions update" [
+export def "classroom-courses-course-work-student-submissions-patch" [
   course_id: string
   course_work_id: string
   id: string
@@ -1104,7 +1104,7 @@ export def "courses-course-work-student-submissions update" [
 # POST /v1/courses/{courseId}/courseWork/{courseWorkId}/studentSubmissions/{id}:modifyAttachments
 # operationId: classroom.courses.courseWork.studentSubmissions.modifyAttachments
 # --addAttachments item shape: {driveFile?: record, form?: record, link?: record, youTubeVideo?: record}
-export def "courses-course-work-student-submissions create-modify-attachments" [
+export def "classroom-courses-course-work-student-submissions-modify-attachments" [
   course_id: string
   course_work_id: string
   id: string
@@ -1160,7 +1160,7 @@ export def "courses-course-work-student-submissions create-modify-attachments" [
 #
 # POST /v1/courses/{courseId}/courseWork/{courseWorkId}/studentSubmissions/{id}:reclaim
 # operationId: classroom.courses.courseWork.studentSubmissions.reclaim
-export def "courses-course-work-student-submissions create-reclaim" [
+export def "classroom-courses-course-work-student-submissions-reclaim" [
   course_id: string
   course_work_id: string
   id: string
@@ -1216,7 +1216,7 @@ export def "courses-course-work-student-submissions create-reclaim" [
 #
 # POST /v1/courses/{courseId}/courseWork/{courseWorkId}/studentSubmissions/{id}:return
 # operationId: classroom.courses.courseWork.studentSubmissions.return
-export def "courses-course-work-student-submissions create-return" [
+export def "classroom-courses-course-work-student-submissions-return" [
   course_id: string
   course_work_id: string
   id: string
@@ -1272,7 +1272,7 @@ export def "courses-course-work-student-submissions create-return" [
 #
 # POST /v1/courses/{courseId}/courseWork/{courseWorkId}/studentSubmissions/{id}:turnIn
 # operationId: classroom.courses.courseWork.studentSubmissions.turnIn
-export def "courses-course-work-student-submissions create-turn" [
+export def "classroom-courses-course-work-student-submissions-turn-in" [
   course_id: string
   course_work_id: string
   id: string
@@ -1328,7 +1328,7 @@ export def "courses-course-work-student-submissions create-turn" [
 #
 # DELETE /v1/courses/{courseId}/courseWork/{id}
 # operationId: classroom.courses.courseWork.delete
-export def "courses-course-work delete" [
+export def "classroom-courses-course-work-delete" [
   course_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1378,7 +1378,7 @@ export def "courses-course-work delete" [
 #
 # GET /v1/courses/{courseId}/courseWork/{id}
 # operationId: classroom.courses.courseWork.get
-export def "courses-course-work get" [
+export def "classroom-courses-course-work-get" [
   course_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1435,7 +1435,7 @@ export def "courses-course-work get" [
 # --individualStudentsOptions shape: {studentIds?: list<string>}
 # --materials item shape: {driveFile?: record, form?: record, link?: record, youtubeVideo?: record}
 # --multipleChoiceQuestion shape: {choices?: list<string>}
-export def "courses-course-work update" [
+export def "classroom-courses-course-work-patch" [
   course_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1513,7 +1513,7 @@ export def "courses-course-work update" [
 # POST /v1/courses/{courseId}/courseWork/{id}:modifyAssignees
 # operationId: classroom.courses.courseWork.modifyAssignees
 # --modifyIndividualStudentsOptions shape: {addStudentIds?: list<string>, removeStudentIds?: list<string>}
-export def "courses-course-work create-modify-assignees" [
+export def "classroom-courses-course-work-modify-assignees" [
   course_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1568,7 +1568,7 @@ export def "courses-course-work create-modify-assignees" [
 #
 # GET /v1/courses/{courseId}/courseWorkMaterials
 # operationId: classroom.courses.courseWorkMaterials.list
-export def "courses-course-work-materials list" [
+export def "classroom-courses-course-work-materials-list" [
   course_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1624,7 +1624,7 @@ export def "courses-course-work-materials list" [
 # operationId: classroom.courses.courseWorkMaterials.create
 # --individualStudentsOptions shape: {studentIds?: list<string>}
 # --materials item shape: {driveFile?: record, form?: record, link?: record, youtubeVideo?: record}
-export def "courses-course-work-materials create" [
+export def "classroom-courses-course-work-materials-create" [
   course_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1689,7 +1689,7 @@ export def "courses-course-work-materials create" [
 #
 # DELETE /v1/courses/{courseId}/courseWorkMaterials/{id}
 # operationId: classroom.courses.courseWorkMaterials.delete
-export def "courses-course-work-materials delete" [
+export def "classroom-courses-course-work-materials-delete" [
   course_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1739,7 +1739,7 @@ export def "courses-course-work-materials delete" [
 #
 # GET /v1/courses/{courseId}/courseWorkMaterials/{id}
 # operationId: classroom.courses.courseWorkMaterials.get
-export def "courses-course-work-materials get" [
+export def "classroom-courses-course-work-materials-get" [
   course_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1791,7 +1791,7 @@ export def "courses-course-work-materials get" [
 # operationId: classroom.courses.courseWorkMaterials.patch
 # --individualStudentsOptions shape: {studentIds?: list<string>}
 # --materials item shape: {driveFile?: record, form?: record, link?: record, youtubeVideo?: record}
-export def "courses-course-work-materials update" [
+export def "classroom-courses-course-work-materials-patch" [
   course_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1859,7 +1859,7 @@ export def "courses-course-work-materials update" [
 #
 # GET /v1/courses/{courseId}/students
 # operationId: classroom.courses.students.list
-export def "courses-students list" [
+export def "classroom-courses-students-list" [
   course_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1911,7 +1911,7 @@ export def "courses-students list" [
 # operationId: classroom.courses.students.create
 # --profile shape: {emailAddress?: string, id?: string, name?: record, permissions?: list, photoUrl?: string, verifiedTeacher?: bool}
 # --studentWorkFolder shape: {alternateLink?: string, id?: string, title?: string}
-export def "courses-students create" [
+export def "classroom-courses-students-create" [
   course_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -1967,7 +1967,7 @@ export def "courses-students create" [
 #
 # DELETE /v1/courses/{courseId}/students/{userId}
 # operationId: classroom.courses.students.delete
-export def "courses-students delete" [
+export def "classroom-courses-students-delete" [
   course_id: string
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2017,7 +2017,7 @@ export def "courses-students delete" [
 #
 # GET /v1/courses/{courseId}/students/{userId}
 # operationId: classroom.courses.students.get
-export def "courses-students get" [
+export def "classroom-courses-students-get" [
   course_id: string
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2067,7 +2067,7 @@ export def "courses-students get" [
 #
 # GET /v1/courses/{courseId}/teachers
 # operationId: classroom.courses.teachers.list
-export def "courses-teachers list" [
+export def "classroom-courses-teachers-list" [
   course_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2118,7 +2118,7 @@ export def "courses-teachers list" [
 # POST /v1/courses/{courseId}/teachers
 # operationId: classroom.courses.teachers.create
 # --profile shape: {emailAddress?: string, id?: string, name?: record, permissions?: list, photoUrl?: string, verifiedTeacher?: bool}
-export def "courses-teachers create" [
+export def "classroom-courses-teachers-create" [
   course_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2172,7 +2172,7 @@ export def "courses-teachers create" [
 #
 # DELETE /v1/courses/{courseId}/teachers/{userId}
 # operationId: classroom.courses.teachers.delete
-export def "courses-teachers delete" [
+export def "classroom-courses-teachers-delete" [
   course_id: string
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2222,7 +2222,7 @@ export def "courses-teachers delete" [
 #
 # GET /v1/courses/{courseId}/teachers/{userId}
 # operationId: classroom.courses.teachers.get
-export def "courses-teachers get" [
+export def "classroom-courses-teachers-get" [
   course_id: string
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2272,7 +2272,7 @@ export def "courses-teachers get" [
 #
 # GET /v1/courses/{courseId}/topics
 # operationId: classroom.courses.topics.list
-export def "courses-topics list" [
+export def "classroom-courses-topics-list" [
   course_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2322,7 +2322,7 @@ export def "courses-topics list" [
 #
 # POST /v1/courses/{courseId}/topics
 # operationId: classroom.courses.topics.create
-export def "courses-topics create" [
+export def "classroom-courses-topics-create" [
   course_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2377,7 +2377,7 @@ export def "courses-topics create" [
 #
 # DELETE /v1/courses/{courseId}/topics/{id}
 # operationId: classroom.courses.topics.delete
-export def "courses-topics delete" [
+export def "classroom-courses-topics-delete" [
   course_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2427,7 +2427,7 @@ export def "courses-topics delete" [
 #
 # GET /v1/courses/{courseId}/topics/{id}
 # operationId: classroom.courses.topics.get
-export def "courses-topics get" [
+export def "classroom-courses-topics-get" [
   course_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2477,7 +2477,7 @@ export def "courses-topics get" [
 #
 # PATCH /v1/courses/{courseId}/topics/{id}
 # operationId: classroom.courses.topics.patch
-export def "courses-topics update" [
+export def "classroom-courses-topics-patch" [
   course_id: string
   id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2535,7 +2535,7 @@ export def "courses-topics update" [
 #
 # DELETE /v1/courses/{id}
 # operationId: classroom.courses.delete
-export def "courses delete" [
+export def "classroom-courses-delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2583,7 +2583,7 @@ export def "courses delete" [
 #
 # GET /v1/courses/{id}
 # operationId: classroom.courses.get
-export def "courses get" [
+export def "classroom-courses-get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2634,7 +2634,7 @@ export def "courses get" [
 # --courseMaterialSets item shape: {materials?: list, title?: string}
 # --gradebookSettings shape: {calculationType?: "CALCULATION_TYPE_UNSPECIFIED"|"TOTAL_POINTS"|"WEIGHTED_CATEGORIES", displaySetting?: "DISPLAY_SETTING_UNSPECIFIED"|"SHOW_OVERALL_GRADE"|"HIDE_OVERALL_GRADE"|"SHOW_TEACHERS_ONLY", gradeCategories?: list}
 # --teacherFolder shape: {alternateLink?: string, id?: string, title?: string}
-export def "courses update-by-id" [
+export def "classroom-courses-patch" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2708,7 +2708,7 @@ export def "courses update-by-id" [
 # --courseMaterialSets item shape: {materials?: list, title?: string}
 # --gradebookSettings shape: {calculationType?: "CALCULATION_TYPE_UNSPECIFIED"|"TOTAL_POINTS"|"WEIGHTED_CATEGORIES", displaySetting?: "DISPLAY_SETTING_UNSPECIFIED"|"SHOW_OVERALL_GRADE"|"HIDE_OVERALL_GRADE"|"SHOW_TEACHERS_ONLY", gradeCategories?: list}
 # --teacherFolder shape: {alternateLink?: string, id?: string, title?: string}
-export def "courses update-by-id-1" [
+export def "classroom-courses-update" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2778,7 +2778,7 @@ export def "courses update-by-id-1" [
 #
 # GET /v1/invitations
 # operationId: classroom.invitations.list
-export def "invitations list" [
+export def "classroom-invitations-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -2828,7 +2828,7 @@ export def "invitations list" [
 #
 # POST /v1/invitations
 # operationId: classroom.invitations.create
-export def "invitations create" [
+export def "classroom-invitations-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -2881,7 +2881,7 @@ export def "invitations create" [
 #
 # DELETE /v1/invitations/{id}
 # operationId: classroom.invitations.delete
-export def "invitations delete" [
+export def "classroom-invitations-delete" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2929,7 +2929,7 @@ export def "invitations delete" [
 #
 # GET /v1/invitations/{id}
 # operationId: classroom.invitations.get
-export def "invitations get" [
+export def "classroom-invitations-get" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -2977,7 +2977,7 @@ export def "invitations get" [
 #
 # POST /v1/invitations/{id}:accept
 # operationId: classroom.invitations.accept
-export def "invitations create-accept" [
+export def "classroom-invitations-accept" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -3027,7 +3027,7 @@ export def "invitations create-accept" [
 # operationId: classroom.registrations.create
 # --cloudPubsubTopic shape: {topicName?: string}
 # --feed shape: {courseRosterChangesInfo?: record, courseWorkChangesInfo?: record, feedType?: "FEED_TYPE_UNSPECIFIED"|"DOMAIN_ROSTER_CHANGES"|"COURSE_ROSTER_CHANGES"|"COURSE_WORK_CHANGES"}
-export def "registrations create" [
+export def "classroom-registrations-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
   --token-oauth2c: string # Auth token for Oauth2c (Authorization)
@@ -3080,7 +3080,7 @@ export def "registrations create" [
 #
 # DELETE /v1/registrations/{registrationId}
 # operationId: classroom.registrations.delete
-export def "registrations delete" [
+export def "classroom-registrations-delete" [
   registration_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -3128,7 +3128,7 @@ export def "registrations delete" [
 #
 # GET /v1/userProfiles/{studentId}/guardianInvitations
 # operationId: classroom.userProfiles.guardianInvitations.list
-export def "user-profiles-guardian-invitations list" [
+export def "classroom-user-profiles-guardian-invitations-list" [
   student_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -3180,7 +3180,7 @@ export def "user-profiles-guardian-invitations list" [
 #
 # POST /v1/userProfiles/{studentId}/guardianInvitations
 # operationId: classroom.userProfiles.guardianInvitations.create
-export def "user-profiles-guardian-invitations create" [
+export def "classroom-user-profiles-guardian-invitations-create" [
   student_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -3236,7 +3236,7 @@ export def "user-profiles-guardian-invitations create" [
 #
 # GET /v1/userProfiles/{studentId}/guardianInvitations/{invitationId}
 # operationId: classroom.userProfiles.guardianInvitations.get
-export def "user-profiles-guardian-invitations get" [
+export def "classroom-user-profiles-guardian-invitations-get" [
   student_id: string
   invitation_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3286,7 +3286,7 @@ export def "user-profiles-guardian-invitations get" [
 #
 # PATCH /v1/userProfiles/{studentId}/guardianInvitations/{invitationId}
 # operationId: classroom.userProfiles.guardianInvitations.patch
-export def "user-profiles-guardian-invitations update" [
+export def "classroom-user-profiles-guardian-invitations-patch" [
   student_id: string
   invitation_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3345,7 +3345,7 @@ export def "user-profiles-guardian-invitations update" [
 #
 # GET /v1/userProfiles/{studentId}/guardians
 # operationId: classroom.userProfiles.guardians.list
-export def "user-profiles-guardians list" [
+export def "classroom-user-profiles-guardians-list" [
   student_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -3396,7 +3396,7 @@ export def "user-profiles-guardians list" [
 #
 # DELETE /v1/userProfiles/{studentId}/guardians/{guardianId}
 # operationId: classroom.userProfiles.guardians.delete
-export def "user-profiles-guardians delete" [
+export def "classroom-user-profiles-guardians-delete" [
   student_id: string
   guardian_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3446,7 +3446,7 @@ export def "user-profiles-guardians delete" [
 #
 # GET /v1/userProfiles/{studentId}/guardians/{guardianId}
 # operationId: classroom.userProfiles.guardians.get
-export def "user-profiles-guardians get" [
+export def "classroom-user-profiles-guardians-get" [
   student_id: string
   guardian_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3496,7 +3496,7 @@ export def "user-profiles-guardians get" [
 #
 # GET /v1/userProfiles/{userId}
 # operationId: classroom.userProfiles.get
-export def "user-profiles get" [
+export def "classroom-user-profiles-get" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)

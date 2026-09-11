@@ -126,7 +126,7 @@ def action-completer-19 [] { ["UntagQueue"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "api get-create-permission" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-add-permission" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -150,7 +150,7 @@ export def commands []: nothing -> table {
 #
 # GET /{AccountNumber}/{QueueName}/
 # operationId: GET_AddPermission
-export def "api get-create-permission" [
+export def "get-add-permission" [
   account_number: int
   queue_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -203,7 +203,7 @@ export def "api get-create-permission" [
 #
 # POST /
 # operationId: POST_AddPermission
-export def "api create-permission" [
+export def "post-add-permission" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -253,7 +253,7 @@ export def "api create-permission" [
 #
 # GET /{AccountNumber}/{QueueName}/
 # operationId: GET_ChangeMessageVisibility
-export def "api get-change-message-visibility" [
+export def "get-change-message-visibility" [
   account_number: int
   queue_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -305,7 +305,7 @@ export def "api get-change-message-visibility" [
 #
 # POST /
 # operationId: POST_ChangeMessageVisibility
-export def "api create-change-message-visibility" [
+export def "post-change-message-visibility" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -355,7 +355,7 @@ export def "api create-change-message-visibility" [
 #
 # GET /{AccountNumber}/{QueueName}/
 # operationId: GET_ChangeMessageVisibilityBatch
-export def "api get-change-message-visibility-batch" [
+export def "get-change-message-visibility-batch" [
   account_number: int
   queue_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -406,7 +406,7 @@ export def "api get-change-message-visibility-batch" [
 #
 # POST /
 # operationId: POST_ChangeMessageVisibilityBatch
-export def "api create-change-message-visibility-batch" [
+export def "post-change-message-visibility-batch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -456,7 +456,7 @@ export def "api create-change-message-visibility-batch" [
 #
 # GET /
 # operationId: GET_CreateQueue
-export def "api get-create-queue" [
+export def "get-create-queue" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -505,7 +505,7 @@ export def "api get-create-queue" [
 #
 # POST /
 # operationId: POST_CreateQueue
-export def "api create-queue" [
+export def "post-create-queue" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -555,7 +555,7 @@ export def "api create-queue" [
 #
 # GET /{AccountNumber}/{QueueName}/
 # operationId: GET_DeleteMessage
-export def "api get-delete-message" [
+export def "get-delete-message" [
   account_number: int
   queue_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -606,7 +606,7 @@ export def "api get-delete-message" [
 #
 # POST /
 # operationId: POST_DeleteMessage
-export def "api create-delete-message" [
+export def "post-delete-message" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -656,7 +656,7 @@ export def "api create-delete-message" [
 #
 # GET /{AccountNumber}/{QueueName}/
 # operationId: GET_DeleteMessageBatch
-export def "api get-delete-message-batch" [
+export def "get-delete-message-batch" [
   account_number: int
   queue_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -707,7 +707,7 @@ export def "api get-delete-message-batch" [
 #
 # POST /
 # operationId: POST_DeleteMessageBatch
-export def "api create-delete-message-batch" [
+export def "post-delete-message-batch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -757,7 +757,7 @@ export def "api create-delete-message-batch" [
 #
 # GET /{AccountNumber}/{QueueName}/
 # operationId: GET_DeleteQueue
-export def "api get-delete-queue" [
+export def "get-delete-queue" [
   account_number: int
   queue_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -807,7 +807,7 @@ export def "api get-delete-queue" [
 #
 # POST /
 # operationId: POST_DeleteQueue
-export def "api create-delete-queue" [
+export def "post-delete-queue" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -857,7 +857,7 @@ export def "api create-delete-queue" [
 #
 # GET /{AccountNumber}/{QueueName}/
 # operationId: GET_GetQueueAttributes
-export def "api get-queue-attributes" [
+export def "get-get-queue-attributes" [
   account_number: int
   queue_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -908,7 +908,7 @@ export def "api get-queue-attributes" [
 #
 # POST /
 # operationId: POST_GetQueueAttributes
-export def "api create-get-queue-attributes" [
+export def "post-get-queue-attributes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -958,7 +958,7 @@ export def "api create-get-queue-attributes" [
 #
 # GET /
 # operationId: GET_GetQueueUrl
-export def "api get-queue-url" [
+export def "get-get-queue-url" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1006,7 +1006,7 @@ export def "api get-queue-url" [
 #
 # POST /
 # operationId: POST_GetQueueUrl
-export def "api create-get-queue-url" [
+export def "post-get-queue-url" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1056,7 +1056,7 @@ export def "api create-get-queue-url" [
 #
 # GET /{AccountNumber}/{QueueName}/
 # operationId: GET_ListDeadLetterSourceQueues
-export def "api get-list-dead-letter-source-queues" [
+export def "get-list-dead-letter-source-queues" [
   account_number: int
   queue_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1108,7 +1108,7 @@ export def "api get-list-dead-letter-source-queues" [
 #
 # POST /
 # operationId: POST_ListDeadLetterSourceQueues
-export def "api create-list-dead-letter-source-queues" [
+export def "post-list-dead-letter-source-queues" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1160,7 +1160,7 @@ export def "api create-list-dead-letter-source-queues" [
 #
 # GET /{AccountNumber}/{QueueName}/
 # operationId: GET_ListQueueTags
-export def "api get-list-queue-tags" [
+export def "get-list-queue-tags" [
   account_number: int
   queue_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1210,7 +1210,7 @@ export def "api get-list-queue-tags" [
 #
 # POST /
 # operationId: POST_ListQueueTags
-export def "api create-list-queue-tags" [
+export def "post-list-queue-tags" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1260,7 +1260,7 @@ export def "api create-list-queue-tags" [
 #
 # GET /
 # operationId: GET_ListQueues
-export def "api get-list-queues" [
+export def "get-list-queues" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1309,7 +1309,7 @@ export def "api get-list-queues" [
 #
 # POST /
 # operationId: POST_ListQueues
-export def "api create-list-queues" [
+export def "post-list-queues" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1361,7 +1361,7 @@ export def "api create-list-queues" [
 #
 # GET /{AccountNumber}/{QueueName}/
 # operationId: GET_PurgeQueue
-export def "api get-purge-queue" [
+export def "get-purge-queue" [
   account_number: int
   queue_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1411,7 +1411,7 @@ export def "api get-purge-queue" [
 #
 # POST /
 # operationId: POST_PurgeQueue
-export def "api create-purge-queue" [
+export def "post-purge-queue" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1461,7 +1461,7 @@ export def "api create-purge-queue" [
 #
 # GET /{AccountNumber}/{QueueName}/
 # operationId: GET_ReceiveMessage
-export def "api get-receive-message" [
+export def "get-receive-message" [
   account_number: int
   queue_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1517,7 +1517,7 @@ export def "api get-receive-message" [
 #
 # POST /
 # operationId: POST_ReceiveMessage
-export def "api create-receive-message" [
+export def "post-receive-message" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1567,7 +1567,7 @@ export def "api create-receive-message" [
 #
 # GET /{AccountNumber}/{QueueName}/
 # operationId: GET_RemovePermission
-export def "api get-delete-permission" [
+export def "get-remove-permission" [
   account_number: int
   queue_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1618,7 +1618,7 @@ export def "api get-delete-permission" [
 #
 # POST /
 # operationId: POST_RemovePermission
-export def "api create-delete-permission" [
+export def "post-remove-permission" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1668,7 +1668,7 @@ export def "api create-delete-permission" [
 #
 # GET /{AccountNumber}/{QueueName}/
 # operationId: GET_SendMessage
-export def "api get-send-message" [
+export def "get-send-message" [
   account_number: int
   queue_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1724,7 +1724,7 @@ export def "api get-send-message" [
 #
 # POST /
 # operationId: POST_SendMessage
-export def "api create-send-message" [
+export def "post-send-message" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1774,7 +1774,7 @@ export def "api create-send-message" [
 #
 # GET /{AccountNumber}/{QueueName}/
 # operationId: GET_SendMessageBatch
-export def "api get-send-message-batch" [
+export def "get-send-message-batch" [
   account_number: int
   queue_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1825,7 +1825,7 @@ export def "api get-send-message-batch" [
 #
 # POST /
 # operationId: POST_SendMessageBatch
-export def "api create-send-message-batch" [
+export def "post-send-message-batch" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1875,7 +1875,7 @@ export def "api create-send-message-batch" [
 #
 # GET /{AccountNumber}/{QueueName}/
 # operationId: GET_SetQueueAttributes
-export def "api get-update-queue-attributes" [
+export def "get-set-queue-attributes" [
   account_number: int
   queue_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1926,7 +1926,7 @@ export def "api get-update-queue-attributes" [
 #
 # POST /
 # operationId: POST_SetQueueAttributes
-export def "api create-update-queue-attributes" [
+export def "post-set-queue-attributes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1976,7 +1976,7 @@ export def "api create-update-queue-attributes" [
 #
 # GET /{AccountNumber}/{QueueName}/
 # operationId: GET_TagQueue
-export def "api get-tag-queue" [
+export def "get-tag-queue" [
   account_number: int
   queue_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2027,7 +2027,7 @@ export def "api get-tag-queue" [
 #
 # POST /
 # operationId: POST_TagQueue
-export def "api create-tag-queue" [
+export def "post-tag-queue" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2077,7 +2077,7 @@ export def "api create-tag-queue" [
 #
 # GET /{AccountNumber}/{QueueName}/
 # operationId: GET_UntagQueue
-export def "api get-untag-queue" [
+export def "get-untag-queue" [
   account_number: int
   queue_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2128,7 +2128,7 @@ export def "api get-untag-queue" [
 #
 # POST /
 # operationId: POST_UntagQueue
-export def "api create-untag-queue" [
+export def "post-untag-queue" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

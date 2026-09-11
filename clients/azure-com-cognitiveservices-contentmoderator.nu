@@ -122,7 +122,7 @@ def content-type-completer-3 [] { ["text/plain"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "contentmoderator-lists-v1-0-imagelists get-management-image-list-image" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "list-management-image-lists-get-all-image-lists" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -146,7 +146,7 @@ export def commands []: nothing -> table {
 #
 # GET /contentmoderator/lists/v1.0/imagelists
 # operationId: ListManagementImageLists_GetAllImageLists
-export def "contentmoderator-lists-v1-0-imagelists get-management-image-list-image" [
+export def "list-management-image-lists-get-all-image-lists" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -180,7 +180,7 @@ export def "contentmoderator-lists-v1-0-imagelists get-management-image-list-ima
 #
 # POST /contentmoderator/lists/v1.0/imagelists
 # operationId: ListManagementImageLists_Create
-export def "contentmoderator-lists-v1-0-imagelists create-management-image" [
+export def "list-management-image-lists-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -225,7 +225,7 @@ export def "contentmoderator-lists-v1-0-imagelists create-management-image" [
 #
 # DELETE /contentmoderator/lists/v1.0/imagelists/{listId}
 # operationId: ListManagementImageLists_Delete
-export def "contentmoderator-lists-v1-0-imagelists delete-management-image" [
+export def "list-management-image-lists-delete" [
   list_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -261,7 +261,7 @@ export def "contentmoderator-lists-v1-0-imagelists delete-management-image" [
 #
 # GET /contentmoderator/lists/v1.0/imagelists/{listId}
 # operationId: ListManagementImageLists_GetDetails
-export def "contentmoderator-lists-v1-0-imagelists get-management-image-details" [
+export def "list-management-image-lists-get-details" [
   list_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -297,7 +297,7 @@ export def "contentmoderator-lists-v1-0-imagelists get-management-image-details"
 #
 # PUT /contentmoderator/lists/v1.0/imagelists/{listId}
 # operationId: ListManagementImageLists_Update
-export def "contentmoderator-lists-v1-0-imagelists update-management-image" [
+export def "list-management-image-lists-update" [
   list_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -344,7 +344,7 @@ export def "contentmoderator-lists-v1-0-imagelists update-management-image" [
 #
 # POST /contentmoderator/lists/v1.0/imagelists/{listId}/RefreshIndex
 # operationId: ListManagementImageLists_RefreshIndex
-export def "contentmoderator-lists-v1-0-imagelists-refresh-index list-management-image" [
+export def "list-management-image-lists-refresh-index" [
   list_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -380,7 +380,7 @@ export def "contentmoderator-lists-v1-0-imagelists-refresh-index list-management
 #
 # DELETE /contentmoderator/lists/v1.0/imagelists/{listId}/images
 # operationId: ListManagementImage_DeleteAllImages
-export def "contentmoderator-lists-v1-0-imagelists-images delete-management-list" [
+export def "list-management-image-delete-all-images" [
   list_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -416,7 +416,7 @@ export def "contentmoderator-lists-v1-0-imagelists-images delete-management-list
 #
 # GET /contentmoderator/lists/v1.0/imagelists/{listId}/images
 # operationId: ListManagementImage_GetAllImageIds
-export def "contentmoderator-lists-v1-0-imagelists-images get-management-list" [
+export def "list-management-image-get-all-image-ids" [
   list_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -452,7 +452,7 @@ export def "contentmoderator-lists-v1-0-imagelists-images get-management-list" [
 #
 # POST /contentmoderator/lists/v1.0/imagelists/{listId}/images
 # operationId: ListManagementImage_AddImage
-export def "contentmoderator-lists-v1-0-imagelists-images create-management" [
+export def "list-management-image-add-image" [
   list_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -491,7 +491,7 @@ export def "contentmoderator-lists-v1-0-imagelists-images create-management" [
 #
 # DELETE /contentmoderator/lists/v1.0/imagelists/{listId}/images/{ImageId}
 # operationId: ListManagementImage_DeleteImage
-export def "contentmoderator-lists-v1-0-imagelists-images delete-management" [
+export def "list-management-image-delete-image" [
   list_id: string
   image_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -529,7 +529,7 @@ export def "contentmoderator-lists-v1-0-imagelists-images delete-management" [
 #
 # GET /contentmoderator/lists/v1.0/termlists
 # operationId: ListManagementTermLists_GetAllTermLists
-export def "contentmoderator-lists-v1-0-termlists get-management-term-list-term" [
+export def "list-management-term-lists-get-all-term-lists" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -563,7 +563,7 @@ export def "contentmoderator-lists-v1-0-termlists get-management-term-list-term"
 #
 # POST /contentmoderator/lists/v1.0/termlists
 # operationId: ListManagementTermLists_Create
-export def "contentmoderator-lists-v1-0-termlists create-management-term" [
+export def "list-management-term-lists-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -608,7 +608,7 @@ export def "contentmoderator-lists-v1-0-termlists create-management-term" [
 #
 # DELETE /contentmoderator/lists/v1.0/termlists/{listId}
 # operationId: ListManagementTermLists_Delete
-export def "contentmoderator-lists-v1-0-termlists delete-management-term" [
+export def "list-management-term-lists-delete" [
   list_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -644,7 +644,7 @@ export def "contentmoderator-lists-v1-0-termlists delete-management-term" [
 #
 # GET /contentmoderator/lists/v1.0/termlists/{listId}
 # operationId: ListManagementTermLists_GetDetails
-export def "contentmoderator-lists-v1-0-termlists get-management-term-details" [
+export def "list-management-term-lists-get-details" [
   list_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -680,7 +680,7 @@ export def "contentmoderator-lists-v1-0-termlists get-management-term-details" [
 #
 # PUT /contentmoderator/lists/v1.0/termlists/{listId}
 # operationId: ListManagementTermLists_Update
-export def "contentmoderator-lists-v1-0-termlists update-management-term" [
+export def "list-management-term-lists-update" [
   list_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -727,7 +727,7 @@ export def "contentmoderator-lists-v1-0-termlists update-management-term" [
 #
 # POST /contentmoderator/lists/v1.0/termlists/{listId}/RefreshIndex
 # operationId: ListManagementTermLists_RefreshIndex
-export def "contentmoderator-lists-v1-0-termlists-refresh-index list-management-term" [
+export def "list-management-term-lists-refresh-index" [
   list_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -765,7 +765,7 @@ export def "contentmoderator-lists-v1-0-termlists-refresh-index list-management-
 #
 # DELETE /contentmoderator/lists/v1.0/termlists/{listId}/terms
 # operationId: ListManagementTerm_DeleteAllTerms
-export def "contentmoderator-lists-v1-0-termlists-terms delete-management-list" [
+export def "list-management-term-delete-all-terms" [
   list_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -803,7 +803,7 @@ export def "contentmoderator-lists-v1-0-termlists-terms delete-management-list" 
 #
 # GET /contentmoderator/lists/v1.0/termlists/{listId}/terms
 # operationId: ListManagementTerm_GetAllTerms
-export def "contentmoderator-lists-v1-0-termlists-terms get-management-list" [
+export def "list-management-term-get-all-terms" [
   list_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -843,7 +843,7 @@ export def "contentmoderator-lists-v1-0-termlists-terms get-management-list" [
 #
 # DELETE /contentmoderator/lists/v1.0/termlists/{listId}/terms/{term}
 # operationId: ListManagementTerm_DeleteTerm
-export def "contentmoderator-lists-v1-0-termlists-terms delete-management" [
+export def "list-management-term-delete-term" [
   list_id: string
   term: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -883,7 +883,7 @@ export def "contentmoderator-lists-v1-0-termlists-terms delete-management" [
 #
 # POST /contentmoderator/lists/v1.0/termlists/{listId}/terms/{term}
 # operationId: ListManagementTerm_AddTerm
-export def "contentmoderator-lists-v1-0-termlists-terms create-management" [
+export def "list-management-term-add-term" [
   list_id: string
   term: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -923,7 +923,7 @@ export def "contentmoderator-lists-v1-0-termlists-terms create-management" [
 #
 # POST /contentmoderator/moderate/v1.0/ProcessImage/Evaluate
 # operationId: ImageModeration_Evaluate
-export def "contentmoderator-moderate-v1-0-process-image-evaluate create-moderation" [
+export def "image-moderation-evaluate" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -959,7 +959,7 @@ export def "contentmoderator-moderate-v1-0-process-image-evaluate create-moderat
 #
 # POST /contentmoderator/moderate/v1.0/ProcessImage/FindFaces
 # operationId: ImageModeration_FindFaces
-export def "contentmoderator-moderate-v1-0-process-image-find-faces find-moderation" [
+export def "image-moderation-find-faces" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -995,7 +995,7 @@ export def "contentmoderator-moderate-v1-0-process-image-find-faces find-moderat
 #
 # POST /contentmoderator/moderate/v1.0/ProcessImage/Match
 # operationId: ImageModeration_Match
-export def "contentmoderator-moderate-v1-0-process-image-match create-moderation" [
+export def "image-moderation-match" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1032,7 +1032,7 @@ export def "contentmoderator-moderate-v1-0-process-image-match create-moderation
 #
 # POST /contentmoderator/moderate/v1.0/ProcessImage/OCR
 # operationId: ImageModeration_OCR
-export def "contentmoderator-moderate-v1-0-process-image-ocr create-moderation" [
+export def "image-moderation-ocr" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1070,7 +1070,7 @@ export def "contentmoderator-moderate-v1-0-process-image-ocr create-moderation" 
 #
 # POST /contentmoderator/moderate/v1.0/ProcessText/DetectLanguage
 # operationId: TextModeration_DetectLanguage
-export def "contentmoderator-moderate-v1-0-process-text-detect-language create-moderation" [
+export def "text-moderation-detect-language" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1113,7 +1113,7 @@ export def "contentmoderator-moderate-v1-0-process-text-detect-language create-m
 #
 # POST /contentmoderator/moderate/v1.0/ProcessText/Screen/
 # operationId: TextModeration_ScreenText
-export def "contentmoderator-moderate-v1-0-process-text-screen create-moderation" [
+export def "text-moderation-screen-text" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1162,7 +1162,7 @@ export def "contentmoderator-moderate-v1-0-process-text-screen create-moderation
 #
 # POST /contentmoderator/review/v1.0/teams/{teamName}/jobs
 # operationId: Reviews_CreateJob
-export def "contentmoderator-review-v1-0-teams-jobs create" [
+export def "reviews-create-job" [
   team_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1213,7 +1213,7 @@ export def "contentmoderator-review-v1-0-teams-jobs create" [
 #
 # GET /contentmoderator/review/v1.0/teams/{teamName}/jobs/{JobId}
 # operationId: Reviews_GetJobDetails
-export def "contentmoderator-review-v1-0-teams-jobs get-details" [
+export def "reviews-get-job-details" [
   team_name: string
   job_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1251,7 +1251,7 @@ export def "contentmoderator-review-v1-0-teams-jobs get-details" [
 #
 # POST /contentmoderator/review/v1.0/teams/{teamName}/reviews
 # operationId: Reviews_CreateReviews
-export def "contentmoderator-review-v1-0-teams-reviews create" [
+export def "reviews-create-reviews" [
   team_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1296,7 +1296,7 @@ export def "contentmoderator-review-v1-0-teams-reviews create" [
 #
 # GET /contentmoderator/review/v1.0/teams/{teamName}/reviews/{reviewId}
 # operationId: Reviews_GetReview
-export def "contentmoderator-review-v1-0-teams-reviews get" [
+export def "reviews-get-review" [
   team_name: string
   review_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1334,7 +1334,7 @@ export def "contentmoderator-review-v1-0-teams-reviews get" [
 #
 # GET /contentmoderator/review/v1.0/teams/{teamName}/reviews/{reviewId}/frames
 # operationId: Reviews_GetVideoFrames
-export def "contentmoderator-review-v1-0-teams-reviews-frames get-video" [
+export def "reviews-get-video-frames" [
   team_name: string
   review_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1376,7 +1376,7 @@ export def "contentmoderator-review-v1-0-teams-reviews-frames get-video" [
 #
 # POST /contentmoderator/review/v1.0/teams/{teamName}/reviews/{reviewId}/frames
 # operationId: Reviews_AddVideoFrame
-export def "contentmoderator-review-v1-0-teams-reviews-frames create-video" [
+export def "reviews-add-video-frame" [
   team_name: string
   review_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1416,7 +1416,7 @@ export def "contentmoderator-review-v1-0-teams-reviews-frames create-video" [
 #
 # POST /contentmoderator/review/v1.0/teams/{teamName}/reviews/{reviewId}/publish
 # operationId: Reviews_PublishVideoReview
-export def "contentmoderator-review-v1-0-teams-reviews-publish publish-video" [
+export def "reviews-publish-video-review" [
   team_name: string
   review_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1454,7 +1454,7 @@ export def "contentmoderator-review-v1-0-teams-reviews-publish publish-video" [
 #
 # PUT /contentmoderator/review/v1.0/teams/{teamName}/reviews/{reviewId}/transcript
 # operationId: Reviews_AddVideoTranscript
-export def "contentmoderator-review-v1-0-teams-reviews-transcript create-video" [
+export def "reviews-add-video-transcript" [
   team_name: string
   review_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1501,7 +1501,7 @@ export def "contentmoderator-review-v1-0-teams-reviews-transcript create-video" 
 #
 # PUT /contentmoderator/review/v1.0/teams/{teamName}/reviews/{reviewId}/transcriptmoderationresult
 # operationId: Reviews_AddVideoTranscriptModerationResult
-export def "contentmoderator-review-v1-0-teams-reviews-transcriptmoderationresult create-video-transcript-moderation-result" [
+export def "reviews-add-video-transcript-moderation-result" [
   team_name: string
   review_id: string
   --base-url(-b): string@base-url-completer # API base URL

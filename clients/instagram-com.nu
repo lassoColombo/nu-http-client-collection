@@ -113,7 +113,7 @@ def action-completer [] { ["approve" "block" "follow" "ignore" "unblock" "unfoll
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "geographies-media-recent get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-geographies-geo-id-media-recent" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -138,7 +138,7 @@ export def commands []: nothing -> table {
 # GET /geographies/{geo-id}/media/recent
 # DEPRECATED
 @deprecated
-export def "geographies-media-recent get" [
+export def "get-geographies-geo-id-media-recent" [
   geo_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -176,7 +176,7 @@ export def "geographies-media-recent get" [
 # Search for a location by geographic coordinate.
 #
 # GET /locations/search
-export def "locations-search get" [
+export def "get-locations-search" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -216,7 +216,7 @@ export def "locations-search get" [
 # Get information about a location.
 #
 # GET /locations/{location-id}
-export def "locations get" [
+export def "get-locations-location-id" [
   location_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -251,7 +251,7 @@ export def "locations get" [
 # Get a list of recent media objects from a given location.
 #
 # GET /locations/{location-id}/media/recent
-export def "locations-media-recent get" [
+export def "get-locations-location-id-media-recent" [
   location_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -293,7 +293,7 @@ export def "locations-media-recent get" [
 # GET /media/popular
 # DEPRECATED
 @deprecated
-export def "media-popular get" [
+export def "get-media-popular" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -326,7 +326,7 @@ export def "media-popular get" [
 # Search for media in a given area.
 #
 # GET /media/search
-export def "media-search get" [
+export def "get-media-search" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -365,7 +365,7 @@ export def "media-search get" [
 # Get information about a media object.
 #
 # GET /media/shortcode/{shortcode}
-export def "media-shortcode get" [
+export def "get-media-shortcode-shortcode" [
   shortcode: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -400,7 +400,7 @@ export def "media-shortcode get" [
 # Get information about a media object.
 #
 # GET /media/{media-id}
-export def "media get" [
+export def "get-media-media-id" [
   media_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -435,7 +435,7 @@ export def "media get" [
 # Get a list of recent comments on a media object.
 #
 # GET /media/{media-id}/comments
-export def "media-comments get" [
+export def "get-media-media-id-comments" [
   media_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -470,7 +470,7 @@ export def "media-comments get" [
 # Create a comment on a media object.
 #
 # POST /media/{media-id}/comments
-export def "media-comments create" [
+export def "post-media-media-id-comments" [
   media_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -507,7 +507,7 @@ export def "media-comments create" [
 # Remove a comment.
 #
 # DELETE /media/{media-id}/comments/{comment-id}
-export def "media-comments delete" [
+export def "delete-media-media-id-comments-comment-id" [
   media_id: string
   comment_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -544,7 +544,7 @@ export def "media-comments delete" [
 # Remove a like on this media by the current user.
 #
 # DELETE /media/{media-id}/likes
-export def "media-likes delete" [
+export def "delete-media-media-id-likes" [
   media_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -579,7 +579,7 @@ export def "media-likes delete" [
 # Get a list of users who have liked this media.
 #
 # GET /media/{media-id}/likes
-export def "media-likes get" [
+export def "get-media-media-id-likes" [
   media_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -614,7 +614,7 @@ export def "media-likes get" [
 # Set a like on this media by the current user.
 #
 # POST /media/{media-id}/likes
-export def "media-likes create" [
+export def "post-media-media-id-likes" [
   media_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -649,7 +649,7 @@ export def "media-likes create" [
 # Search for tags by name.
 #
 # GET /tags/search
-export def "tags-search get" [
+export def "get-tags-search" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -684,7 +684,7 @@ export def "tags-search get" [
 # Get information about a tag object.
 #
 # GET /tags/{tag-name}
-export def "tags get" [
+export def "get-tags-tag-name" [
   tag_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -719,7 +719,7 @@ export def "tags get" [
 # Get a list of recently tagged media.
 #
 # GET /tags/{tag-name}/media/recent
-export def "tags-media-recent get" [
+export def "get-tags-tag-name-media-recent" [
   tag_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -758,7 +758,7 @@ export def "tags-media-recent get" [
 # Search for a user by name.
 #
 # GET /users/search
-export def "users-search get" [
+export def "get-users-search" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -796,7 +796,7 @@ export def "users-search get" [
 # GET /users/self/feed
 # DEPRECATED
 @deprecated
-export def "users-self-feed get" [
+export def "get-users-self-feed" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -833,7 +833,7 @@ export def "users-self-feed get" [
 # See the list of media liked by the authenticated user.
 #
 # GET /users/self/media/liked
-export def "users-self-media-liked get" [
+export def "get-users-self-media-liked" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -869,7 +869,7 @@ export def "users-self-media-liked get" [
 # List the users who have requested this user's permission to follow.
 #
 # GET /users/self/requested-by
-export def "users-self-requested-by get" [
+export def "get-users-self-requested-by" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -902,7 +902,7 @@ export def "users-self-requested-by get" [
 # Get basic information about a user.
 #
 # GET /users/{user-id}
-export def "users get" [
+export def "get-users-user-id" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -937,7 +937,7 @@ export def "users get" [
 # Get the list of users this user is followed by.
 #
 # GET /users/{user-id}/followed-by
-export def "users-followed-by get" [
+export def "get-users-user-id-followed-by" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -972,7 +972,7 @@ export def "users-followed-by get" [
 # Get the list of users this user follows.
 #
 # GET /users/{user-id}/follows
-export def "users-follows get" [
+export def "get-users-user-id-follows" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1007,7 +1007,7 @@ export def "users-follows get" [
 # Get the most recent media published by a user.
 #
 # GET /users/{user-id}/media/recent
-export def "users-media-recent get" [
+export def "get-users-user-id-media-recent" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1048,7 +1048,7 @@ export def "users-media-recent get" [
 # Get information about a relationship to another user.
 #
 # GET /users/{user-id}/relationship
-export def "users-relationship get" [
+export def "get-users-user-id-relationship" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1083,7 +1083,7 @@ export def "users-relationship get" [
 # Modify the relationship between the current user and the target user.
 #
 # POST /users/{user-id}/relationship
-export def "users-relationship create" [
+export def "post-users-user-id-relationship" [
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

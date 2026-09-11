@@ -110,7 +110,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resource-groups-providers-microsoft-insights-components-pricing-plans-current get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "component-current-pricing-plan-get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -134,7 +134,7 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/microsoft.insights/components/{resourceName}/pricingPlans/current
 # operationId: ComponentCurrentPricingPlan_Get
-export def "subscriptions-resource-groups-providers-microsoft-insights-components-pricing-plans-current get" [
+export def "component-current-pricing-plan-get" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -177,7 +177,7 @@ export def "subscriptions-resource-groups-providers-microsoft-insights-component
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/microsoft.insights/components/{resourceName}/pricingPlans/current
 # operationId: ComponentCurrentPricingPlan_Update
 # --properties shape: {cap?: float, planType?: string, stopSendNotificationWhenHitCap?: bool, stopSendNotificationWhenHitThreshold?: bool, warningThreshold?: int}
-export def "subscriptions-resource-groups-providers-microsoft-insights-components-pricing-plans-current update" [
+export def "component-current-pricing-plan-update" [
   subscription_id: string
   resource_group_name: string
   resource_name: string
@@ -224,7 +224,7 @@ export def "subscriptions-resource-groups-providers-microsoft-insights-component
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/microsoft.insights/components/{resourceName}/pricingPlans/current
 # operationId: ComponentCurrentPricingPlan_CreateAndUpdate
 # --properties shape: {cap?: float, planType?: string, stopSendNotificationWhenHitCap?: bool, stopSendNotificationWhenHitThreshold?: bool, warningThreshold?: int}
-export def "subscriptions-resource-groups-providers-microsoft-insights-components-pricing-plans-current create-and-update" [
+export def "component-current-pricing-plan-create-and-update" [
   subscription_id: string
   resource_group_name: string
   resource_name: string

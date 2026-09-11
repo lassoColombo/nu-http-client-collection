@@ -126,7 +126,7 @@ def case-status-completer [] { ["closed" "open"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "attorney get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-attorney-by-id" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -150,7 +150,7 @@ export def commands []: nothing -> table {
 #
 # GET /attorney/{attorneyId}
 # operationId: getAttorneyById
-export def "attorney get" [
+export def "get-attorney-by-id" [
   attorney_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -186,7 +186,7 @@ export def "attorney get" [
 #
 # GET /attorney/{attorneyId}/associatedParties
 # operationId: getAttorneyAssociatedParties
-export def "attorney-associated-parties get" [
+export def "get-attorney-associated-parties" [
   attorney_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -224,7 +224,7 @@ export def "attorney-associated-parties get" [
 #
 # GET /billingCycleUsage/{billingCycle}
 # operationId: getBillingUsageByBillingCycle
-export def "billing-cycle-usage get" [
+export def "get-billing-usage-by-billing-cycle" [
   billing_cycle: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -260,7 +260,7 @@ export def "billing-cycle-usage get" [
 #
 # GET /billingCycles
 # operationId: getBillingCycles
-export def "billing-cycles get" [
+export def "get-billing-cycles" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -294,7 +294,7 @@ export def "billing-cycles get" [
 #
 # GET /callbacks
 # operationId: getCallbacks
-export def "callbacks get" [
+export def "get-callbacks" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -331,7 +331,7 @@ export def "callbacks get" [
 #
 # GET /case/{caseId}
 # operationId: getCase
-export def "case get" [
+export def "get-case" [
   case_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -367,7 +367,7 @@ export def "case get" [
 #
 # GET /case/{caseId}/attorneys
 # operationId: getCaseAttorneys
-export def "case-attorneys get" [
+export def "get-case-attorneys" [
   case_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -406,7 +406,7 @@ export def "case-attorneys get" [
 #
 # GET /case/{caseId}/docketEntries
 # operationId: getCaseDocketEntries
-export def "case-docket-entries get" [
+export def "get-case-docket-entries" [
   case_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -446,7 +446,7 @@ export def "case-docket-entries get" [
 #
 # GET /case/{caseId}/docketEntries/primaryDocuments
 # operationId: getPrimaryDocumentsForDocketEntries
-export def "case-docket-entries-primary-documents get" [
+export def "get-primary-documents-for-docket-entries" [
   case_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -488,7 +488,7 @@ export def "case-docket-entries-primary-documents get" [
 #
 # GET /case/{caseId}/docketEntries/secondaryDocuments
 # operationId: getSecondaryDocumentsForDocketEntries
-export def "case-docket-entries-secondary-documents get" [
+export def "get-secondary-documents-for-docket-entries" [
   case_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -530,7 +530,7 @@ export def "case-docket-entries-secondary-documents get" [
 #
 # GET /case/{caseId}/documents
 # operationId: getCaseDocuments
-export def "case-documents get" [
+export def "get-case-documents" [
   case_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -573,7 +573,7 @@ export def "case-documents get" [
 #
 # GET /case/{caseId}/hearings
 # operationId: getCaseHearings
-export def "case-hearings get" [
+export def "get-case-hearings" [
   case_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -612,7 +612,7 @@ export def "case-hearings get" [
 #
 # GET /case/{caseId}/judges
 # operationId: getCaseJudges
-export def "case-judges get" [
+export def "get-case-judges" [
   case_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -651,7 +651,7 @@ export def "case-judges get" [
 #
 # GET /case/{caseId}/parties
 # operationId: getCaseParties
-export def "case-parties get" [
+export def "get-case-parties" [
   case_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -694,7 +694,7 @@ export def "case-parties get" [
 #
 # GET /case/{caseId}/relatedCases
 # operationId: getCaseRelatedCases
-export def "case-related-cases get" [
+export def "get-case-related-cases" [
   case_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -732,7 +732,7 @@ export def "case-related-cases get" [
 #
 # GET /caseCountAnalyticsByAreaOfLaw
 # operationId: getCaseCountAnalyticsByAreaOfLaw
-export def "case-count-analytics-by-area-of-law get" [
+export def "get-case-count-analytics-by-area-of-law" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -769,7 +769,7 @@ export def "case-count-analytics-by-area-of-law get" [
 #
 # GET /caseCountAnalyticsByCaseClass
 # operationId: getCaseCountAnalyticsByCaseClass
-export def "case-count-analytics-by-case-class get" [
+export def "get-case-count-analytics-by-case-class" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -806,7 +806,7 @@ export def "case-count-analytics-by-case-class get" [
 #
 # GET /caseCountAnalyticsByCaseFiledDate
 # operationId: getCaseCountAnalyticsByCaseFiledDate
-export def "case-count-analytics-by-case-filed-date get" [
+export def "get-case-count-analytics-by-case-filed-date" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -844,7 +844,7 @@ export def "case-count-analytics-by-case-filed-date get" [
 #
 # GET /caseCountAnalyticsByCaseType
 # operationId: getCaseCountAnalyticsByCaseType
-export def "case-count-analytics-by-case-type get" [
+export def "get-case-count-analytics-by-case-type" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -881,7 +881,7 @@ export def "case-count-analytics-by-case-type get" [
 #
 # GET /caseCountAnalyticsByCaseTypeGroup
 # operationId: getCaseCountAnalyticsByCaseTypeGroup
-export def "case-count-analytics-by-case-type-group get" [
+export def "get-case-count-analytics-by-case-type-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -918,7 +918,7 @@ export def "case-count-analytics-by-case-type-group get" [
 #
 # GET /caseCountAnalyticsByCourt
 # operationId: getCaseCountAnalyticsByCourt
-export def "case-count-analytics-by-court get" [
+export def "get-case-count-analytics-by-court" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -955,7 +955,7 @@ export def "case-count-analytics-by-court get" [
 #
 # GET /caseCountAnalyticsByCourtLocation
 # operationId: getCaseCountAnalyticsByCourtLocation
-export def "case-count-analytics-by-court-location get" [
+export def "get-case-count-analytics-by-court-location" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -992,7 +992,7 @@ export def "case-count-analytics-by-court-location get" [
 #
 # GET /caseCountAnalyticsByCourtSystem
 # operationId: getCaseCountAnalyticsByCourtSystem
-export def "case-count-analytics-by-court-system get" [
+export def "get-case-count-analytics-by-court-system" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1029,7 +1029,7 @@ export def "case-count-analytics-by-court-system get" [
 #
 # GET /caseCountAnalyticsByCourtType
 # operationId: getCaseCountAnalyticsByCourtType
-export def "case-count-analytics-by-court-type get" [
+export def "get-case-count-analytics-by-court-type" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1066,7 +1066,7 @@ export def "case-count-analytics-by-court-type get" [
 #
 # GET /caseCountAnalyticsByJurisdictionGeo
 # operationId: getCaseCountAnalyticsByJurisdictionGeo
-export def "case-count-analytics-by-jurisdiction-geo get" [
+export def "get-case-count-analytics-by-jurisdiction-geo" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1103,7 +1103,7 @@ export def "case-count-analytics-by-jurisdiction-geo get" [
 #
 # GET /caseCountAnalyticsByNormAttorney
 # operationId: getCaseCountAnalyticsByNormAttorney
-export def "case-count-analytics-by-norm-attorney get" [
+export def "get-case-count-analytics-by-norm-attorney" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1140,7 +1140,7 @@ export def "case-count-analytics-by-norm-attorney get" [
 #
 # GET /caseCountAnalyticsByNormJudge
 # operationId: getCaseCountAnalyticsByNormJudge
-export def "case-count-analytics-by-norm-judge get" [
+export def "get-case-count-analytics-by-norm-judge" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1177,7 +1177,7 @@ export def "case-count-analytics-by-norm-judge get" [
 #
 # GET /caseCountAnalyticsByNormLawFirm
 # operationId: getCaseCountAnalyticsByNormLawFirm
-export def "case-count-analytics-by-norm-law-firm get" [
+export def "get-case-count-analytics-by-norm-law-firm" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1214,7 +1214,7 @@ export def "case-count-analytics-by-norm-law-firm get" [
 #
 # GET /caseCountAnalyticsByNormParty
 # operationId: getCaseCountAnalyticsByNormParty
-export def "case-count-analytics-by-norm-party get" [
+export def "get-case-count-analytics-by-norm-party" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1251,7 +1251,7 @@ export def "case-count-analytics-by-norm-party get" [
 #
 # GET /caseCountAnalyticsByPartyRole
 # operationId: getCaseCountAnalyticsByPartyRole
-export def "case-count-analytics-by-party-role get" [
+export def "get-case-count-analytics-by-party-role" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1288,7 +1288,7 @@ export def "case-count-analytics-by-party-role get" [
 #
 # GET /caseCountAnalyticsByPartyRoleGroup
 # operationId: getCaseCountAnalyticsByPartyRoleGroup
-export def "case-count-analytics-by-party-role-group get" [
+export def "get-case-count-analytics-by-party-role-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1325,7 +1325,7 @@ export def "case-count-analytics-by-party-role-group get" [
 #
 # GET /caseDocument/{caseDocumentId}
 # operationId: getDocumentById
-export def "case-document get" [
+export def "get-document-by-id" [
   case_document_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1361,7 +1361,7 @@ export def "case-document get" [
 #
 # GET /caseDocumentDownload/{caseDocumentId}
 # operationId: getCaseDocumentDownloadById
-export def "case-document-download get" [
+export def "get-case-document-download-by-id" [
   case_document_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1400,7 +1400,7 @@ export def "case-document-download get" [
 # PUT /caseDocumentOrder
 # operationId: orderCaseDocument
 # --pacerOptions shape: {pacerClientCode?: string, pacerUserId: string}
-export def "case-document-order update" [
+export def "order-case-document" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1440,7 +1440,7 @@ export def "case-document-order update" [
 #
 # GET /caseDocumentOrder/callbacks
 # operationId: getCaseDocumentOrderCallbacks
-export def "case-document-order-callbacks list" [
+export def "get-case-document-order-callbacks" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1478,7 +1478,7 @@ export def "case-document-order-callbacks list" [
 #
 # GET /caseDocumentOrder/callbacks/{caseDocumentOrderCallbackId}
 # operationId: getCaseDocumentOrderCallbackById
-export def "case-document-order-callbacks get" [
+export def "get-case-document-order-callback-by-id" [
   case_document_order_callback_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1514,7 +1514,7 @@ export def "case-document-order-callbacks get" [
 #
 # GET /caseExport/callbacks
 # operationId: getCaseExportCallbacks
-export def "case-export-callbacks list" [
+export def "get-case-export-callbacks" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1552,7 +1552,7 @@ export def "case-export-callbacks list" [
 #
 # GET /caseExport/callbacks/{caseExportCallbackId}
 # operationId: getCaseExportCallbackById
-export def "case-export-callbacks get" [
+export def "get-case-export-callback-by-id" [
   case_export_callback_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1588,7 +1588,7 @@ export def "case-export-callbacks get" [
 #
 # GET /caseExport/{caseId}
 # operationId: exportCase
-export def "case-export export" [
+export def "export-case" [
   case_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1624,7 +1624,7 @@ export def "case-export export" [
 #
 # GET /caseSearch
 # operationId: searchCases
-export def "case-search list" [
+export def "search-cases" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1663,7 +1663,7 @@ export def "case-search list" [
 #
 # GET /caseSearch/{caseSearchId}
 # operationId: searchCasesById
-export def "case-search list-1" [
+export def "search-cases-by-id" [
   case_search_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1703,7 +1703,7 @@ export def "case-search list-1" [
 # operationId: trackCase
 # --caseTrackParams shape: {caseId: string, pacerOptions?: record}
 # --schedule shape: {days: list<int>, type: "daily"|"weekly"|"monthly"}
-export def "case-track update" [
+export def "track-case" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1742,7 +1742,7 @@ export def "case-track update" [
 #
 # DELETE /caseTrack/{caseId}
 # operationId: removeCaseTrackById
-export def "case-track delete" [
+export def "remove-case-track-by-id" [
   case_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1778,7 +1778,7 @@ export def "case-track delete" [
 #
 # GET /caseTrack/{caseId}
 # operationId: getCaseTrackById
-export def "case-track get" [
+export def "get-case-track-by-id" [
   case_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1814,7 +1814,7 @@ export def "case-track get" [
 #
 # GET /caseTracks
 # operationId: getCaseTracks
-export def "case-tracks get" [
+export def "get-case-tracks" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1853,7 +1853,7 @@ export def "case-tracks get" [
 # PUT /caseUpdate
 # operationId: updateCase
 # --pacerOptions shape: {additionalPageArray?: list, fetchParticipantsIfOlderThanDays?: int, pacerClientCode?: string, pacerUserId: string, refreshType?: "fetchNewDocketEntries"|"fetchAllDocketEntries"}
-export def "case-update update" [
+export def "update-case" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1892,7 +1892,7 @@ export def "case-update update" [
 #
 # GET /caseUpdate/{caseId}
 # operationId: getCaseUpdateByCaseId
-export def "case-update get" [
+export def "get-case-update-by-case-id" [
   case_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1928,7 +1928,7 @@ export def "case-update get" [
 #
 # GET /caseUpdates
 # operationId: getCaseUpdates
-export def "case-updates get" [
+export def "get-case-updates" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1967,7 +1967,7 @@ export def "case-updates get" [
 #
 # GET /courtCoverage/{courtId}
 # operationId: getCourtCoverage
-export def "court-coverage get" [
+export def "get-court-coverage" [
   court_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2003,7 +2003,7 @@ export def "court-coverage get" [
 #
 # GET /dailyUsage/{date}
 # operationId: getDailyUsageByDate
-export def "daily-usage get" [
+export def "get-daily-usage-by-date" [
   date: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2039,7 +2039,7 @@ export def "daily-usage get" [
 #
 # POST /generateNewToken
 # operationId: generateNewToken
-export def "generate-new-token generate" [
+export def "generate-new-token" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2078,7 +2078,7 @@ export def "generate-new-token generate" [
 #
 # PUT /invalidateAllTokens
 # operationId: invalidateAllTokens
-export def "invalidate-all-tokens list" [
+export def "invalidate-all-tokens" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2117,7 +2117,7 @@ export def "invalidate-all-tokens list" [
 #
 # PUT /invalidateToken
 # operationId: invalidateToken
-export def "invalidate-token update" [
+export def "invalidate-token" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2157,7 +2157,7 @@ export def "invalidate-token update" [
 #
 # GET /judge/{judgeId}
 # operationId: getJudgeById
-export def "judge get" [
+export def "get-judge-by-id" [
   judge_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2193,7 +2193,7 @@ export def "judge get" [
 #
 # PUT /listAllTokenIds
 # operationId: listAllTokenIds
-export def "list-all-token-ids list" [
+export def "list-all-token-ids" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2232,7 +2232,7 @@ export def "list-all-token-ids list" [
 #
 # GET /masterData/areaOfLaw
 # operationId: getAreasOfLaw
-export def "master-data-area-of-law list" [
+export def "get-areas-of-law" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2271,7 +2271,7 @@ export def "master-data-area-of-law list" [
 #
 # GET /masterData/areaOfLaw/{areaOfLawId}
 # operationId: getAreaOfLaw
-export def "master-data-area-of-law get" [
+export def "get-area-of-law" [
   area_of_law_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2307,7 +2307,7 @@ export def "master-data-area-of-law get" [
 #
 # GET /masterData/attorneyRepresentationType
 # operationId: getAttorneyRepresentationTypes
-export def "master-data-attorney-representation-type list" [
+export def "get-attorney-representation-types" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2346,7 +2346,7 @@ export def "master-data-attorney-representation-type list" [
 #
 # GET /masterData/attorneyRepresentationType/{attorneyRepresentationTypeId}
 # operationId: getAttorneyRepresentationType
-export def "master-data-attorney-representation-type get" [
+export def "get-attorney-representation-type" [
   attorney_representation_type_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2382,7 +2382,7 @@ export def "master-data-attorney-representation-type get" [
 #
 # GET /masterData/attorneyType
 # operationId: getAttorneyTypes
-export def "master-data-attorney-type list" [
+export def "get-attorney-types" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2421,7 +2421,7 @@ export def "master-data-attorney-type list" [
 #
 # GET /masterData/attorneyType/{attorneyTypeId}
 # operationId: getAttorneyType
-export def "master-data-attorney-type get" [
+export def "get-attorney-type" [
   attorney_type_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2457,7 +2457,7 @@ export def "master-data-attorney-type get" [
 #
 # GET /masterData/caseClass
 # operationId: getCasesClass
-export def "master-data-case-class list" [
+export def "get-cases-class" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2496,7 +2496,7 @@ export def "master-data-case-class list" [
 #
 # GET /masterData/caseClass/{caseClassId}
 # operationId: getCaseClass
-export def "master-data-case-class get" [
+export def "get-case-class" [
   case_class_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2532,7 +2532,7 @@ export def "master-data-case-class get" [
 #
 # GET /masterData/caseRelationshipType
 # operationId: getCaseRelationshipTypes
-export def "master-data-case-relationship-type list" [
+export def "get-case-relationship-types" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2571,7 +2571,7 @@ export def "master-data-case-relationship-type list" [
 #
 # GET /masterData/caseRelationshipType/{caseRelationshipTypeId}
 # operationId: getCaseRelationshipType
-export def "master-data-case-relationship-type get" [
+export def "get-case-relationship-type" [
   case_relationship_type_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2607,7 +2607,7 @@ export def "master-data-case-relationship-type get" [
 #
 # GET /masterData/caseStatus
 # operationId: getCasesStatus
-export def "master-data-case-status list" [
+export def "get-cases-status" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2646,7 +2646,7 @@ export def "master-data-case-status list" [
 #
 # GET /masterData/caseStatus/{caseStatusId}
 # operationId: getCaseStatus
-export def "master-data-case-status get" [
+export def "get-case-status" [
   case_status_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2682,7 +2682,7 @@ export def "master-data-case-status get" [
 #
 # GET /masterData/caseStatusGroup
 # operationId: getCaseStatusGroups
-export def "master-data-case-status-group list" [
+export def "get-case-status-groups" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2721,7 +2721,7 @@ export def "master-data-case-status-group list" [
 #
 # GET /masterData/caseStatusGroup/{caseStatusGroupId}
 # operationId: getCaseStatusGroup
-export def "master-data-case-status-group get" [
+export def "get-case-status-group" [
   case_status_group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2757,7 +2757,7 @@ export def "master-data-case-status-group get" [
 #
 # GET /masterData/caseType
 # operationId: getCaseTypes
-export def "master-data-case-type list" [
+export def "get-case-types" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2796,7 +2796,7 @@ export def "master-data-case-type list" [
 #
 # GET /masterData/caseType/{caseTypeId}
 # operationId: getCaseType
-export def "master-data-case-type get" [
+export def "get-case-type" [
   case_type_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2832,7 +2832,7 @@ export def "master-data-case-type get" [
 #
 # GET /masterData/caseTypeGroup
 # operationId: getCaseTypeGroups
-export def "master-data-case-type-group list" [
+export def "get-case-type-groups" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2871,7 +2871,7 @@ export def "master-data-case-type-group list" [
 #
 # GET /masterData/caseTypeGroup/{caseTypeGroupId}
 # operationId: getCaseTypeGroup
-export def "master-data-case-type-group get" [
+export def "get-case-type-group" [
   case_type_group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2907,7 +2907,7 @@ export def "master-data-case-type-group get" [
 #
 # GET /masterData/causeOfAction
 # operationId: getCausesOfAction
-export def "master-data-cause-of-action list" [
+export def "get-causes-of-action" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2946,7 +2946,7 @@ export def "master-data-cause-of-action list" [
 #
 # GET /masterData/causeOfAction/{causeOfActionId}
 # operationId: getCauseOfAction
-export def "master-data-cause-of-action get" [
+export def "get-cause-of-action" [
   cause_of_action_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2982,7 +2982,7 @@ export def "master-data-cause-of-action get" [
 #
 # GET /masterData/causeOfActionAdditionalData
 # operationId: getCausesOfActionAdditionalData
-export def "master-data-cause-of-action-additional-data list" [
+export def "get-causes-of-action-additional-data" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3021,7 +3021,7 @@ export def "master-data-cause-of-action-additional-data list" [
 #
 # GET /masterData/causeOfActionAdditionalData/{causeOfActionAdditionalDataId}
 # operationId: getCauseOfActionAdditionalData
-export def "master-data-cause-of-action-additional-data get" [
+export def "get-cause-of-action-additional-data" [
   cause_of_action_additional_data_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3057,7 +3057,7 @@ export def "master-data-cause-of-action-additional-data get" [
 #
 # GET /masterData/causeOfActionGroup
 # operationId: getCausesOfActionGroup
-export def "master-data-cause-of-action-group list" [
+export def "get-causes-of-action-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3096,7 +3096,7 @@ export def "master-data-cause-of-action-group list" [
 #
 # GET /masterData/causeOfActionGroup/{causeOfActionGroupId}
 # operationId: getCauseOfActionGroup
-export def "master-data-cause-of-action-group get" [
+export def "get-cause-of-action-group" [
   cause_of_action_group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3132,7 +3132,7 @@ export def "master-data-cause-of-action-group get" [
 #
 # GET /masterData/charge
 # operationId: getCharges
-export def "master-data-charge list" [
+export def "get-charges" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3171,7 +3171,7 @@ export def "master-data-charge list" [
 #
 # GET /masterData/charge/{chargeId}
 # operationId: getCharge
-export def "master-data-charge get" [
+export def "get-charge" [
   charge_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3207,7 +3207,7 @@ export def "master-data-charge get" [
 #
 # GET /masterData/chargeAdditionalData
 # operationId: getChargesAdditionalData
-export def "master-data-charge-additional-data list" [
+export def "get-charges-additional-data" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3246,7 +3246,7 @@ export def "master-data-charge-additional-data list" [
 #
 # GET /masterData/chargeAdditionalData/{chargeAdditionalDataId}
 # operationId: getChargeAdditionalData
-export def "master-data-charge-additional-data get" [
+export def "get-charge-additional-data" [
   charge_additional_data_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3282,7 +3282,7 @@ export def "master-data-charge-additional-data get" [
 #
 # GET /masterData/chargeDegree
 # operationId: getChargesDegree
-export def "master-data-charge-degree list" [
+export def "get-charges-degree" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3321,7 +3321,7 @@ export def "master-data-charge-degree list" [
 #
 # GET /masterData/chargeDegree/{chargeDegreeId}
 # operationId: getChargeDegree
-export def "master-data-charge-degree get" [
+export def "get-charge-degree" [
   charge_degree_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3357,7 +3357,7 @@ export def "master-data-charge-degree get" [
 #
 # GET /masterData/chargeGroup
 # operationId: getChargeGroups
-export def "master-data-charge-group list" [
+export def "get-charge-groups" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3396,7 +3396,7 @@ export def "master-data-charge-group list" [
 #
 # GET /masterData/chargeGroup/{chargeGroupId}
 # operationId: getChargeGroup
-export def "master-data-charge-group get" [
+export def "get-charge-group" [
   charge_group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3432,7 +3432,7 @@ export def "master-data-charge-group get" [
 #
 # GET /masterData/chargeSeverity
 # operationId: getChargesSeverity
-export def "master-data-charge-severity list" [
+export def "get-charges-severity" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3471,7 +3471,7 @@ export def "master-data-charge-severity list" [
 #
 # GET /masterData/chargeSeverity/{chargeSeverityId}
 # operationId: getChargeSeverity
-export def "master-data-charge-severity get" [
+export def "get-charge-severity" [
   charge_severity_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3507,7 +3507,7 @@ export def "master-data-charge-severity get" [
 #
 # GET /masterData/court
 # operationId: getCourts
-export def "master-data-court list" [
+export def "get-courts" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3546,7 +3546,7 @@ export def "master-data-court list" [
 #
 # GET /masterData/court/{courtId}
 # operationId: getCourt
-export def "master-data-court get" [
+export def "get-court" [
   court_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3582,7 +3582,7 @@ export def "master-data-court get" [
 #
 # GET /masterData/court/{courtId}/appealCourts
 # operationId: getAppealCourtsForCourt
-export def "master-data-court-appeal-courts get" [
+export def "get-appeal-courts-for-court" [
   court_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3622,7 +3622,7 @@ export def "master-data-court-appeal-courts get" [
 #
 # GET /masterData/court/{courtId}/courtLocations
 # operationId: getCourtLocationsForCourt
-export def "master-data-court-court-locations get" [
+export def "get-court-locations-for-court" [
   court_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3662,7 +3662,7 @@ export def "master-data-court-court-locations get" [
 #
 # GET /masterData/court/{courtId}/jurisdictionGeo
 # operationId: getJurisdictionGeoForCourt
-export def "master-data-court-jurisdiction-geo get" [
+export def "get-jurisdiction-geo-for-court" [
   court_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3702,7 +3702,7 @@ export def "master-data-court-jurisdiction-geo get" [
 #
 # GET /masterData/courtLocation
 # operationId: getCourtLocations
-export def "master-data-court-location list" [
+export def "get-court-locations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3741,7 +3741,7 @@ export def "master-data-court-location list" [
 #
 # GET /masterData/courtLocation/{courtLocationId}
 # operationId: getCourtLocation
-export def "master-data-court-location get" [
+export def "get-court-location" [
   court_location_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3777,7 +3777,7 @@ export def "master-data-court-location get" [
 #
 # GET /masterData/courtLocation/{courtLocationId}/courts
 # operationId: getCourtsForCourtLocation
-export def "master-data-court-location-courts get" [
+export def "get-courts-for-court-location" [
   court_location_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3817,7 +3817,7 @@ export def "master-data-court-location-courts get" [
 #
 # GET /masterData/courtServiceStatus
 # operationId: getCourtsServiceStatus
-export def "master-data-court-service-status list" [
+export def "get-courts-service-status" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3856,7 +3856,7 @@ export def "master-data-court-service-status list" [
 #
 # GET /masterData/courtServiceStatus/{courtServiceStatusId}
 # operationId: getCourtServiceStatus
-export def "master-data-court-service-status get" [
+export def "get-court-service-status" [
   court_service_status_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3892,7 +3892,7 @@ export def "master-data-court-service-status get" [
 #
 # GET /masterData/courtSystem
 # operationId: getCourtSystems
-export def "master-data-court-system list" [
+export def "get-court-systems" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3931,7 +3931,7 @@ export def "master-data-court-system list" [
 #
 # GET /masterData/courtSystem/{courtSystemId}
 # operationId: getCourtSystem
-export def "master-data-court-system get" [
+export def "get-court-system" [
   court_system_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3967,7 +3967,7 @@ export def "master-data-court-system get" [
 #
 # GET /masterData/courtType
 # operationId: getCourtTypes
-export def "master-data-court-type list" [
+export def "get-court-types" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4006,7 +4006,7 @@ export def "master-data-court-type list" [
 #
 # GET /masterData/courtType/{courtTypeId}
 # operationId: getCourtType
-export def "master-data-court-type get" [
+export def "get-court-type" [
   court_type_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4042,7 +4042,7 @@ export def "master-data-court-type get" [
 #
 # GET /masterData/judgeType
 # operationId: getJudgeTypes
-export def "master-data-judge-type list" [
+export def "get-judge-types" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4081,7 +4081,7 @@ export def "master-data-judge-type list" [
 #
 # GET /masterData/judgeType/{judgeTypeId}
 # operationId: getJudgeType
-export def "master-data-judge-type get" [
+export def "get-judge-type" [
   judge_type_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4117,7 +4117,7 @@ export def "master-data-judge-type get" [
 #
 # GET /masterData/jurisdictionGeo
 # operationId: getJurisdictionsGeo
-export def "master-data-jurisdiction-geo list" [
+export def "get-jurisdictions-geo" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4156,7 +4156,7 @@ export def "master-data-jurisdiction-geo list" [
 #
 # GET /masterData/jurisdictionGeo/{jurisdictionGeoId}
 # operationId: getJurisdictionGeo
-export def "master-data-jurisdiction-geo get" [
+export def "get-jurisdiction-geo" [
   jurisdiction_geo_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4192,7 +4192,7 @@ export def "master-data-jurisdiction-geo get" [
 #
 # GET /masterData/jurisdictionGeo/{jurisdictionGeoId}/courts
 # operationId: getCourtsForJurisdictionGeo
-export def "master-data-jurisdiction-geo-courts get" [
+export def "get-courts-for-jurisdiction-geo" [
   jurisdiction_geo_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4232,7 +4232,7 @@ export def "master-data-jurisdiction-geo-courts get" [
 #
 # GET /masterData/partyRole
 # operationId: getPartyRoles
-export def "master-data-party-role list" [
+export def "get-party-roles" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4271,7 +4271,7 @@ export def "master-data-party-role list" [
 #
 # GET /masterData/partyRole/{partyRoleId}
 # operationId: getPartyRole
-export def "master-data-party-role get" [
+export def "get-party-role" [
   party_role_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4307,7 +4307,7 @@ export def "master-data-party-role get" [
 #
 # GET /masterData/partyRoleGroup
 # operationId: getPartyRoleGroups
-export def "master-data-party-role-group list" [
+export def "get-party-role-groups" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4346,7 +4346,7 @@ export def "master-data-party-role-group list" [
 #
 # GET /masterData/partyRoleGroup/{partyRoleGroupId}
 # operationId: getPartyRoleGroup
-export def "master-data-party-role-group get" [
+export def "get-party-role-group" [
   party_role_group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4382,7 +4382,7 @@ export def "master-data-party-role-group get" [
 #
 # GET /normAttorney/{normAttorneyId}
 # operationId: getNormAttorneyById
-export def "norm-attorney get" [
+export def "get-norm-attorney-by-id" [
   norm_attorney_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4418,7 +4418,7 @@ export def "norm-attorney get" [
 #
 # GET /normAttorney/{normAttorneyId}/associatedNormJudges
 # operationId: getNormJudgesAssociatedWithNormAttorney
-export def "norm-attorney-associated-norm-judges get" [
+export def "get-norm-judges-associated-with-norm-attorney" [
   norm_attorney_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4457,7 +4457,7 @@ export def "norm-attorney-associated-norm-judges get" [
 #
 # GET /normAttorney/{normAttorneyId}/associatedNormLawFirms
 # operationId: getNormLawFirmsAssociatedWithNormAttorney
-export def "norm-attorney-associated-norm-law-firms get" [
+export def "get-norm-law-firms-associated-with-norm-attorney" [
   norm_attorney_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4496,7 +4496,7 @@ export def "norm-attorney-associated-norm-law-firms get" [
 #
 # GET /normAttorney/{normAttorneyId}/associatedNormParties
 # operationId: getNormPartiesAssociatedWithNormAttorney
-export def "norm-attorney-associated-norm-parties get" [
+export def "get-norm-parties-associated-with-norm-attorney" [
   norm_attorney_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4535,7 +4535,7 @@ export def "norm-attorney-associated-norm-parties get" [
 #
 # GET /normAttorney/{normAttorneyId}/caseCountAnalyticsByOpposingNormAttorney
 # operationId: getCaseCountAnalyticsByOpposingNormAttorneyForANormAttorney
-export def "norm-attorney-case-count-analytics-by-opposing-norm-attorney get" [
+export def "get-case-count-analytics-by-opposing-norm-attorney-for-a-norm-attorney" [
   norm_attorney_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4574,7 +4574,7 @@ export def "norm-attorney-case-count-analytics-by-opposing-norm-attorney get" [
 #
 # GET /normAttorneySearch
 # operationId: searchNormalizedAttorneys
-export def "norm-attorney-search list" [
+export def "search-normalized-attorneys" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4611,7 +4611,7 @@ export def "norm-attorney-search list" [
 #
 # GET /normAttorneySearch/{normAttorneySearchId}
 # operationId: searchNormalizedAttorneysById
-export def "norm-attorney-search list-normalized" [
+export def "search-normalized-attorneys-by-id" [
   norm_attorney_search_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4649,7 +4649,7 @@ export def "norm-attorney-search list-normalized" [
 #
 # GET /normJudge/{normJudgeId}
 # operationId: getNormJudgeById
-export def "norm-judge get" [
+export def "get-norm-judge-by-id" [
   norm_judge_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4685,7 +4685,7 @@ export def "norm-judge get" [
 #
 # GET /normJudge/{normJudgeId}/associatedNormAttorneys
 # operationId: getNormAttorneysAssociatedWithNormJudge
-export def "norm-judge-associated-norm-attorneys get" [
+export def "get-norm-attorneys-associated-with-norm-judge" [
   norm_judge_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4724,7 +4724,7 @@ export def "norm-judge-associated-norm-attorneys get" [
 #
 # GET /normJudge/{normJudgeId}/associatedNormLawFirms
 # operationId: getNormLawFirmsAssociatedWithNormJudge
-export def "norm-judge-associated-norm-law-firms get" [
+export def "get-norm-law-firms-associated-with-norm-judge" [
   norm_judge_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4763,7 +4763,7 @@ export def "norm-judge-associated-norm-law-firms get" [
 #
 # GET /normJudge/{normJudgeId}/associatedNormParties
 # operationId: getNormPartiesAssociatedWithNormJudge
-export def "norm-judge-associated-norm-parties get" [
+export def "get-norm-parties-associated-with-norm-judge" [
   norm_judge_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4802,7 +4802,7 @@ export def "norm-judge-associated-norm-parties get" [
 #
 # GET /normJudgeSearch
 # operationId: searchNormalizedJudges
-export def "norm-judge-search list" [
+export def "search-normalized-judges" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4839,7 +4839,7 @@ export def "norm-judge-search list" [
 #
 # GET /normJudgeSearch/{normJudgeSearchId}
 # operationId: searchNormalizedJudgesById
-export def "norm-judge-search list-normalized" [
+export def "search-normalized-judges-by-id" [
   norm_judge_search_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4877,7 +4877,7 @@ export def "norm-judge-search list-normalized" [
 #
 # GET /normLawFirm/{normLawFirmId}
 # operationId: getNormLawFirmById
-export def "norm-law-firm get" [
+export def "get-norm-law-firm-by-id" [
   norm_law_firm_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4913,7 +4913,7 @@ export def "norm-law-firm get" [
 #
 # GET /normLawFirm/{normLawFirmId}/associatedNormAttorneys
 # operationId: getNormAttorneysAssociatedWithNormLawFirm
-export def "norm-law-firm-associated-norm-attorneys get" [
+export def "get-norm-attorneys-associated-with-norm-law-firm" [
   norm_law_firm_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4952,7 +4952,7 @@ export def "norm-law-firm-associated-norm-attorneys get" [
 #
 # GET /normLawFirm/{normLawFirmId}/associatedNormJudges
 # operationId: getNormJudgesAssociatedWithNormLawFirm
-export def "norm-law-firm-associated-norm-judges get" [
+export def "get-norm-judges-associated-with-norm-law-firm" [
   norm_law_firm_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4991,7 +4991,7 @@ export def "norm-law-firm-associated-norm-judges get" [
 #
 # GET /normLawFirm/{normLawFirmId}/associatedNormParties
 # operationId: getNormPartiesAssociatedWithNormLawFirm
-export def "norm-law-firm-associated-norm-parties get" [
+export def "get-norm-parties-associated-with-norm-law-firm" [
   norm_law_firm_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5030,7 +5030,7 @@ export def "norm-law-firm-associated-norm-parties get" [
 #
 # GET /normLawFirm/{normLawFirmId}/caseCountAnalyticsByOpposingNormLawFirm
 # operationId: getCaseCountAnalyticsByOpposingNormLawFirmForANormLawFirm
-export def "norm-law-firm-case-count-analytics-by-opposing-norm-law-firm get" [
+export def "get-case-count-analytics-by-opposing-norm-law-firm-for-a-norm-law-firm" [
   norm_law_firm_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5069,7 +5069,7 @@ export def "norm-law-firm-case-count-analytics-by-opposing-norm-law-firm get" [
 #
 # GET /normLawFirmSearch
 # operationId: searchNormalizedLawFirms
-export def "norm-law-firm-search list" [
+export def "search-normalized-law-firms" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5106,7 +5106,7 @@ export def "norm-law-firm-search list" [
 #
 # GET /normLawFirmSearch/{normLawFirmSearchId}
 # operationId: searchNormalizedLawFirmsById
-export def "norm-law-firm-search list-normalized" [
+export def "search-normalized-law-firms-by-id" [
   norm_law_firm_search_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5144,7 +5144,7 @@ export def "norm-law-firm-search list-normalized" [
 #
 # GET /normParty/{normPartyId}
 # operationId: getNormPartyById
-export def "norm-party get" [
+export def "get-norm-party-by-id" [
   norm_party_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5180,7 +5180,7 @@ export def "norm-party get" [
 #
 # GET /normParty/{normPartyId}/associatedNormAttorneys
 # operationId: getNormAttorneysAssociatedWithNormParty
-export def "norm-party-associated-norm-attorneys get" [
+export def "get-norm-attorneys-associated-with-norm-party" [
   norm_party_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5219,7 +5219,7 @@ export def "norm-party-associated-norm-attorneys get" [
 #
 # GET /normParty/{normPartyId}/associatedNormJudges
 # operationId: getNormJudgesAssociatedWithNormParty
-export def "norm-party-associated-norm-judges get" [
+export def "get-norm-judges-associated-with-norm-party" [
   norm_party_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5258,7 +5258,7 @@ export def "norm-party-associated-norm-judges get" [
 #
 # GET /normParty/{normPartyId}/associatedNormLawFirms
 # operationId: getNormLawFirmsAssociatedWithNormParty
-export def "norm-party-associated-norm-law-firms get" [
+export def "get-norm-law-firms-associated-with-norm-party" [
   norm_party_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5297,7 +5297,7 @@ export def "norm-party-associated-norm-law-firms get" [
 #
 # GET /normParty/{normPartyId}/caseCountAnalyticsByOpposingNormParty
 # operationId: getCaseCountAnalyticsByOpposingNormPartyForANormParty
-export def "norm-party-case-count-analytics-by-opposing-norm-party get" [
+export def "get-case-count-analytics-by-opposing-norm-party-for-a-norm-party" [
   norm_party_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5336,7 +5336,7 @@ export def "norm-party-case-count-analytics-by-opposing-norm-party get" [
 #
 # GET /normPartySearch
 # operationId: searchNormalizedParties
-export def "norm-party-search list" [
+export def "search-normalized-parties" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5373,7 +5373,7 @@ export def "norm-party-search list" [
 #
 # GET /normPartySearch/{normPartySearchId}
 # operationId: searchNormalizedPartiesById
-export def "norm-party-search list-normalized-parties" [
+export def "search-normalized-parties-by-id" [
   norm_party_search_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5411,7 +5411,7 @@ export def "norm-party-search list-normalized-parties" [
 #
 # GET /pacer/importCaseByCourtUsingCaseNumber
 # operationId: importPacerCaseByCourtUsingCaseNumber
-export def "pacer-import-case-by-court-using-case-number import" [
+export def "import-pacer-case-by-court-using-case-number" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5450,7 +5450,7 @@ export def "pacer-import-case-by-court-using-case-number import" [
 #
 # GET /pacerCaseLocator/caseSearch/allCourts
 # operationId: AllCourtsPacerCaseLocatorCaseSearch
-export def "pacer-case-locator-case-search-all-courts list" [
+export def "all-courts-pacer-case-locator-case-search" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5502,7 +5502,7 @@ export def "pacer-case-locator-case-search-all-courts list" [
 #
 # GET /pacerCaseLocator/caseSearch/appealCourts
 # operationId: AppealCourtsPacerCaseLocatorCaseSearch
-export def "pacer-case-locator-case-search-appeal-courts list" [
+export def "appeal-courts-pacer-case-locator-case-search" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5555,7 +5555,7 @@ export def "pacer-case-locator-case-search-appeal-courts list" [
 #
 # GET /pacerCaseLocator/caseSearch/bankruptcyCourts
 # operationId: BankruptcyCourtsPacerCaseLocatorCaseSearch
-export def "pacer-case-locator-case-search-bankruptcy-courts list" [
+export def "bankruptcy-courts-pacer-case-locator-case-search" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5612,7 +5612,7 @@ export def "pacer-case-locator-case-search-bankruptcy-courts list" [
 #
 # GET /pacerCaseLocator/caseSearch/civilCourts
 # operationId: CivilCourtsPacerCaseLocatorCaseSearch
-export def "pacer-case-locator-case-search-civil-courts list" [
+export def "civil-courts-pacer-case-locator-case-search" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5665,7 +5665,7 @@ export def "pacer-case-locator-case-search-civil-courts list" [
 #
 # GET /pacerCaseLocator/caseSearch/criminalCourts
 # operationId: CriminalCourtsPacerCaseLocatorCaseSearch
-export def "pacer-case-locator-case-search-criminal-courts list" [
+export def "criminal-courts-pacer-case-locator-case-search" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5717,7 +5717,7 @@ export def "pacer-case-locator-case-search-criminal-courts list" [
 #
 # GET /pacerCaseLocator/caseSearch/multiDistrictCourts
 # operationId: MultiDistrictCourtsPacerCaseLocatorCaseSearch
-export def "pacer-case-locator-case-search-multi-district-courts list" [
+export def "multi-district-courts-pacer-case-locator-case-search" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5770,7 +5770,7 @@ export def "pacer-case-locator-case-search-multi-district-courts list" [
 #
 # GET /pacerCaseLocator/partySearch/allCourts
 # operationId: AllCourtsPacerCaseLocatorPartySearch
-export def "pacer-case-locator-party-search-all-courts list" [
+export def "all-courts-pacer-case-locator-party-search" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5831,7 +5831,7 @@ export def "pacer-case-locator-party-search-all-courts list" [
 #
 # GET /pacerCaseLocator/partySearch/appealCourts
 # operationId: AppealCourtsPacerCaseLocatorPartySearch
-export def "pacer-case-locator-party-search-appeal-courts list" [
+export def "appeal-courts-pacer-case-locator-party-search" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5892,7 +5892,7 @@ export def "pacer-case-locator-party-search-appeal-courts list" [
 #
 # GET /pacerCaseLocator/partySearch/bankruptcyCourts
 # operationId: BankruptcyCourtsPacerCaseLocatorPartySearch
-export def "pacer-case-locator-party-search-bankruptcy-courts list" [
+export def "bankruptcy-courts-pacer-case-locator-party-search" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5959,7 +5959,7 @@ export def "pacer-case-locator-party-search-bankruptcy-courts list" [
 #
 # GET /pacerCaseLocator/partySearch/civilCourts
 # operationId: CivilCourtsPacerCaseLocatorPartySearch
-export def "pacer-case-locator-party-search-civil-courts list" [
+export def "civil-courts-pacer-case-locator-party-search" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6020,7 +6020,7 @@ export def "pacer-case-locator-party-search-civil-courts list" [
 #
 # GET /pacerCaseLocator/partySearch/criminalCourts
 # operationId: CriminalCourtsPacerCaseLocatorPartySearch
-export def "pacer-case-locator-party-search-criminal-courts list" [
+export def "criminal-courts-pacer-case-locator-party-search" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6081,7 +6081,7 @@ export def "pacer-case-locator-party-search-criminal-courts list" [
 #
 # GET /pacerCaseLocator/partySearch/multiDistrictCourts
 # operationId: MultiDistrictCourtsPacerCaseLocatorPartySearch
-export def "pacer-case-locator-party-search-multi-district-courts list" [
+export def "multi-district-courts-pacer-case-locator-party-search" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6143,7 +6143,7 @@ export def "pacer-case-locator-party-search-multi-district-courts list" [
 #
 # GET /pacerCredential
 # operationId: getPacerCredential
-export def "pacer-credential list" [
+export def "get-pacer-credential" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6179,7 +6179,7 @@ export def "pacer-credential list" [
 #
 # PUT /pacerCredential
 # operationId: addPacerCredential
-export def "pacer-credential create" [
+export def "add-pacer-credential" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6219,7 +6219,7 @@ export def "pacer-credential create" [
 #
 # DELETE /pacerCredential/{pacerUserId}
 # operationId: removePacerCredentialById
-export def "pacer-credential delete" [
+export def "remove-pacer-credential-by-id" [
   pacer_user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6255,7 +6255,7 @@ export def "pacer-credential delete" [
 #
 # GET /pacerCredential/{pacerUserId}
 # operationId: getPacerCredentialById
-export def "pacer-credential get" [
+export def "get-pacer-credential-by-id" [
   pacer_user_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6291,7 +6291,7 @@ export def "pacer-credential get" [
 #
 # GET /party/{partyId}
 # operationId: getPartyById
-export def "party get" [
+export def "get-party-by-id" [
   party_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6327,7 +6327,7 @@ export def "party get" [
 #
 # GET /party/{partyId}/associatedAttorneys
 # operationId: getPartyAssociatedAttorneys
-export def "party-associated-attorneys get" [
+export def "get-party-associated-attorneys" [
   party_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

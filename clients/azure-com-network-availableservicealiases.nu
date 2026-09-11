@@ -98,7 +98,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-providers-microsoft-network-locations-available-service-aliases list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "available-service-aliases-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -122,7 +122,7 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Network/locations/{location}/availableServiceAliases
 # operationId: AvailableServiceAliases_List
-export def "subscriptions-providers-microsoft-network-locations-available-service-aliases list" [
+export def "available-service-aliases-list" [
   subscription_id: string
   location: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -162,7 +162,7 @@ export def "subscriptions-providers-microsoft-network-locations-available-servic
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.Network/locations/{location}/availableServiceAliases
 # operationId: AvailableServiceAliases_ListByResourceGroup
-export def "subscriptions-resource-groups-providers-microsoft-network-locations-available-service-aliases list" [
+export def "available-service-aliases-list-by-resource-group" [
   subscription_id: string
   resource_group_name: string
   location: string

@@ -114,7 +114,7 @@ def bounds-completer [] { ["exclusive" "inclusive"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "services list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "list-service" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -137,7 +137,7 @@ export def commands []: nothing -> table {
 # GET /v1/Services
 #
 # operationId: ListService
-export def "services list" [
+export def "list-service" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -174,7 +174,7 @@ export def "services list" [
 # POST /v1/Services
 #
 # operationId: CreateService
-export def "services create" [
+export def "create-service" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -218,7 +218,7 @@ export def "services create" [
 # GET /v1/Services/{ServiceSid}/Documents
 #
 # operationId: ListDocument
-export def "services-documents list" [
+export def "list-document" [
   service_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -257,7 +257,7 @@ export def "services-documents list" [
 # POST /v1/Services/{ServiceSid}/Documents
 #
 # operationId: CreateDocument
-export def "services-documents create" [
+export def "create-document" [
   service_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -300,7 +300,7 @@ export def "services-documents create" [
 #
 # GET /v1/Services/{ServiceSid}/Documents/{DocumentSid}/Permissions
 # operationId: ListDocumentPermission
-export def "services-documents-permissions list" [
+export def "list-document-permission" [
   service_sid: string
   document_sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -342,7 +342,7 @@ export def "services-documents-permissions list" [
 #
 # DELETE /v1/Services/{ServiceSid}/Documents/{DocumentSid}/Permissions/{Identity}
 # operationId: DeleteDocumentPermission
-export def "services-documents-permissions delete" [
+export def "delete-document-permission" [
   service_sid: string
   document_sid: string
   identity: string
@@ -382,7 +382,7 @@ export def "services-documents-permissions delete" [
 #
 # GET /v1/Services/{ServiceSid}/Documents/{DocumentSid}/Permissions/{Identity}
 # operationId: FetchDocumentPermission
-export def "services-documents-permissions get" [
+export def "fetch-document-permission" [
   service_sid: string
   document_sid: string
   identity: string
@@ -422,7 +422,7 @@ export def "services-documents-permissions get" [
 #
 # POST /v1/Services/{ServiceSid}/Documents/{DocumentSid}/Permissions/{Identity}
 # operationId: UpdateDocumentPermission
-export def "services-documents-permissions update" [
+export def "update-document-permission" [
   service_sid: string
   document_sid: string
   identity: string
@@ -468,7 +468,7 @@ export def "services-documents-permissions update" [
 # DELETE /v1/Services/{ServiceSid}/Documents/{Sid}
 #
 # operationId: DeleteDocument
-export def "services-documents delete" [
+export def "delete-document" [
   service_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -505,7 +505,7 @@ export def "services-documents delete" [
 # GET /v1/Services/{ServiceSid}/Documents/{Sid}
 #
 # operationId: FetchDocument
-export def "services-documents get" [
+export def "fetch-document" [
   service_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -542,7 +542,7 @@ export def "services-documents get" [
 # POST /v1/Services/{ServiceSid}/Documents/{Sid}
 #
 # operationId: UpdateDocument
-export def "services-documents update" [
+export def "update-document" [
   service_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -588,7 +588,7 @@ export def "services-documents update" [
 # GET /v1/Services/{ServiceSid}/Lists
 #
 # operationId: ListSyncList
-export def "services-lists sync" [
+export def "list-sync-list" [
   service_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -627,7 +627,7 @@ export def "services-lists sync" [
 # POST /v1/Services/{ServiceSid}/Lists
 #
 # operationId: CreateSyncList
-export def "services-lists create-sync" [
+export def "create-sync-list" [
   service_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -669,7 +669,7 @@ export def "services-lists create-sync" [
 # GET /v1/Services/{ServiceSid}/Lists/{ListSid}/Items
 #
 # operationId: ListSyncListItem
-export def "services-lists-items sync" [
+export def "list-sync-list-item" [
   service_sid: string
   list_sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -713,7 +713,7 @@ export def "services-lists-items sync" [
 # POST /v1/Services/{ServiceSid}/Lists/{ListSid}/Items
 #
 # operationId: CreateSyncListItem
-export def "services-lists-items create-sync" [
+export def "create-sync-list-item" [
   service_sid: string
   list_sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -758,7 +758,7 @@ export def "services-lists-items create-sync" [
 # DELETE /v1/Services/{ServiceSid}/Lists/{ListSid}/Items/{Index}
 #
 # operationId: DeleteSyncListItem
-export def "services-lists-items delete-sync" [
+export def "delete-sync-list-item" [
   service_sid: string
   list_sid: string
   index: int
@@ -800,7 +800,7 @@ export def "services-lists-items delete-sync" [
 # GET /v1/Services/{ServiceSid}/Lists/{ListSid}/Items/{Index}
 #
 # operationId: FetchSyncListItem
-export def "services-lists-items get-sync" [
+export def "fetch-sync-list-item" [
   service_sid: string
   list_sid: string
   index: int
@@ -839,7 +839,7 @@ export def "services-lists-items get-sync" [
 # POST /v1/Services/{ServiceSid}/Lists/{ListSid}/Items/{Index}
 #
 # operationId: UpdateSyncListItem
-export def "services-lists-items update-sync" [
+export def "update-sync-list-item" [
   service_sid: string
   list_sid: string
   index: int
@@ -890,7 +890,7 @@ export def "services-lists-items update-sync" [
 #
 # GET /v1/Services/{ServiceSid}/Lists/{ListSid}/Permissions
 # operationId: ListSyncListPermission
-export def "services-lists-permissions sync" [
+export def "list-sync-list-permission" [
   service_sid: string
   list_sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -932,7 +932,7 @@ export def "services-lists-permissions sync" [
 #
 # DELETE /v1/Services/{ServiceSid}/Lists/{ListSid}/Permissions/{Identity}
 # operationId: DeleteSyncListPermission
-export def "services-lists-permissions delete-sync" [
+export def "delete-sync-list-permission" [
   service_sid: string
   list_sid: string
   identity: string
@@ -972,7 +972,7 @@ export def "services-lists-permissions delete-sync" [
 #
 # GET /v1/Services/{ServiceSid}/Lists/{ListSid}/Permissions/{Identity}
 # operationId: FetchSyncListPermission
-export def "services-lists-permissions get-sync" [
+export def "fetch-sync-list-permission" [
   service_sid: string
   list_sid: string
   identity: string
@@ -1012,7 +1012,7 @@ export def "services-lists-permissions get-sync" [
 #
 # POST /v1/Services/{ServiceSid}/Lists/{ListSid}/Permissions/{Identity}
 # operationId: UpdateSyncListPermission
-export def "services-lists-permissions update-sync" [
+export def "update-sync-list-permission" [
   service_sid: string
   list_sid: string
   identity: string
@@ -1058,7 +1058,7 @@ export def "services-lists-permissions update-sync" [
 # DELETE /v1/Services/{ServiceSid}/Lists/{Sid}
 #
 # operationId: DeleteSyncList
-export def "services-lists delete-sync" [
+export def "delete-sync-list" [
   service_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1095,7 +1095,7 @@ export def "services-lists delete-sync" [
 # GET /v1/Services/{ServiceSid}/Lists/{Sid}
 #
 # operationId: FetchSyncList
-export def "services-lists get-sync" [
+export def "fetch-sync-list" [
   service_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1132,7 +1132,7 @@ export def "services-lists get-sync" [
 # POST /v1/Services/{ServiceSid}/Lists/{Sid}
 #
 # operationId: UpdateSyncList
-export def "services-lists update-sync" [
+export def "update-sync-list" [
   service_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1175,7 +1175,7 @@ export def "services-lists update-sync" [
 # GET /v1/Services/{ServiceSid}/Maps
 #
 # operationId: ListSyncMap
-export def "services-maps list-sync" [
+export def "list-sync-map" [
   service_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1214,7 +1214,7 @@ export def "services-maps list-sync" [
 # POST /v1/Services/{ServiceSid}/Maps
 #
 # operationId: CreateSyncMap
-export def "services-maps create-sync" [
+export def "create-sync-map" [
   service_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1256,7 +1256,7 @@ export def "services-maps create-sync" [
 # GET /v1/Services/{ServiceSid}/Maps/{MapSid}/Items
 #
 # operationId: ListSyncMapItem
-export def "services-maps-items list-sync" [
+export def "list-sync-map-item" [
   service_sid: string
   map_sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1300,7 +1300,7 @@ export def "services-maps-items list-sync" [
 # POST /v1/Services/{ServiceSid}/Maps/{MapSid}/Items
 #
 # operationId: CreateSyncMapItem
-export def "services-maps-items create-sync" [
+export def "create-sync-map-item" [
   service_sid: string
   map_sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1346,7 +1346,7 @@ export def "services-maps-items create-sync" [
 # DELETE /v1/Services/{ServiceSid}/Maps/{MapSid}/Items/{Key}
 #
 # operationId: DeleteSyncMapItem
-export def "services-maps-items delete-sync" [
+export def "delete-sync-map-item" [
   service_sid: string
   map_sid: string
   key: string
@@ -1388,7 +1388,7 @@ export def "services-maps-items delete-sync" [
 # GET /v1/Services/{ServiceSid}/Maps/{MapSid}/Items/{Key}
 #
 # operationId: FetchSyncMapItem
-export def "services-maps-items get-sync" [
+export def "fetch-sync-map-item" [
   service_sid: string
   map_sid: string
   key: string
@@ -1427,7 +1427,7 @@ export def "services-maps-items get-sync" [
 # POST /v1/Services/{ServiceSid}/Maps/{MapSid}/Items/{Key}
 #
 # operationId: UpdateSyncMapItem
-export def "services-maps-items update-sync" [
+export def "update-sync-map-item" [
   service_sid: string
   map_sid: string
   key: string
@@ -1478,7 +1478,7 @@ export def "services-maps-items update-sync" [
 #
 # GET /v1/Services/{ServiceSid}/Maps/{MapSid}/Permissions
 # operationId: ListSyncMapPermission
-export def "services-maps-permissions list-sync" [
+export def "list-sync-map-permission" [
   service_sid: string
   map_sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1520,7 +1520,7 @@ export def "services-maps-permissions list-sync" [
 #
 # DELETE /v1/Services/{ServiceSid}/Maps/{MapSid}/Permissions/{Identity}
 # operationId: DeleteSyncMapPermission
-export def "services-maps-permissions delete-sync" [
+export def "delete-sync-map-permission" [
   service_sid: string
   map_sid: string
   identity: string
@@ -1560,7 +1560,7 @@ export def "services-maps-permissions delete-sync" [
 #
 # GET /v1/Services/{ServiceSid}/Maps/{MapSid}/Permissions/{Identity}
 # operationId: FetchSyncMapPermission
-export def "services-maps-permissions get-sync" [
+export def "fetch-sync-map-permission" [
   service_sid: string
   map_sid: string
   identity: string
@@ -1600,7 +1600,7 @@ export def "services-maps-permissions get-sync" [
 #
 # POST /v1/Services/{ServiceSid}/Maps/{MapSid}/Permissions/{Identity}
 # operationId: UpdateSyncMapPermission
-export def "services-maps-permissions update-sync" [
+export def "update-sync-map-permission" [
   service_sid: string
   map_sid: string
   identity: string
@@ -1646,7 +1646,7 @@ export def "services-maps-permissions update-sync" [
 # DELETE /v1/Services/{ServiceSid}/Maps/{Sid}
 #
 # operationId: DeleteSyncMap
-export def "services-maps delete-sync" [
+export def "delete-sync-map" [
   service_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1683,7 +1683,7 @@ export def "services-maps delete-sync" [
 # GET /v1/Services/{ServiceSid}/Maps/{Sid}
 #
 # operationId: FetchSyncMap
-export def "services-maps get-sync" [
+export def "fetch-sync-map" [
   service_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1720,7 +1720,7 @@ export def "services-maps get-sync" [
 # POST /v1/Services/{ServiceSid}/Maps/{Sid}
 #
 # operationId: UpdateSyncMap
-export def "services-maps update-sync" [
+export def "update-sync-map" [
   service_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1764,7 +1764,7 @@ export def "services-maps update-sync" [
 #
 # GET /v1/Services/{ServiceSid}/Streams
 # operationId: ListSyncStream
-export def "services-streams list-sync" [
+export def "list-sync-stream" [
   service_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1804,7 +1804,7 @@ export def "services-streams list-sync" [
 #
 # POST /v1/Services/{ServiceSid}/Streams
 # operationId: CreateSyncStream
-export def "services-streams create-sync" [
+export def "create-sync-stream" [
   service_sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1846,7 +1846,7 @@ export def "services-streams create-sync" [
 #
 # DELETE /v1/Services/{ServiceSid}/Streams/{Sid}
 # operationId: DeleteSyncStream
-export def "services-streams delete-sync" [
+export def "delete-sync-stream" [
   service_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1884,7 +1884,7 @@ export def "services-streams delete-sync" [
 #
 # GET /v1/Services/{ServiceSid}/Streams/{Sid}
 # operationId: FetchSyncStream
-export def "services-streams get-sync" [
+export def "fetch-sync-stream" [
   service_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1922,7 +1922,7 @@ export def "services-streams get-sync" [
 #
 # POST /v1/Services/{ServiceSid}/Streams/{Sid}
 # operationId: UpdateSyncStream
-export def "services-streams update-sync" [
+export def "update-sync-stream" [
   service_sid: string
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1965,7 +1965,7 @@ export def "services-streams update-sync" [
 #
 # POST /v1/Services/{ServiceSid}/Streams/{StreamSid}/Messages
 # operationId: CreateStreamMessage
-export def "services-streams-messages create" [
+export def "create-stream-message" [
   service_sid: string
   stream_sid: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2007,7 +2007,7 @@ export def "services-streams-messages create" [
 # DELETE /v1/Services/{Sid}
 #
 # operationId: DeleteService
-export def "services delete" [
+export def "delete-service" [
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2042,7 +2042,7 @@ export def "services delete" [
 # GET /v1/Services/{Sid}
 #
 # operationId: FetchService
-export def "services get" [
+export def "fetch-service" [
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2077,7 +2077,7 @@ export def "services get" [
 # POST /v1/Services/{Sid}
 #
 # operationId: UpdateService
-export def "services update" [
+export def "update-service" [
   sid: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

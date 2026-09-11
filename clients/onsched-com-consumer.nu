@@ -119,7 +119,7 @@ def sort-order-completer [] { ["name" "natural"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "consumer-appointments list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-consumer-v1-appointments" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -142,7 +142,7 @@ export def commands []: nothing -> table {
 # Get Appointments
 #
 # GET /consumer/v1/appointments
-export def "consumer-appointments list" [
+export def "get-consumer-v1-appointments" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -194,7 +194,7 @@ export def "consumer-appointments list" [
 # --appointmentBookingFields item shape: {name?: string, value?: string}
 # --customFields shape: {field1?: string, field10?: string, field2?: string, field3?: string, field4?: string, field5?: string, field6?: string, field7?: string, field8?: string, field9?: string}
 # --customerBookingFields item shape: {name?: string, value?: string}
-export def "consumer-appointments create" [
+export def "post-consumer-v1-appointments" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -258,7 +258,7 @@ export def "consumer-appointments create" [
 # Get Custom Fields Labels
 #
 # GET /consumer/v1/appointments/bookingfields
-export def "consumer-appointments-bookingfields get" [
+export def "get-consumer-v1-appointments-bookingfields" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -293,7 +293,7 @@ export def "consumer-appointments-bookingfields get" [
 # Get Custom Fields List
 #
 # GET /consumer/v1/appointments/customfields
-export def "consumer-appointments-customfields get" [
+export def "get-consumer-v1-appointments-customfields" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -328,7 +328,7 @@ export def "consumer-appointments-customfields get" [
 # Delete Appointment
 #
 # DELETE /consumer/v1/appointments/{id}
-export def "consumer-appointments delete" [
+export def "delete-consumer-v1-appointments-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -363,7 +363,7 @@ export def "consumer-appointments delete" [
 # Get Appointment
 #
 # GET /consumer/v1/appointments/{id}
-export def "consumer-appointments get" [
+export def "get-consumer-v1-appointments-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -401,7 +401,7 @@ export def "consumer-appointments get" [
 # --appointmentBookingFields item shape: {name?: string, value?: string}
 # --customFields shape: {field1?: string, field10?: string, field2?: string, field3?: string, field4?: string, field5?: string, field6?: string, field7?: string, field8?: string, field9?: string}
 # --customerBookingFields item shape: {name?: string, value?: string}
-export def "consumer-appointments-book update" [
+export def "put-consumer-v1-appointments-id-book" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -450,7 +450,7 @@ export def "consumer-appointments-book update" [
 # Cancel Appointment
 #
 # PUT /consumer/v1/appointments/{id}/cancel
-export def "consumer-appointments-cancel update" [
+export def "put-consumer-v1-appointments-id-cancel" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -485,7 +485,7 @@ export def "consumer-appointments-cancel update" [
 # Confirm Appointment
 #
 # PUT /consumer/v1/appointments/{id}/confirm
-export def "consumer-appointments-confirm update" [
+export def "put-consumer-v1-appointments-id-confirm" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -522,7 +522,7 @@ export def "consumer-appointments-confirm update" [
 # Set NoShow Status
 #
 # PUT /consumer/v1/appointments/{id}/noshow
-export def "consumer-appointments-noshow update" [
+export def "put-consumer-v1-appointments-id-noshow" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -561,7 +561,7 @@ export def "consumer-appointments-noshow update" [
 # Reschedule Appointment
 #
 # PUT /consumer/v1/appointments/{id}/reschedule
-export def "consumer-appointments-reschedule update" [
+export def "put-consumer-v1-appointments-id-reschedule" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -609,7 +609,7 @@ export def "consumer-appointments-reschedule update" [
 # --appointmentBookingFields item shape: {name?: string, value?: string}
 # --customFields shape: {field1?: string, field10?: string, field2?: string, field3?: string, field4?: string, field5?: string, field6?: string, field7?: string, field8?: string, field9?: string}
 # --customerBookingFields item shape: {name?: string, value?: string}
-export def "consumer-appointments-reserve update" [
+export def "put-consumer-v1-appointments-id-reserve" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -659,7 +659,7 @@ export def "consumer-appointments-reserve update" [
 # Get Available Times
 #
 # GET /consumer/v1/availability/{serviceId}/{startDate}/{endDate}
-export def "consumer-availability get" [
+export def "get-consumer-v1-availability-service-id-start-date-end-date" [
   service_id: string
   start_date: string
   end_date: string
@@ -714,7 +714,7 @@ export def "consumer-availability get" [
 # Get Available Days
 #
 # GET /consumer/v1/availability/{serviceId}/{startDate}/{endDate}/days
-export def "consumer-availability-days get" [
+export def "get-consumer-v1-availability-service-id-start-date-end-date-days" [
   service_id: string
   start_date: string
   end_date: string
@@ -757,7 +757,7 @@ export def "consumer-availability-days get" [
 # Get Unavailable Times
 #
 # GET /consumer/v1/availability/{serviceId}/{startDate}/{endDate}/unavailable
-export def "consumer-availability-unavailable get" [
+export def "get-consumer-v1-availability-service-id-start-date-end-date-unavailable" [
   service_id: string
   start_date: string
   end_date: string
@@ -802,7 +802,7 @@ export def "consumer-availability-unavailable get" [
 # List Customers
 #
 # GET /consumer/v1/customers
-export def "consumer-customers list" [
+export def "get-consumer-v1-customers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -846,7 +846,7 @@ export def "consumer-customers list" [
 # --address shape: {addressLine1?: string, addressLine2?: string, city?: string, country?: string, postalCode?: string, state?: string}
 # --contact shape: {businessPhone?: string, businessPhoneExt?: string, conferenceInfo?: string, homePhone?: string, mobilePhone?: string, preferredPhoneType?: string, skypeUsername?: string}
 # --customFields shape: {field1?: string, field10?: string, field2?: string, field3?: string, field4?: string, field5?: string, field6?: string, field7?: string, field8?: string, field9?: string}
-export def "consumer-customers create" [
+export def "post-consumer-v1-customers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -894,7 +894,7 @@ export def "consumer-customers create" [
 # Get Customer Booking Fields
 #
 # GET /consumer/v1/customers/bookingfields
-export def "consumer-customers-bookingfields get" [
+export def "get-consumer-v1-customers-bookingfields" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -929,7 +929,7 @@ export def "consumer-customers-bookingfields get" [
 # List Country Codes
 #
 # GET /consumer/v1/customers/countries
-export def "consumer-customers-countries get" [
+export def "get-consumer-v1-customers-countries" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -962,7 +962,7 @@ export def "consumer-customers-countries get" [
 # Get Customer Custom Fields
 #
 # GET /consumer/v1/customers/customfields
-export def "consumer-customers-customfields get" [
+export def "get-consumer-v1-customers-customfields" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -998,7 +998,7 @@ export def "consumer-customers-customfields get" [
 # List Country States
 #
 # GET /consumer/v1/customers/states
-export def "consumer-customers-states get" [
+export def "get-consumer-v1-customers-states" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1033,7 +1033,7 @@ export def "consumer-customers-states get" [
 # Delete Customer
 #
 # DELETE /consumer/v1/customers/{id}
-export def "consumer-customers delete" [
+export def "delete-consumer-v1-customers-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1068,7 +1068,7 @@ export def "consumer-customers delete" [
 # Get Customer
 #
 # GET /consumer/v1/customers/{id}
-export def "consumer-customers get" [
+export def "get-consumer-v1-customers-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1106,7 +1106,7 @@ export def "consumer-customers get" [
 # --address shape: {addressLine1?: string, addressLine2?: string, city?: string, country?: string, postalCode?: string, state?: string}
 # --contact shape: {businessPhone?: string, businessPhoneExt?: string, conferenceInfo?: string, homePhone?: string, mobilePhone?: string, preferredPhoneType?: string, skypeUsername?: string}
 # --customFields shape: {field1?: string, field10?: string, field2?: string, field3?: string, field4?: string, field5?: string, field6?: string, field7?: string, field8?: string, field9?: string}
-export def "consumer-customers update" [
+export def "put-consumer-v1-customers-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1155,7 +1155,7 @@ export def "consumer-customers update" [
 # List Locations
 #
 # GET /consumer/v1/locations
-export def "consumer-locations list" [
+export def "get-consumer-v1-locations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1199,7 +1199,7 @@ export def "consumer-locations list" [
 # Get Location
 #
 # GET /consumer/v1/locations/{id}
-export def "consumer-locations get" [
+export def "get-consumer-v1-locations-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1234,7 +1234,7 @@ export def "consumer-locations get" [
 # List Resource Groups
 #
 # GET /consumer/v1/resourcegroups
-export def "consumer-resourcegroups list" [
+export def "get-consumer-v1-resourcegroups" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1272,7 +1272,7 @@ export def "consumer-resourcegroups list" [
 # Get Resource Group
 #
 # GET /consumer/v1/resourcegroups/{id}
-export def "consumer-resourcegroups get" [
+export def "get-consumer-v1-resourcegroups-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1307,7 +1307,7 @@ export def "consumer-resourcegroups get" [
 # List Resources
 #
 # GET /consumer/v1/resources
-export def "consumer-resources list" [
+export def "get-consumer-v1-resources" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1348,7 +1348,7 @@ export def "consumer-resources list" [
 # Get Resource
 #
 # GET /consumer/v1/resources/{id}
-export def "consumer-resources get" [
+export def "get-consumer-v1-resources-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1383,7 +1383,7 @@ export def "consumer-resources get" [
 # Get Resource Linked Services
 #
 # GET /consumer/v1/resources/{id}/services
-export def "consumer-resources-services get" [
+export def "get-consumer-v1-resources-id-services" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1421,7 +1421,7 @@ export def "consumer-resources-services get" [
 # List Service Groups
 #
 # GET /consumer/v1/servicegroups
-export def "consumer-servicegroups list" [
+export def "get-consumer-v1-servicegroups" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1458,7 +1458,7 @@ export def "consumer-servicegroups list" [
 # Get Service Group
 #
 # GET /consumer/v1/servicegroups/{id}
-export def "consumer-servicegroups get" [
+export def "get-consumer-v1-servicegroups-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1493,7 +1493,7 @@ export def "consumer-servicegroups get" [
 # List Services
 #
 # GET /consumer/v1/services
-export def "consumer-services list" [
+export def "get-consumer-v1-services" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1538,7 +1538,7 @@ export def "consumer-services list" [
 # Get Service Allocation
 #
 # GET /consumer/v1/services/allocations/{id}
-export def "consumer-services-allocations get-by-id" [
+export def "get-consumer-v1-services-allocations-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1573,7 +1573,7 @@ export def "consumer-services-allocations get-by-id" [
 # Get Service
 #
 # GET /consumer/v1/services/{id}
-export def "consumer-services get" [
+export def "get-consumer-v1-services-id" [
   id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1608,7 +1608,7 @@ export def "consumer-services get" [
 # List Service Allocations
 #
 # GET /consumer/v1/services/{id}/allocations
-export def "consumer-services-allocations get-by-id-1" [
+export def "get-consumer-v1-services-id-allocations" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1650,7 +1650,7 @@ export def "consumer-services-allocations get-by-id-1" [
 # List Resources for Service
 #
 # GET /consumer/v1/services/{id}/resources
-export def "consumer-services-resources get" [
+export def "get-consumer-v1-services-id-resources" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

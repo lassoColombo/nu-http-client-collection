@@ -127,7 +127,7 @@ def condition-completer [] { ["Any" "Clean" "CleanNotInspected" "Dirty"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "booking-addons get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "addons-get" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -151,7 +151,7 @@ export def commands []: nothing -> table {
 #
 # GET /api/booking/v0/addons
 # operationId: Addons_Get
-export def "booking-addons get" [
+export def "addons-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -200,7 +200,7 @@ export def "booking-addons get" [
 #
 # GET /api/booking/v0/availability
 # operationId: Availability_Get
-export def "booking-availability get" [
+export def "availability-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -248,7 +248,7 @@ export def "booking-availability get" [
 # GET /api/booking/v0/blocks
 # operationId: Blocks_GetBlocksAsync
 # --WaitHandle shape: {Handle?: record, SafeWaitHandle?: record}
-export def "booking-blocks get-async" [
+export def "blocks-get-blocks-async" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -299,7 +299,7 @@ export def "booking-blocks get-async" [
 # GET /api/booking/v0/blocks/$count
 # operationId: Blocks_GetBlocksCountAsync
 # --WaitHandle shape: {Handle?: record, SafeWaitHandle?: record}
-export def "booking-blocks-count get-count-async" [
+export def "blocks-get-blocks-count-async" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -347,7 +347,7 @@ export def "booking-blocks-count get-count-async" [
 # GET /api/booking/v0/blocks/{blockCode}
 # operationId: Blocks_GetSingleBlockAsync
 # --WaitHandle shape: {Handle?: record, SafeWaitHandle?: record}
-export def "booking-blocks get-single-async" [
+export def "blocks-get-single-block-async" [
   block_code: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -388,7 +388,7 @@ export def "booking-blocks get-single-async" [
 #
 # GET /api/booking/v0/bookings
 # operationId: Bookings_GetBookings
-export def "booking-bookings list" [
+export def "bookings-get-bookings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -459,7 +459,7 @@ export def "booking-bookings list" [
 # --guarantee shape: {guarantee_type?: "PM4Hold"|"PM6Hold"|"GuaranteeToCreditCard"|"GuaranteeToGuestAccount"|"GuaranteeByTravelAgent"|"GuaranteeByCompany"|"Deposit"|"Voucher"|"Prepayment"|"NonGuaranteed"|"Tentative"|"Waitlist", token?: record}
 # --guests item shape: {consent_subscribe?: list<string>, consent_unsubscribe?: list<string>, customer_id?: string, email?: string, first_name?: string, gender?: "Unspecified"|"Male"|"Female", last_name?: string, mailing_address?: record, nationality?: string, phone?: string, primary?: bool, title?: string}
 # --travel_agent shape: {company_id?: string}
-export def "booking-bookings create" [
+export def "bookings-create-booking" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -522,7 +522,7 @@ export def "booking-bookings create" [
 #
 # GET /api/booking/v0/bookings/$count
 # operationId: Bookings_GetBookingsCount
-export def "booking-bookings-count get-count" [
+export def "bookings-get-bookings-count" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -585,7 +585,7 @@ export def "booking-bookings-count get-count" [
 #
 # GET /api/booking/v0/bookings/{confirmationId}
 # operationId: Bookings_GetBooking
-export def "booking-bookings get" [
+export def "bookings-get-booking" [
   confirmation_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -629,7 +629,7 @@ export def "booking-bookings get" [
 #
 # GET /api/booking/v0/bookings/{confirmationId}/reservations/{reservationNumber}
 # operationId: Bookings_GetReservation
-export def "booking-bookings-reservations get" [
+export def "bookings-get-reservation" [
   confirmation_id: string
   reservation_number: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -675,7 +675,7 @@ export def "booking-bookings-reservations get" [
 #
 # PATCH /api/booking/v0/bookings/{confirmationId}/reservations/{reservationNumber}
 # operationId: Bookings_Patch
-export def "booking-bookings-reservations update" [
+export def "bookings-patch" [
   confirmation_id: string
   reservation_number: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -722,7 +722,7 @@ export def "booking-bookings-reservations update" [
 #
 # POST /api/booking/v0/bookings/{confirmationId}/reservations/{reservationNumber}/assign_room
 # operationId: Bookings_PostRoomAssignment
-export def "booking-bookings-reservations-assign-room create-assignment" [
+export def "bookings-post-room-assignment" [
   confirmation_id: string
   reservation_number: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -775,7 +775,7 @@ export def "booking-bookings-reservations-assign-room create-assignment" [
 #
 # POST /api/booking/v0/bookings/{confirmationId}/reservations/{reservationNumber}/cancel
 # operationId: Bookings_CancelReservation
-export def "booking-bookings-reservations-cancel cancel" [
+export def "bookings-cancel-reservation" [
   confirmation_id: string
   reservation_number: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -820,7 +820,7 @@ export def "booking-bookings-reservations-cancel cancel" [
 #
 # POST /api/booking/v0/bookings/{confirmationId}/reservations/{reservationNumber}/check_in
 # operationId: Bookings_CheckIn
-export def "booking-bookings-reservations-check-in check" [
+export def "bookings-check-in" [
   confirmation_id: string
   reservation_number: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -867,7 +867,7 @@ export def "booking-bookings-reservations-check-in check" [
 #
 # POST /api/booking/v0/bookings/{confirmationId}/reservations/{reservationNumber}/check_out
 # operationId: Bookings_CheckOut
-export def "booking-bookings-reservations-check-out check" [
+export def "bookings-check-out" [
   confirmation_id: string
   reservation_number: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -911,7 +911,7 @@ export def "booking-bookings-reservations-check-out check" [
 # PUT /api/booking/v0/bookings/{confirmationId}/reservations/{reservationNumber}/payment_token
 # operationId: Bookings_PaymentToken
 # --authorization shape: {amount?: float, expiry_date?: string, merchant_reference: string, reference: string, shopper_reference: string}
-export def "booking-bookings-reservations-payment-token update" [
+export def "bookings-payment-token" [
   confirmation_id: string
   reservation_number: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -960,7 +960,7 @@ export def "booking-bookings-reservations-payment-token update" [
 #
 # POST /api/booking/v0/bookings/{confirmationId}/reservations/{reservationNumber}/pre_authorize
 # operationId: Bookings_TerminalAuthorization
-export def "booking-bookings-reservations-pre-authorize create-terminal-authorization" [
+export def "bookings-terminal-authorization" [
   confirmation_id: string
   reservation_number: int
   --base-url(-b): string@base-url-completer # API base URL
@@ -1008,7 +1008,7 @@ export def "booking-bookings-reservations-pre-authorize create-terminal-authoriz
 #
 # GET /api/booking/v0/daily_rates
 # operationId: DailyRates_GetDailyRates
-export def "booking-daily-rates get" [
+export def "daily-rates-get-daily-rates" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1057,7 +1057,7 @@ export def "booking-daily-rates get" [
 #
 # GET /api/booking/v0/rates
 # operationId: Rates_Get
-export def "booking-rates get" [
+export def "rates-get" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

@@ -129,7 +129,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-resource-groups-providers-microsoft-api-management-service-users list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "user-list-by-service" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -153,7 +153,7 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/users
 # operationId: User_ListByService
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-users list" [
+export def "user-list-by-service" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -199,7 +199,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/users/{userId}
 # operationId: User_Delete
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-users delete" [
+export def "user-delete" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -248,7 +248,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/users/{userId}
 # operationId: User_Get
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-users get" [
+export def "user-get" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -292,7 +292,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 #
 # HEAD /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/users/{userId}
 # operationId: User_GetEntityTag
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-users get-entity-tag" [
+export def "user-get-entity-tag" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -337,7 +337,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 # PATCH /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/users/{userId}
 # operationId: User_Update
 # --properties shape: {email?: string, firstName?: string, lastName?: string, password?: string, identities?: list, note?: string, state?: "active"|"blocked"|"pending"|"deleted"}
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-users update" [
+export def "user-update" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -389,7 +389,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/users/{userId}
 # operationId: User_CreateOrUpdate
 # --properties shape: {appType?: "developerPortal", confirmation?: "signup"|"invite", email: string, firstName: string, lastName: string, password?: string, identities?: list, note?: string, state?: "active"|"blocked"|"pending"|"deleted"}
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-users create-or-update" [
+export def "user-create-or-update" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -440,7 +440,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/users/{userId}/confirmations/password/send
 # operationId: UserConfirmationPassword_Send
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-users-confirmations-password-send send" [
+export def "user-confirmation-password-send" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -484,7 +484,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/users/{userId}/generateSsoUrl
 # operationId: User_GenerateSsoUrl
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-users-generate-sso-url generate" [
+export def "user-generate-sso-url" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -528,7 +528,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/users/{userId}/groups
 # operationId: UserGroup_List
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-users-groups list" [
+export def "user-group-list" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -575,7 +575,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/users/{userId}/identities
 # operationId: UserIdentities_List
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-users-identities list" [
+export def "user-identities-list" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -619,7 +619,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/users/{userId}/subscriptions
 # operationId: UserSubscription_List
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-users-subscriptions list" [
+export def "user-subscription-list" [
   subscription_id: string
   resource_group_name: string
   service_name: string
@@ -667,7 +667,7 @@ export def "subscriptions-resource-groups-providers-microsoft-api-management-ser
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.ApiManagement/service/{serviceName}/users/{userId}/token
 # operationId: User_GetSharedAccessToken
 # --properties shape: {expiry: string, keyType: "primary"|"secondary"}
-export def "subscriptions-resource-groups-providers-microsoft-api-management-service-users-token get-shared-access" [
+export def "user-get-shared-access-token" [
   subscription_id: string
   resource_group_name: string
   service_name: string

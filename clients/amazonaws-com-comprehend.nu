@@ -184,7 +184,7 @@ def x-amz-target-completer-83 [] { ["Comprehend_20171127.UpdateFlywheel"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "api create-batch-detect-dominant-language" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "batch-detect-dominant-language" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -208,7 +208,7 @@ export def commands []: nothing -> table {
 #
 # POST /
 # operationId: BatchDetectDominantLanguage
-export def "api create-batch-detect-dominant-language" [
+export def "batch-detect-dominant-language" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -256,7 +256,7 @@ export def "api create-batch-detect-dominant-language" [
 #
 # POST /
 # operationId: BatchDetectEntities
-export def "api create-batch-detect-entities" [
+export def "batch-detect-entities" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -305,7 +305,7 @@ export def "api create-batch-detect-entities" [
 #
 # POST /
 # operationId: BatchDetectKeyPhrases
-export def "api create-batch-detect-key-phrases" [
+export def "batch-detect-key-phrases" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -354,7 +354,7 @@ export def "api create-batch-detect-key-phrases" [
 #
 # POST /
 # operationId: BatchDetectSentiment
-export def "api create-batch-detect-sentiment" [
+export def "batch-detect-sentiment" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -403,7 +403,7 @@ export def "api create-batch-detect-sentiment" [
 #
 # POST /
 # operationId: BatchDetectSyntax
-export def "api create-batch-detect-syntax" [
+export def "batch-detect-syntax" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -452,7 +452,7 @@ export def "api create-batch-detect-syntax" [
 #
 # POST /
 # operationId: BatchDetectTargetedSentiment
-export def "api create-batch-detect-targeted-sentiment" [
+export def "batch-detect-targeted-sentiment" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -501,7 +501,7 @@ export def "api create-batch-detect-targeted-sentiment" [
 #
 # POST /
 # operationId: ClassifyDocument
-export def "api create-classify-document" [
+export def "classify-document" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -552,7 +552,7 @@ export def "api create-classify-document" [
 #
 # POST /
 # operationId: ContainsPiiEntities
-export def "api create-contains-pii-entities" [
+export def "contains-pii-entities" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -601,7 +601,7 @@ export def "api create-contains-pii-entities" [
 #
 # POST /
 # operationId: CreateDataset
-export def "api create-dataset" [
+export def "create-dataset" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -655,7 +655,7 @@ export def "api create-dataset" [
 #
 # POST /
 # operationId: CreateDocumentClassifier
-export def "api create-document-classifier" [
+export def "create-document-classifier" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -715,7 +715,7 @@ export def "api create-document-classifier" [
 #
 # POST /
 # operationId: CreateEndpoint
-export def "api create-endpoint" [
+export def "create-endpoint" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -769,7 +769,7 @@ export def "api create-endpoint" [
 #
 # POST /
 # operationId: CreateEntityRecognizer
-export def "api create-entity-recognizer" [
+export def "create-entity-recognizer" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -827,7 +827,7 @@ export def "api create-entity-recognizer" [
 #
 # POST /
 # operationId: CreateFlywheel
-export def "api create-flywheel" [
+export def "create-flywheel" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -883,7 +883,7 @@ export def "api create-flywheel" [
 #
 # POST /
 # operationId: DeleteDocumentClassifier
-export def "api delete-document-classifier" [
+export def "delete-document-classifier" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -931,7 +931,7 @@ export def "api delete-document-classifier" [
 #
 # POST /
 # operationId: DeleteEndpoint
-export def "api delete-endpoint" [
+export def "delete-endpoint" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -979,7 +979,7 @@ export def "api delete-endpoint" [
 #
 # POST /
 # operationId: DeleteEntityRecognizer
-export def "api delete-entity-recognizer" [
+export def "delete-entity-recognizer" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1027,7 +1027,7 @@ export def "api delete-entity-recognizer" [
 #
 # POST /
 # operationId: DeleteFlywheel
-export def "api delete-flywheel" [
+export def "delete-flywheel" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1075,7 +1075,7 @@ export def "api delete-flywheel" [
 #
 # POST /
 # operationId: DeleteResourcePolicy
-export def "api delete-resource-policy" [
+export def "delete-resource-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1124,7 +1124,7 @@ export def "api delete-resource-policy" [
 #
 # POST /
 # operationId: DescribeDataset
-export def "api get-dataset" [
+export def "describe-dataset" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1172,7 +1172,7 @@ export def "api get-dataset" [
 #
 # POST /
 # operationId: DescribeDocumentClassificationJob
-export def "api get-document-classification-job" [
+export def "describe-document-classification-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1220,7 +1220,7 @@ export def "api get-document-classification-job" [
 #
 # POST /
 # operationId: DescribeDocumentClassifier
-export def "api get-document-classifier" [
+export def "describe-document-classifier" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1268,7 +1268,7 @@ export def "api get-document-classifier" [
 #
 # POST /
 # operationId: DescribeDominantLanguageDetectionJob
-export def "api get-dominant-language-detection-job" [
+export def "describe-dominant-language-detection-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1316,7 +1316,7 @@ export def "api get-dominant-language-detection-job" [
 #
 # POST /
 # operationId: DescribeEndpoint
-export def "api get-endpoint" [
+export def "describe-endpoint" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1364,7 +1364,7 @@ export def "api get-endpoint" [
 #
 # POST /
 # operationId: DescribeEntitiesDetectionJob
-export def "api get-entities-detection-job" [
+export def "describe-entities-detection-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1412,7 +1412,7 @@ export def "api get-entities-detection-job" [
 #
 # POST /
 # operationId: DescribeEntityRecognizer
-export def "api get-entity-recognizer" [
+export def "describe-entity-recognizer" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1460,7 +1460,7 @@ export def "api get-entity-recognizer" [
 #
 # POST /
 # operationId: DescribeEventsDetectionJob
-export def "api get-events-detection-job" [
+export def "describe-events-detection-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1508,7 +1508,7 @@ export def "api get-events-detection-job" [
 #
 # POST /
 # operationId: DescribeFlywheel
-export def "api get-flywheel" [
+export def "describe-flywheel" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1556,7 +1556,7 @@ export def "api get-flywheel" [
 #
 # POST /
 # operationId: DescribeFlywheelIteration
-export def "api get-flywheel-iteration" [
+export def "describe-flywheel-iteration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1605,7 +1605,7 @@ export def "api get-flywheel-iteration" [
 #
 # POST /
 # operationId: DescribeKeyPhrasesDetectionJob
-export def "api get-key-phrases-detection-job" [
+export def "describe-key-phrases-detection-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1653,7 +1653,7 @@ export def "api get-key-phrases-detection-job" [
 #
 # POST /
 # operationId: DescribePiiEntitiesDetectionJob
-export def "api get-pii-entities-detection-job" [
+export def "describe-pii-entities-detection-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1701,7 +1701,7 @@ export def "api get-pii-entities-detection-job" [
 #
 # POST /
 # operationId: DescribeResourcePolicy
-export def "api get-resource-policy" [
+export def "describe-resource-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1749,7 +1749,7 @@ export def "api get-resource-policy" [
 #
 # POST /
 # operationId: DescribeSentimentDetectionJob
-export def "api get-sentiment-detection-job" [
+export def "describe-sentiment-detection-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1797,7 +1797,7 @@ export def "api get-sentiment-detection-job" [
 #
 # POST /
 # operationId: DescribeTargetedSentimentDetectionJob
-export def "api get-targeted-sentiment-detection-job" [
+export def "describe-targeted-sentiment-detection-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1845,7 +1845,7 @@ export def "api get-targeted-sentiment-detection-job" [
 #
 # POST /
 # operationId: DescribeTopicsDetectionJob
-export def "api get-topics-detection-job" [
+export def "describe-topics-detection-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1893,7 +1893,7 @@ export def "api get-topics-detection-job" [
 #
 # POST /
 # operationId: DetectDominantLanguage
-export def "api create-detect-dominant-language" [
+export def "detect-dominant-language" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1941,7 +1941,7 @@ export def "api create-detect-dominant-language" [
 #
 # POST /
 # operationId: DetectEntities
-export def "api create-detect-entities" [
+export def "detect-entities" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1993,7 +1993,7 @@ export def "api create-detect-entities" [
 #
 # POST /
 # operationId: DetectKeyPhrases
-export def "api create-detect-key-phrases" [
+export def "detect-key-phrases" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2042,7 +2042,7 @@ export def "api create-detect-key-phrases" [
 #
 # POST /
 # operationId: DetectPiiEntities
-export def "api create-detect-pii-entities" [
+export def "detect-pii-entities" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2091,7 +2091,7 @@ export def "api create-detect-pii-entities" [
 #
 # POST /
 # operationId: DetectSentiment
-export def "api create-detect-sentiment" [
+export def "detect-sentiment" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2140,7 +2140,7 @@ export def "api create-detect-sentiment" [
 #
 # POST /
 # operationId: DetectSyntax
-export def "api create-detect-syntax" [
+export def "detect-syntax" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2189,7 +2189,7 @@ export def "api create-detect-syntax" [
 #
 # POST /
 # operationId: DetectTargetedSentiment
-export def "api create-detect-targeted-sentiment" [
+export def "detect-targeted-sentiment" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2238,7 +2238,7 @@ export def "api create-detect-targeted-sentiment" [
 #
 # POST /
 # operationId: ImportModel
-export def "api import-model" [
+export def "import-model" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2291,7 +2291,7 @@ export def "api import-model" [
 #
 # POST /
 # operationId: ListDatasets
-export def "api list-datasets" [
+export def "list-datasets" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2345,7 +2345,7 @@ export def "api list-datasets" [
 #
 # POST /
 # operationId: ListDocumentClassificationJobs
-export def "api list-document-classification-jobs" [
+export def "list-document-classification-jobs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2398,7 +2398,7 @@ export def "api list-document-classification-jobs" [
 #
 # POST /
 # operationId: ListDocumentClassifierSummaries
-export def "api list-document-classifier-summaries" [
+export def "list-document-classifier-summaries" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2450,7 +2450,7 @@ export def "api list-document-classifier-summaries" [
 #
 # POST /
 # operationId: ListDocumentClassifiers
-export def "api list-document-classifiers" [
+export def "list-document-classifiers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2503,7 +2503,7 @@ export def "api list-document-classifiers" [
 #
 # POST /
 # operationId: ListDominantLanguageDetectionJobs
-export def "api list-dominant-language-detection-jobs" [
+export def "list-dominant-language-detection-jobs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2556,7 +2556,7 @@ export def "api list-dominant-language-detection-jobs" [
 #
 # POST /
 # operationId: ListEndpoints
-export def "api list-endpoints" [
+export def "list-endpoints" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2609,7 +2609,7 @@ export def "api list-endpoints" [
 #
 # POST /
 # operationId: ListEntitiesDetectionJobs
-export def "api list-entities-detection-jobs" [
+export def "list-entities-detection-jobs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2662,7 +2662,7 @@ export def "api list-entities-detection-jobs" [
 #
 # POST /
 # operationId: ListEntityRecognizerSummaries
-export def "api list-entity-recognizer-summaries" [
+export def "list-entity-recognizer-summaries" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2714,7 +2714,7 @@ export def "api list-entity-recognizer-summaries" [
 #
 # POST /
 # operationId: ListEntityRecognizers
-export def "api list-entity-recognizers" [
+export def "list-entity-recognizers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2767,7 +2767,7 @@ export def "api list-entity-recognizers" [
 #
 # POST /
 # operationId: ListEventsDetectionJobs
-export def "api list-events-detection-jobs" [
+export def "list-events-detection-jobs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2820,7 +2820,7 @@ export def "api list-events-detection-jobs" [
 #
 # POST /
 # operationId: ListFlywheelIterationHistory
-export def "api list-flywheel-iteration-history" [
+export def "list-flywheel-iteration-history" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2874,7 +2874,7 @@ export def "api list-flywheel-iteration-history" [
 #
 # POST /
 # operationId: ListFlywheels
-export def "api list-flywheels" [
+export def "list-flywheels" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2927,7 +2927,7 @@ export def "api list-flywheels" [
 #
 # POST /
 # operationId: ListKeyPhrasesDetectionJobs
-export def "api list-key-phrases-detection-jobs" [
+export def "list-key-phrases-detection-jobs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2980,7 +2980,7 @@ export def "api list-key-phrases-detection-jobs" [
 #
 # POST /
 # operationId: ListPiiEntitiesDetectionJobs
-export def "api list-pii-entities-detection-jobs" [
+export def "list-pii-entities-detection-jobs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3033,7 +3033,7 @@ export def "api list-pii-entities-detection-jobs" [
 #
 # POST /
 # operationId: ListSentimentDetectionJobs
-export def "api list-sentiment-detection-jobs" [
+export def "list-sentiment-detection-jobs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3086,7 +3086,7 @@ export def "api list-sentiment-detection-jobs" [
 #
 # POST /
 # operationId: ListTagsForResource
-export def "api list-tags-for-resource" [
+export def "list-tags-for-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3134,7 +3134,7 @@ export def "api list-tags-for-resource" [
 #
 # POST /
 # operationId: ListTargetedSentimentDetectionJobs
-export def "api list-targeted-sentiment-detection-jobs" [
+export def "list-targeted-sentiment-detection-jobs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3187,7 +3187,7 @@ export def "api list-targeted-sentiment-detection-jobs" [
 #
 # POST /
 # operationId: ListTopicsDetectionJobs
-export def "api list-topics-detection-jobs" [
+export def "list-topics-detection-jobs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3240,7 +3240,7 @@ export def "api list-topics-detection-jobs" [
 #
 # POST /
 # operationId: PutResourcePolicy
-export def "api update-resource-policy" [
+export def "put-resource-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3290,7 +3290,7 @@ export def "api update-resource-policy" [
 #
 # POST /
 # operationId: StartDocumentClassificationJob
-export def "api start-document-classification-job" [
+export def "start-document-classification-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3347,7 +3347,7 @@ export def "api start-document-classification-job" [
 #
 # POST /
 # operationId: StartDominantLanguageDetectionJob
-export def "api start-dominant-language-detection-job" [
+export def "start-dominant-language-detection-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3402,7 +3402,7 @@ export def "api start-dominant-language-detection-job" [
 #
 # POST /
 # operationId: StartEntitiesDetectionJob
-export def "api start-entities-detection-job" [
+export def "start-entities-detection-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3460,7 +3460,7 @@ export def "api start-entities-detection-job" [
 #
 # POST /
 # operationId: StartEventsDetectionJob
-export def "api start-events-detection-job" [
+export def "start-events-detection-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3515,7 +3515,7 @@ export def "api start-events-detection-job" [
 #
 # POST /
 # operationId: StartFlywheelIteration
-export def "api start-flywheel-iteration" [
+export def "start-flywheel-iteration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3564,7 +3564,7 @@ export def "api start-flywheel-iteration" [
 #
 # POST /
 # operationId: StartKeyPhrasesDetectionJob
-export def "api start-key-phrases-detection-job" [
+export def "start-key-phrases-detection-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3620,7 +3620,7 @@ export def "api start-key-phrases-detection-job" [
 #
 # POST /
 # operationId: StartPiiEntitiesDetectionJob
-export def "api start-pii-entities-detection-job" [
+export def "start-pii-entities-detection-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3676,7 +3676,7 @@ export def "api start-pii-entities-detection-job" [
 #
 # POST /
 # operationId: StartSentimentDetectionJob
-export def "api start-sentiment-detection-job" [
+export def "start-sentiment-detection-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3734,7 +3734,7 @@ export def "api start-sentiment-detection-job" [
 # operationId: StartTargetedSentimentDetectionJob
 # --InputDataConfig shape: {S3Uri: any, InputFormat?: any, DocumentReaderConfig?: any}
 # --VpcConfig shape: {SecurityGroupIds: any, Subnets: any}
-export def "api start-targeted-sentiment-detection-job" [
+export def "start-targeted-sentiment-detection-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3790,7 +3790,7 @@ export def "api start-targeted-sentiment-detection-job" [
 #
 # POST /
 # operationId: StartTopicsDetectionJob
-export def "api start-topics-detection-job" [
+export def "start-topics-detection-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3846,7 +3846,7 @@ export def "api start-topics-detection-job" [
 #
 # POST /
 # operationId: StopDominantLanguageDetectionJob
-export def "api stop-dominant-language-detection-job" [
+export def "stop-dominant-language-detection-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3894,7 +3894,7 @@ export def "api stop-dominant-language-detection-job" [
 #
 # POST /
 # operationId: StopEntitiesDetectionJob
-export def "api stop-entities-detection-job" [
+export def "stop-entities-detection-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3942,7 +3942,7 @@ export def "api stop-entities-detection-job" [
 #
 # POST /
 # operationId: StopEventsDetectionJob
-export def "api stop-events-detection-job" [
+export def "stop-events-detection-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3990,7 +3990,7 @@ export def "api stop-events-detection-job" [
 #
 # POST /
 # operationId: StopKeyPhrasesDetectionJob
-export def "api stop-key-phrases-detection-job" [
+export def "stop-key-phrases-detection-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4038,7 +4038,7 @@ export def "api stop-key-phrases-detection-job" [
 #
 # POST /
 # operationId: StopPiiEntitiesDetectionJob
-export def "api stop-pii-entities-detection-job" [
+export def "stop-pii-entities-detection-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4086,7 +4086,7 @@ export def "api stop-pii-entities-detection-job" [
 #
 # POST /
 # operationId: StopSentimentDetectionJob
-export def "api stop-sentiment-detection-job" [
+export def "stop-sentiment-detection-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4134,7 +4134,7 @@ export def "api stop-sentiment-detection-job" [
 #
 # POST /
 # operationId: StopTargetedSentimentDetectionJob
-export def "api stop-targeted-sentiment-detection-job" [
+export def "stop-targeted-sentiment-detection-job" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4182,7 +4182,7 @@ export def "api stop-targeted-sentiment-detection-job" [
 #
 # POST /
 # operationId: StopTrainingDocumentClassifier
-export def "api stop-training-document-classifier" [
+export def "stop-training-document-classifier" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4230,7 +4230,7 @@ export def "api stop-training-document-classifier" [
 #
 # POST /
 # operationId: StopTrainingEntityRecognizer
-export def "api stop-training-entity-recognizer" [
+export def "stop-training-entity-recognizer" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4278,7 +4278,7 @@ export def "api stop-training-entity-recognizer" [
 #
 # POST /
 # operationId: TagResource
-export def "api tag-resource" [
+export def "tag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4327,7 +4327,7 @@ export def "api tag-resource" [
 #
 # POST /
 # operationId: UntagResource
-export def "api untag-resource" [
+export def "untag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4376,7 +4376,7 @@ export def "api untag-resource" [
 #
 # POST /
 # operationId: UpdateEndpoint
-export def "api update-endpoint" [
+export def "update-endpoint" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4428,7 +4428,7 @@ export def "api update-endpoint" [
 #
 # POST /
 # operationId: UpdateFlywheel
-export def "api update-flywheel" [
+export def "update-flywheel" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

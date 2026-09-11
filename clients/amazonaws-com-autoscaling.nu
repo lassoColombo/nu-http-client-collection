@@ -173,7 +173,7 @@ def action-completer-64 [] { ["UpdateAutoScalingGroup"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "api get-attach-instances" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-attach-instances" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -197,7 +197,7 @@ export def commands []: nothing -> table {
 #
 # GET /
 # operationId: GET_AttachInstances
-export def "api get-attach-instances" [
+export def "get-attach-instances" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -245,7 +245,7 @@ export def "api get-attach-instances" [
 #
 # POST /
 # operationId: POST_AttachInstances
-export def "api create-attach-instances" [
+export def "post-attach-instances" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -295,7 +295,7 @@ export def "api create-attach-instances" [
 #
 # GET /
 # operationId: GET_AttachLoadBalancerTargetGroups
-export def "api get-attach-load-balancer-target-groups" [
+export def "get-attach-load-balancer-target-groups" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -343,7 +343,7 @@ export def "api get-attach-load-balancer-target-groups" [
 #
 # POST /
 # operationId: POST_AttachLoadBalancerTargetGroups
-export def "api create-attach-load-balancer-target-groups" [
+export def "post-attach-load-balancer-target-groups" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -393,7 +393,7 @@ export def "api create-attach-load-balancer-target-groups" [
 #
 # GET /
 # operationId: GET_AttachLoadBalancers
-export def "api get-attach-load-balancers" [
+export def "get-attach-load-balancers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -441,7 +441,7 @@ export def "api get-attach-load-balancers" [
 #
 # POST /
 # operationId: POST_AttachLoadBalancers
-export def "api create-attach-load-balancers" [
+export def "post-attach-load-balancers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -491,7 +491,7 @@ export def "api create-attach-load-balancers" [
 #
 # GET /
 # operationId: GET_AttachTrafficSources
-export def "api get-attach-traffic-sources" [
+export def "get-attach-traffic-sources" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -539,7 +539,7 @@ export def "api get-attach-traffic-sources" [
 #
 # POST /
 # operationId: POST_AttachTrafficSources
-export def "api create-attach-traffic-sources" [
+export def "post-attach-traffic-sources" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -589,7 +589,7 @@ export def "api create-attach-traffic-sources" [
 #
 # GET /
 # operationId: GET_BatchDeleteScheduledAction
-export def "api get-batch-delete-scheduled-action" [
+export def "get-batch-delete-scheduled-action" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -637,7 +637,7 @@ export def "api get-batch-delete-scheduled-action" [
 #
 # POST /
 # operationId: POST_BatchDeleteScheduledAction
-export def "api create-batch-delete-scheduled-action" [
+export def "post-batch-delete-scheduled-action" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -687,7 +687,7 @@ export def "api create-batch-delete-scheduled-action" [
 #
 # GET /
 # operationId: GET_BatchPutScheduledUpdateGroupAction
-export def "api get-batch-update-scheduled-group-action" [
+export def "get-batch-put-scheduled-update-group-action" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -735,7 +735,7 @@ export def "api get-batch-update-scheduled-group-action" [
 #
 # POST /
 # operationId: POST_BatchPutScheduledUpdateGroupAction
-export def "api create-batch-update-scheduled-group-action" [
+export def "post-batch-put-scheduled-update-group-action" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -785,7 +785,7 @@ export def "api create-batch-update-scheduled-group-action" [
 #
 # GET /
 # operationId: GET_CancelInstanceRefresh
-export def "api get-cancel-instance-refresh" [
+export def "get-cancel-instance-refresh" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -832,7 +832,7 @@ export def "api get-cancel-instance-refresh" [
 #
 # POST /
 # operationId: POST_CancelInstanceRefresh
-export def "api create-cancel-instance-refresh" [
+export def "post-cancel-instance-refresh" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -882,7 +882,7 @@ export def "api create-cancel-instance-refresh" [
 #
 # GET /
 # operationId: GET_CompleteLifecycleAction
-export def "api get-complete-lifecycle-action" [
+export def "get-complete-lifecycle-action" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -933,7 +933,7 @@ export def "api get-complete-lifecycle-action" [
 #
 # POST /
 # operationId: POST_CompleteLifecycleAction
-export def "api create-complete-lifecycle-action" [
+export def "post-complete-lifecycle-action" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -983,7 +983,7 @@ export def "api create-complete-lifecycle-action" [
 #
 # GET /
 # operationId: GET_CreateAutoScalingGroup
-export def "api get-create-auto-scaling-group" [
+export def "get-create-auto-scaling-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1056,7 +1056,7 @@ export def "api get-create-auto-scaling-group" [
 #
 # POST /
 # operationId: POST_CreateAutoScalingGroup
-export def "api create-auto-scaling-group" [
+export def "post-create-auto-scaling-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1106,7 +1106,7 @@ export def "api create-auto-scaling-group" [
 #
 # GET /
 # operationId: GET_CreateLaunchConfiguration
-export def "api get-create-launch-configuration" [
+export def "get-create-launch-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1171,7 +1171,7 @@ export def "api get-create-launch-configuration" [
 #
 # POST /
 # operationId: POST_CreateLaunchConfiguration
-export def "api create-launch-configuration" [
+export def "post-create-launch-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1221,7 +1221,7 @@ export def "api create-launch-configuration" [
 #
 # GET /
 # operationId: GET_CreateOrUpdateTags
-export def "api get-create-or-update-tags" [
+export def "get-create-or-update-tags" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1268,7 +1268,7 @@ export def "api get-create-or-update-tags" [
 #
 # POST /
 # operationId: POST_CreateOrUpdateTags
-export def "api create-or-update-tags" [
+export def "post-create-or-update-tags" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1318,7 +1318,7 @@ export def "api create-or-update-tags" [
 #
 # GET /
 # operationId: GET_DeleteAutoScalingGroup
-export def "api get-delete-auto-scaling-group" [
+export def "get-delete-auto-scaling-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1366,7 +1366,7 @@ export def "api get-delete-auto-scaling-group" [
 #
 # POST /
 # operationId: POST_DeleteAutoScalingGroup
-export def "api create-delete-auto-scaling-group" [
+export def "post-delete-auto-scaling-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1416,7 +1416,7 @@ export def "api create-delete-auto-scaling-group" [
 #
 # GET /
 # operationId: GET_DeleteLaunchConfiguration
-export def "api get-delete-launch-configuration" [
+export def "get-delete-launch-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1463,7 +1463,7 @@ export def "api get-delete-launch-configuration" [
 #
 # POST /
 # operationId: POST_DeleteLaunchConfiguration
-export def "api create-delete-launch-configuration" [
+export def "post-delete-launch-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1513,7 +1513,7 @@ export def "api create-delete-launch-configuration" [
 #
 # GET /
 # operationId: GET_DeleteLifecycleHook
-export def "api get-delete-lifecycle-hook" [
+export def "get-delete-lifecycle-hook" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1561,7 +1561,7 @@ export def "api get-delete-lifecycle-hook" [
 #
 # POST /
 # operationId: POST_DeleteLifecycleHook
-export def "api create-delete-lifecycle-hook" [
+export def "post-delete-lifecycle-hook" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1611,7 +1611,7 @@ export def "api create-delete-lifecycle-hook" [
 #
 # GET /
 # operationId: GET_DeleteNotificationConfiguration
-export def "api get-delete-notification-configuration" [
+export def "get-delete-notification-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1659,7 +1659,7 @@ export def "api get-delete-notification-configuration" [
 #
 # POST /
 # operationId: POST_DeleteNotificationConfiguration
-export def "api create-delete-notification-configuration" [
+export def "post-delete-notification-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1709,7 +1709,7 @@ export def "api create-delete-notification-configuration" [
 #
 # GET /
 # operationId: GET_DeletePolicy
-export def "api get-delete-policy" [
+export def "get-delete-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1757,7 +1757,7 @@ export def "api get-delete-policy" [
 #
 # POST /
 # operationId: POST_DeletePolicy
-export def "api create-delete-policy" [
+export def "post-delete-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1807,7 +1807,7 @@ export def "api create-delete-policy" [
 #
 # GET /
 # operationId: GET_DeleteScheduledAction
-export def "api get-delete-scheduled-action" [
+export def "get-delete-scheduled-action" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1855,7 +1855,7 @@ export def "api get-delete-scheduled-action" [
 #
 # POST /
 # operationId: POST_DeleteScheduledAction
-export def "api create-delete-scheduled-action" [
+export def "post-delete-scheduled-action" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1905,7 +1905,7 @@ export def "api create-delete-scheduled-action" [
 #
 # GET /
 # operationId: GET_DeleteTags
-export def "api get-delete-tags" [
+export def "get-delete-tags" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1952,7 +1952,7 @@ export def "api get-delete-tags" [
 #
 # POST /
 # operationId: POST_DeleteTags
-export def "api create-delete-tags" [
+export def "post-delete-tags" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2002,7 +2002,7 @@ export def "api create-delete-tags" [
 #
 # GET /
 # operationId: GET_DeleteWarmPool
-export def "api get-delete-warm-pool" [
+export def "get-delete-warm-pool" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2050,7 +2050,7 @@ export def "api get-delete-warm-pool" [
 #
 # POST /
 # operationId: POST_DeleteWarmPool
-export def "api create-delete-warm-pool" [
+export def "post-delete-warm-pool" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2100,7 +2100,7 @@ export def "api create-delete-warm-pool" [
 #
 # GET /
 # operationId: GET_DescribeAccountLimits
-export def "api get-account-limits" [
+export def "get-describe-account-limits" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2146,7 +2146,7 @@ export def "api get-account-limits" [
 #
 # POST /
 # operationId: POST_DescribeAccountLimits
-export def "api create-get-account-limits" [
+export def "post-describe-account-limits" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2192,7 +2192,7 @@ export def "api create-get-account-limits" [
 #
 # GET /
 # operationId: GET_DescribeAdjustmentTypes
-export def "api get-adjustment-types" [
+export def "get-describe-adjustment-types" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2238,7 +2238,7 @@ export def "api get-adjustment-types" [
 #
 # POST /
 # operationId: POST_DescribeAdjustmentTypes
-export def "api create-get-adjustment-types" [
+export def "post-describe-adjustment-types" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2284,7 +2284,7 @@ export def "api create-get-adjustment-types" [
 #
 # GET /
 # operationId: GET_DescribeAutoScalingGroups
-export def "api get-auto-scaling-groups" [
+export def "get-describe-auto-scaling-groups" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2334,7 +2334,7 @@ export def "api get-auto-scaling-groups" [
 #
 # POST /
 # operationId: POST_DescribeAutoScalingGroups
-export def "api create-get-auto-scaling-groups" [
+export def "post-describe-auto-scaling-groups" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2386,7 +2386,7 @@ export def "api create-get-auto-scaling-groups" [
 #
 # GET /
 # operationId: GET_DescribeAutoScalingInstances
-export def "api get-auto-scaling-instances" [
+export def "get-describe-auto-scaling-instances" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2435,7 +2435,7 @@ export def "api get-auto-scaling-instances" [
 #
 # POST /
 # operationId: POST_DescribeAutoScalingInstances
-export def "api create-get-auto-scaling-instances" [
+export def "post-describe-auto-scaling-instances" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2487,7 +2487,7 @@ export def "api create-get-auto-scaling-instances" [
 #
 # GET /
 # operationId: GET_DescribeAutoScalingNotificationTypes
-export def "api get-auto-scaling-notification-types" [
+export def "get-describe-auto-scaling-notification-types" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2533,7 +2533,7 @@ export def "api get-auto-scaling-notification-types" [
 #
 # POST /
 # operationId: POST_DescribeAutoScalingNotificationTypes
-export def "api create-get-auto-scaling-notification-types" [
+export def "post-describe-auto-scaling-notification-types" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2579,7 +2579,7 @@ export def "api create-get-auto-scaling-notification-types" [
 #
 # GET /
 # operationId: GET_DescribeInstanceRefreshes
-export def "api get-instance-refreshes" [
+export def "get-describe-instance-refreshes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2629,7 +2629,7 @@ export def "api get-instance-refreshes" [
 #
 # POST /
 # operationId: POST_DescribeInstanceRefreshes
-export def "api create-get-instance-refreshes" [
+export def "post-describe-instance-refreshes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2679,7 +2679,7 @@ export def "api create-get-instance-refreshes" [
 #
 # GET /
 # operationId: GET_DescribeLaunchConfigurations
-export def "api get-launch-configurations" [
+export def "get-describe-launch-configurations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2728,7 +2728,7 @@ export def "api get-launch-configurations" [
 #
 # POST /
 # operationId: POST_DescribeLaunchConfigurations
-export def "api create-get-launch-configurations" [
+export def "post-describe-launch-configurations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2780,7 +2780,7 @@ export def "api create-get-launch-configurations" [
 #
 # GET /
 # operationId: GET_DescribeLifecycleHookTypes
-export def "api get-lifecycle-hook-types" [
+export def "get-describe-lifecycle-hook-types" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2826,7 +2826,7 @@ export def "api get-lifecycle-hook-types" [
 #
 # POST /
 # operationId: POST_DescribeLifecycleHookTypes
-export def "api create-get-lifecycle-hook-types" [
+export def "post-describe-lifecycle-hook-types" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2872,7 +2872,7 @@ export def "api create-get-lifecycle-hook-types" [
 #
 # GET /
 # operationId: GET_DescribeLifecycleHooks
-export def "api get-lifecycle-hooks" [
+export def "get-describe-lifecycle-hooks" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2920,7 +2920,7 @@ export def "api get-lifecycle-hooks" [
 #
 # POST /
 # operationId: POST_DescribeLifecycleHooks
-export def "api create-get-lifecycle-hooks" [
+export def "post-describe-lifecycle-hooks" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2970,7 +2970,7 @@ export def "api create-get-lifecycle-hooks" [
 #
 # GET /
 # operationId: GET_DescribeLoadBalancerTargetGroups
-export def "api get-load-balancer-target-groups" [
+export def "get-describe-load-balancer-target-groups" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3019,7 +3019,7 @@ export def "api get-load-balancer-target-groups" [
 #
 # POST /
 # operationId: POST_DescribeLoadBalancerTargetGroups
-export def "api create-get-load-balancer-target-groups" [
+export def "post-describe-load-balancer-target-groups" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3069,7 +3069,7 @@ export def "api create-get-load-balancer-target-groups" [
 #
 # GET /
 # operationId: GET_DescribeLoadBalancers
-export def "api get-load-balancers" [
+export def "get-describe-load-balancers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3118,7 +3118,7 @@ export def "api get-load-balancers" [
 #
 # POST /
 # operationId: POST_DescribeLoadBalancers
-export def "api create-get-load-balancers" [
+export def "post-describe-load-balancers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3168,7 +3168,7 @@ export def "api create-get-load-balancers" [
 #
 # GET /
 # operationId: GET_DescribeMetricCollectionTypes
-export def "api get-metric-collection-types" [
+export def "get-describe-metric-collection-types" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3214,7 +3214,7 @@ export def "api get-metric-collection-types" [
 #
 # POST /
 # operationId: POST_DescribeMetricCollectionTypes
-export def "api create-get-metric-collection-types" [
+export def "post-describe-metric-collection-types" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3260,7 +3260,7 @@ export def "api create-get-metric-collection-types" [
 #
 # GET /
 # operationId: GET_DescribeNotificationConfigurations
-export def "api get-notification-configurations" [
+export def "get-describe-notification-configurations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3309,7 +3309,7 @@ export def "api get-notification-configurations" [
 #
 # POST /
 # operationId: POST_DescribeNotificationConfigurations
-export def "api create-get-notification-configurations" [
+export def "post-describe-notification-configurations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3361,7 +3361,7 @@ export def "api create-get-notification-configurations" [
 #
 # GET /
 # operationId: GET_DescribePolicies
-export def "api get-policies" [
+export def "get-describe-policies" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3412,7 +3412,7 @@ export def "api get-policies" [
 #
 # POST /
 # operationId: POST_DescribePolicies
-export def "api create-get-policies" [
+export def "post-describe-policies" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3464,7 +3464,7 @@ export def "api create-get-policies" [
 #
 # GET /
 # operationId: GET_DescribeScalingActivities
-export def "api get-scaling-activities" [
+export def "get-describe-scaling-activities" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3515,7 +3515,7 @@ export def "api get-scaling-activities" [
 #
 # POST /
 # operationId: POST_DescribeScalingActivities
-export def "api create-get-scaling-activities" [
+export def "post-describe-scaling-activities" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3567,7 +3567,7 @@ export def "api create-get-scaling-activities" [
 #
 # GET /
 # operationId: GET_DescribeScalingProcessTypes
-export def "api get-scaling-process-types" [
+export def "get-describe-scaling-process-types" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3613,7 +3613,7 @@ export def "api get-scaling-process-types" [
 #
 # POST /
 # operationId: POST_DescribeScalingProcessTypes
-export def "api create-get-scaling-process-types" [
+export def "post-describe-scaling-process-types" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3659,7 +3659,7 @@ export def "api create-get-scaling-process-types" [
 #
 # GET /
 # operationId: GET_DescribeScheduledActions
-export def "api get-scheduled-actions" [
+export def "get-describe-scheduled-actions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3711,7 +3711,7 @@ export def "api get-scheduled-actions" [
 #
 # POST /
 # operationId: POST_DescribeScheduledActions
-export def "api create-get-scheduled-actions" [
+export def "post-describe-scheduled-actions" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3763,7 +3763,7 @@ export def "api create-get-scheduled-actions" [
 #
 # GET /
 # operationId: GET_DescribeTags
-export def "api get-tags" [
+export def "get-describe-tags" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3812,7 +3812,7 @@ export def "api get-tags" [
 #
 # POST /
 # operationId: POST_DescribeTags
-export def "api create-get-tags" [
+export def "post-describe-tags" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3864,7 +3864,7 @@ export def "api create-get-tags" [
 #
 # GET /
 # operationId: GET_DescribeTerminationPolicyTypes
-export def "api get-termination-policy-types" [
+export def "get-describe-termination-policy-types" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3910,7 +3910,7 @@ export def "api get-termination-policy-types" [
 #
 # POST /
 # operationId: POST_DescribeTerminationPolicyTypes
-export def "api create-get-termination-policy-types" [
+export def "post-describe-termination-policy-types" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -3956,7 +3956,7 @@ export def "api create-get-termination-policy-types" [
 #
 # GET /
 # operationId: GET_DescribeTrafficSources
-export def "api get-traffic-sources" [
+export def "get-describe-traffic-sources" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4006,7 +4006,7 @@ export def "api get-traffic-sources" [
 #
 # POST /
 # operationId: POST_DescribeTrafficSources
-export def "api create-get-traffic-sources" [
+export def "post-describe-traffic-sources" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4058,7 +4058,7 @@ export def "api create-get-traffic-sources" [
 #
 # GET /
 # operationId: GET_DescribeWarmPool
-export def "api get-warm-pool" [
+export def "get-describe-warm-pool" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4107,7 +4107,7 @@ export def "api get-warm-pool" [
 #
 # POST /
 # operationId: POST_DescribeWarmPool
-export def "api create-get-warm-pool" [
+export def "post-describe-warm-pool" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4157,7 +4157,7 @@ export def "api create-get-warm-pool" [
 #
 # GET /
 # operationId: GET_DetachInstances
-export def "api get-detach-instances" [
+export def "get-detach-instances" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4206,7 +4206,7 @@ export def "api get-detach-instances" [
 #
 # POST /
 # operationId: POST_DetachInstances
-export def "api create-detach-instances" [
+export def "post-detach-instances" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4256,7 +4256,7 @@ export def "api create-detach-instances" [
 #
 # GET /
 # operationId: GET_DetachLoadBalancerTargetGroups
-export def "api get-detach-load-balancer-target-groups" [
+export def "get-detach-load-balancer-target-groups" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4304,7 +4304,7 @@ export def "api get-detach-load-balancer-target-groups" [
 #
 # POST /
 # operationId: POST_DetachLoadBalancerTargetGroups
-export def "api create-detach-load-balancer-target-groups" [
+export def "post-detach-load-balancer-target-groups" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4354,7 +4354,7 @@ export def "api create-detach-load-balancer-target-groups" [
 #
 # GET /
 # operationId: GET_DetachLoadBalancers
-export def "api get-detach-load-balancers" [
+export def "get-detach-load-balancers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4402,7 +4402,7 @@ export def "api get-detach-load-balancers" [
 #
 # POST /
 # operationId: POST_DetachLoadBalancers
-export def "api create-detach-load-balancers" [
+export def "post-detach-load-balancers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4452,7 +4452,7 @@ export def "api create-detach-load-balancers" [
 #
 # GET /
 # operationId: GET_DetachTrafficSources
-export def "api get-detach-traffic-sources" [
+export def "get-detach-traffic-sources" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4500,7 +4500,7 @@ export def "api get-detach-traffic-sources" [
 #
 # POST /
 # operationId: POST_DetachTrafficSources
-export def "api create-detach-traffic-sources" [
+export def "post-detach-traffic-sources" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4550,7 +4550,7 @@ export def "api create-detach-traffic-sources" [
 #
 # GET /
 # operationId: GET_DisableMetricsCollection
-export def "api get-disable-metrics-collection" [
+export def "get-disable-metrics-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4598,7 +4598,7 @@ export def "api get-disable-metrics-collection" [
 #
 # POST /
 # operationId: POST_DisableMetricsCollection
-export def "api create-disable-metrics-collection" [
+export def "post-disable-metrics-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4648,7 +4648,7 @@ export def "api create-disable-metrics-collection" [
 #
 # GET /
 # operationId: GET_EnableMetricsCollection
-export def "api get-enable-metrics-collection" [
+export def "get-enable-metrics-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4697,7 +4697,7 @@ export def "api get-enable-metrics-collection" [
 #
 # POST /
 # operationId: POST_EnableMetricsCollection
-export def "api create-enable-metrics-collection" [
+export def "post-enable-metrics-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4747,7 +4747,7 @@ export def "api create-enable-metrics-collection" [
 #
 # GET /
 # operationId: GET_EnterStandby
-export def "api get-enter-standby" [
+export def "get-enter-standby" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4796,7 +4796,7 @@ export def "api get-enter-standby" [
 #
 # POST /
 # operationId: POST_EnterStandby
-export def "api create-enter-standby" [
+export def "post-enter-standby" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4846,7 +4846,7 @@ export def "api create-enter-standby" [
 #
 # GET /
 # operationId: GET_ExecutePolicy
-export def "api get-execute-policy" [
+export def "get-execute-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4897,7 +4897,7 @@ export def "api get-execute-policy" [
 #
 # POST /
 # operationId: POST_ExecutePolicy
-export def "api create-execute-policy" [
+export def "post-execute-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4947,7 +4947,7 @@ export def "api create-execute-policy" [
 #
 # GET /
 # operationId: GET_ExitStandby
-export def "api get-exit-standby" [
+export def "get-exit-standby" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -4995,7 +4995,7 @@ export def "api get-exit-standby" [
 #
 # POST /
 # operationId: POST_ExitStandby
-export def "api create-exit-standby" [
+export def "post-exit-standby" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5045,7 +5045,7 @@ export def "api create-exit-standby" [
 #
 # GET /
 # operationId: GET_GetPredictiveScalingForecast
-export def "api get-predictive-scaling-forecast" [
+export def "get-get-predictive-scaling-forecast" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5095,7 +5095,7 @@ export def "api get-predictive-scaling-forecast" [
 #
 # POST /
 # operationId: POST_GetPredictiveScalingForecast
-export def "api create-get-predictive-scaling-forecast" [
+export def "post-get-predictive-scaling-forecast" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5145,7 +5145,7 @@ export def "api create-get-predictive-scaling-forecast" [
 #
 # GET /
 # operationId: GET_PutLifecycleHook
-export def "api get-update-lifecycle-hook" [
+export def "get-put-lifecycle-hook" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5199,7 +5199,7 @@ export def "api get-update-lifecycle-hook" [
 #
 # POST /
 # operationId: POST_PutLifecycleHook
-export def "api create-update-lifecycle-hook" [
+export def "post-put-lifecycle-hook" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5249,7 +5249,7 @@ export def "api create-update-lifecycle-hook" [
 #
 # GET /
 # operationId: GET_PutNotificationConfiguration
-export def "api get-update-notification-configuration" [
+export def "get-put-notification-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5298,7 +5298,7 @@ export def "api get-update-notification-configuration" [
 #
 # POST /
 # operationId: POST_PutNotificationConfiguration
-export def "api create-update-notification-configuration" [
+export def "post-put-notification-configuration" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5348,7 +5348,7 @@ export def "api create-update-notification-configuration" [
 #
 # GET /
 # operationId: GET_PutScalingPolicy
-export def "api get-update-scaling-policy" [
+export def "get-put-scaling-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5408,7 +5408,7 @@ export def "api get-update-scaling-policy" [
 #
 # POST /
 # operationId: POST_PutScalingPolicy
-export def "api create-update-scaling-policy" [
+export def "post-put-scaling-policy" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5458,7 +5458,7 @@ export def "api create-update-scaling-policy" [
 #
 # GET /
 # operationId: GET_PutScheduledUpdateGroupAction
-export def "api get-update-scheduled-group-action" [
+export def "get-put-scheduled-update-group-action" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5514,7 +5514,7 @@ export def "api get-update-scheduled-group-action" [
 #
 # POST /
 # operationId: POST_PutScheduledUpdateGroupAction
-export def "api create-update-scheduled-group-action" [
+export def "post-put-scheduled-update-group-action" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5564,7 +5564,7 @@ export def "api create-update-scheduled-group-action" [
 #
 # GET /
 # operationId: GET_PutWarmPool
-export def "api get-update-warm-pool" [
+export def "get-put-warm-pool" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5615,7 +5615,7 @@ export def "api get-update-warm-pool" [
 #
 # POST /
 # operationId: POST_PutWarmPool
-export def "api create-update-warm-pool" [
+export def "post-put-warm-pool" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5665,7 +5665,7 @@ export def "api create-update-warm-pool" [
 #
 # GET /
 # operationId: GET_RecordLifecycleActionHeartbeat
-export def "api get-record-lifecycle-action-heartbeat" [
+export def "get-record-lifecycle-action-heartbeat" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5715,7 +5715,7 @@ export def "api get-record-lifecycle-action-heartbeat" [
 #
 # POST /
 # operationId: POST_RecordLifecycleActionHeartbeat
-export def "api create-record-lifecycle-action-heartbeat" [
+export def "post-record-lifecycle-action-heartbeat" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5765,7 +5765,7 @@ export def "api create-record-lifecycle-action-heartbeat" [
 #
 # GET /
 # operationId: GET_ResumeProcesses
-export def "api get-resume-processes" [
+export def "get-resume-processes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5813,7 +5813,7 @@ export def "api get-resume-processes" [
 #
 # POST /
 # operationId: POST_ResumeProcesses
-export def "api create-resume-processes" [
+export def "post-resume-processes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5863,7 +5863,7 @@ export def "api create-resume-processes" [
 #
 # GET /
 # operationId: GET_RollbackInstanceRefresh
-export def "api get-rollback-instance-refresh" [
+export def "get-rollback-instance-refresh" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5910,7 +5910,7 @@ export def "api get-rollback-instance-refresh" [
 #
 # POST /
 # operationId: POST_RollbackInstanceRefresh
-export def "api create-rollback-instance-refresh" [
+export def "post-rollback-instance-refresh" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -5960,7 +5960,7 @@ export def "api create-rollback-instance-refresh" [
 #
 # GET /
 # operationId: GET_SetDesiredCapacity
-export def "api get-update-desired-capacity" [
+export def "get-set-desired-capacity" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6009,7 +6009,7 @@ export def "api get-update-desired-capacity" [
 #
 # POST /
 # operationId: POST_SetDesiredCapacity
-export def "api create-update-desired-capacity" [
+export def "post-set-desired-capacity" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6059,7 +6059,7 @@ export def "api create-update-desired-capacity" [
 #
 # GET /
 # operationId: GET_SetInstanceHealth
-export def "api get-update-instance-health" [
+export def "get-set-instance-health" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6108,7 +6108,7 @@ export def "api get-update-instance-health" [
 #
 # POST /
 # operationId: POST_SetInstanceHealth
-export def "api create-update-instance-health" [
+export def "post-set-instance-health" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6158,7 +6158,7 @@ export def "api create-update-instance-health" [
 #
 # GET /
 # operationId: GET_SetInstanceProtection
-export def "api get-update-instance-protection" [
+export def "get-set-instance-protection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6207,7 +6207,7 @@ export def "api get-update-instance-protection" [
 #
 # POST /
 # operationId: POST_SetInstanceProtection
-export def "api create-update-instance-protection" [
+export def "post-set-instance-protection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6257,7 +6257,7 @@ export def "api create-update-instance-protection" [
 #
 # GET /
 # operationId: GET_StartInstanceRefresh
-export def "api get-start-instance-refresh" [
+export def "get-start-instance-refresh" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6307,7 +6307,7 @@ export def "api get-start-instance-refresh" [
 #
 # POST /
 # operationId: POST_StartInstanceRefresh
-export def "api create-start-instance-refresh" [
+export def "post-start-instance-refresh" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6357,7 +6357,7 @@ export def "api create-start-instance-refresh" [
 #
 # GET /
 # operationId: GET_SuspendProcesses
-export def "api get-suspend-processes" [
+export def "get-suspend-processes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6405,7 +6405,7 @@ export def "api get-suspend-processes" [
 #
 # POST /
 # operationId: POST_SuspendProcesses
-export def "api create-suspend-processes" [
+export def "post-suspend-processes" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6455,7 +6455,7 @@ export def "api create-suspend-processes" [
 #
 # GET /
 # operationId: GET_TerminateInstanceInAutoScalingGroup
-export def "api get-terminate-instance-in-auto-scaling-group" [
+export def "get-terminate-instance-in-auto-scaling-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6503,7 +6503,7 @@ export def "api get-terminate-instance-in-auto-scaling-group" [
 #
 # POST /
 # operationId: POST_TerminateInstanceInAutoScalingGroup
-export def "api create-terminate-instance-in-auto-scaling-group" [
+export def "post-terminate-instance-in-auto-scaling-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6553,7 +6553,7 @@ export def "api create-terminate-instance-in-auto-scaling-group" [
 #
 # GET /
 # operationId: GET_UpdateAutoScalingGroup
-export def "api get-update-auto-scaling-group" [
+export def "get-update-auto-scaling-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -6620,7 +6620,7 @@ export def "api get-update-auto-scaling-group" [
 #
 # POST /
 # operationId: POST_UpdateAutoScalingGroup
-export def "api create-update-auto-scaling-group" [
+export def "post-update-auto-scaling-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

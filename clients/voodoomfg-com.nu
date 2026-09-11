@@ -104,7 +104,7 @@ def auth-scheme-completer [] { ["api_key"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "materials get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-materials" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -127,7 +127,7 @@ export def commands []: nothing -> table {
 # Voodoo Manufacturing offers printing in a number of different materials, with different color options for each. Your organization can expose as many or as few material options as you want to your end-customer.
 #
 # GET /materials
-export def "materials get" [
+export def "get-materials" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -160,7 +160,7 @@ export def "materials get" [
 # Retrieve the models you've created.
 #
 # GET /model
-export def "model list" [
+export def "get-model" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -193,7 +193,7 @@ export def "model list" [
 # Models represent 3D design files that you'd like to produce. Creating models is generally the first step in creating an order.
 #
 # POST /model
-export def "model create" [
+export def "post-model" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -230,7 +230,7 @@ export def "model create" [
 # Get a quote a given model id.
 #
 # GET /model/quote
-export def "model-quote get" [
+export def "get-model-quote" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -269,7 +269,7 @@ export def "model-quote get" [
 # Get a quote for a model with the given attributes.
 #
 # GET /model/quote_attrs
-export def "model-quote-attrs get" [
+export def "get-model-quote-attrs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -312,7 +312,7 @@ export def "model-quote-attrs get" [
 # Retrieve a previously created model by its id.
 #
 # GET /model/{model_id}
-export def "model get" [
+export def "get-model-model-id" [
   model_id: int
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -347,7 +347,7 @@ export def "model get" [
 # Lists all orders.
 #
 # GET /order
-export def "order list" [
+export def "get-order" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -380,7 +380,7 @@ export def "order list" [
 # Confirms an order from a quote_id and submits it to the Voodoo factory.
 #
 # POST /order/confirm
-export def "order-confirm create" [
+export def "post-order-confirm" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -419,7 +419,7 @@ export def "order-confirm create" [
 # POST /order/create
 # --models item shape: {material_id?: int, model_id?: int, options?: record, quantity?: int, units?: string}
 # --shipping_address shape: {city?: string, country?: string, email?: string, name?: string, state?: string, street1?: string, street2?: string, zip?: string}
-export def "order-create create" [
+export def "post-order-create" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -461,7 +461,7 @@ export def "order-create create" [
 # POST /order/shipping
 # --models item shape: {material_id?: int, model_id?: int, options?: record, quantity?: int, units?: string}
 # --shipping_address shape: {city?: string, country?: string, email?: string, name?: string, state?: string, street1?: string, street2?: string, zip?: string}
-export def "order-shipping create" [
+export def "post-order-shipping" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -499,7 +499,7 @@ export def "order-shipping create" [
 # Retrieve a previously created model by its id.
 #
 # GET /order/{order_id}
-export def "order get" [
+export def "get-order-order-id" [
   order_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

@@ -103,7 +103,7 @@ def house-completer [] { ["Commons" "Lords"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "business-item get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-business-item-by-id" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -127,7 +127,7 @@ export def commands []: nothing -> table {
 #
 # GET /api/v1/BusinessItem/{id}
 # operationId: GetBusinessItemById
-export def "business-item get" [
+export def "get-business-item-by-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -166,7 +166,7 @@ export def "business-item get" [
 #
 # GET /api/v1/LayingBody
 # operationId: GetLayingBodies
-export def "laying-body get-bodies" [
+export def "get-laying-bodies" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -201,7 +201,7 @@ export def "laying-body get-bodies" [
 #
 # GET /api/v1/Procedure
 # operationId: GetProceduresV1
-export def "procedure list" [
+export def "get-procedures-v1" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -236,7 +236,7 @@ export def "procedure list" [
 #
 # GET /api/v1/Procedure/{id}
 # operationId: GetProceduresByIdV1
-export def "procedure get" [
+export def "get-procedures-by-id-v1" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -273,7 +273,7 @@ export def "procedure get" [
 #
 # GET /api/v1/ProposedNegativeStatutoryInstrument
 # operationId: GetProposedNegativeStatutoryInstruments
-export def "proposed-negative-statutory-instrument list" [
+export def "get-proposed-negative-statutory-instruments" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -315,7 +315,7 @@ export def "proposed-negative-statutory-instrument list" [
 #
 # GET /api/v1/ProposedNegativeStatutoryInstrument/{id}
 # operationId: GetProposedNegativeStatutoryInstrumentById
-export def "proposed-negative-statutory-instrument get" [
+export def "get-proposed-negative-statutory-instrument-by-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -352,7 +352,7 @@ export def "proposed-negative-statutory-instrument get" [
 #
 # GET /api/v1/ProposedNegativeStatutoryInstrument/{id}/BusinessItems
 # operationId: GetBusinessItemsByProposedNegativeStatutoryInstrumentId
-export def "proposed-negative-statutory-instrument-business-items get" [
+export def "get-business-items-by-proposed-negative-statutory-instrument-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -389,7 +389,7 @@ export def "proposed-negative-statutory-instrument-business-items get" [
 #
 # GET /api/v1/StatutoryInstrument
 # operationId: GetStatutoryInstruments
-export def "statutory-instrument list" [
+export def "get-statutory-instruments" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -436,7 +436,7 @@ export def "statutory-instrument list" [
 #
 # GET /api/v1/StatutoryInstrument/{id}
 # operationId: GetStatutoryInstrumentById
-export def "statutory-instrument get" [
+export def "get-statutory-instrument-by-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -473,7 +473,7 @@ export def "statutory-instrument get" [
 #
 # GET /api/v1/StatutoryInstrument/{id}/BusinessItems
 # operationId: GetBusinessItemsByStatutoryInstrumentId
-export def "statutory-instrument-business-items get" [
+export def "get-business-items-by-statutory-instrument-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

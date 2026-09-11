@@ -97,7 +97,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "atms-atm get" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-atms-v1-atm" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -120,7 +120,7 @@ export def commands []: nothing -> table {
 # Returns detailed information about an ATM location. This information can be used to display ATMs on a map, provide driving directions, or show special ATM features.
 #
 # GET /atms/v1/atm
-export def "atms-atm get" [
+export def "get-atms-v1-atm" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -168,7 +168,7 @@ export def "atms-atm get" [
 # Returns countries with valid ATM locations.
 #
 # GET /atms/v1/country
-export def "atms-country get" [
+export def "get-atms-v1-country" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -201,7 +201,7 @@ export def "atms-country get" [
 # Returns country subdivisions that have ATM locations. A country subdivision is a segment within a country (ex state or province). Country subdivisions are only available for the US and Canada.
 #
 # GET /atms/v1/countrysubdivision
-export def "atms-countrysubdivision get" [
+export def "get-atms-v1-countrysubdivision" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -236,7 +236,7 @@ export def "atms-countrysubdivision get" [
 # Returns a list of all merchant categories for contactless and cash back merchants (example: Airline, Retail, etc.).
 #
 # GET /merchants/v1/category
-export def "merchants-category get" [
+export def "get-merchants-v1-category" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -269,7 +269,7 @@ export def "merchants-category get" [
 # Returns countries that have Merchants offering the following services: accept contactless-enabled cards and devices, allow customers to add money to an eligible MasterCard or Maestro prepaid card, issue MasterCard Prepaid Travel cards, offer cash at checkout when paying with a Debit MasterCard or Maestro Card.
 #
 # GET /merchants/v1/country
-export def "merchants-country get" [
+export def "get-merchants-v1-country" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -304,7 +304,7 @@ export def "merchants-country get" [
 # Returns country subdivisions that have Merchants offering the following services: accept contactless-enabled cards and devices, allow customers to add money to an eligible MasterCard or Maestro prepaid card, issue MasterCard Prepaid Travel cards, offer cash at checkout when paying with a Debit MasterCard or Maestro Card. A country subdivision is a segment within a country (ex state or province). Please note country subdivisions are only available for the US and Canada.
 #
 # GET /merchants/v1/countrysubdivision
-export def "merchants-countrysubdivision get" [
+export def "get-merchants-v1-countrysubdivision" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -340,7 +340,7 @@ export def "merchants-countrysubdivision get" [
 # Returns merchant location information for merchants offering the following services: accept contactless-enabled cards and devices, allow customers to add money to an eligible MasterCard or Maestro prepaid card, issue MasterCard Prepaid Travel cards, participate in the MasterCard Easy Savings program, and offer cash at checkout when paying with a Debit MasterCard or Maestro Card.
 #
 # GET /merchants/v1/merchant
-export def "merchants-merchant get" [
+export def "get-merchants-v1-merchant" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

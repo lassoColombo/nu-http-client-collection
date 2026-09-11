@@ -129,7 +129,7 @@ def alt-completer [] { ["json" "media" "proto"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "v1beta2 delete" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "firebaseml-projects-models-delete" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -153,7 +153,7 @@ export def commands []: nothing -> table {
 #
 # DELETE /v1beta2/{name}
 # operationId: firebaseml.projects.models.delete
-export def "v1beta2 delete" [
+export def "firebaseml-projects-models-delete" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -201,7 +201,7 @@ export def "v1beta2 delete" [
 #
 # GET /v1beta2/{name}
 # operationId: firebaseml.projects.operations.get
-export def "v1beta2 get" [
+export def "firebaseml-projects-operations-get" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -252,7 +252,7 @@ export def "v1beta2 get" [
 # --activeOperations item shape: {done?: bool, error?: record, metadata?: record, name?: string, response?: record}
 # --state shape: {published?: bool, validationError?: record}
 # --tfliteModel shape: {automlModel?: string, gcsTfliteUri?: string}
-export def "v1beta2 update" [
+export def "firebaseml-projects-models-patch" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -309,7 +309,7 @@ export def "v1beta2 update" [
 #
 # GET /v1beta2/{name}:download
 # operationId: firebaseml.projects.models.download
-export def "v1beta2 download" [
+export def "firebaseml-projects-models-download" [
   name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -357,7 +357,7 @@ export def "v1beta2 download" [
 #
 # GET /v1beta2/{parent}/models
 # operationId: firebaseml.projects.models.list
-export def "v1beta2-models list" [
+export def "firebaseml-projects-models-list" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)
@@ -411,7 +411,7 @@ export def "v1beta2-models list" [
 # --activeOperations item shape: {done?: bool, error?: record, metadata?: record, name?: string, response?: record}
 # --state shape: {published?: bool, validationError?: record}
 # --tfliteModel shape: {automlModel?: string, gcsTfliteUri?: string}
-export def "v1beta2-models create" [
+export def "firebaseml-projects-models-create" [
   parent: string
   --base-url(-b): string@base-url-completer # API base URL
   --token-oauth2: string # Auth token for Oauth2 (Authorization)

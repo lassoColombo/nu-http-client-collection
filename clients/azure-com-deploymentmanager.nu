@@ -116,7 +116,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "providers-microsoft-deployment-manager-operations list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "operations-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -140,7 +140,7 @@ export def commands []: nothing -> table {
 #
 # GET /providers/Microsoft.DeploymentManager/operations
 # operationId: Operations_List
-export def "providers-microsoft-deployment-manager-operations list" [
+export def "operations-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -176,7 +176,7 @@ export def "providers-microsoft-deployment-manager-operations list" [
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DeploymentManager/artifactSources
 # operationId: ArtifactSources_List
-export def "subscriptions-resource-groups-providers-microsoft-deployment-manager-artifact-sources list" [
+export def "artifact-sources-list" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -216,7 +216,7 @@ export def "subscriptions-resource-groups-providers-microsoft-deployment-manager
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DeploymentManager/artifactSources/{artifactSourceName}
 # operationId: ArtifactSources_Delete
-export def "subscriptions-resource-groups-providers-microsoft-deployment-manager-artifact-sources delete" [
+export def "artifact-sources-delete" [
   subscription_id: string
   resource_group_name: string
   artifact_source_name: string
@@ -258,7 +258,7 @@ export def "subscriptions-resource-groups-providers-microsoft-deployment-manager
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DeploymentManager/artifactSources/{artifactSourceName}
 # operationId: ArtifactSources_Get
-export def "subscriptions-resource-groups-providers-microsoft-deployment-manager-artifact-sources get" [
+export def "artifact-sources-get" [
   subscription_id: string
   resource_group_name: string
   artifact_source_name: string
@@ -300,7 +300,7 @@ export def "subscriptions-resource-groups-providers-microsoft-deployment-manager
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DeploymentManager/artifactSources/{artifactSourceName}
 # operationId: ArtifactSources_CreateOrUpdate
-export def "subscriptions-resource-groups-providers-microsoft-deployment-manager-artifact-sources create-or-update" [
+export def "artifact-sources-create-or-update" [
   subscription_id: string
   resource_group_name: string
   artifact_source_name: string
@@ -348,7 +348,7 @@ export def "subscriptions-resource-groups-providers-microsoft-deployment-manager
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DeploymentManager/rollouts
 # operationId: Rollouts_List
-export def "subscriptions-resource-groups-providers-microsoft-deployment-manager-rollouts list" [
+export def "rollouts-list" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -388,7 +388,7 @@ export def "subscriptions-resource-groups-providers-microsoft-deployment-manager
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DeploymentManager/rollouts/{rolloutName}
 # operationId: Rollouts_Delete
-export def "subscriptions-resource-groups-providers-microsoft-deployment-manager-rollouts delete" [
+export def "rollouts-delete" [
   subscription_id: string
   resource_group_name: string
   rollout_name: string
@@ -430,7 +430,7 @@ export def "subscriptions-resource-groups-providers-microsoft-deployment-manager
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DeploymentManager/rollouts/{rolloutName}
 # operationId: Rollouts_Get
-export def "subscriptions-resource-groups-providers-microsoft-deployment-manager-rollouts get" [
+export def "rollouts-get" [
   subscription_id: string
   resource_group_name: string
   rollout_name: string
@@ -475,7 +475,7 @@ export def "subscriptions-resource-groups-providers-microsoft-deployment-manager
 # operationId: Rollouts_CreateOrUpdate
 # --identity shape: {identityIds: list<string>, type: string}
 # --properties shape: {artifactSourceId?: string, buildVersion: string, stepGroups: list, targetServiceTopologyId: string}
-export def "subscriptions-resource-groups-providers-microsoft-deployment-manager-rollouts create-or-update" [
+export def "rollouts-create-or-update" [
   subscription_id: string
   resource_group_name: string
   rollout_name: string
@@ -524,7 +524,7 @@ export def "subscriptions-resource-groups-providers-microsoft-deployment-manager
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DeploymentManager/rollouts/{rolloutName}/cancel
 # operationId: Rollouts_Cancel
-export def "subscriptions-resource-groups-providers-microsoft-deployment-manager-rollouts-cancel cancel" [
+export def "rollouts-cancel" [
   subscription_id: string
   resource_group_name: string
   rollout_name: string
@@ -566,7 +566,7 @@ export def "subscriptions-resource-groups-providers-microsoft-deployment-manager
 #
 # POST /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DeploymentManager/rollouts/{rolloutName}/restart
 # operationId: Rollouts_Restart
-export def "subscriptions-resource-groups-providers-microsoft-deployment-manager-rollouts-restart restart" [
+export def "rollouts-restart" [
   subscription_id: string
   resource_group_name: string
   rollout_name: string
@@ -609,7 +609,7 @@ export def "subscriptions-resource-groups-providers-microsoft-deployment-manager
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DeploymentManager/serviceTopologies
 # operationId: ServiceTopologies_List
-export def "subscriptions-resource-groups-providers-microsoft-deployment-manager-service-topologies list" [
+export def "service-topologies-list" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -649,7 +649,7 @@ export def "subscriptions-resource-groups-providers-microsoft-deployment-manager
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DeploymentManager/serviceTopologies/{serviceTopologyName}
 # operationId: ServiceTopologies_Delete
-export def "subscriptions-resource-groups-providers-microsoft-deployment-manager-service-topologies delete" [
+export def "service-topologies-delete" [
   subscription_id: string
   resource_group_name: string
   service_topology_name: string
@@ -691,7 +691,7 @@ export def "subscriptions-resource-groups-providers-microsoft-deployment-manager
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DeploymentManager/serviceTopologies/{serviceTopologyName}
 # operationId: ServiceTopologies_Get
-export def "subscriptions-resource-groups-providers-microsoft-deployment-manager-service-topologies get" [
+export def "service-topologies-get" [
   subscription_id: string
   resource_group_name: string
   service_topology_name: string
@@ -733,7 +733,7 @@ export def "subscriptions-resource-groups-providers-microsoft-deployment-manager
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DeploymentManager/serviceTopologies/{serviceTopologyName}
 # operationId: ServiceTopologies_CreateOrUpdate
-export def "subscriptions-resource-groups-providers-microsoft-deployment-manager-service-topologies create-or-update" [
+export def "service-topologies-create-or-update" [
   subscription_id: string
   resource_group_name: string
   service_topology_name: string
@@ -781,7 +781,7 @@ export def "subscriptions-resource-groups-providers-microsoft-deployment-manager
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DeploymentManager/serviceTopologies/{serviceTopologyName}/services
 # operationId: Services_List
-export def "subscriptions-resource-groups-providers-microsoft-deployment-manager-service-topologies-services list" [
+export def "services-list" [
   subscription_id: string
   resource_group_name: string
   service_topology_name: string
@@ -823,7 +823,7 @@ export def "subscriptions-resource-groups-providers-microsoft-deployment-manager
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DeploymentManager/serviceTopologies/{serviceTopologyName}/services/{serviceName}
 # operationId: Services_Delete
-export def "subscriptions-resource-groups-providers-microsoft-deployment-manager-service-topologies-services delete" [
+export def "services-delete" [
   subscription_id: string
   resource_group_name: string
   service_topology_name: string
@@ -867,7 +867,7 @@ export def "subscriptions-resource-groups-providers-microsoft-deployment-manager
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DeploymentManager/serviceTopologies/{serviceTopologyName}/services/{serviceName}
 # operationId: Services_Get
-export def "subscriptions-resource-groups-providers-microsoft-deployment-manager-service-topologies-services get" [
+export def "services-get" [
   subscription_id: string
   resource_group_name: string
   service_topology_name: string
@@ -911,7 +911,7 @@ export def "subscriptions-resource-groups-providers-microsoft-deployment-manager
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DeploymentManager/serviceTopologies/{serviceTopologyName}/services/{serviceName}
 # operationId: Services_CreateOrUpdate
-export def "subscriptions-resource-groups-providers-microsoft-deployment-manager-service-topologies-services create-or-update" [
+export def "services-create-or-update" [
   subscription_id: string
   resource_group_name: string
   service_topology_name: string
@@ -961,7 +961,7 @@ export def "subscriptions-resource-groups-providers-microsoft-deployment-manager
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DeploymentManager/serviceTopologies/{serviceTopologyName}/services/{serviceName}/serviceUnits
 # operationId: ServiceUnits_List
-export def "subscriptions-resource-groups-providers-microsoft-deployment-manager-service-topologies-services-service-units list" [
+export def "service-units-list" [
   subscription_id: string
   resource_group_name: string
   service_topology_name: string
@@ -1005,7 +1005,7 @@ export def "subscriptions-resource-groups-providers-microsoft-deployment-manager
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DeploymentManager/serviceTopologies/{serviceTopologyName}/services/{serviceName}/serviceUnits/{serviceUnitName}
 # operationId: ServiceUnits_Delete
-export def "subscriptions-resource-groups-providers-microsoft-deployment-manager-service-topologies-services-service-units delete" [
+export def "service-units-delete" [
   subscription_id: string
   resource_group_name: string
   service_topology_name: string
@@ -1051,7 +1051,7 @@ export def "subscriptions-resource-groups-providers-microsoft-deployment-manager
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DeploymentManager/serviceTopologies/{serviceTopologyName}/services/{serviceName}/serviceUnits/{serviceUnitName}
 # operationId: ServiceUnits_Get
-export def "subscriptions-resource-groups-providers-microsoft-deployment-manager-service-topologies-services-service-units get" [
+export def "service-units-get" [
   subscription_id: string
   resource_group_name: string
   service_topology_name: string
@@ -1097,7 +1097,7 @@ export def "subscriptions-resource-groups-providers-microsoft-deployment-manager
 #
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DeploymentManager/serviceTopologies/{serviceTopologyName}/services/{serviceName}/serviceUnits/{serviceUnitName}
 # operationId: ServiceUnits_CreateOrUpdate
-export def "subscriptions-resource-groups-providers-microsoft-deployment-manager-service-topologies-services-service-units create-or-update" [
+export def "service-units-create-or-update" [
   subscription_id: string
   resource_group_name: string
   service_topology_name: string
@@ -1149,7 +1149,7 @@ export def "subscriptions-resource-groups-providers-microsoft-deployment-manager
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DeploymentManager/steps
 # operationId: Steps_List
-export def "subscriptions-resource-groups-providers-microsoft-deployment-manager-steps list" [
+export def "steps-list" [
   subscription_id: string
   resource_group_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1189,7 +1189,7 @@ export def "subscriptions-resource-groups-providers-microsoft-deployment-manager
 #
 # DELETE /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DeploymentManager/steps/{stepName}
 # operationId: Steps_Delete
-export def "subscriptions-resource-groups-providers-microsoft-deployment-manager-steps delete" [
+export def "steps-delete" [
   subscription_id: string
   resource_group_name: string
   step_name: string
@@ -1231,7 +1231,7 @@ export def "subscriptions-resource-groups-providers-microsoft-deployment-manager
 #
 # GET /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DeploymentManager/steps/{stepName}
 # operationId: Steps_Get
-export def "subscriptions-resource-groups-providers-microsoft-deployment-manager-steps get" [
+export def "steps-get" [
   subscription_id: string
   resource_group_name: string
   step_name: string
@@ -1274,7 +1274,7 @@ export def "subscriptions-resource-groups-providers-microsoft-deployment-manager
 # PUT /subscriptions/{subscriptionId}/resourceGroups/{resourceGroupName}/providers/Microsoft.DeploymentManager/steps/{stepName}
 # operationId: Steps_CreateOrUpdate
 # --properties shape: {stepType: "Wait"|"HealthCheck"}
-export def "subscriptions-resource-groups-providers-microsoft-deployment-manager-steps create-or-update" [
+export def "steps-create-or-update" [
   subscription_id: string
   resource_group_name: string
   step_name: string

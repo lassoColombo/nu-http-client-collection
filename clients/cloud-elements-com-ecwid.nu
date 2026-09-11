@@ -154,7 +154,7 @@ def accept-completer-1 [] { ["application/json" "application/pdf"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "bulk-download create" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "create-bulk-download" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -180,7 +180,7 @@ export def commands []: nothing -> table {
 # operationId: createBulkDownload
 # --docsHubDetails shape: {instanceId?: string, path?: string}
 # --query shape: {anyKey?: string}
-export def "bulk-download create" [
+export def "create-bulk-download" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -235,7 +235,7 @@ export def "bulk-download create" [
 #
 # GET /bulk/jobs
 # operationId: getBulkJobs
-export def "bulk-jobs get" [
+export def "get-bulk-jobs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -277,7 +277,7 @@ export def "bulk-jobs get" [
 #
 # POST /bulk/query
 # operationId: createBulkQuery
-export def "bulk-query create" [
+export def "create-bulk-query" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -325,7 +325,7 @@ export def "bulk-query create" [
 #
 # PUT /bulk/{id}/cancel
 # operationId: replaceBulkCancel
-export def "bulk-cancel update" [
+export def "replace-bulk-cancel" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -364,7 +364,7 @@ export def "bulk-cancel update" [
 #
 # GET /bulk/{id}/errors
 # operationId: getBulkErrors
-export def "bulk-errors get" [
+export def "get-bulk-errors" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -407,7 +407,7 @@ export def "bulk-errors get" [
 #
 # GET /bulk/{id}/status
 # operationId: getBulkStatus
-export def "bulk-status get" [
+export def "get-bulk-status" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -446,7 +446,7 @@ export def "bulk-status get" [
 #
 # GET /bulk/{id}/{objectName}
 # operationId: getBulkByObjectName
-export def "bulk get-by-object-name" [
+export def "get-bulk-by-object-name" [
   id: string
   object_name: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -488,7 +488,7 @@ export def "bulk get-by-object-name" [
 #
 # POST /bulk/{objectName}
 # operationId: createBulkByObjectName
-export def "bulk create-by-object-name" [
+export def "create-bulk-by-object-name" [
   object_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -535,7 +535,7 @@ export def "bulk create-by-object-name" [
 #
 # GET /customers
 # operationId: getCustomers
-export def "customers list" [
+export def "get-customers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -579,7 +579,7 @@ export def "customers list" [
 # operationId: createCustomer
 # --billingPerson shape: {city?: string, companyName?: string, countryCode?: string, countryName?: string, name?: string, phone?: string, postalCode?: string, stateName?: string, stateOrProvinceCode?: string, stateOrProvinceName?: string, street?: string}
 # --shippingAddresses item shape: {city?: string, companyName?: string, countryCode?: string, countryName?: string, name?: string, phone?: string, postalCode?: string, stateName?: string, stateOrProvinceCode?: string, stateOrProvinceName?: string, street?: string}
-export def "customers create" [
+export def "create-customer" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -627,7 +627,7 @@ export def "customers create" [
 #
 # DELETE /customers/{id}
 # operationId: deleteCustomerById
-export def "customers delete" [
+export def "delete-customer-by-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -666,7 +666,7 @@ export def "customers delete" [
 #
 # GET /customers/{id}
 # operationId: getCustomerById
-export def "customers get" [
+export def "get-customer-by-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -707,7 +707,7 @@ export def "customers get" [
 # operationId: updateCustomerById
 # --billingPerson shape: {city?: string, companyName?: string, countryCode?: string, countryName?: string, name?: string, phone?: string, postalCode?: string, stateName?: string, stateOrProvinceCode?: string, stateOrProvinceName?: string, street?: string}
 # --shippingAddresses item shape: {city?: string, companyName?: string, countryCode?: string, countryName?: string, name?: string, phone?: string, postalCode?: string, stateName?: string, stateOrProvinceCode?: string, stateOrProvinceName?: string, street?: string}
-export def "customers update" [
+export def "update-customer-by-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -757,7 +757,7 @@ export def "customers update" [
 #
 # GET /customers/{id}/orders
 # operationId: getCustomersOrders
-export def "customers-orders get" [
+export def "get-customers-orders" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -800,7 +800,7 @@ export def "customers-orders get" [
 #
 # GET /objects
 # operationId: getObjects
-export def "objects get" [
+export def "get-objects" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -838,7 +838,7 @@ export def "objects get" [
 #
 # GET /objects/{objectName}/docs
 # operationId: getObjectsObjectNameDocs
-export def "objects-docs get-name" [
+export def "get-objects-object-name-docs" [
   object_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -882,7 +882,7 @@ export def "objects-docs get-name" [
 #
 # GET /objects/{objectName}/metadata
 # operationId: getObjectsObjectNameMetadata
-export def "objects-metadata get-name" [
+export def "get-objects-object-name-metadata" [
   object_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -922,7 +922,7 @@ export def "objects-metadata get-name" [
 #
 # GET /orders
 # operationId: getOrders
-export def "orders list" [
+export def "get-orders" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -968,7 +968,7 @@ export def "orders list" [
 # --items item shape: {categoryId?: int, couponApplied?: bool, digital?: bool, fixedShippingRate?: float, fixedShippingRateOnly?: bool, hdThumbnailUrl?: string, id?: int, imageUrl?: string, isShippingRequired?: bool, name?: string, price?: float, productAvailable?: bool, productId?: int, productPrice?: float, quantity?: int, quantityInStock?: float, shipping?: float, sku?: string, smallThumbnailUrl?: string, tax?: float, taxes?: list, trackQuantity?: bool, weight?: float}
 # --shippingOption shape: {estimatedTransitTime?: string, isPickup?: bool, shippingCarrierName?: string, shippingMethodName?: string, shippingRate?: float}
 # --shippingPerson shape: {city?: string, companyName?: string, countryCode?: string, countryName?: string, name?: string, phone?: string, postalCode?: string, stateName?: string, stateOrProvinceCode?: string, stateOrProvinceName?: string, street?: string}
-export def "orders create" [
+export def "create-order" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1037,7 +1037,7 @@ export def "orders create" [
 #
 # DELETE /orders/{id}
 # operationId: deleteOrderById
-export def "orders delete" [
+export def "delete-order-by-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1076,7 +1076,7 @@ export def "orders delete" [
 #
 # GET /orders/{id}
 # operationId: getOrderById
-export def "orders get" [
+export def "get-order-by-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1120,7 +1120,7 @@ export def "orders get" [
 # --shippingOption shape: {estimatedTransitTime?: string, isPickup?: bool, shippingCarrierName?: string, shippingMethodName?: string, shippingRate?: float}
 # --shippingPerson shape: {city?: string, companyName?: string, countryCode?: string, countryName?: string, name?: string, phone?: string, postalCode?: string, stateName?: string, stateOrProvinceCode?: string, stateOrProvinceName?: string, street?: string}
 # --taxesOnShipping item shape: {name?: string, total?: float, value?: float}
-export def "orders update" [
+export def "update-order-by-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1193,7 +1193,7 @@ export def "orders update" [
 #
 # GET /orders/{orderId}/payments
 # operationId: getOrdersPayments
-export def "orders-payments get" [
+export def "get-orders-payments" [
   order_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1236,7 +1236,7 @@ export def "orders-payments get" [
 #
 # GET /orders/{orderId}/refunds
 # operationId: getOrdersRefunds
-export def "orders-refunds get" [
+export def "get-orders-refunds" [
   order_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1279,7 +1279,7 @@ export def "orders-refunds get" [
 #
 # GET /ping
 # operationId: getPing
-export def "ping get" [
+export def "get-ping" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1316,7 +1316,7 @@ export def "ping get" [
 #
 # GET /products
 # operationId: getProducts
-export def "products list" [
+export def "get-products" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1368,7 +1368,7 @@ export def "products list" [
 # --tax shape: {defaultLocationIncludedTaxRate?: float, enabledManualTaxes?: list<int>}
 # --taxes item shape: {name?: string, total?: float, value?: float}
 # --wholesalePrices shape: {{quantity}?: float}
-export def "products create" [
+export def "create-product" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1439,7 +1439,7 @@ export def "products create" [
 #
 # DELETE /products/{id}
 # operationId: deleteProductById
-export def "products delete" [
+export def "delete-product-by-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1478,7 +1478,7 @@ export def "products delete" [
 #
 # GET /products/{id}
 # operationId: getProductById
-export def "products get" [
+export def "get-product-by-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1526,7 +1526,7 @@ export def "products get" [
 # --tax shape: {defaultLocationIncludedTaxRate?: float, enabledManualTaxes?: list<int>}
 # --taxes item shape: {name?: string, total?: float, value?: float}
 # --wholesalePrices shape: {{quantity}?: float}
-export def "products update" [
+export def "update-product-by-id" [
   id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1597,7 +1597,7 @@ export def "products update" [
 #
 # GET /{objectName}
 # operationId: getByObjectName
-export def "object-name list" [
+export def "get-by-object-name" [
   object_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1641,7 +1641,7 @@ export def "object-name list" [
 #
 # POST /{objectName}
 # operationId: createByObjectName
-export def "object-name create" [
+export def "create-by-object-name" [
   object_name: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1684,7 +1684,7 @@ export def "object-name create" [
 #
 # DELETE /{objectName}/{objectId}
 # operationId: deleteObjectNameByObjectId
-export def "object-name delete" [
+export def "delete-object-name-by-object-id" [
   object_name: string
   object_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1725,7 +1725,7 @@ export def "object-name delete" [
 #
 # GET /{objectName}/{objectId}
 # operationId: getObjectNameByObjectId
-export def "object-name get" [
+export def "get-object-name-by-object-id" [
   object_name: string
   object_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1767,7 +1767,7 @@ export def "object-name get" [
 #
 # PATCH /{objectName}/{objectId}
 # operationId: updateObjectNameByObjectId
-export def "object-name update-by-object-name-object-id" [
+export def "update-object-name-by-object-id" [
   object_name: string
   object_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1812,7 +1812,7 @@ export def "object-name update-by-object-name-object-id" [
 #
 # PUT /{objectName}/{objectId}
 # operationId: replaceObjectNameByObjectId
-export def "object-name update-by-object-name-object-id-1" [
+export def "replace-object-name-by-object-id" [
   object_name: string
   object_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -1857,7 +1857,7 @@ export def "object-name update-by-object-name-object-id-1" [
 #
 # GET /{objectName}/{objectId}/{childObjectName}
 # operationId: getObjectNameByChildObjectName
-export def "object-name list-1" [
+export def "get-object-name-by-child-object-name" [
   object_name: string
   object_id: string
   child_object_name: string
@@ -1905,7 +1905,7 @@ export def "object-name list-1" [
 #
 # POST /{objectName}/{objectId}/{childObjectName}
 # operationId: createObjectNameByChildObjectName
-export def "object-name create-by-child" [
+export def "create-object-name-by-child-object-name" [
   object_name: string
   object_id: string
   child_object_name: string
@@ -1952,7 +1952,7 @@ export def "object-name create-by-child" [
 #
 # DELETE /{objectName}/{objectId}/{childObjectName}/{childObjectId}
 # operationId: deleteObjectNameByChildObjectId
-export def "object-name delete-by-child" [
+export def "delete-object-name-by-child-object-id" [
   object_name: string
   object_id: string
   child_object_name: string
@@ -1997,7 +1997,7 @@ export def "object-name delete-by-child" [
 #
 # GET /{objectName}/{objectId}/{childObjectName}/{childObjectId}
 # operationId: getObjectNameByChildObjectId
-export def "object-name get-by-child" [
+export def "get-object-name-by-child-object-id" [
   object_name: string
   object_id: string
   child_object_name: string
@@ -2042,7 +2042,7 @@ export def "object-name get-by-child" [
 #
 # PATCH /{objectName}/{objectId}/{childObjectName}/{childObjectId}
 # operationId: updateObjectNameByChildObjectId
-export def "object-name update-by-child-by-object-name-object-id-child-object-name-child-object-id" [
+export def "update-object-name-by-child-object-id" [
   object_name: string
   object_id: string
   child_object_name: string
@@ -2091,7 +2091,7 @@ export def "object-name update-by-child-by-object-name-object-id-child-object-na
 #
 # PUT /{objectName}/{objectId}/{childObjectName}/{childObjectId}
 # operationId: replaceObjectNameByChildObjectId
-export def "object-name update-by-child-by-object-name-object-id-child-object-name-child-object-id-1" [
+export def "replace-object-name-by-child-object-id" [
   object_name: string
   object_id: string
   child_object_name: string

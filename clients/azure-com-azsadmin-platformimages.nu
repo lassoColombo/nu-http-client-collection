@@ -110,7 +110,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "subscriptions-providers-microsoft-compute-admin-locations-artifact-types-platform-image list" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "platform-images-list" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -134,7 +134,7 @@ export def commands []: nothing -> table {
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Compute.Admin/locations/{location}/artifactTypes/platformImage
 # operationId: PlatformImages_List
-export def "subscriptions-providers-microsoft-compute-admin-locations-artifact-types-platform-image list" [
+export def "platform-images-list" [
   subscription_id: string
   location: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -174,7 +174,7 @@ export def "subscriptions-providers-microsoft-compute-admin-locations-artifact-t
 #
 # DELETE /subscriptions/{subscriptionId}/providers/Microsoft.Compute.Admin/locations/{location}/artifactTypes/platformImage/publishers/{publisher}/offers/{offer}/skus/{sku}/versions/{version}
 # operationId: PlatformImages_Delete
-export def "subscriptions-providers-microsoft-compute-admin-locations-artifact-types-platform-image-publishers-offers-skus-versions delete" [
+export def "platform-images-delete" [
   subscription_id: string
   location: string
   publisher: string
@@ -222,7 +222,7 @@ export def "subscriptions-providers-microsoft-compute-admin-locations-artifact-t
 #
 # GET /subscriptions/{subscriptionId}/providers/Microsoft.Compute.Admin/locations/{location}/artifactTypes/platformImage/publishers/{publisher}/offers/{offer}/skus/{sku}/versions/{version}
 # operationId: PlatformImages_Get
-export def "subscriptions-providers-microsoft-compute-admin-locations-artifact-types-platform-image-publishers-offers-skus-versions get" [
+export def "platform-images-get" [
   subscription_id: string
   location: string
   publisher: string
@@ -271,7 +271,7 @@ export def "subscriptions-providers-microsoft-compute-admin-locations-artifact-t
 # PUT /subscriptions/{subscriptionId}/providers/Microsoft.Compute.Admin/locations/{location}/artifactTypes/platformImage/publishers/{publisher}/offers/{offer}/skus/{sku}/versions/{version}
 # operationId: PlatformImages_Create
 # --properties shape: {dataDisks?: list, details?: record, osDisk?: record, provisioningState?: "Creating"|"Failed"|"Succeeded"|"Canceled"}
-export def "subscriptions-providers-microsoft-compute-admin-locations-artifact-types-platform-image-publishers-offers-skus-versions create" [
+export def "platform-images-create" [
   subscription_id: string
   location: string
   publisher: string

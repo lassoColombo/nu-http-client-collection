@@ -168,7 +168,7 @@ def operation-completer-24 [] { ["untag-resource"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "accounts-users create-associate-phone-number" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "associate-phone-number-with-user" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -192,7 +192,7 @@ export def commands []: nothing -> table {
 #
 # POST /accounts/{accountId}/users/{userId}
 # operationId: AssociatePhoneNumberWithUser
-export def "accounts-users create-associate-phone-number" [
+export def "associate-phone-number-with-user" [
   account_id: string
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -245,7 +245,7 @@ export def "accounts-users create-associate-phone-number" [
 #
 # POST /voice-connectors/{voiceConnectorId}
 # operationId: AssociatePhoneNumbersWithVoiceConnector
-export def "voice-connectors create-associate-phone-numbers" [
+export def "associate-phone-numbers-with-voice-connector" [
   voice_connector_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -297,7 +297,7 @@ export def "voice-connectors create-associate-phone-numbers" [
 #
 # POST /voice-connector-groups/{voiceConnectorGroupId}
 # operationId: AssociatePhoneNumbersWithVoiceConnectorGroup
-export def "voice-connector-groups create-associate-phone-numbers" [
+export def "associate-phone-numbers-with-voice-connector-group" [
   voice_connector_group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -350,7 +350,7 @@ export def "voice-connector-groups create-associate-phone-numbers" [
 # POST /accounts/{accountId}
 # operationId: AssociateSigninDelegateGroupsWithAccount
 # --SigninDelegateGroups item shape: {GroupName?: any}
-export def "accounts create-associate-signin-delegate-groups" [
+export def "associate-signin-delegate-groups-with-account" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -402,7 +402,7 @@ export def "accounts create-associate-signin-delegate-groups" [
 # POST /meetings/{meetingId}/attendees
 # operationId: BatchCreateAttendee
 # --Attendees item shape: {ExternalUserId: any, Tags?: any}
-export def "meetings-attendees create-batch" [
+export def "batch-create-attendee" [
   meeting_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -453,7 +453,7 @@ export def "meetings-attendees create-batch" [
 #
 # POST /channels/{channelArn}/memberships
 # operationId: BatchCreateChannelMembership
-export def "channels-memberships create-batch" [
+export def "batch-create-channel-membership" [
   channel_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -507,7 +507,7 @@ export def "channels-memberships create-batch" [
 # POST /accounts/{accountId}/rooms/{roomId}/memberships
 # operationId: BatchCreateRoomMembership
 # --MembershipItemList item shape: {MemberId?: any, Role?: any}
-export def "accounts-rooms-memberships create-batch" [
+export def "batch-create-room-membership" [
   account_id: string
   room_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -560,7 +560,7 @@ export def "accounts-rooms-memberships create-batch" [
 #
 # POST /phone-numbers
 # operationId: BatchDeletePhoneNumber
-export def "phone-numbers delete-batch" [
+export def "batch-delete-phone-number" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -609,7 +609,7 @@ export def "phone-numbers delete-batch" [
 #
 # POST /accounts/{accountId}/users
 # operationId: BatchSuspendUser
-export def "accounts-users create-batch-suspend" [
+export def "batch-suspend-user" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -660,7 +660,7 @@ export def "accounts-users create-batch-suspend" [
 #
 # POST /accounts/{accountId}/users
 # operationId: BatchUnsuspendUser
-export def "accounts-users create-batch-unsuspend" [
+export def "batch-unsuspend-user" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -712,7 +712,7 @@ export def "accounts-users create-batch-unsuspend" [
 # POST /phone-numbers
 # operationId: BatchUpdatePhoneNumber
 # --UpdatePhoneNumberRequestItems item shape: {PhoneNumberId: any, ProductType?: any, CallingName?: any}
-export def "phone-numbers update-batch" [
+export def "batch-update-phone-number" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -762,7 +762,7 @@ export def "phone-numbers update-batch" [
 # POST /accounts/{accountId}/users
 # operationId: BatchUpdateUser
 # --UpdateUserRequestItems item shape: {UserId: any, LicenseType?: any, UserType?: any, AlexaForBusinessMetadata?: any}
-export def "accounts-users update-batch" [
+export def "batch-update-user" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -811,7 +811,7 @@ export def "accounts-users update-batch" [
 #
 # GET /accounts/{accountId}/users
 # operationId: ListUsers
-export def "accounts-users list" [
+export def "list-users" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -863,7 +863,7 @@ export def "accounts-users list" [
 #
 # POST /accounts
 # operationId: CreateAccount
-export def "accounts create" [
+export def "create-account" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -910,7 +910,7 @@ export def "accounts create" [
 #
 # GET /accounts
 # operationId: ListAccounts
-export def "accounts list" [
+export def "list-accounts" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -961,7 +961,7 @@ export def "accounts list" [
 # POST /app-instances
 # operationId: CreateAppInstance
 # --Tags item shape: {Key: any, Value: any}
-export def "app-instances create" [
+export def "create-app-instance" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1011,7 +1011,7 @@ export def "app-instances create" [
 #
 # GET /app-instances
 # operationId: ListAppInstances
-export def "app-instances list" [
+export def "list-app-instances" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1059,7 +1059,7 @@ export def "app-instances list" [
 #
 # POST /app-instances/{appInstanceArn}/admins
 # operationId: CreateAppInstanceAdmin
-export def "app-instances-admins create" [
+export def "create-app-instance-admin" [
   app_instance_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1108,7 +1108,7 @@ export def "app-instances-admins create" [
 #
 # GET /app-instances/{appInstanceArn}/admins
 # operationId: ListAppInstanceAdmins
-export def "app-instances-admins list" [
+export def "list-app-instance-admins" [
   app_instance_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1159,7 +1159,7 @@ export def "app-instances-admins list" [
 # POST /app-instance-users
 # operationId: CreateAppInstanceUser
 # --Tags item shape: {Key: any, Value: any}
-export def "app-instance-users create" [
+export def "create-app-instance-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1212,7 +1212,7 @@ export def "app-instance-users create" [
 # POST /meetings/{meetingId}/attendees
 # operationId: CreateAttendee
 # --Tags item shape: {Key: any, Value: any}
-export def "meetings-attendees create" [
+export def "create-attendee" [
   meeting_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1262,7 +1262,7 @@ export def "meetings-attendees create" [
 #
 # GET /meetings/{meetingId}/attendees
 # operationId: ListAttendees
-export def "meetings-attendees list" [
+export def "list-attendees" [
   meeting_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1312,7 +1312,7 @@ export def "meetings-attendees list" [
 #
 # POST /accounts/{accountId}/bots
 # operationId: CreateBot
-export def "accounts-bots create" [
+export def "create-bot" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1362,7 +1362,7 @@ export def "accounts-bots create" [
 #
 # GET /accounts/{accountId}/bots
 # operationId: ListBots
-export def "accounts-bots list" [
+export def "list-bots" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1413,7 +1413,7 @@ export def "accounts-bots list" [
 # POST /channels
 # operationId: CreateChannel
 # --Tags item shape: {Key: any, Value: any}
-export def "channels create" [
+export def "create-channel" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1467,7 +1467,7 @@ export def "channels create" [
 #
 # POST /channels/{channelArn}/bans
 # operationId: CreateChannelBan
-export def "channels-bans create" [
+export def "create-channel-ban" [
   channel_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1517,7 +1517,7 @@ export def "channels-bans create" [
 #
 # GET /channels/{channelArn}/bans
 # operationId: ListChannelBans
-export def "channels-bans list" [
+export def "list-channel-bans" [
   channel_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1568,7 +1568,7 @@ export def "channels-bans list" [
 #
 # POST /channels/{channelArn}/memberships
 # operationId: CreateChannelMembership
-export def "channels-memberships create" [
+export def "create-channel-membership" [
   channel_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1619,7 +1619,7 @@ export def "channels-memberships create" [
 #
 # GET /channels/{channelArn}/memberships
 # operationId: ListChannelMemberships
-export def "channels-memberships list" [
+export def "list-channel-memberships" [
   channel_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1671,7 +1671,7 @@ export def "channels-memberships list" [
 #
 # POST /channels/{channelArn}/moderators
 # operationId: CreateChannelModerator
-export def "channels-moderators create" [
+export def "create-channel-moderator" [
   channel_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1721,7 +1721,7 @@ export def "channels-moderators create" [
 #
 # GET /channels/{channelArn}/moderators
 # operationId: ListChannelModerators
-export def "channels-moderators list" [
+export def "list-channel-moderators" [
   channel_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -1773,7 +1773,7 @@ export def "channels-moderators list" [
 # POST /media-capture-pipelines
 # operationId: CreateMediaCapturePipeline
 # --ChimeSdkMeetingConfiguration shape: {SourceConfiguration?: any, ArtifactsConfiguration?: any}
-export def "media-capture-pipelines create" [
+export def "create-media-capture-pipeline" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1825,7 +1825,7 @@ export def "media-capture-pipelines create" [
 #
 # GET /media-capture-pipelines
 # operationId: ListMediaCapturePipelines
-export def "media-capture-pipelines list" [
+export def "list-media-capture-pipelines" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1875,7 +1875,7 @@ export def "media-capture-pipelines list" [
 # operationId: CreateMeeting
 # --Tags item shape: {Key: any, Value: any}
 # --NotificationsConfiguration shape: {SnsTopicArn?: any, SqsQueueArn?: any}
-export def "meetings create" [
+export def "create-meeting" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1927,7 +1927,7 @@ export def "meetings create" [
 #
 # GET /meetings
 # operationId: ListMeetings
-export def "meetings list" [
+export def "list-meetings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1975,7 +1975,7 @@ export def "meetings list" [
 #
 # POST /meetings/{meetingId}/dial-outs
 # operationId: CreateMeetingDialOut
-export def "meetings-dial-outs create" [
+export def "create-meeting-dial-out" [
   meeting_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2029,7 +2029,7 @@ export def "meetings-dial-outs create" [
 # --Tags item shape: {Key: any, Value: any}
 # --NotificationsConfiguration shape: {SnsTopicArn?: any, SqsQueueArn?: any}
 # --Attendees item shape: {ExternalUserId: any, Tags?: any}
-export def "meetings create-with-attendees" [
+export def "create-meeting-with-attendees" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2084,7 +2084,7 @@ export def "meetings create-with-attendees" [
 #
 # POST /phone-number-orders
 # operationId: CreatePhoneNumberOrder
-export def "phone-number-orders create" [
+export def "create-phone-number-order" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2132,7 +2132,7 @@ export def "phone-number-orders create" [
 #
 # GET /phone-number-orders
 # operationId: ListPhoneNumberOrders
-export def "phone-number-orders list" [
+export def "list-phone-number-orders" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2181,7 +2181,7 @@ export def "phone-number-orders list" [
 # POST /voice-connectors/{voiceConnectorId}/proxy-sessions
 # operationId: CreateProxySession
 # --GeoMatchParams shape: {Country?: any, AreaCode?: any}
-export def "voice-connectors-proxy-sessions create" [
+export def "create-proxy-session" [
   voice_connector_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2236,7 +2236,7 @@ export def "voice-connectors-proxy-sessions create" [
 #
 # GET /voice-connectors/{voiceConnectorId}/proxy-sessions
 # operationId: ListProxySessions
-export def "voice-connectors-proxy-sessions list" [
+export def "list-proxy-sessions" [
   voice_connector_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2287,7 +2287,7 @@ export def "voice-connectors-proxy-sessions list" [
 #
 # POST /accounts/{accountId}/rooms
 # operationId: CreateRoom
-export def "accounts-rooms create" [
+export def "create-room" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2337,7 +2337,7 @@ export def "accounts-rooms create" [
 #
 # GET /accounts/{accountId}/rooms
 # operationId: ListRooms
-export def "accounts-rooms list" [
+export def "list-rooms" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2388,7 +2388,7 @@ export def "accounts-rooms list" [
 #
 # POST /accounts/{accountId}/rooms/{roomId}/memberships
 # operationId: CreateRoomMembership
-export def "accounts-rooms-memberships create" [
+export def "create-room-membership" [
   account_id: string
   room_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2440,7 +2440,7 @@ export def "accounts-rooms-memberships create" [
 #
 # GET /accounts/{accountId}/rooms/{roomId}/memberships
 # operationId: ListRoomMemberships
-export def "accounts-rooms-memberships list" [
+export def "list-room-memberships" [
   account_id: string
   room_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -2493,7 +2493,7 @@ export def "accounts-rooms-memberships list" [
 # POST /sip-media-applications
 # operationId: CreateSipMediaApplication
 # --Endpoints item shape: {LambdaArn?: any}
-export def "sip-media-applications create" [
+export def "create-sip-media-application" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2542,7 +2542,7 @@ export def "sip-media-applications create" [
 #
 # GET /sip-media-applications
 # operationId: ListSipMediaApplications
-export def "sip-media-applications list" [
+export def "list-sip-media-applications" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2590,7 +2590,7 @@ export def "sip-media-applications list" [
 #
 # POST /sip-media-applications/{sipMediaApplicationId}/calls
 # operationId: CreateSipMediaApplicationCall
-export def "sip-media-applications-calls create" [
+export def "create-sip-media-application-call" [
   sip_media_application_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2642,7 +2642,7 @@ export def "sip-media-applications-calls create" [
 # POST /sip-rules
 # operationId: CreateSipRule
 # --TargetApplications item shape: {SipMediaApplicationId?: any, Priority?: any, AwsRegion?: any}
-export def "sip-rules create" [
+export def "create-sip-rule" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2693,7 +2693,7 @@ export def "sip-rules create" [
 #
 # GET /sip-rules
 # operationId: ListSipRules
-export def "sip-rules list" [
+export def "list-sip-rules" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2742,7 +2742,7 @@ export def "sip-rules list" [
 #
 # POST /accounts/{accountId}/users
 # operationId: CreateUser
-export def "accounts-users create" [
+export def "create-user" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -2795,7 +2795,7 @@ export def "accounts-users create" [
 #
 # POST /voice-connectors
 # operationId: CreateVoiceConnector
-export def "voice-connectors create" [
+export def "create-voice-connector" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2844,7 +2844,7 @@ export def "voice-connectors create" [
 #
 # GET /voice-connectors
 # operationId: ListVoiceConnectors
-export def "voice-connectors list" [
+export def "list-voice-connectors" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2893,7 +2893,7 @@ export def "voice-connectors list" [
 # POST /voice-connector-groups
 # operationId: CreateVoiceConnectorGroup
 # --VoiceConnectorItems item shape: {VoiceConnectorId: any, Priority: any}
-export def "voice-connector-groups create" [
+export def "create-voice-connector-group" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2941,7 +2941,7 @@ export def "voice-connector-groups create" [
 #
 # GET /voice-connector-groups
 # operationId: ListVoiceConnectorGroups
-export def "voice-connector-groups list" [
+export def "list-voice-connector-groups" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -2989,7 +2989,7 @@ export def "voice-connector-groups list" [
 #
 # DELETE /accounts/{accountId}
 # operationId: DeleteAccount
-export def "accounts delete" [
+export def "delete-account" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3034,7 +3034,7 @@ export def "accounts delete" [
 #
 # GET /accounts/{accountId}
 # operationId: GetAccount
-export def "accounts get" [
+export def "get-account" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3079,7 +3079,7 @@ export def "accounts get" [
 #
 # POST /accounts/{accountId}
 # operationId: UpdateAccount
-export def "accounts update" [
+export def "update-account" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3129,7 +3129,7 @@ export def "accounts update" [
 #
 # DELETE /app-instances/{appInstanceArn}
 # operationId: DeleteAppInstance
-export def "app-instances delete" [
+export def "delete-app-instance" [
   app_instance_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3174,7 +3174,7 @@ export def "app-instances delete" [
 #
 # GET /app-instances/{appInstanceArn}
 # operationId: DescribeAppInstance
-export def "app-instances get" [
+export def "describe-app-instance" [
   app_instance_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3219,7 +3219,7 @@ export def "app-instances get" [
 #
 # PUT /app-instances/{appInstanceArn}
 # operationId: UpdateAppInstance
-export def "app-instances update" [
+export def "update-app-instance" [
   app_instance_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3269,7 +3269,7 @@ export def "app-instances update" [
 #
 # DELETE /app-instances/{appInstanceArn}/admins/{appInstanceAdminArn}
 # operationId: DeleteAppInstanceAdmin
-export def "app-instances-admins delete" [
+export def "delete-app-instance-admin" [
   app_instance_arn: string
   app_instance_admin_arn: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3316,7 +3316,7 @@ export def "app-instances-admins delete" [
 #
 # GET /app-instances/{appInstanceArn}/admins/{appInstanceAdminArn}
 # operationId: DescribeAppInstanceAdmin
-export def "app-instances-admins get" [
+export def "describe-app-instance-admin" [
   app_instance_arn: string
   app_instance_admin_arn: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3363,7 +3363,7 @@ export def "app-instances-admins get" [
 #
 # DELETE /app-instances/{appInstanceArn}/streaming-configurations
 # operationId: DeleteAppInstanceStreamingConfigurations
-export def "app-instances-streaming-configurations delete" [
+export def "delete-app-instance-streaming-configurations" [
   app_instance_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3408,7 +3408,7 @@ export def "app-instances-streaming-configurations delete" [
 #
 # GET /app-instances/{appInstanceArn}/streaming-configurations
 # operationId: GetAppInstanceStreamingConfigurations
-export def "app-instances-streaming-configurations get" [
+export def "get-app-instance-streaming-configurations" [
   app_instance_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3454,7 +3454,7 @@ export def "app-instances-streaming-configurations get" [
 # PUT /app-instances/{appInstanceArn}/streaming-configurations
 # operationId: PutAppInstanceStreamingConfigurations
 # --AppInstanceStreamingConfigurations item shape: {AppInstanceDataType: any, ResourceArn: any}
-export def "app-instances-streaming-configurations update" [
+export def "put-app-instance-streaming-configurations" [
   app_instance_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3503,7 +3503,7 @@ export def "app-instances-streaming-configurations update" [
 #
 # DELETE /app-instance-users/{appInstanceUserArn}
 # operationId: DeleteAppInstanceUser
-export def "app-instance-users delete" [
+export def "delete-app-instance-user" [
   app_instance_user_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3548,7 +3548,7 @@ export def "app-instance-users delete" [
 #
 # GET /app-instance-users/{appInstanceUserArn}
 # operationId: DescribeAppInstanceUser
-export def "app-instance-users get" [
+export def "describe-app-instance-user" [
   app_instance_user_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3593,7 +3593,7 @@ export def "app-instance-users get" [
 #
 # PUT /app-instance-users/{appInstanceUserArn}
 # operationId: UpdateAppInstanceUser
-export def "app-instance-users update" [
+export def "update-app-instance-user" [
   app_instance_user_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3643,7 +3643,7 @@ export def "app-instance-users update" [
 #
 # DELETE /meetings/{meetingId}/attendees/{attendeeId}
 # operationId: DeleteAttendee
-export def "meetings-attendees delete" [
+export def "delete-attendee" [
   meeting_id: string
   attendee_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3690,7 +3690,7 @@ export def "meetings-attendees delete" [
 #
 # GET /meetings/{meetingId}/attendees/{attendeeId}
 # operationId: GetAttendee
-export def "meetings-attendees get" [
+export def "get-attendee" [
   meeting_id: string
   attendee_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3737,7 +3737,7 @@ export def "meetings-attendees get" [
 #
 # DELETE /channels/{channelArn}
 # operationId: DeleteChannel
-export def "channels delete" [
+export def "delete-channel" [
   channel_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3783,7 +3783,7 @@ export def "channels delete" [
 #
 # GET /channels/{channelArn}
 # operationId: DescribeChannel
-export def "channels get" [
+export def "describe-channel" [
   channel_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3829,7 +3829,7 @@ export def "channels get" [
 #
 # PUT /channels/{channelArn}
 # operationId: UpdateChannel
-export def "channels update" [
+export def "update-channel" [
   channel_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -3881,7 +3881,7 @@ export def "channels update" [
 #
 # DELETE /channels/{channelArn}/bans/{memberArn}
 # operationId: DeleteChannelBan
-export def "channels-bans delete" [
+export def "delete-channel-ban" [
   channel_arn: string
   member_arn: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3929,7 +3929,7 @@ export def "channels-bans delete" [
 #
 # GET /channels/{channelArn}/bans/{memberArn}
 # operationId: DescribeChannelBan
-export def "channels-bans get" [
+export def "describe-channel-ban" [
   channel_arn: string
   member_arn: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -3977,7 +3977,7 @@ export def "channels-bans get" [
 #
 # DELETE /channels/{channelArn}/memberships/{memberArn}
 # operationId: DeleteChannelMembership
-export def "channels-memberships delete" [
+export def "delete-channel-membership" [
   channel_arn: string
   member_arn: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4025,7 +4025,7 @@ export def "channels-memberships delete" [
 #
 # GET /channels/{channelArn}/memberships/{memberArn}
 # operationId: DescribeChannelMembership
-export def "channels-memberships get" [
+export def "describe-channel-membership" [
   channel_arn: string
   member_arn: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4073,7 +4073,7 @@ export def "channels-memberships get" [
 #
 # DELETE /channels/{channelArn}/messages/{messageId}
 # operationId: DeleteChannelMessage
-export def "channels-messages delete" [
+export def "delete-channel-message" [
   channel_arn: string
   message_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4121,7 +4121,7 @@ export def "channels-messages delete" [
 #
 # GET /channels/{channelArn}/messages/{messageId}
 # operationId: GetChannelMessage
-export def "channels-messages get" [
+export def "get-channel-message" [
   channel_arn: string
   message_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4169,7 +4169,7 @@ export def "channels-messages get" [
 #
 # PUT /channels/{channelArn}/messages/{messageId}
 # operationId: UpdateChannelMessage
-export def "channels-messages update" [
+export def "update-channel-message" [
   channel_arn: string
   message_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4222,7 +4222,7 @@ export def "channels-messages update" [
 #
 # DELETE /channels/{channelArn}/moderators/{channelModeratorArn}
 # operationId: DeleteChannelModerator
-export def "channels-moderators delete" [
+export def "delete-channel-moderator" [
   channel_arn: string
   channel_moderator_arn: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4270,7 +4270,7 @@ export def "channels-moderators delete" [
 #
 # GET /channels/{channelArn}/moderators/{channelModeratorArn}
 # operationId: DescribeChannelModerator
-export def "channels-moderators get" [
+export def "describe-channel-moderator" [
   channel_arn: string
   channel_moderator_arn: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4318,7 +4318,7 @@ export def "channels-moderators get" [
 #
 # DELETE /accounts/{accountId}/bots/{botId}/events-configuration
 # operationId: DeleteEventsConfiguration
-export def "accounts-bots-events-configuration delete" [
+export def "delete-events-configuration" [
   account_id: string
   bot_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4365,7 +4365,7 @@ export def "accounts-bots-events-configuration delete" [
 #
 # GET /accounts/{accountId}/bots/{botId}/events-configuration
 # operationId: GetEventsConfiguration
-export def "accounts-bots-events-configuration get" [
+export def "get-events-configuration" [
   account_id: string
   bot_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4412,7 +4412,7 @@ export def "accounts-bots-events-configuration get" [
 #
 # PUT /accounts/{accountId}/bots/{botId}/events-configuration
 # operationId: PutEventsConfiguration
-export def "accounts-bots-events-configuration update" [
+export def "put-events-configuration" [
   account_id: string
   bot_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4464,7 +4464,7 @@ export def "accounts-bots-events-configuration update" [
 #
 # DELETE /media-capture-pipelines/{mediaPipelineId}
 # operationId: DeleteMediaCapturePipeline
-export def "media-capture-pipelines delete" [
+export def "delete-media-capture-pipeline" [
   media_pipeline_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4509,7 +4509,7 @@ export def "media-capture-pipelines delete" [
 #
 # GET /media-capture-pipelines/{mediaPipelineId}
 # operationId: GetMediaCapturePipeline
-export def "media-capture-pipelines get" [
+export def "get-media-capture-pipeline" [
   media_pipeline_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4554,7 +4554,7 @@ export def "media-capture-pipelines get" [
 #
 # DELETE /meetings/{meetingId}
 # operationId: DeleteMeeting
-export def "meetings delete" [
+export def "delete-meeting" [
   meeting_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4599,7 +4599,7 @@ export def "meetings delete" [
 #
 # GET /meetings/{meetingId}
 # operationId: GetMeeting
-export def "meetings get" [
+export def "get-meeting" [
   meeting_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4644,7 +4644,7 @@ export def "meetings get" [
 #
 # DELETE /phone-numbers/{phoneNumberId}
 # operationId: DeletePhoneNumber
-export def "phone-numbers delete" [
+export def "delete-phone-number" [
   phone_number_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4689,7 +4689,7 @@ export def "phone-numbers delete" [
 #
 # GET /phone-numbers/{phoneNumberId}
 # operationId: GetPhoneNumber
-export def "phone-numbers get" [
+export def "get-phone-number" [
   phone_number_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4734,7 +4734,7 @@ export def "phone-numbers get" [
 #
 # POST /phone-numbers/{phoneNumberId}
 # operationId: UpdatePhoneNumber
-export def "phone-numbers update" [
+export def "update-phone-number" [
   phone_number_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -4784,7 +4784,7 @@ export def "phone-numbers update" [
 #
 # DELETE /voice-connectors/{voiceConnectorId}/proxy-sessions/{proxySessionId}
 # operationId: DeleteProxySession
-export def "voice-connectors-proxy-sessions delete" [
+export def "delete-proxy-session" [
   voice_connector_id: string
   proxy_session_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4831,7 +4831,7 @@ export def "voice-connectors-proxy-sessions delete" [
 #
 # GET /voice-connectors/{voiceConnectorId}/proxy-sessions/{proxySessionId}
 # operationId: GetProxySession
-export def "voice-connectors-proxy-sessions get" [
+export def "get-proxy-session" [
   voice_connector_id: string
   proxy_session_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4878,7 +4878,7 @@ export def "voice-connectors-proxy-sessions get" [
 #
 # POST /voice-connectors/{voiceConnectorId}/proxy-sessions/{proxySessionId}
 # operationId: UpdateProxySession
-export def "voice-connectors-proxy-sessions update" [
+export def "update-proxy-session" [
   voice_connector_id: string
   proxy_session_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4930,7 +4930,7 @@ export def "voice-connectors-proxy-sessions update" [
 #
 # DELETE /accounts/{accountId}/rooms/{roomId}
 # operationId: DeleteRoom
-export def "accounts-rooms delete" [
+export def "delete-room" [
   account_id: string
   room_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -4977,7 +4977,7 @@ export def "accounts-rooms delete" [
 #
 # GET /accounts/{accountId}/rooms/{roomId}
 # operationId: GetRoom
-export def "accounts-rooms get" [
+export def "get-room" [
   account_id: string
   room_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5024,7 +5024,7 @@ export def "accounts-rooms get" [
 #
 # POST /accounts/{accountId}/rooms/{roomId}
 # operationId: UpdateRoom
-export def "accounts-rooms update" [
+export def "update-room" [
   account_id: string
   room_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -5075,7 +5075,7 @@ export def "accounts-rooms update" [
 #
 # DELETE /accounts/{accountId}/rooms/{roomId}/memberships/{memberId}
 # operationId: DeleteRoomMembership
-export def "accounts-rooms-memberships delete" [
+export def "delete-room-membership" [
   account_id: string
   room_id: string
   member_id: string
@@ -5124,7 +5124,7 @@ export def "accounts-rooms-memberships delete" [
 #
 # POST /accounts/{accountId}/rooms/{roomId}/memberships/{memberId}
 # operationId: UpdateRoomMembership
-export def "accounts-rooms-memberships update" [
+export def "update-room-membership" [
   account_id: string
   room_id: string
   member_id: string
@@ -5177,7 +5177,7 @@ export def "accounts-rooms-memberships update" [
 #
 # DELETE /sip-media-applications/{sipMediaApplicationId}
 # operationId: DeleteSipMediaApplication
-export def "sip-media-applications delete" [
+export def "delete-sip-media-application" [
   sip_media_application_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5222,7 +5222,7 @@ export def "sip-media-applications delete" [
 #
 # GET /sip-media-applications/{sipMediaApplicationId}
 # operationId: GetSipMediaApplication
-export def "sip-media-applications get" [
+export def "get-sip-media-application" [
   sip_media_application_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5268,7 +5268,7 @@ export def "sip-media-applications get" [
 # PUT /sip-media-applications/{sipMediaApplicationId}
 # operationId: UpdateSipMediaApplication
 # --Endpoints item shape: {LambdaArn?: any}
-export def "sip-media-applications update" [
+export def "update-sip-media-application" [
   sip_media_application_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5318,7 +5318,7 @@ export def "sip-media-applications update" [
 #
 # DELETE /sip-rules/{sipRuleId}
 # operationId: DeleteSipRule
-export def "sip-rules delete" [
+export def "delete-sip-rule" [
   sip_rule_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5363,7 +5363,7 @@ export def "sip-rules delete" [
 #
 # GET /sip-rules/{sipRuleId}
 # operationId: GetSipRule
-export def "sip-rules get" [
+export def "get-sip-rule" [
   sip_rule_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5409,7 +5409,7 @@ export def "sip-rules get" [
 # PUT /sip-rules/{sipRuleId}
 # operationId: UpdateSipRule
 # --TargetApplications item shape: {SipMediaApplicationId?: any, Priority?: any, AwsRegion?: any}
-export def "sip-rules update" [
+export def "update-sip-rule" [
   sip_rule_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5460,7 +5460,7 @@ export def "sip-rules update" [
 #
 # DELETE /voice-connectors/{voiceConnectorId}
 # operationId: DeleteVoiceConnector
-export def "voice-connectors delete" [
+export def "delete-voice-connector" [
   voice_connector_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5505,7 +5505,7 @@ export def "voice-connectors delete" [
 #
 # GET /voice-connectors/{voiceConnectorId}
 # operationId: GetVoiceConnector
-export def "voice-connectors get" [
+export def "get-voice-connector" [
   voice_connector_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5550,7 +5550,7 @@ export def "voice-connectors get" [
 #
 # PUT /voice-connectors/{voiceConnectorId}
 # operationId: UpdateVoiceConnector
-export def "voice-connectors update" [
+export def "update-voice-connector" [
   voice_connector_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5600,7 +5600,7 @@ export def "voice-connectors update" [
 #
 # DELETE /voice-connectors/{voiceConnectorId}/emergency-calling-configuration
 # operationId: DeleteVoiceConnectorEmergencyCallingConfiguration
-export def "voice-connectors-emergency-calling-configuration delete" [
+export def "delete-voice-connector-emergency-calling-configuration" [
   voice_connector_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5645,7 +5645,7 @@ export def "voice-connectors-emergency-calling-configuration delete" [
 #
 # GET /voice-connectors/{voiceConnectorId}/emergency-calling-configuration
 # operationId: GetVoiceConnectorEmergencyCallingConfiguration
-export def "voice-connectors-emergency-calling-configuration get" [
+export def "get-voice-connector-emergency-calling-configuration" [
   voice_connector_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5691,7 +5691,7 @@ export def "voice-connectors-emergency-calling-configuration get" [
 # PUT /voice-connectors/{voiceConnectorId}/emergency-calling-configuration
 # operationId: PutVoiceConnectorEmergencyCallingConfiguration
 # --EmergencyCallingConfiguration shape: {DNIS?: any}
-export def "voice-connectors-emergency-calling-configuration update" [
+export def "put-voice-connector-emergency-calling-configuration" [
   voice_connector_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5740,7 +5740,7 @@ export def "voice-connectors-emergency-calling-configuration update" [
 #
 # DELETE /voice-connector-groups/{voiceConnectorGroupId}
 # operationId: DeleteVoiceConnectorGroup
-export def "voice-connector-groups delete" [
+export def "delete-voice-connector-group" [
   voice_connector_group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5785,7 +5785,7 @@ export def "voice-connector-groups delete" [
 #
 # GET /voice-connector-groups/{voiceConnectorGroupId}
 # operationId: GetVoiceConnectorGroup
-export def "voice-connector-groups get" [
+export def "get-voice-connector-group" [
   voice_connector_group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5831,7 +5831,7 @@ export def "voice-connector-groups get" [
 # PUT /voice-connector-groups/{voiceConnectorGroupId}
 # operationId: UpdateVoiceConnectorGroup
 # --VoiceConnectorItems item shape: {VoiceConnectorId: any, Priority: any}
-export def "voice-connector-groups update" [
+export def "update-voice-connector-group" [
   voice_connector_group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5881,7 +5881,7 @@ export def "voice-connector-groups update" [
 #
 # DELETE /voice-connectors/{voiceConnectorId}/origination
 # operationId: DeleteVoiceConnectorOrigination
-export def "voice-connectors-origination delete" [
+export def "delete-voice-connector-origination" [
   voice_connector_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5926,7 +5926,7 @@ export def "voice-connectors-origination delete" [
 #
 # GET /voice-connectors/{voiceConnectorId}/origination
 # operationId: GetVoiceConnectorOrigination
-export def "voice-connectors-origination get" [
+export def "get-voice-connector-origination" [
   voice_connector_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -5972,7 +5972,7 @@ export def "voice-connectors-origination get" [
 # PUT /voice-connectors/{voiceConnectorId}/origination
 # operationId: PutVoiceConnectorOrigination
 # --Origination shape: {Routes?: any, Disabled?: any}
-export def "voice-connectors-origination update" [
+export def "put-voice-connector-origination" [
   voice_connector_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6021,7 +6021,7 @@ export def "voice-connectors-origination update" [
 #
 # DELETE /voice-connectors/{voiceConnectorId}/programmable-numbers/proxy
 # operationId: DeleteVoiceConnectorProxy
-export def "voice-connectors-programmable-numbers-proxy delete" [
+export def "delete-voice-connector-proxy" [
   voice_connector_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6066,7 +6066,7 @@ export def "voice-connectors-programmable-numbers-proxy delete" [
 #
 # GET /voice-connectors/{voiceConnectorId}/programmable-numbers/proxy
 # operationId: GetVoiceConnectorProxy
-export def "voice-connectors-programmable-numbers-proxy get" [
+export def "get-voice-connector-proxy" [
   voice_connector_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6111,7 +6111,7 @@ export def "voice-connectors-programmable-numbers-proxy get" [
 #
 # PUT /voice-connectors/{voiceConnectorId}/programmable-numbers/proxy
 # operationId: PutVoiceConnectorProxy
-export def "voice-connectors-programmable-numbers-proxy update" [
+export def "put-voice-connector-proxy" [
   voice_connector_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6163,7 +6163,7 @@ export def "voice-connectors-programmable-numbers-proxy update" [
 #
 # DELETE /voice-connectors/{voiceConnectorId}/streaming-configuration
 # operationId: DeleteVoiceConnectorStreamingConfiguration
-export def "voice-connectors-streaming-configuration delete" [
+export def "delete-voice-connector-streaming-configuration" [
   voice_connector_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6208,7 +6208,7 @@ export def "voice-connectors-streaming-configuration delete" [
 #
 # GET /voice-connectors/{voiceConnectorId}/streaming-configuration
 # operationId: GetVoiceConnectorStreamingConfiguration
-export def "voice-connectors-streaming-configuration get" [
+export def "get-voice-connector-streaming-configuration" [
   voice_connector_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6254,7 +6254,7 @@ export def "voice-connectors-streaming-configuration get" [
 # PUT /voice-connectors/{voiceConnectorId}/streaming-configuration
 # operationId: PutVoiceConnectorStreamingConfiguration
 # --StreamingConfiguration shape: {DataRetentionInHours?: any, Disabled?: any, StreamingNotificationTargets?: any}
-export def "voice-connectors-streaming-configuration update" [
+export def "put-voice-connector-streaming-configuration" [
   voice_connector_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6303,7 +6303,7 @@ export def "voice-connectors-streaming-configuration update" [
 #
 # DELETE /voice-connectors/{voiceConnectorId}/termination
 # operationId: DeleteVoiceConnectorTermination
-export def "voice-connectors-termination delete" [
+export def "delete-voice-connector-termination" [
   voice_connector_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6348,7 +6348,7 @@ export def "voice-connectors-termination delete" [
 #
 # GET /voice-connectors/{voiceConnectorId}/termination
 # operationId: GetVoiceConnectorTermination
-export def "voice-connectors-termination get" [
+export def "get-voice-connector-termination" [
   voice_connector_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6394,7 +6394,7 @@ export def "voice-connectors-termination get" [
 # PUT /voice-connectors/{voiceConnectorId}/termination
 # operationId: PutVoiceConnectorTermination
 # --Termination shape: {CpsLimit?: any, DefaultPhoneNumber?: any, CallingRegions?: any, CidrAllowedList?: any, Disabled?: any}
-export def "voice-connectors-termination update" [
+export def "put-voice-connector-termination" [
   voice_connector_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6443,7 +6443,7 @@ export def "voice-connectors-termination update" [
 #
 # POST /voice-connectors/{voiceConnectorId}/termination/credentials
 # operationId: DeleteVoiceConnectorTerminationCredentials
-export def "voice-connectors-termination-credentials delete" [
+export def "delete-voice-connector-termination-credentials" [
   voice_connector_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6494,7 +6494,7 @@ export def "voice-connectors-termination-credentials delete" [
 #
 # GET /channels/{channelArn}
 # operationId: DescribeChannelMembershipForAppInstanceUser
-export def "channels get-membership-for-app-instance-user" [
+export def "describe-channel-membership-for-app-instance-user" [
   channel_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6543,7 +6543,7 @@ export def "channels get-membership-for-app-instance-user" [
 #
 # GET /channels/{channelArn}
 # operationId: DescribeChannelModeratedByAppInstanceUser
-export def "channels get-moderated-by-app-instance-user" [
+export def "describe-channel-moderated-by-app-instance-user" [
   channel_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6592,7 +6592,7 @@ export def "channels get-moderated-by-app-instance-user" [
 #
 # POST /accounts/{accountId}/users/{userId}
 # operationId: DisassociatePhoneNumberFromUser
-export def "accounts-users create-disassociate-phone-number" [
+export def "disassociate-phone-number-from-user" [
   account_id: string
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -6641,7 +6641,7 @@ export def "accounts-users create-disassociate-phone-number" [
 #
 # POST /voice-connectors/{voiceConnectorId}
 # operationId: DisassociatePhoneNumbersFromVoiceConnector
-export def "voice-connectors create-disassociate-phone-numbers" [
+export def "disassociate-phone-numbers-from-voice-connector" [
   voice_connector_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6692,7 +6692,7 @@ export def "voice-connectors create-disassociate-phone-numbers" [
 #
 # POST /voice-connector-groups/{voiceConnectorGroupId}
 # operationId: DisassociatePhoneNumbersFromVoiceConnectorGroup
-export def "voice-connector-groups create-disassociate-phone-numbers" [
+export def "disassociate-phone-numbers-from-voice-connector-group" [
   voice_connector_group_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6743,7 +6743,7 @@ export def "voice-connector-groups create-disassociate-phone-numbers" [
 #
 # POST /accounts/{accountId}
 # operationId: DisassociateSigninDelegateGroupsFromAccount
-export def "accounts create-disassociate-signin-delegate-groups" [
+export def "disassociate-signin-delegate-groups-from-account" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6794,7 +6794,7 @@ export def "accounts create-disassociate-signin-delegate-groups" [
 #
 # GET /accounts/{accountId}/settings
 # operationId: GetAccountSettings
-export def "accounts-settings get" [
+export def "get-account-settings" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6840,7 +6840,7 @@ export def "accounts-settings get" [
 # PUT /accounts/{accountId}/settings
 # operationId: UpdateAccountSettings
 # --AccountSettings shape: {DisableRemoteControl?: any, EnableDialOut?: any}
-export def "accounts-settings update" [
+export def "update-account-settings" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6889,7 +6889,7 @@ export def "accounts-settings update" [
 #
 # GET /app-instances/{appInstanceArn}/retention-settings
 # operationId: GetAppInstanceRetentionSettings
-export def "app-instances-retention-settings get" [
+export def "get-app-instance-retention-settings" [
   app_instance_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6935,7 +6935,7 @@ export def "app-instances-retention-settings get" [
 # PUT /app-instances/{appInstanceArn}/retention-settings
 # operationId: PutAppInstanceRetentionSettings
 # --AppInstanceRetentionSettings shape: {ChannelRetentionSettings?: any}
-export def "app-instances-retention-settings update" [
+export def "put-app-instance-retention-settings" [
   app_instance_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -6984,7 +6984,7 @@ export def "app-instances-retention-settings update" [
 #
 # GET /accounts/{accountId}/bots/{botId}
 # operationId: GetBot
-export def "accounts-bots get" [
+export def "get-bot" [
   account_id: string
   bot_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7031,7 +7031,7 @@ export def "accounts-bots get" [
 #
 # POST /accounts/{accountId}/bots/{botId}
 # operationId: UpdateBot
-export def "accounts-bots update" [
+export def "update-bot" [
   account_id: string
   bot_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7082,7 +7082,7 @@ export def "accounts-bots update" [
 #
 # GET /settings
 # operationId: GetGlobalSettings
-export def "settings get-global" [
+export def "get-global-settings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7127,7 +7127,7 @@ export def "settings get-global" [
 # operationId: UpdateGlobalSettings
 # --BusinessCalling shape: {CdrBucket?: any}
 # --VoiceConnector shape: {CdrBucket?: any}
-export def "settings update-global" [
+export def "update-global-settings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7175,7 +7175,7 @@ export def "settings update-global" [
 #
 # GET /endpoints/messaging-session
 # operationId: GetMessagingSessionEndpoint
-export def "endpoints-messaging-session get" [
+export def "get-messaging-session-endpoint" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7218,7 +7218,7 @@ export def "endpoints-messaging-session get" [
 #
 # GET /phone-number-orders/{phoneNumberOrderId}
 # operationId: GetPhoneNumberOrder
-export def "phone-number-orders get" [
+export def "get-phone-number-order" [
   phone_number_order_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7263,7 +7263,7 @@ export def "phone-number-orders get" [
 #
 # GET /settings/phone-number
 # operationId: GetPhoneNumberSettings
-export def "settings-phone-number get" [
+export def "get-phone-number-settings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7306,7 +7306,7 @@ export def "settings-phone-number get" [
 #
 # PUT /settings/phone-number
 # operationId: UpdatePhoneNumberSettings
-export def "settings-phone-number update" [
+export def "update-phone-number-settings" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7353,7 +7353,7 @@ export def "settings-phone-number update" [
 #
 # GET /accounts/{accountId}/retention-settings
 # operationId: GetRetentionSettings
-export def "accounts-retention-settings get" [
+export def "get-retention-settings" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7399,7 +7399,7 @@ export def "accounts-retention-settings get" [
 # PUT /accounts/{accountId}/retention-settings
 # operationId: PutRetentionSettings
 # --RetentionSettings shape: {RoomRetentionSettings?: any, ConversationRetentionSettings?: any}
-export def "accounts-retention-settings update" [
+export def "put-retention-settings" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7448,7 +7448,7 @@ export def "accounts-retention-settings update" [
 #
 # GET /sip-media-applications/{sipMediaApplicationId}/logging-configuration
 # operationId: GetSipMediaApplicationLoggingConfiguration
-export def "sip-media-applications-logging-configuration get" [
+export def "get-sip-media-application-logging-configuration" [
   sip_media_application_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7494,7 +7494,7 @@ export def "sip-media-applications-logging-configuration get" [
 # PUT /sip-media-applications/{sipMediaApplicationId}/logging-configuration
 # operationId: PutSipMediaApplicationLoggingConfiguration
 # --SipMediaApplicationLoggingConfiguration shape: {EnableSipMediaApplicationMessageLogs?: any}
-export def "sip-media-applications-logging-configuration update" [
+export def "put-sip-media-application-logging-configuration" [
   sip_media_application_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7543,7 +7543,7 @@ export def "sip-media-applications-logging-configuration update" [
 #
 # GET /accounts/{accountId}/users/{userId}
 # operationId: GetUser
-export def "accounts-users get" [
+export def "get-user" [
   account_id: string
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7591,7 +7591,7 @@ export def "accounts-users get" [
 # POST /accounts/{accountId}/users/{userId}
 # operationId: UpdateUser
 # --AlexaForBusinessMetadata shape: {IsAlexaForBusinessEnabled?: any, AlexaForBusinessRoomArn?: any}
-export def "accounts-users update" [
+export def "update-user" [
   account_id: string
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7644,7 +7644,7 @@ export def "accounts-users update" [
 #
 # GET /accounts/{accountId}/users/{userId}/settings
 # operationId: GetUserSettings
-export def "accounts-users-settings get" [
+export def "get-user-settings" [
   account_id: string
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7692,7 +7692,7 @@ export def "accounts-users-settings get" [
 # PUT /accounts/{accountId}/users/{userId}/settings
 # operationId: UpdateUserSettings
 # --UserSettings shape: {Telephony?: any}
-export def "accounts-users-settings update" [
+export def "update-user-settings" [
   account_id: string
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -7743,7 +7743,7 @@ export def "accounts-users-settings update" [
 #
 # GET /voice-connectors/{voiceConnectorId}/logging-configuration
 # operationId: GetVoiceConnectorLoggingConfiguration
-export def "voice-connectors-logging-configuration get" [
+export def "get-voice-connector-logging-configuration" [
   voice_connector_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7789,7 +7789,7 @@ export def "voice-connectors-logging-configuration get" [
 # PUT /voice-connectors/{voiceConnectorId}/logging-configuration
 # operationId: PutVoiceConnectorLoggingConfiguration
 # --LoggingConfiguration shape: {EnableSIPLogs?: any, EnableMediaMetricLogs?: any}
-export def "voice-connectors-logging-configuration update" [
+export def "put-voice-connector-logging-configuration" [
   voice_connector_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7838,7 +7838,7 @@ export def "voice-connectors-logging-configuration update" [
 #
 # GET /voice-connectors/{voiceConnectorId}/termination/health
 # operationId: GetVoiceConnectorTerminationHealth
-export def "voice-connectors-termination-health get" [
+export def "get-voice-connector-termination-health" [
   voice_connector_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7883,7 +7883,7 @@ export def "voice-connectors-termination-health get" [
 #
 # POST /accounts/{accountId}/users
 # operationId: InviteUsers
-export def "accounts-users create-invite" [
+export def "invite-users" [
   account_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -7935,7 +7935,7 @@ export def "accounts-users create-invite" [
 #
 # GET /app-instance-users
 # operationId: ListAppInstanceUsers
-export def "app-instance-users list" [
+export def "list-app-instance-users" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -7984,7 +7984,7 @@ export def "app-instance-users list" [
 #
 # GET /meetings/{meetingId}/attendees/{attendeeId}/tags
 # operationId: ListAttendeeTags
-export def "meetings-attendees-tags list" [
+export def "list-attendee-tags" [
   meeting_id: string
   attendee_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8031,7 +8031,7 @@ export def "meetings-attendees-tags list" [
 #
 # GET /channels
 # operationId: ListChannelMembershipsForAppInstanceUser
-export def "channels list-memberships-for-app-instance-user" [
+export def "list-channel-memberships-for-app-instance-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8082,7 +8082,7 @@ export def "channels list-memberships-for-app-instance-user" [
 #
 # GET /channels/{channelArn}/messages
 # operationId: ListChannelMessages
-export def "channels-messages list" [
+export def "list-channel-messages" [
   channel_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8136,7 +8136,7 @@ export def "channels-messages list" [
 #
 # POST /channels/{channelArn}/messages
 # operationId: SendChannelMessage
-export def "channels-messages send" [
+export def "send-channel-message" [
   channel_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8190,7 +8190,7 @@ export def "channels-messages send" [
 #
 # GET /channels
 # operationId: ListChannels
-export def "channels list" [
+export def "list-channels" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8241,7 +8241,7 @@ export def "channels list" [
 #
 # GET /channels
 # operationId: ListChannelsModeratedByAppInstanceUser
-export def "channels list-moderated-by-app-instance-user" [
+export def "list-channels-moderated-by-app-instance-user" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8292,7 +8292,7 @@ export def "channels list-moderated-by-app-instance-user" [
 #
 # GET /meetings/{meetingId}/tags
 # operationId: ListMeetingTags
-export def "meetings-tags list" [
+export def "list-meeting-tags" [
   meeting_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8337,7 +8337,7 @@ export def "meetings-tags list" [
 #
 # GET /phone-numbers
 # operationId: ListPhoneNumbers
-export def "phone-numbers list" [
+export def "list-phone-numbers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8389,7 +8389,7 @@ export def "phone-numbers list" [
 #
 # GET /phone-number-countries
 # operationId: ListSupportedPhoneNumberCountries
-export def "phone-number-countries list-supported" [
+export def "list-supported-phone-number-countries" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8434,7 +8434,7 @@ export def "phone-number-countries list-supported" [
 #
 # GET /tags
 # operationId: ListTagsForResource
-export def "tags list-for-resource" [
+export def "list-tags-for-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8479,7 +8479,7 @@ export def "tags list-for-resource" [
 #
 # GET /voice-connectors/{voiceConnectorId}/termination/credentials
 # operationId: ListVoiceConnectorTerminationCredentials
-export def "voice-connectors-termination-credentials list" [
+export def "list-voice-connector-termination-credentials" [
   voice_connector_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8524,7 +8524,7 @@ export def "voice-connectors-termination-credentials list" [
 #
 # POST /accounts/{accountId}/users/{userId}
 # operationId: LogoutUser
-export def "accounts-users create-logout" [
+export def "logout-user" [
   account_id: string
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8574,7 +8574,7 @@ export def "accounts-users create-logout" [
 # POST /voice-connectors/{voiceConnectorId}/termination/credentials
 # operationId: PutVoiceConnectorTerminationCredentials
 # --Credentials item shape: {Username?: any, Password?: any}
-export def "voice-connectors-termination-credentials update" [
+export def "put-voice-connector-termination-credentials" [
   voice_connector_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8625,7 +8625,7 @@ export def "voice-connectors-termination-credentials update" [
 #
 # POST /channels/{channelArn}/messages/{messageId}
 # operationId: RedactChannelMessage
-export def "channels-messages create-redact" [
+export def "redact-channel-message" [
   channel_arn: string
   message_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8675,7 +8675,7 @@ export def "channels-messages create-redact" [
 #
 # POST /accounts/{accountId}/conversations/{conversationId}/messages/{messageId}
 # operationId: RedactConversationMessage
-export def "accounts-conversations-messages create-redact" [
+export def "redact-conversation-message" [
   account_id: string
   conversation_id: string
   message_id: string
@@ -8726,7 +8726,7 @@ export def "accounts-conversations-messages create-redact" [
 #
 # POST /accounts/{accountId}/rooms/{roomId}/messages/{messageId}
 # operationId: RedactRoomMessage
-export def "accounts-rooms-messages create-redact" [
+export def "redact-room-message" [
   account_id: string
   room_id: string
   message_id: string
@@ -8777,7 +8777,7 @@ export def "accounts-rooms-messages create-redact" [
 #
 # POST /accounts/{accountId}/bots/{botId}
 # operationId: RegenerateSecurityToken
-export def "accounts-bots create-regenerate-security-token" [
+export def "regenerate-security-token" [
   account_id: string
   bot_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8826,7 +8826,7 @@ export def "accounts-bots create-regenerate-security-token" [
 #
 # POST /accounts/{accountId}/users/{userId}
 # operationId: ResetPersonalPIN
-export def "accounts-users reset-personal-pin" [
+export def "reset-personal-pin" [
   account_id: string
   user_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -8875,7 +8875,7 @@ export def "accounts-users reset-personal-pin" [
 #
 # POST /phone-numbers/{phoneNumberId}
 # operationId: RestorePhoneNumber
-export def "phone-numbers create-restore" [
+export def "restore-phone-number" [
   phone_number_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -8922,7 +8922,7 @@ export def "phone-numbers create-restore" [
 #
 # GET /search
 # operationId: SearchAvailablePhoneNumbers
-export def "search list-available-phone-numbers" [
+export def "search-available-phone-numbers" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -8978,7 +8978,7 @@ export def "search list-available-phone-numbers" [
 # POST /meetings/{meetingId}/transcription
 # operationId: StartMeetingTranscription
 # --TranscriptionConfiguration shape: {EngineTranscribeSettings?: any, EngineTranscribeMedicalSettings?: any}
-export def "meetings-transcription start" [
+export def "start-meeting-transcription" [
   meeting_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9029,7 +9029,7 @@ export def "meetings-transcription start" [
 #
 # POST /meetings/{meetingId}/transcription
 # operationId: StopMeetingTranscription
-export def "meetings-transcription stop" [
+export def "stop-meeting-transcription" [
   meeting_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9077,7 +9077,7 @@ export def "meetings-transcription stop" [
 # POST /meetings/{meetingId}/attendees/{attendeeId}/tags
 # operationId: TagAttendee
 # --Tags item shape: {Key: any, Value: any}
-export def "meetings-attendees-tags tag" [
+export def "tag-attendee" [
   meeting_id: string
   attendee_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9131,7 +9131,7 @@ export def "meetings-attendees-tags tag" [
 # POST /meetings/{meetingId}/tags
 # operationId: TagMeeting
 # --Tags item shape: {Key: any, Value: any}
-export def "meetings-tags tag" [
+export def "tag-meeting" [
   meeting_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9183,7 +9183,7 @@ export def "meetings-tags tag" [
 # POST /tags
 # operationId: TagResource
 # --Tags item shape: {Key: any, Value: any}
-export def "tags tag-resource" [
+export def "tag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9233,7 +9233,7 @@ export def "tags tag-resource" [
 #
 # POST /meetings/{meetingId}/attendees/{attendeeId}/tags
 # operationId: UntagAttendee
-export def "meetings-attendees-tags untag" [
+export def "untag-attendee" [
   meeting_id: string
   attendee_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9286,7 +9286,7 @@ export def "meetings-attendees-tags untag" [
 #
 # POST /meetings/{meetingId}/tags
 # operationId: UntagMeeting
-export def "meetings-tags untag" [
+export def "untag-meeting" [
   meeting_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9337,7 +9337,7 @@ export def "meetings-tags untag" [
 #
 # POST /tags
 # operationId: UntagResource
-export def "tags untag-resource" [
+export def "untag-resource" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -9387,7 +9387,7 @@ export def "tags untag-resource" [
 #
 # PUT /channels/{channelArn}/readMarker
 # operationId: UpdateChannelReadMarker
-export def "channels-read-marker update" [
+export def "update-channel-read-marker" [
   channel_arn: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -9433,7 +9433,7 @@ export def "channels-read-marker update" [
 #
 # POST /sip-media-applications/{sipMediaApplicationId}/calls/{transactionId}
 # operationId: UpdateSipMediaApplicationCall
-export def "sip-media-applications-calls update" [
+export def "update-sip-media-application-call" [
   sip_media_application_id: string
   transaction_id: string
   --base-url(-b): string@base-url-completer # API base URL
@@ -9484,7 +9484,7 @@ export def "sip-media-applications-calls update" [
 #
 # POST /emergency-calling/address
 # operationId: ValidateE911Address
-export def "emergency-calling-address validate-e911" [
+export def "validate-e911-address" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme

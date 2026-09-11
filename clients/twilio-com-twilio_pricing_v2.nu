@@ -99,7 +99,7 @@ def auth-scheme-completer [] { ["basic" "basic-credentials"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "trunking-countries list-country" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "list-trunking-country" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -122,7 +122,7 @@ export def commands []: nothing -> table {
 # GET /v2/Trunking/Countries
 #
 # operationId: ListTrunkingCountry
-export def "trunking-countries list-country" [
+export def "list-trunking-country" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -160,7 +160,7 @@ export def "trunking-countries list-country" [
 #
 # GET /v2/Trunking/Countries/{IsoCountry}
 # operationId: FetchTrunkingCountry
-export def "trunking-countries get-country" [
+export def "fetch-trunking-country" [
   iso_country: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -196,7 +196,7 @@ export def "trunking-countries get-country" [
 #
 # GET /v2/Trunking/Numbers/{DestinationNumber}
 # operationId: FetchTrunkingNumber
-export def "trunking-numbers get" [
+export def "fetch-trunking-number" [
   destination_number: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -233,7 +233,7 @@ export def "trunking-numbers get" [
 # GET /v2/Voice/Countries
 #
 # operationId: ListVoiceCountry
-export def "voice-countries list-country" [
+export def "list-voice-country" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -271,7 +271,7 @@ export def "voice-countries list-country" [
 #
 # GET /v2/Voice/Countries/{IsoCountry}
 # operationId: FetchVoiceCountry
-export def "voice-countries get-country" [
+export def "fetch-voice-country" [
   iso_country: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -307,7 +307,7 @@ export def "voice-countries get-country" [
 #
 # GET /v2/Voice/Numbers/{DestinationNumber}
 # operationId: FetchVoiceNumber
-export def "voice-numbers get" [
+export def "fetch-voice-number" [
   destination_number: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token

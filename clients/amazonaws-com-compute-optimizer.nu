@@ -121,7 +121,7 @@ def x-amz-target-completer-20 [] { ["ComputeOptimizerService.UpdateEnrollmentSta
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "api delete-recommendation-preferences" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "delete-recommendation-preferences" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -145,7 +145,7 @@ export def commands []: nothing -> table {
 #
 # POST /
 # operationId: DeleteRecommendationPreferences
-export def "api delete-recommendation-preferences" [
+export def "delete-recommendation-preferences" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -195,7 +195,7 @@ export def "api delete-recommendation-preferences" [
 #
 # POST /
 # operationId: DescribeRecommendationExportJobs
-export def "api get-recommendation-export-jobs" [
+export def "describe-recommendation-export-jobs" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -249,7 +249,7 @@ export def "api get-recommendation-export-jobs" [
 #
 # POST /
 # operationId: ExportAutoScalingGroupRecommendations
-export def "api export-auto-scaling-group-recommendations" [
+export def "export-auto-scaling-group-recommendations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -304,7 +304,7 @@ export def "api export-auto-scaling-group-recommendations" [
 # POST /
 # operationId: ExportEBSVolumeRecommendations
 # --s3DestinationConfig shape: {bucket?: any, keyPrefix?: any}
-export def "api export-ebs-volume-recommendations" [
+export def "export-ebs-volume-recommendations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -357,7 +357,7 @@ export def "api export-ebs-volume-recommendations" [
 #
 # POST /
 # operationId: ExportEC2InstanceRecommendations
-export def "api export-ec2-instance-recommendations" [
+export def "export-ec2-instance-recommendations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -412,7 +412,7 @@ export def "api export-ec2-instance-recommendations" [
 # POST /
 # operationId: ExportECSServiceRecommendations
 # --s3DestinationConfig shape: {bucket?: any, keyPrefix?: any}
-export def "api export-ecs-service-recommendations" [
+export def "export-ecs-service-recommendations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -466,7 +466,7 @@ export def "api export-ecs-service-recommendations" [
 # POST /
 # operationId: ExportLambdaFunctionRecommendations
 # --s3DestinationConfig shape: {bucket?: any, keyPrefix?: any}
-export def "api export-lambda-function-recommendations" [
+export def "export-lambda-function-recommendations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -519,7 +519,7 @@ export def "api export-lambda-function-recommendations" [
 #
 # POST /
 # operationId: GetAutoScalingGroupRecommendations
-export def "api get-auto-scaling-group-recommendations" [
+export def "get-auto-scaling-group-recommendations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -572,7 +572,7 @@ export def "api get-auto-scaling-group-recommendations" [
 #
 # POST /
 # operationId: GetEBSVolumeRecommendations
-export def "api get-ebs-volume-recommendations" [
+export def "get-ebs-volume-recommendations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -624,7 +624,7 @@ export def "api get-ebs-volume-recommendations" [
 #
 # POST /
 # operationId: GetEC2InstanceRecommendations
-export def "api get-ec2-instance-recommendations" [
+export def "get-ec2-instance-recommendations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -677,7 +677,7 @@ export def "api get-ec2-instance-recommendations" [
 #
 # POST /
 # operationId: GetEC2RecommendationProjectedMetrics
-export def "api get-ec2-recommendation-projected-metrics" [
+export def "get-ec2-recommendation-projected-metrics" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -730,7 +730,7 @@ export def "api get-ec2-recommendation-projected-metrics" [
 #
 # POST /
 # operationId: GetECSServiceRecommendationProjectedMetrics
-export def "api get-ecs-service-recommendation-projected-metrics" [
+export def "get-ecs-service-recommendation-projected-metrics" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -782,7 +782,7 @@ export def "api get-ecs-service-recommendation-projected-metrics" [
 #
 # POST /
 # operationId: GetECSServiceRecommendations
-export def "api get-ecs-service-recommendations" [
+export def "get-ecs-service-recommendations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -834,7 +834,7 @@ export def "api get-ecs-service-recommendations" [
 #
 # POST /
 # operationId: GetEffectiveRecommendationPreferences
-export def "api get-effective-recommendation-preferences" [
+export def "get-effective-recommendation-preferences" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -882,7 +882,7 @@ export def "api get-effective-recommendation-preferences" [
 #
 # POST /
 # operationId: GetEnrollmentStatus
-export def "api get-enrollment-status" [
+export def "get-enrollment-status" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -930,7 +930,7 @@ export def "api get-enrollment-status" [
 #
 # POST /
 # operationId: GetEnrollmentStatusesForOrganization
-export def "api get-enrollment-statuses-for-organization" [
+export def "get-enrollment-statuses-for-organization" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -983,7 +983,7 @@ export def "api get-enrollment-statuses-for-organization" [
 #
 # POST /
 # operationId: GetLambdaFunctionRecommendations
-export def "api get-lambda-function-recommendations" [
+export def "get-lambda-function-recommendations" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1038,7 +1038,7 @@ export def "api get-lambda-function-recommendations" [
 #
 # POST /
 # operationId: GetRecommendationPreferences
-export def "api get-recommendation-preferences" [
+export def "get-recommendation-preferences" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1092,7 +1092,7 @@ export def "api get-recommendation-preferences" [
 #
 # POST /
 # operationId: GetRecommendationSummaries
-export def "api get-recommendation-summaries" [
+export def "get-recommendation-summaries" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1145,7 +1145,7 @@ export def "api get-recommendation-summaries" [
 #
 # POST /
 # operationId: PutRecommendationPreferences
-export def "api update-recommendation-preferences" [
+export def "put-recommendation-preferences" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -1197,7 +1197,7 @@ export def "api update-recommendation-preferences" [
 #
 # POST /
 # operationId: UpdateEnrollmentStatus
-export def "api update-enrollment-status" [
+export def "update-enrollment-status" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
