@@ -97,7 +97,7 @@ def auth-scheme-completer [] { ["bearer"] }
 # List all available API commands with their parameters
 export def commands []: nothing -> table {
   let builtin_flags = ["base-url" "token" "auth-scheme" "insecure" "max-time" "raw" "allow-errors" "full" "dry-run" "accept" "help"]
-  let mod_name = (scope modules | where { $in.commands | any { $in.name == "domains-search get-item" } } | get name | first)
+  let mod_name = (scope modules | where { $in.commands | any { $in.name == "get-search-domain-item" } } | get name | first)
   let mod_cmds = (scope modules | where name == $mod_name | get commands | first)
   let cmd_ids = ($mod_cmds | where name not-in [$mod_name "commands"] | get decl_id)
   scope commands | where decl_id in $cmd_ids | each {|cmd|
@@ -121,7 +121,7 @@ export def commands []: nothing -> table {
 #
 # GET /domains/search
 # operationId: get_search_domain_item
-export def "domains-search get-item" [
+export def "get-search-domain-item" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -169,7 +169,7 @@ export def "domains-search get-item" [
 #
 # GET /domains/tld/{zone_id}
 # operationId: get_tld_domain_item
-export def "domains-tld get-item" [
+export def "get-tld-domain-item" [
   zone_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -217,7 +217,7 @@ export def "domains-tld get-item" [
 # Download Whole Dataset for TLD
 #
 # GET /domains/tld/{zone_id}/download
-export def "domains-tld-download get" [
+export def "get-domains-tld-zone-id-download" [
   zone_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -255,7 +255,7 @@ export def "domains-tld-download get" [
 # Domains Search for TLD
 #
 # GET /domains/tld/{zone_id}/search
-export def "domains-tld-search get" [
+export def "get-domains-tld-zone-id-search" [
   zone_id: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -303,7 +303,7 @@ export def "domains-tld-search get" [
 # Get added domains, latest if date not specified
 #
 # GET /domains/updates/added
-export def "domains-updates-added get" [
+export def "get-domains-updates-added" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -341,7 +341,7 @@ export def "domains-updates-added get" [
 # Download added domains, latest if date not specified
 #
 # GET /domains/updates/added/download
-export def "domains-updates-added-download get" [
+export def "get-domains-updates-added-download" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -377,7 +377,7 @@ export def "domains-updates-added-download get" [
 # Get deleted domains, latest if date not specified
 #
 # GET /domains/updates/deleted
-export def "domains-updates-deleted get" [
+export def "get-domains-updates-deleted" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -415,7 +415,7 @@ export def "domains-updates-deleted get" [
 # Download deleted domains, latest if date not specified
 #
 # GET /domains/updates/deleted/download
-export def "domains-updates-deleted-download get" [
+export def "get-domains-updates-deleted-download" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -451,7 +451,7 @@ export def "domains-updates-deleted-download get" [
 # List of updates
 #
 # GET /domains/updates/list
-export def "domains-updates-list get" [
+export def "get-domains-updates-list" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -486,7 +486,7 @@ export def "domains-updates-list get" [
 # GET /info/api
 #
 # operationId: get_api_info_item
-export def "info get-item" [
+export def "get-api-info-item" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -522,7 +522,7 @@ export def "info get-item" [
 #
 # GET /info/stat/
 # operationId: get_statistics_collection
-export def "info-stat get-statistics-collection" [
+export def "get-statistics-collection" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -559,7 +559,7 @@ export def "info-stat get-statistics-collection" [
 #
 # GET /info/stat/{zone}
 # operationId: get_statistics_item
-export def "info-stat get-statistics-item" [
+export def "get-statistics-item" [
   zone: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
@@ -597,7 +597,7 @@ export def "info-stat get-statistics-item" [
 # Returns overall Tld info
 #
 # GET /info/tld/
-export def "info-tld list" [
+export def "get-info-tld" [
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
   --auth-scheme(-a): string@auth-scheme-completer # Auth scheme
@@ -630,7 +630,7 @@ export def "info-tld list" [
 # Returns statistics for specific zone
 #
 # GET /info/tld/{zone}
-export def "info-tld get" [
+export def "get-info-tld-zone" [
   zone: string
   --base-url(-b): string@base-url-completer # API base URL
   --token(-t): string # Auth token
