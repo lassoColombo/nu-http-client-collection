@@ -1662,7 +1662,7 @@ export def "get-connections-id-connection-logs" [
   --max-date: string # maximum date (format: date)
   --period: string # period to group logs
   --id-user: int # ID of a user
-  --id-connection: int # ID of a connection
+  --qp-id-connection: int # ID of a connection
   --id-connector: int # ID of a connector
   --connector-uuid: string # UUID of a connector
   --qp-error: string # connections log error filter
@@ -1673,14 +1673,14 @@ export def "get-connections-id-connection-logs" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id_connection | is-empty) { error make --unspanned { msg: "path parameter 'id_connection' must be non-empty" } }
-  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "min_date" $min_date "scalar") (serialize-qp "max_date" $max_date "scalar") (serialize-qp "period" $period "scalar") (serialize-qp "id_user" $id_user "scalar") (serialize-qp "id_connection" $id_connection "scalar") (serialize-qp "id_connector" $id_connector "scalar") (serialize-qp "connector_uuid" $connector_uuid "scalar") (serialize-qp "error" $qp_error "scalar") (serialize-qp "id_source" $id_source "scalar") (serialize-qp "id_max" $id_max "scalar") (serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "min_date" $min_date "scalar") (serialize-qp "max_date" $max_date "scalar") (serialize-qp "period" $period "scalar") (serialize-qp "id_user" $id_user "scalar") (serialize-qp "id_connection" $qp_id_connection "scalar") (serialize-qp "id_connector" $id_connector "scalar") (serialize-qp "connector_uuid" $connector_uuid "scalar") (serialize-qp "error" $qp_error "scalar") (serialize-qp "id_source" $id_source "scalar") (serialize-qp "id_max" $id_max "scalar") (serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_connection: (encode-path-segment $id_connection)} | format pattern "/connections/{id_connection}/logs") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"limit": $limit, "offset": $offset, "min_date": $min_date, "max_date": $max_date, "period": $period, "id_user": $id_user, "id_connection": $id_connection, "id_connector": $id_connector, "connector_uuid": $connector_uuid, "error": $qp_error, "id_source": $id_source, "id_max": $id_max, "expand": $expand} | compact)
+    query: ({"limit": $limit, "offset": $offset, "min_date": $min_date, "max_date": $max_date, "period": $period, "id_user": $id_user, "id_connection": $qp_id_connection, "id_connector": $id_connector, "connector_uuid": $connector_uuid, "error": $qp_error, "id_source": $id_source, "id_max": $id_max, "expand": $expand} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -5324,8 +5324,8 @@ export def "get-users-id-user-connections-id-connection-logs" [
   --min-date: string # minimal date (format: date)
   --max-date: string # maximum date (format: date)
   --period: string # period to group logs
-  --id-user: int # ID of a user
-  --id-connection: int # ID of a connection
+  --qp-id-user: int # ID of a user
+  --qp-id-connection: int # ID of a connection
   --id-connector: int # ID of a connector
   --connector-uuid: string # UUID of a connector
   --qp-error: string # connections log error filter
@@ -5337,14 +5337,14 @@ export def "get-users-id-user-connections-id-connection-logs" [
   let base = ($base_url | default $BASE_URL)
   if ($id_user | is-empty) { error make --unspanned { msg: "path parameter 'id_user' must be non-empty" } }
   if ($id_connection | is-empty) { error make --unspanned { msg: "path parameter 'id_connection' must be non-empty" } }
-  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "min_date" $min_date "scalar") (serialize-qp "max_date" $max_date "scalar") (serialize-qp "period" $period "scalar") (serialize-qp "id_user" $id_user "scalar") (serialize-qp "id_connection" $id_connection "scalar") (serialize-qp "id_connector" $id_connector "scalar") (serialize-qp "connector_uuid" $connector_uuid "scalar") (serialize-qp "error" $qp_error "scalar") (serialize-qp "id_source" $id_source "scalar") (serialize-qp "id_max" $id_max "scalar") (serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "min_date" $min_date "scalar") (serialize-qp "max_date" $max_date "scalar") (serialize-qp "period" $period "scalar") (serialize-qp "id_user" $qp_id_user "scalar") (serialize-qp "id_connection" $qp_id_connection "scalar") (serialize-qp "id_connector" $id_connector "scalar") (serialize-qp "connector_uuid" $connector_uuid "scalar") (serialize-qp "error" $qp_error "scalar") (serialize-qp "id_source" $id_source "scalar") (serialize-qp "id_max" $id_max "scalar") (serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_user: (encode-path-segment $id_user), id_connection: (encode-path-segment $id_connection)} | format pattern "/users/{id_user}/connections/{id_connection}/logs") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"limit": $limit, "offset": $offset, "min_date": $min_date, "max_date": $max_date, "period": $period, "id_user": $id_user, "id_connection": $id_connection, "id_connector": $id_connector, "connector_uuid": $connector_uuid, "error": $qp_error, "id_source": $id_source, "id_max": $id_max, "expand": $expand} | compact)
+    query: ({"limit": $limit, "offset": $offset, "min_date": $min_date, "max_date": $max_date, "period": $period, "id_user": $qp_id_user, "id_connection": $qp_id_connection, "id_connector": $id_connector, "connector_uuid": $connector_uuid, "error": $qp_error, "id_source": $id_source, "id_max": $id_max, "expand": $expand} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -5748,7 +5748,7 @@ export def "get-users-id-user-logs" [
   --min-date: string # minimal date (format: date)
   --max-date: string # maximum date (format: date)
   --period: string # period to group logs
-  --id-user: int # ID of a user
+  --qp-id-user: int # ID of a user
   --id-connection: int # ID of a connection
   --id-connector: int # ID of a connector
   --connector-uuid: string # UUID of a connector
@@ -5760,14 +5760,14 @@ export def "get-users-id-user-logs" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id_user | is-empty) { error make --unspanned { msg: "path parameter 'id_user' must be non-empty" } }
-  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "min_date" $min_date "scalar") (serialize-qp "max_date" $max_date "scalar") (serialize-qp "period" $period "scalar") (serialize-qp "id_user" $id_user "scalar") (serialize-qp "id_connection" $id_connection "scalar") (serialize-qp "id_connector" $id_connector "scalar") (serialize-qp "connector_uuid" $connector_uuid "scalar") (serialize-qp "error" $qp_error "scalar") (serialize-qp "id_source" $id_source "scalar") (serialize-qp "id_max" $id_max "scalar") (serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "min_date" $min_date "scalar") (serialize-qp "max_date" $max_date "scalar") (serialize-qp "period" $period "scalar") (serialize-qp "id_user" $qp_id_user "scalar") (serialize-qp "id_connection" $id_connection "scalar") (serialize-qp "id_connector" $id_connector "scalar") (serialize-qp "connector_uuid" $connector_uuid "scalar") (serialize-qp "error" $qp_error "scalar") (serialize-qp "id_source" $id_source "scalar") (serialize-qp "id_max" $id_max "scalar") (serialize-qp "expand" $expand "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id_user: (encode-path-segment $id_user)} | format pattern "/users/{id_user}/logs") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"limit": $limit, "offset": $offset, "min_date": $min_date, "max_date": $max_date, "period": $period, "id_user": $id_user, "id_connection": $id_connection, "id_connector": $id_connector, "connector_uuid": $connector_uuid, "error": $qp_error, "id_source": $id_source, "id_max": $id_max, "expand": $expand} | compact)
+    query: ({"limit": $limit, "offset": $offset, "min_date": $min_date, "max_date": $max_date, "period": $period, "id_user": $qp_id_user, "id_connection": $id_connection, "id_connector": $id_connector, "connector_uuid": $connector_uuid, "error": $qp_error, "id_source": $id_source, "id_max": $id_max, "expand": $expand} | compact)
     headers: $auth.headers
     body: null
     content_type: null

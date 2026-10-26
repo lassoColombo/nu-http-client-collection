@@ -2637,19 +2637,19 @@ export def "get-driving-types-driving-type-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --driving-type-id: string
+  --qp-driving-type-id: string
 ]: nothing -> record<company_id: string, created: string, created_by_id: string, deleted: string, employee_price: float, erp_id: string, id: string, invoice_price: float, modified: string, modified_by_id: string, name: string, salary_id: string> {
   let auth = (build-auth $token ($auth_scheme | default "x-auth-token"))
   let base = ($base_url | default $BASE_URL)
   if ($driving_type_id | is-empty) { error make --unspanned { msg: "path parameter 'driving_type_id' must be non-empty" } }
-  let qp = [(serialize-qp "driving_type_id" $driving_type_id "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "driving_type_id" $qp_driving_type_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({driving_type_id: (encode-path-segment $driving_type_id)} | format pattern "/driving_types/{driving_type_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"driving_type_id": $driving_type_id} | compact)
+    query: ({"driving_type_id": $qp_driving_type_id} | compact)
     headers: $auth.headers
     body: null
     content_type: null

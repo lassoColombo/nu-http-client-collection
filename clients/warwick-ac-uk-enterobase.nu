@@ -1328,20 +1328,20 @@ export def "get-api-v2-0-database-scheme-loci" [
   --create-time: string # format: date-time
   --limit: int # format: int32, default: 50
   --offset: int # format: int32, default: 0
-  --scheme: string
+  --qp-scheme: string
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "basic"))
   let base = ($base_url | default $BASE_URL)
   if ($database | is-empty) { error make --unspanned { msg: "path parameter 'database' must be non-empty" } }
   if ($scheme | is-empty) { error make --unspanned { msg: "path parameter 'scheme' must be non-empty" } }
-  let qp = [(serialize-qp "barcode" $barcode "multi") (serialize-qp "locus" $locus "scalar") (serialize-qp "only_fields" $only_fields "multi") (serialize-qp "create_time" $create_time "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "scheme" $scheme "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "barcode" $barcode "multi") (serialize-qp "locus" $locus "scalar") (serialize-qp "only_fields" $only_fields "multi") (serialize-qp "create_time" $create_time "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "offset" $offset "scalar") (serialize-qp "scheme" $qp_scheme "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({database: (encode-path-segment $database), scheme: (encode-path-segment $scheme)} | format pattern "/api/v2.0/{database}/{scheme}/loci") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"barcode": $barcode, "locus": $locus, "only_fields": $only_fields, "create_time": $create_time, "limit": $limit, "offset": $offset, "scheme": $scheme} | compact)
+    query: ({"barcode": $barcode, "locus": $locus, "only_fields": $only_fields, "create_time": $create_time, "limit": $limit, "offset": $offset, "scheme": $qp_scheme} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -1368,7 +1368,7 @@ export def "get-api-v2-0-database-scheme-sts" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --st-id: string
-  --scheme: string
+  --qp-scheme: string
   --show-alleles: oneof<nothing, bool>
   --barcode: list<string> # Unique barcode for Strain records, _ e.g. SAL_AA0001AA
   --only-fields: list<string>
@@ -1380,14 +1380,14 @@ export def "get-api-v2-0-database-scheme-sts" [
   let base = ($base_url | default $BASE_URL)
   if ($database | is-empty) { error make --unspanned { msg: "path parameter 'database' must be non-empty" } }
   if ($scheme | is-empty) { error make --unspanned { msg: "path parameter 'scheme' must be non-empty" } }
-  let qp = [(serialize-qp "st_id" $st_id "scalar") (serialize-qp "scheme" $scheme "scalar") (serialize-qp "show_alleles" $show_alleles "scalar") (serialize-qp "barcode" $barcode "multi") (serialize-qp "only_fields" $only_fields "multi") (serialize-qp "limit" $limit "scalar") (serialize-qp "reldate" $reldate "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "st_id" $st_id "scalar") (serialize-qp "scheme" $qp_scheme "scalar") (serialize-qp "show_alleles" $show_alleles "scalar") (serialize-qp "barcode" $barcode "multi") (serialize-qp "only_fields" $only_fields "multi") (serialize-qp "limit" $limit "scalar") (serialize-qp "reldate" $reldate "scalar") (serialize-qp "offset" $offset "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({database: (encode-path-segment $database), scheme: (encode-path-segment $scheme)} | format pattern "/api/v2.0/{database}/{scheme}/sts") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"st_id": $st_id, "scheme": $scheme, "show_alleles": $show_alleles, "barcode": $barcode, "only_fields": $only_fields, "limit": $limit, "reldate": $reldate, "offset": $offset} | compact)
+    query: ({"st_id": $st_id, "scheme": $qp_scheme, "show_alleles": $show_alleles, "barcode": $barcode, "only_fields": $only_fields, "limit": $limit, "reldate": $reldate, "offset": $offset} | compact)
     headers: $auth.headers
     body: null
     content_type: null

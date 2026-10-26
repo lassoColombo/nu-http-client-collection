@@ -3186,7 +3186,7 @@ export def "get-events-for-subscription-by-id" [
   --until: string # Limits on `time_created`. Marks the end of a range, optionally use `from` to set the start. Result output includes the given timestamp. (format: dateTime, e.g. 2016-01-27T08:38:55.255Z)
   --until-id: string # Limits on `id`. Marks the end of a range, optionally use `from_id` to set the start. Result output includes the given `id` value. Please note that `id` is in chronological order. (e.g. 56a88364e783152127d15340)
   --timeout-s: float # Overrides the default query timeout (in seconds). A value of 0 means unlimited. IMPORTANT: using high timeouts in production code is strongly discouraged as it may lead to stability issues. (e.g. 60)
-  --id: string # Unique identifier (e.g. 5b7d6cbd7503c445552a1664)
+  --qp-id: string # Unique identifier (e.g. 5b7d6cbd7503c445552a1664)
   --time-created: string # Filter on the time the resource was created. (format: dateTime, e.g. 2018-08-30T09:51:59.737Z)
   --topic-resource-type: string@topic-resource-type-completer # Filter on the topic resource type (e.g. items)
   --topic-action: string@topic-action-completer # Filter on the topic action (e.g. created)
@@ -3197,14 +3197,14 @@ export def "get-events-for-subscription-by-id" [
   let auth = (build-auth $token ($auth_scheme | default "cookie-brain.sid"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "after" $after "scalar") (serialize-qp "after_id" $after_id "scalar") (serialize-qp "before" $before "scalar") (serialize-qp "before_id" $before_id "scalar") (serialize-qp "from" $qp_from "scalar") (serialize-qp "from_id" $from_id "scalar") (serialize-qp "id_only" $id_only "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "populate" $populate "scalar") (serialize-qp "results_only" $results_only "scalar") (serialize-qp "select" $select "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "until" $until "scalar") (serialize-qp "until_id" $until_id "scalar") (serialize-qp "timeout_s" $timeout_s "scalar") (serialize-qp "id" $id "scalar") (serialize-qp "time_created" $time_created "scalar") (serialize-qp "topic.resource_type" $topic_resource_type "scalar") (serialize-qp "topic.action" $topic_action "scalar") (serialize-qp "topic.resource" $topic_resource "scalar") (serialize-qp "time_event" $time_event "scalar") (serialize-qp "time_expire" $time_expire "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "after" $after "scalar") (serialize-qp "after_id" $after_id "scalar") (serialize-qp "before" $before "scalar") (serialize-qp "before_id" $before_id "scalar") (serialize-qp "from" $qp_from "scalar") (serialize-qp "from_id" $from_id "scalar") (serialize-qp "id_only" $id_only "scalar") (serialize-qp "limit" $limit "scalar") (serialize-qp "populate" $populate "scalar") (serialize-qp "results_only" $results_only "scalar") (serialize-qp "select" $select "scalar") (serialize-qp "sort" $qp_sort "scalar") (serialize-qp "until" $until "scalar") (serialize-qp "until_id" $until_id "scalar") (serialize-qp "timeout_s" $timeout_s "scalar") (serialize-qp "id" $qp_id "scalar") (serialize-qp "time_created" $time_created "scalar") (serialize-qp "topic.resource_type" $topic_resource_type "scalar") (serialize-qp "topic.action" $topic_action "scalar") (serialize-qp "topic.resource" $topic_resource "scalar") (serialize-qp "time_event" $time_event "scalar") (serialize-qp "time_expire" $time_expire "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/subscriptions/{id}/events") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"after": $after, "after_id": $after_id, "before": $before, "before_id": $before_id, "from": $qp_from, "from_id": $from_id, "id_only": $id_only, "limit": $limit, "populate": $populate, "results_only": $results_only, "select": $select, "sort": $qp_sort, "until": $until, "until_id": $until_id, "timeout_s": $timeout_s, "id": $id, "time_created": $time_created, "topic.resource_type": $topic_resource_type, "topic.action": $topic_action, "topic.resource": $topic_resource, "time_event": $time_event, "time_expire": $time_expire} | compact)
+    query: ({"after": $after, "after_id": $after_id, "before": $before, "before_id": $before_id, "from": $qp_from, "from_id": $from_id, "id_only": $id_only, "limit": $limit, "populate": $populate, "results_only": $results_only, "select": $select, "sort": $qp_sort, "until": $until, "until_id": $until_id, "timeout_s": $timeout_s, "id": $qp_id, "time_created": $time_created, "topic.resource_type": $topic_resource_type, "topic.action": $topic_action, "topic.resource": $topic_resource, "time_event": $time_event, "time_expire": $time_expire} | compact)
     headers: $auth.headers
     body: null
     content_type: null

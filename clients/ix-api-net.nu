@@ -3228,20 +3228,20 @@ export def "roles-read" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --id: list<string> # Filter by id (e.g. id1,id2,id3)
+  --qp-id: list<string> # Filter by id (e.g. id1,id2,id3)
   --name: string # Filter by name
 ]: nothing -> record<id: string, name: string, required_fields: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
-  let qp = [(serialize-qp "id" $id "csv") (serialize-qp "name" $name "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "id" $qp_id "csv") (serialize-qp "name" $name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id)} | format pattern "/roles/{id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"id": $id, "name": $name} | compact)
+    query: ({"id": $qp_id, "name": $name} | compact)
     headers: $auth.headers
     body: null
     content_type: null

@@ -355,19 +355,19 @@ export def "get-drug-by-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --drug-id: string # An ID in the drug index.
+  --qp-drug-id: string # An ID in the drug index.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($drug_id | is-empty) { error make --unspanned { msg: "path parameter 'DRUG_ID' must be non-empty" } }
-  let qp = [(serialize-qp "drug_id" $drug_id "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "drug_id" $qp_drug_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({drug_id: (encode-path-segment $drug_id)} | format pattern "/platform/private/drug/{drug_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"drug_id": $drug_id} | compact)
+    query: ({"drug_id": $qp_drug_id} | compact)
     headers: $auth.headers
     body: null
     content_type: null

@@ -542,7 +542,7 @@ export def "dps-certificate-delete" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --certificate-name: string # This is optional, and it is the Common Name of the certificate.
+  --qp-certificate-name: string # This is optional, and it is the Common Name of the certificate.
   --certificate-raw-bytes: string # Raw data within the certificate. (format: byte)
   --certificate-is-verified: oneof<nothing, bool> # Indicates if certificate has been verified by owner of the private key.
   --certificate-purpose: string@certificate-purpose-completer # A description that mentions the purpose of the certificate.
@@ -559,7 +559,7 @@ export def "dps-certificate-delete" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($provisioning_service_name | is-empty) { error make --unspanned { msg: "path parameter 'provisioningServiceName' must be non-empty" } }
   if ($certificate_name | is-empty) { error make --unspanned { msg: "path parameter 'certificateName' must be non-empty" } }
-  let qp = [(serialize-qp "certificate.name" $certificate_name "scalar") (serialize-qp "certificate.rawBytes" $certificate_raw_bytes "scalar") (serialize-qp "certificate.isVerified" $certificate_is_verified "scalar") (serialize-qp "certificate.purpose" $certificate_purpose "scalar") (serialize-qp "certificate.created" $certificate_created "scalar") (serialize-qp "certificate.lastUpdated" $certificate_last_updated "scalar") (serialize-qp "certificate.hasPrivateKey" $certificate_has_private_key "scalar") (serialize-qp "certificate.nonce" $certificate_nonce "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "certificate.name" $qp_certificate_name "scalar") (serialize-qp "certificate.rawBytes" $certificate_raw_bytes "scalar") (serialize-qp "certificate.isVerified" $certificate_is_verified "scalar") (serialize-qp "certificate.purpose" $certificate_purpose "scalar") (serialize-qp "certificate.created" $certificate_created "scalar") (serialize-qp "certificate.lastUpdated" $certificate_last_updated "scalar") (serialize-qp "certificate.hasPrivateKey" $certificate_has_private_key "scalar") (serialize-qp "certificate.nonce" $certificate_nonce "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), provisioning_service_name: (encode-path-segment $provisioning_service_name), certificate_name: (encode-path-segment $certificate_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Devices/provisioningServices/{provisioning_service_name}/certificates/{certificate_name}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -568,7 +568,7 @@ export def "dps-certificate-delete" [
   let req = {
     method: "delete"
     url: $full_url
-    query: ({"certificate.name": $certificate_name, "certificate.rawBytes": $certificate_raw_bytes, "certificate.isVerified": $certificate_is_verified, "certificate.purpose": $certificate_purpose, "certificate.created": $certificate_created, "certificate.lastUpdated": $certificate_last_updated, "certificate.hasPrivateKey": $certificate_has_private_key, "certificate.nonce": $certificate_nonce, "api-version": $api_version} | compact)
+    query: ({"certificate.name": $qp_certificate_name, "certificate.rawBytes": $certificate_raw_bytes, "certificate.isVerified": $certificate_is_verified, "certificate.purpose": $certificate_purpose, "certificate.created": $certificate_created, "certificate.lastUpdated": $certificate_last_updated, "certificate.hasPrivateKey": $certificate_has_private_key, "certificate.nonce": $certificate_nonce, "api-version": $api_version} | compact)
     headers: $auth.headers
     body: null
     content_type: "application/json"
@@ -695,7 +695,7 @@ export def "dps-certificate-generate-verification-code" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --certificate-name: string # Common Name for the certificate.
+  --qp-certificate-name: string # Common Name for the certificate.
   --certificate-raw-bytes: string # Raw data of certificate. (format: byte)
   --certificate-is-verified: oneof<nothing, bool> # Indicates if the certificate has been verified by owner of the private key.
   --certificate-purpose: string@certificate-purpose-completer # Description mentioning the purpose of the certificate.
@@ -712,7 +712,7 @@ export def "dps-certificate-generate-verification-code" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($provisioning_service_name | is-empty) { error make --unspanned { msg: "path parameter 'provisioningServiceName' must be non-empty" } }
   if ($certificate_name | is-empty) { error make --unspanned { msg: "path parameter 'certificateName' must be non-empty" } }
-  let qp = [(serialize-qp "certificate.name" $certificate_name "scalar") (serialize-qp "certificate.rawBytes" $certificate_raw_bytes "scalar") (serialize-qp "certificate.isVerified" $certificate_is_verified "scalar") (serialize-qp "certificate.purpose" $certificate_purpose "scalar") (serialize-qp "certificate.created" $certificate_created "scalar") (serialize-qp "certificate.lastUpdated" $certificate_last_updated "scalar") (serialize-qp "certificate.hasPrivateKey" $certificate_has_private_key "scalar") (serialize-qp "certificate.nonce" $certificate_nonce "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "certificate.name" $qp_certificate_name "scalar") (serialize-qp "certificate.rawBytes" $certificate_raw_bytes "scalar") (serialize-qp "certificate.isVerified" $certificate_is_verified "scalar") (serialize-qp "certificate.purpose" $certificate_purpose "scalar") (serialize-qp "certificate.created" $certificate_created "scalar") (serialize-qp "certificate.lastUpdated" $certificate_last_updated "scalar") (serialize-qp "certificate.hasPrivateKey" $certificate_has_private_key "scalar") (serialize-qp "certificate.nonce" $certificate_nonce "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), provisioning_service_name: (encode-path-segment $provisioning_service_name), certificate_name: (encode-path-segment $certificate_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Devices/provisioningServices/{provisioning_service_name}/certificates/{certificate_name}/generateVerificationCode") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -721,7 +721,7 @@ export def "dps-certificate-generate-verification-code" [
   let req = {
     method: "post"
     url: $full_url
-    query: ({"certificate.name": $certificate_name, "certificate.rawBytes": $certificate_raw_bytes, "certificate.isVerified": $certificate_is_verified, "certificate.purpose": $certificate_purpose, "certificate.created": $certificate_created, "certificate.lastUpdated": $certificate_last_updated, "certificate.hasPrivateKey": $certificate_has_private_key, "certificate.nonce": $certificate_nonce, "api-version": $api_version} | compact)
+    query: ({"certificate.name": $qp_certificate_name, "certificate.rawBytes": $certificate_raw_bytes, "certificate.isVerified": $certificate_is_verified, "certificate.purpose": $certificate_purpose, "certificate.created": $certificate_created, "certificate.lastUpdated": $certificate_last_updated, "certificate.hasPrivateKey": $certificate_has_private_key, "certificate.nonce": $certificate_nonce, "api-version": $api_version} | compact)
     headers: $auth.headers
     body: null
     content_type: "application/json"
@@ -750,7 +750,7 @@ export def "dps-certificate-verify-certificate" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --certificate-name: string # Common Name for the certificate.
+  --qp-certificate-name: string # Common Name for the certificate.
   --certificate-raw-bytes: string # Raw data of certificate. (format: byte)
   --certificate-is-verified: oneof<nothing, bool> # Indicates if the certificate has been verified by owner of the private key.
   --certificate-purpose: string@certificate-purpose-completer # Describe the purpose of the certificate.
@@ -769,7 +769,7 @@ export def "dps-certificate-verify-certificate" [
   if ($resource_group_name | is-empty) { error make --unspanned { msg: "path parameter 'resourceGroupName' must be non-empty" } }
   if ($provisioning_service_name | is-empty) { error make --unspanned { msg: "path parameter 'provisioningServiceName' must be non-empty" } }
   if ($certificate_name | is-empty) { error make --unspanned { msg: "path parameter 'certificateName' must be non-empty" } }
-  let qp = [(serialize-qp "certificate.name" $certificate_name "scalar") (serialize-qp "certificate.rawBytes" $certificate_raw_bytes "scalar") (serialize-qp "certificate.isVerified" $certificate_is_verified "scalar") (serialize-qp "certificate.purpose" $certificate_purpose "scalar") (serialize-qp "certificate.created" $certificate_created "scalar") (serialize-qp "certificate.lastUpdated" $certificate_last_updated "scalar") (serialize-qp "certificate.hasPrivateKey" $certificate_has_private_key "scalar") (serialize-qp "certificate.nonce" $certificate_nonce "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "certificate.name" $qp_certificate_name "scalar") (serialize-qp "certificate.rawBytes" $certificate_raw_bytes "scalar") (serialize-qp "certificate.isVerified" $certificate_is_verified "scalar") (serialize-qp "certificate.purpose" $certificate_purpose "scalar") (serialize-qp "certificate.created" $certificate_created "scalar") (serialize-qp "certificate.lastUpdated" $certificate_last_updated "scalar") (serialize-qp "certificate.hasPrivateKey" $certificate_has_private_key "scalar") (serialize-qp "certificate.nonce" $certificate_nonce "scalar") (serialize-qp "api-version" $api_version "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({subscription_id: (encode-path-segment $subscription_id), resource_group_name: (encode-path-segment $resource_group_name), provisioning_service_name: (encode-path-segment $provisioning_service_name), certificate_name: (encode-path-segment $certificate_name)} | format pattern "/subscriptions/{subscription_id}/resourceGroups/{resource_group_name}/providers/Microsoft.Devices/provisioningServices/{provisioning_service_name}/certificates/{certificate_name}/verify") $qp $auth.query)
   let req_body = {"certificate": $certificate} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -780,7 +780,7 @@ export def "dps-certificate-verify-certificate" [
   let req = {
     method: "post"
     url: $full_url
-    query: ({"certificate.name": $certificate_name, "certificate.rawBytes": $certificate_raw_bytes, "certificate.isVerified": $certificate_is_verified, "certificate.purpose": $certificate_purpose, "certificate.created": $certificate_created, "certificate.lastUpdated": $certificate_last_updated, "certificate.hasPrivateKey": $certificate_has_private_key, "certificate.nonce": $certificate_nonce, "api-version": $api_version} | compact)
+    query: ({"certificate.name": $qp_certificate_name, "certificate.rawBytes": $certificate_raw_bytes, "certificate.isVerified": $certificate_is_verified, "certificate.purpose": $certificate_purpose, "certificate.created": $certificate_created, "certificate.lastUpdated": $certificate_last_updated, "certificate.hasPrivateKey": $certificate_has_private_key, "certificate.nonce": $certificate_nonce, "api-version": $api_version} | compact)
     headers: $auth.headers
     body: $req_body
     content_type: "application/json"

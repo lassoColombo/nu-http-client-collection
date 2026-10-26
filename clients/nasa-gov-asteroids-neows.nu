@@ -169,20 +169,20 @@ export def "get-api-projects-id-format" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --format: string@format-completer # The response type desired. (default: xml)
+  --qp-format: string@format-completer # The response type desired. (default: xml)
 ]: nothing -> record<acronym: string, additionalTas: table<code: string, id: int, name: string>, benefits: string, closeoutDocuments: list<string>, closeoutSummary: string, coFundingPartners: table<acronym: string, city: string, name: string, state: string>, coInvestigators: list<string>, description: string, destinations: list<string>, endDate: string, id: int, lastUpdated: string, leadOrganization: record<acronym: string, city: string, name: string, state: string>, libraryItems: table<completionDate: string, description: string, externalUrl: string, files: list, id: int, publishedBy: string, publishedDate: string, title: string, type: string>, primaryTas: table<code: string, id: int, name: string>, principalInvestigators: list<string>, programDirectors: list<string>, programManagers: list<string>, projectManagers: list<string>, responsibleMissionDirectorateOrOffice: string, responsibleProgram: string, startDate: string, status: string, supportedMissionType: string, supportingOrganizations: table<acronym: string, city: string, name: string, state: string>, technologyMaturityCurrent: string, technologyMaturityEnd: string, technologyMaturityStart: string, title: string, website: string, workLocations: list<string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($id | is-empty) { error make --unspanned { msg: "path parameter 'id' must be non-empty" } }
   if ($format | is-empty) { error make --unspanned { msg: "path parameter '.format' must be non-empty" } }
-  let qp = [(serialize-qp "format" $format "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "format" $qp_format "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({id: (encode-path-segment $id), format: (encode-path-segment $format)} | format pattern "/api/projects/{id}{format}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"format": $format} | compact)
+    query: ({"format": $qp_format} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -209,19 +209,19 @@ export def "get-api-projects-format" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --updated-since: string # ISO 8601 full-date in the format YYYY-MM-DD. Filters the list of available ID values by their lastUpdated parameter. (format: date)
-  --format: string@format-completer # The response type desired. (default: json)
+  --qp-format: string@format-completer # The response type desired. (default: json)
 ]: nothing -> record<id: int, lastUpdated: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($format | is-empty) { error make --unspanned { msg: "path parameter '.format' must be non-empty" } }
-  let qp = [(serialize-qp "updatedSince" $updated_since "scalar") (serialize-qp "format" $format "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "updatedSince" $updated_since "scalar") (serialize-qp "format" $qp_format "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({format: (encode-path-segment $format)} | format pattern "/api/projects{format}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"updatedSince": $updated_since, "format": $format} | compact)
+    query: ({"updatedSince": $updated_since, "format": $qp_format} | compact)
     headers: $auth.headers
     body: null
     content_type: null

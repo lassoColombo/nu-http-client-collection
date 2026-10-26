@@ -235,19 +235,19 @@ export def "get-account" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --account-id: int # The id of the account. (format: int32)
+  --qp-account-id: int # The id of the account. (format: int32)
 ]: nothing -> record<addons: table<id: int, name: string>, id: int, identifier: string, servicepack: record<id: int, name: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($account_id | is-empty) { error make --unspanned { msg: "path parameter 'accountId' must be non-empty" } }
-  let qp = [(serialize-qp "account_id" $account_id "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "account_id" $qp_account_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({account_id: (encode-path-segment $account_id)} | format pattern "/accounts/{account_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"account_id": $account_id} | compact)
+    query: ({"account_id": $qp_account_id} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -272,7 +272,7 @@ export def "get-dns-domain-name-records" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --domain-name: string # The domain name.
+  --qp-domain-name: string # The domain name.
   --skip: int # The number of items to skip in the resultset. (format: int32)
   --take: int # The number of items to return in the resultset. The returned count can be equal or less than this number. (format: int32)
   --type: string # Filters records matching the type. Most other filters only apply when this filter is specified. (nullable)
@@ -282,14 +282,14 @@ export def "get-dns-domain-name-records" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($domain_name | is-empty) { error make --unspanned { msg: "path parameter 'domainName' must be non-empty" } }
-  let qp = [(serialize-qp "domain_name" $domain_name "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "take" $take "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "record_name" $record_name "scalar") (serialize-qp "service" $service "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "domain_name" $qp_domain_name "scalar") (serialize-qp "skip" $skip "scalar") (serialize-qp "take" $take "scalar") (serialize-qp "type" $type "scalar") (serialize-qp "record_name" $record_name "scalar") (serialize-qp "service" $service "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({domain_name: (encode-path-segment $domain_name)} | format pattern "/dns/{domain_name}/records") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"domain_name": $domain_name, "skip": $skip, "take": $take, "type": $type, "record_name": $record_name, "service": $service} | compact)
+    query: ({"domain_name": $qp_domain_name, "skip": $skip, "take": $take, "type": $type, "record_name": $record_name, "service": $service} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -314,7 +314,7 @@ export def "post-dns-domain-name-records" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --domain-name: string # The domain name.
+  --qp-domain-name: string # The domain name.
   --content: string # Variable data depending on the record type. A: the IPv4 address.CNAME: canonical name of an alias.MX: fully qualified domain name of a mail host.SRV: does not apply. Data for the SRV records can be found in specific properties.TXT: free form text data.CAA: format should match specific values for flag, tag and ca: "{flag} {tag} {ca}". The flag. The values 128 (critical) or 0 (non-critical) are expected, with 0 as the default.The tag. A tag specifies which actions an authorized CA can take in terms of issuing SSL/TLS certificates.The value "issue": explicitly authorizes a single certificate authority to issue a certificate (any type) for the hostname.The value "issuewild": explicitly authorizes a single certificate authority to issue a wildcard certificate (and only wildcard) for the hostname.The value "iodef": specifies a URL to which a certificate authority may report policy violations.The ca. This is the domain of the CA (Certification Authority) that has the authority to issue certificates for the domain in question. If the value is a semicolon (;), it means that no CA has the authority to issue a certificate for that domain.ALIAS: canonical name of an alias.TLSA: format should match specific values for usage, selector, matching type and data: "{usage} {selector} {matching_type} {data}" The usage. The first field after the TLSA text in the DNS RR, specifies how to verify the certificate.A value of 0 is for what is commonly called CA constraint (and PKIX-TA). The certificate provided when establishing TLS must be issued by the listed root-CA or one of its intermediate CAs, with a valid certification path to a root-CA already trusted by the application doing the verification.A value of 1 is for what is commonly called Service certificate constraint (and PKIX-EE). The certificate used must match the TLSA record exactly, and it must also pass PKIX certification path validation to a trusted root-CA.A value of 2 is for what is commonly called Trust Anchor Assertion (and DANE-TA). The certificate used has a valid certification path pointing back to the certificate mention in this record, but there is no need for it to pass the PKIX certification path validation to a trusted root-CA.A value of 3 is for what is commonly called Domain issued certificate (and DANE-EE). The services uses a self-signed certificate. It is not signed by anyone else, and is exactly this record.The selector. When connecting to the service and a certificate is received, the selector field specifies which parts of it should be checked.A value of 0 means to select the entire certificate for matching.A value of 1 means to select just the public key for certificate matching. Matching the public key is often sufficient, as this is likely to be unique.The matching type.A type of 0 means the entire information selected is present in the certificate association data.A type of 1 means to do a SHA-256 hash of the selected data.A type of 2 means to do a SHA-512 hash of the selected data.The actual data to be matched given the settings of the other fields. This is a long text string of hexadecimal data.
   --id: string # The id of the record This value is ignored for creation of new records.
   --port: int # The port for SRV records. The value MUST be a positive integer. Editing the value is not possible. You should add a new SRV record and delete the existing record. (format: int32)
@@ -331,7 +331,7 @@ export def "post-dns-domain-name-records" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($domain_name | is-empty) { error make --unspanned { msg: "path parameter 'domainName' must be non-empty" } }
-  let qp = [(serialize-qp "domain_name" $domain_name "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "domain_name" $qp_domain_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({domain_name: (encode-path-segment $domain_name)} | format pattern "/dns/{domain_name}/records") $qp $auth.query)
   let req_body = {"content": $content, "id": $id, "port": $port, "priority": $priority, "protocol": $protocol, "record_name": $record_name, "service": $service, "target": $target, "ttl": $ttl, "type": $type, "weight": $weight} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -340,7 +340,7 @@ export def "post-dns-domain-name-records" [
   let req = {
     method: "post"
     url: $full_url
-    query: ({"domain_name": $domain_name} | compact)
+    query: ({"domain_name": $qp_domain_name} | compact)
     headers: $auth.headers
     body: $req_body
     content_type: "application/json"
@@ -366,21 +366,21 @@ export def "delete-dns-domain-name-records-record-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --domain-name: string # The domain name.
-  --record-id: string # The id of the record.
+  --qp-domain-name: string # The domain name.
+  --qp-record-id: string # The id of the record.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($domain_name | is-empty) { error make --unspanned { msg: "path parameter 'domainName' must be non-empty" } }
   if ($record_id | is-empty) { error make --unspanned { msg: "path parameter 'recordId' must be non-empty" } }
-  let qp = [(serialize-qp "domain_name" $domain_name "scalar") (serialize-qp "record_id" $record_id "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "domain_name" $qp_domain_name "scalar") (serialize-qp "record_id" $qp_record_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({domain_name: (encode-path-segment $domain_name), record_id: (encode-path-segment $record_id)} | format pattern "/dns/{domain_name}/records/{record_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
-    query: ({"domain_name": $domain_name, "record_id": $record_id} | compact)
+    query: ({"domain_name": $qp_domain_name, "record_id": $qp_record_id} | compact)
     headers: $auth.headers
     body: null
     content_type: "application/json"
@@ -406,21 +406,21 @@ export def "get-dns-domain-name-records-record-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --domain-name: string # The domain name.
-  --record-id: string # The id of the record.
+  --qp-domain-name: string # The domain name.
+  --qp-record-id: string # The id of the record.
 ]: nothing -> record<content: string, id: string, port: int, priority: int, protocol: string, record_name: string, service: string, target: string, ttl: int, type: string, weight: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($domain_name | is-empty) { error make --unspanned { msg: "path parameter 'domainName' must be non-empty" } }
   if ($record_id | is-empty) { error make --unspanned { msg: "path parameter 'recordId' must be non-empty" } }
-  let qp = [(serialize-qp "domain_name" $domain_name "scalar") (serialize-qp "record_id" $record_id "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "domain_name" $qp_domain_name "scalar") (serialize-qp "record_id" $qp_record_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({domain_name: (encode-path-segment $domain_name), record_id: (encode-path-segment $record_id)} | format pattern "/dns/{domain_name}/records/{record_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"domain_name": $domain_name, "record_id": $record_id} | compact)
+    query: ({"domain_name": $qp_domain_name, "record_id": $qp_record_id} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -446,8 +446,8 @@ export def "put-dns-domain-name-records-record-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --domain-name: string # The domain name.
-  --record-id: string # The id of the record.
+  --qp-domain-name: string # The domain name.
+  --qp-record-id: string # The id of the record.
   --content: string # Variable data depending on the record type. A: the IPv4 address.CNAME: canonical name of an alias.MX: fully qualified domain name of a mail host.SRV: does not apply. Data for the SRV records can be found in specific properties.TXT: free form text data.CAA: format should match specific values for flag, tag and ca: "{flag} {tag} {ca}". The flag. The values 128 (critical) or 0 (non-critical) are expected, with 0 as the default.The tag. A tag specifies which actions an authorized CA can take in terms of issuing SSL/TLS certificates.The value "issue": explicitly authorizes a single certificate authority to issue a certificate (any type) for the hostname.The value "issuewild": explicitly authorizes a single certificate authority to issue a wildcard certificate (and only wildcard) for the hostname.The value "iodef": specifies a URL to which a certificate authority may report policy violations.The ca. This is the domain of the CA (Certification Authority) that has the authority to issue certificates for the domain in question. If the value is a semicolon (;), it means that no CA has the authority to issue a certificate for that domain.ALIAS: canonical name of an alias.TLSA: format should match specific values for usage, selector, matching type and data: "{usage} {selector} {matching_type} {data}" The usage. The first field after the TLSA text in the DNS RR, specifies how to verify the certificate.A value of 0 is for what is commonly called CA constraint (and PKIX-TA). The certificate provided when establishing TLS must be issued by the listed root-CA or one of its intermediate CAs, with a valid certification path to a root-CA already trusted by the application doing the verification.A value of 1 is for what is commonly called Service certificate constraint (and PKIX-EE). The certificate used must match the TLSA record exactly, and it must also pass PKIX certification path validation to a trusted root-CA.A value of 2 is for what is commonly called Trust Anchor Assertion (and DANE-TA). The certificate used has a valid certification path pointing back to the certificate mention in this record, but there is no need for it to pass the PKIX certification path validation to a trusted root-CA.A value of 3 is for what is commonly called Domain issued certificate (and DANE-EE). The services uses a self-signed certificate. It is not signed by anyone else, and is exactly this record.The selector. When connecting to the service and a certificate is received, the selector field specifies which parts of it should be checked.A value of 0 means to select the entire certificate for matching.A value of 1 means to select just the public key for certificate matching. Matching the public key is often sufficient, as this is likely to be unique.The matching type.A type of 0 means the entire information selected is present in the certificate association data.A type of 1 means to do a SHA-256 hash of the selected data.A type of 2 means to do a SHA-512 hash of the selected data.The actual data to be matched given the settings of the other fields. This is a long text string of hexadecimal data.
   --id: string # The id of the record This value is ignored for creation of new records.
   --port: int # The port for SRV records. The value MUST be a positive integer. Editing the value is not possible. You should add a new SRV record and delete the existing record. (format: int32)
@@ -465,7 +465,7 @@ export def "put-dns-domain-name-records-record-id" [
   let base = ($base_url | default $BASE_URL)
   if ($domain_name | is-empty) { error make --unspanned { msg: "path parameter 'domainName' must be non-empty" } }
   if ($record_id | is-empty) { error make --unspanned { msg: "path parameter 'recordId' must be non-empty" } }
-  let qp = [(serialize-qp "domain_name" $domain_name "scalar") (serialize-qp "record_id" $record_id "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "domain_name" $qp_domain_name "scalar") (serialize-qp "record_id" $qp_record_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({domain_name: (encode-path-segment $domain_name), record_id: (encode-path-segment $record_id)} | format pattern "/dns/{domain_name}/records/{record_id}") $qp $auth.query)
   let req_body = {"content": $content, "id": $id, "port": $port, "priority": $priority, "protocol": $protocol, "record_name": $record_name, "service": $service, "target": $target, "ttl": $ttl, "type": $type, "weight": $weight} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -474,7 +474,7 @@ export def "put-dns-domain-name-records-record-id" [
   let req = {
     method: "put"
     url: $full_url
-    query: ({"domain_name": $domain_name, "record_id": $record_id} | compact)
+    query: ({"domain_name": $qp_domain_name, "record_id": $qp_record_id} | compact)
     headers: $auth.headers
     body: $req_body
     content_type: "application/json"
@@ -620,19 +620,19 @@ export def "get-domain" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --domain-name: string # The domain name
+  --qp-domain-name: string # The domain name
 ]: nothing -> record<can_toggle_renew: bool, domain_name: string, expiration_date: string, name_servers: table<ip: string, name: string>, registrant: record<address: string, city: string, company_name: string, country_code: string, email: string, enterprise_number: string, fax: string, first_name: string, language_code: string, last_name: string, phone: string, postal_code: string>, will_renew: bool> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($domain_name | is-empty) { error make --unspanned { msg: "path parameter 'domainName' must be non-empty" } }
-  let qp = [(serialize-qp "domain_name" $domain_name "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "domain_name" $qp_domain_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({domain_name: (encode-path-segment $domain_name)} | format pattern "/domains/{domain_name}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"domain_name": $domain_name} | compact)
+    query: ({"domain_name": $qp_domain_name} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -658,7 +658,7 @@ export def "edit-name-servers" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --domain-name: string # The domain name
+  --qp-domain-name: string # The domain name
   --body-domain-name: string # The domain name to register.
   --name-servers: list<string> # List of name servers.
 ]: any -> any {
@@ -666,7 +666,7 @@ export def "edit-name-servers" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($domain_name | is-empty) { error make --unspanned { msg: "path parameter 'domainName' must be non-empty" } }
-  let qp = [(serialize-qp "domain_name" $domain_name "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "domain_name" $qp_domain_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({domain_name: (encode-path-segment $domain_name)} | format pattern "/domains/{domain_name}/nameservers") $qp $auth.query)
   let req_body = {"domain_name": $body_domain_name, "name_servers": $name_servers} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -675,7 +675,7 @@ export def "edit-name-servers" [
   let req = {
     method: "put"
     url: $full_url
-    query: ({"domain_name": $domain_name} | compact)
+    query: ({"domain_name": $qp_domain_name} | compact)
     headers: $auth.headers
     body: $req_body
     content_type: "application/json"
@@ -701,14 +701,14 @@ export def "configure-domain" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --domain-name: string # The domain name
+  --qp-domain-name: string # The domain name
   --will-renew: oneof<nothing, bool> # Indication of renewal.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($domain_name | is-empty) { error make --unspanned { msg: "path parameter 'domainName' must be non-empty" } }
-  let qp = [(serialize-qp "domain_name" $domain_name "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "domain_name" $qp_domain_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({domain_name: (encode-path-segment $domain_name)} | format pattern "/domains/{domain_name}/renew") $qp $auth.query)
   let req_body = {"will_renew": $will_renew} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -717,7 +717,7 @@ export def "configure-domain" [
   let req = {
     method: "put"
     url: $full_url
-    query: ({"domain_name": $domain_name} | compact)
+    query: ({"domain_name": $qp_domain_name} | compact)
     headers: $auth.headers
     body: $req_body
     content_type: "application/json"
@@ -780,19 +780,19 @@ export def "get-linux-hosting" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --domain-name: string # The Linux hosting domain name.
+  --qp-domain-name: string # The Linux hosting domain name.
 ]: nothing -> record<actual_size: int, domain_name: string, ftp_enabled: bool, ftp_username: string, ip: string, ip_type: string, max_size: int, max_webspace_size: int, mysql_database_names: list<string>, php_version: string, servicepack_id: int, sites: table<host_headers: list, http2_enabled: bool, https_redirect_enabled: bool, name: string, path: string, ssl_enabled: bool>, ssh_host: string, ssh_username: string, webspace_usage: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($domain_name | is-empty) { error make --unspanned { msg: "path parameter 'domainName' must be non-empty" } }
-  let qp = [(serialize-qp "domain_name" $domain_name "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "domain_name" $qp_domain_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({domain_name: (encode-path-segment $domain_name)} | format pattern "/linuxhostings/{domain_name}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"domain_name": $domain_name} | compact)
+    query: ({"domain_name": $qp_domain_name} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -818,14 +818,14 @@ export def "configure-ftp" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --domain-name: string # Linux hosting domain name.
+  --qp-domain-name: string # Linux hosting domain name.
   --enabled: oneof<nothing, bool> # Enable or disable FTP.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($domain_name | is-empty) { error make --unspanned { msg: "path parameter 'domainName' must be non-empty" } }
-  let qp = [(serialize-qp "domain_name" $domain_name "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "domain_name" $qp_domain_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({domain_name: (encode-path-segment $domain_name)} | format pattern "/linuxhostings/{domain_name}/ftp/configuration") $qp $auth.query)
   let req_body = {"enabled": $enabled} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -834,7 +834,7 @@ export def "configure-ftp" [
   let req = {
     method: "put"
     url: $full_url
-    query: ({"domain_name": $domain_name} | compact)
+    query: ({"domain_name": $qp_domain_name} | compact)
     headers: $auth.headers
     body: $req_body
     content_type: "application/json"
@@ -860,7 +860,7 @@ export def "change-apcu" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --domain-name: string # Linux hosting domain name
+  --qp-domain-name: string # Linux hosting domain name
   --apcu-size: int # The APcu size. (format: int32)
   --enabled: oneof<nothing, bool> # Enables or disables APC.
 ]: any -> any {
@@ -868,7 +868,7 @@ export def "change-apcu" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($domain_name | is-empty) { error make --unspanned { msg: "path parameter 'domainName' must be non-empty" } }
-  let qp = [(serialize-qp "domain_name" $domain_name "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "domain_name" $qp_domain_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({domain_name: (encode-path-segment $domain_name)} | format pattern "/linuxhostings/{domain_name}/phpsettings/apcu") $qp $auth.query)
   let req_body = {"apcu_size": $apcu_size, "enabled": $enabled} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -877,7 +877,7 @@ export def "change-apcu" [
   let req = {
     method: "put"
     url: $full_url
-    query: ({"domain_name": $domain_name} | compact)
+    query: ({"domain_name": $qp_domain_name} | compact)
     headers: $auth.headers
     body: $req_body
     content_type: "application/json"
@@ -903,19 +903,19 @@ export def "get-available-php-versions" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --domain-name: string # Linux hosting domain name.
+  --qp-domain-name: string # Linux hosting domain name.
 ]: nothing -> table<version: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($domain_name | is-empty) { error make --unspanned { msg: "path parameter 'domainName' must be non-empty" } }
-  let qp = [(serialize-qp "domain_name" $domain_name "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "domain_name" $qp_domain_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({domain_name: (encode-path-segment $domain_name)} | format pattern "/linuxhostings/{domain_name}/phpsettings/availableversions") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"domain_name": $domain_name} | compact)
+    query: ({"domain_name": $qp_domain_name} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -941,14 +941,14 @@ export def "change-php-memory-limit" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --domain-name: string # Linux hosting domain name.
+  --qp-domain-name: string # Linux hosting domain name.
   --memory-limit: int # The php memory limit (format: int32)
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($domain_name | is-empty) { error make --unspanned { msg: "path parameter 'domainName' must be non-empty" } }
-  let qp = [(serialize-qp "domain_name" $domain_name "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "domain_name" $qp_domain_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({domain_name: (encode-path-segment $domain_name)} | format pattern "/linuxhostings/{domain_name}/phpsettings/memorylimit") $qp $auth.query)
   let req_body = {"memory_limit": $memory_limit} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -957,7 +957,7 @@ export def "change-php-memory-limit" [
   let req = {
     method: "put"
     url: $full_url
-    query: ({"domain_name": $domain_name} | compact)
+    query: ({"domain_name": $qp_domain_name} | compact)
     headers: $auth.headers
     body: $req_body
     content_type: "application/json"
@@ -983,14 +983,14 @@ export def "change-php-version" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --domain-name: string # Linux hosting domain name.
+  --qp-domain-name: string # Linux hosting domain name.
   --version: string # Php version
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($domain_name | is-empty) { error make --unspanned { msg: "path parameter 'domainName' must be non-empty" } }
-  let qp = [(serialize-qp "domain_name" $domain_name "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "domain_name" $qp_domain_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({domain_name: (encode-path-segment $domain_name)} | format pattern "/linuxhostings/{domain_name}/phpsettings/version") $qp $auth.query)
   let req_body = {"version": $version} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -999,7 +999,7 @@ export def "change-php-version" [
   let req = {
     method: "put"
     url: $full_url
-    query: ({"domain_name": $domain_name} | compact)
+    query: ({"domain_name": $qp_domain_name} | compact)
     headers: $auth.headers
     body: $req_body
     content_type: "application/json"
@@ -1025,19 +1025,19 @@ export def "get-scheduled-tasks" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --domain-name: string # Linux hosting domain name.
+  --qp-domain-name: string # Linux hosting domain name.
 ]: nothing -> table<cron_expression: string, enabled: bool, id: string, script_location: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($domain_name | is-empty) { error make --unspanned { msg: "path parameter 'domainName' must be non-empty" } }
-  let qp = [(serialize-qp "domain_name" $domain_name "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "domain_name" $qp_domain_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({domain_name: (encode-path-segment $domain_name)} | format pattern "/linuxhostings/{domain_name}/scheduledtasks") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"domain_name": $domain_name} | compact)
+    query: ({"domain_name": $qp_domain_name} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -1063,7 +1063,7 @@ export def "add-scheduled-tasks" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --domain-name: string # Linux hosting domain name.
+  --qp-domain-name: string # Linux hosting domain name.
   --cron-expression: string # Cron expression of scheduled task. 5-digit expressions (*/5 * * * *) are required in the following sequence:Minute (0 - 59, also */5, */10, */15 and */30 as every 5 minutes, every 10 minutes, every quarter or every half-hour are allowed)Hour (0 - 23, also * as every hour is allowed)Day of the month (1 - 31, also * as every day is allowed)Month (1 - 12 as January to December, also * as every month is allowed)Day of the week (1 - 7 as Monday to Sunday, also * as every day is allowed)
   --enabled: oneof<nothing, bool> # Enabled.
   --id: string # The id of the scheduled task. This value is ignored for creation of new scheduled tasks.
@@ -1073,7 +1073,7 @@ export def "add-scheduled-tasks" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($domain_name | is-empty) { error make --unspanned { msg: "path parameter 'domainName' must be non-empty" } }
-  let qp = [(serialize-qp "domain_name" $domain_name "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "domain_name" $qp_domain_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({domain_name: (encode-path-segment $domain_name)} | format pattern "/linuxhostings/{domain_name}/scheduledtasks") $qp $auth.query)
   let req_body = {"cron_expression": $cron_expression, "enabled": $enabled, "id": $id, "script_location": $script_location} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1082,7 +1082,7 @@ export def "add-scheduled-tasks" [
   let req = {
     method: "post"
     url: $full_url
-    query: ({"domain_name": $domain_name} | compact)
+    query: ({"domain_name": $qp_domain_name} | compact)
     headers: $auth.headers
     body: $req_body
     content_type: "application/json"
@@ -1109,21 +1109,21 @@ export def "delete-scheduled-task" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --domain-name: string # Linux hosting domain name.
-  --scheduled-task-id: string # Id of the scheduled task.
+  --qp-domain-name: string # Linux hosting domain name.
+  --qp-scheduled-task-id: string # Id of the scheduled task.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($domain_name | is-empty) { error make --unspanned { msg: "path parameter 'domainName' must be non-empty" } }
   if ($scheduled_task_id | is-empty) { error make --unspanned { msg: "path parameter 'scheduledTaskId' must be non-empty" } }
-  let qp = [(serialize-qp "domain_name" $domain_name "scalar") (serialize-qp "scheduled_task_id" $scheduled_task_id "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "domain_name" $qp_domain_name "scalar") (serialize-qp "scheduled_task_id" $qp_scheduled_task_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({domain_name: (encode-path-segment $domain_name), scheduled_task_id: (encode-path-segment $scheduled_task_id)} | format pattern "/linuxhostings/{domain_name}/scheduledtasks/{scheduled_task_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
-    query: ({"domain_name": $domain_name, "scheduled_task_id": $scheduled_task_id} | compact)
+    query: ({"domain_name": $qp_domain_name, "scheduled_task_id": $qp_scheduled_task_id} | compact)
     headers: $auth.headers
     body: null
     content_type: "application/json"
@@ -1150,21 +1150,21 @@ export def "get-scheduled-task" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --domain-name: string # Linux hosting domain name.
-  --scheduled-task-id: string # Id of the scheduled task.
+  --qp-domain-name: string # Linux hosting domain name.
+  --qp-scheduled-task-id: string # Id of the scheduled task.
 ]: nothing -> record<cron_expression: string, enabled: bool, id: string, script_location: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($domain_name | is-empty) { error make --unspanned { msg: "path parameter 'domainName' must be non-empty" } }
   if ($scheduled_task_id | is-empty) { error make --unspanned { msg: "path parameter 'scheduledTaskId' must be non-empty" } }
-  let qp = [(serialize-qp "domain_name" $domain_name "scalar") (serialize-qp "scheduled_task_id" $scheduled_task_id "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "domain_name" $qp_domain_name "scalar") (serialize-qp "scheduled_task_id" $qp_scheduled_task_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({domain_name: (encode-path-segment $domain_name), scheduled_task_id: (encode-path-segment $scheduled_task_id)} | format pattern "/linuxhostings/{domain_name}/scheduledtasks/{scheduled_task_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"domain_name": $domain_name, "scheduled_task_id": $scheduled_task_id} | compact)
+    query: ({"domain_name": $qp_domain_name, "scheduled_task_id": $qp_scheduled_task_id} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -1191,8 +1191,8 @@ export def "configure-scheduled-task" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --domain-name: string # Linux hosting domain name.
-  --scheduled-task-id: string # Id of the scheduled task.
+  --qp-domain-name: string # Linux hosting domain name.
+  --qp-scheduled-task-id: string # Id of the scheduled task.
   --cron-expression: string # Cron expression of scheduled task. 5-digit expressions (*/5 * * * *) are required in the following sequence:Minute (0 - 59, also */5, */10, */15 and */30 as every 5 minutes, every 10 minutes, every quarter or every half-hour are allowed)Hour (0 - 23, also * as every hour is allowed)Day of the month (1 - 31, also * as every day is allowed)Month (1 - 12 as January to December, also * as every month is allowed)Day of the week (1 - 7 as Monday to Sunday, also * as every day is allowed)
   --enabled: oneof<nothing, bool> # Enabled.
   --id: string # The id of the scheduled task. This value is ignored for creation of new scheduled tasks.
@@ -1203,7 +1203,7 @@ export def "configure-scheduled-task" [
   let base = ($base_url | default $BASE_URL)
   if ($domain_name | is-empty) { error make --unspanned { msg: "path parameter 'domainName' must be non-empty" } }
   if ($scheduled_task_id | is-empty) { error make --unspanned { msg: "path parameter 'scheduledTaskId' must be non-empty" } }
-  let qp = [(serialize-qp "domain_name" $domain_name "scalar") (serialize-qp "scheduled_task_id" $scheduled_task_id "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "domain_name" $qp_domain_name "scalar") (serialize-qp "scheduled_task_id" $qp_scheduled_task_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({domain_name: (encode-path-segment $domain_name), scheduled_task_id: (encode-path-segment $scheduled_task_id)} | format pattern "/linuxhostings/{domain_name}/scheduledtasks/{scheduled_task_id}") $qp $auth.query)
   let req_body = {"cron_expression": $cron_expression, "enabled": $enabled, "id": $id, "script_location": $script_location} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1212,7 +1212,7 @@ export def "configure-scheduled-task" [
   let req = {
     method: "put"
     url: $full_url
-    query: ({"domain_name": $domain_name, "scheduled_task_id": $scheduled_task_id} | compact)
+    query: ({"domain_name": $qp_domain_name, "scheduled_task_id": $qp_scheduled_task_id} | compact)
     headers: $auth.headers
     body: $req_body
     content_type: "application/json"
@@ -1238,14 +1238,14 @@ export def "change-gzip-compression" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --domain-name: string # Linux hosting domain name
+  --qp-domain-name: string # Linux hosting domain name
   --enabled: oneof<nothing, bool> # Enabled
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($domain_name | is-empty) { error make --unspanned { msg: "path parameter 'domainName' must be non-empty" } }
-  let qp = [(serialize-qp "domain_name" $domain_name "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "domain_name" $qp_domain_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({domain_name: (encode-path-segment $domain_name)} | format pattern "/linuxhostings/{domain_name}/settings/gzipcompression") $qp $auth.query)
   let req_body = {"enabled": $enabled} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1254,7 +1254,7 @@ export def "change-gzip-compression" [
   let req = {
     method: "put"
     url: $full_url
-    query: ({"domain_name": $domain_name} | compact)
+    query: ({"domain_name": $qp_domain_name} | compact)
     headers: $auth.headers
     body: $req_body
     content_type: "application/json"
@@ -1281,8 +1281,8 @@ export def "create-host-header" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --domain-name: string # Linux hosting domain name.
-  --site-name: string # Name of the site on the linux hosting.
+  --qp-domain-name: string # Linux hosting domain name.
+  --qp-site-name: string # Name of the site on the linux hosting.
   --body-domain-name: string # Host header domain name (e.g. alias.be or alias.site.be).
 ]: any -> any {
   let input = $in
@@ -1290,7 +1290,7 @@ export def "create-host-header" [
   let base = ($base_url | default $BASE_URL)
   if ($domain_name | is-empty) { error make --unspanned { msg: "path parameter 'domainName' must be non-empty" } }
   if ($site_name | is-empty) { error make --unspanned { msg: "path parameter 'siteName' must be non-empty" } }
-  let qp = [(serialize-qp "domain_name" $domain_name "scalar") (serialize-qp "site_name" $site_name "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "domain_name" $qp_domain_name "scalar") (serialize-qp "site_name" $qp_site_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({domain_name: (encode-path-segment $domain_name), site_name: (encode-path-segment $site_name)} | format pattern "/linuxhostings/{domain_name}/sites/{site_name}/hostheaders") $qp $auth.query)
   let req_body = {"domain_name": $body_domain_name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1299,7 +1299,7 @@ export def "create-host-header" [
   let req = {
     method: "post"
     url: $full_url
-    query: ({"domain_name": $domain_name, "site_name": $site_name} | compact)
+    query: ({"domain_name": $qp_domain_name, "site_name": $qp_site_name} | compact)
     headers: $auth.headers
     body: $req_body
     content_type: "application/json"
@@ -1326,8 +1326,8 @@ export def "configure-http2" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --domain-name: string # Linux hosting domain name.
-  --site-name: string # Site name where HTTP/2 should be configured. For HTTP/2 to work correctly, the site must have ssl enabled.
+  --qp-domain-name: string # Linux hosting domain name.
+  --qp-site-name: string # Site name where HTTP/2 should be configured. For HTTP/2 to work correctly, the site must have ssl enabled.
   --enabled: oneof<nothing, bool> # Enable or disable HTTP/2.
 ]: any -> any {
   let input = $in
@@ -1335,7 +1335,7 @@ export def "configure-http2" [
   let base = ($base_url | default $BASE_URL)
   if ($domain_name | is-empty) { error make --unspanned { msg: "path parameter 'domainName' must be non-empty" } }
   if ($site_name | is-empty) { error make --unspanned { msg: "path parameter 'siteName' must be non-empty" } }
-  let qp = [(serialize-qp "domain_name" $domain_name "scalar") (serialize-qp "site_name" $site_name "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "domain_name" $qp_domain_name "scalar") (serialize-qp "site_name" $qp_site_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({domain_name: (encode-path-segment $domain_name), site_name: (encode-path-segment $site_name)} | format pattern "/linuxhostings/{domain_name}/sites/{site_name}/http2/configuration") $qp $auth.query)
   let req_body = {"enabled": $enabled} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1344,7 +1344,7 @@ export def "configure-http2" [
   let req = {
     method: "put"
     url: $full_url
-    query: ({"domain_name": $domain_name, "site_name": $site_name} | compact)
+    query: ({"domain_name": $qp_domain_name, "site_name": $qp_site_name} | compact)
     headers: $auth.headers
     body: $req_body
     content_type: "application/json"
@@ -1370,14 +1370,14 @@ export def "configure-ssh" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --domain-name: string # Linux hosting domain name.
+  --qp-domain-name: string # Linux hosting domain name.
   --enabled: oneof<nothing, bool> # Enable or disable SSH.
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($domain_name | is-empty) { error make --unspanned { msg: "path parameter 'domainName' must be non-empty" } }
-  let qp = [(serialize-qp "domain_name" $domain_name "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "domain_name" $qp_domain_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({domain_name: (encode-path-segment $domain_name)} | format pattern "/linuxhostings/{domain_name}/ssh/configuration") $qp $auth.query)
   let req_body = {"enabled": $enabled} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1386,7 +1386,7 @@ export def "configure-ssh" [
   let req = {
     method: "put"
     url: $full_url
-    query: ({"domain_name": $domain_name} | compact)
+    query: ({"domain_name": $qp_domain_name} | compact)
     headers: $auth.headers
     body: $req_body
     content_type: "application/json"
@@ -1412,19 +1412,19 @@ export def "get-ssh-keys" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --domain-name: string # Linux hosting domain name.
+  --qp-domain-name: string # Linux hosting domain name.
 ]: nothing -> table<fingerprint: string, public_key: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($domain_name | is-empty) { error make --unspanned { msg: "path parameter 'domainName' must be non-empty" } }
-  let qp = [(serialize-qp "domain_name" $domain_name "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "domain_name" $qp_domain_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({domain_name: (encode-path-segment $domain_name)} | format pattern "/linuxhostings/{domain_name}/ssh/keys") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"domain_name": $domain_name} | compact)
+    query: ({"domain_name": $qp_domain_name} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -1450,14 +1450,14 @@ export def "add-ssh-key" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --domain-name: string # Linux hosting domain name.
+  --qp-domain-name: string # Linux hosting domain name.
   --public-key: string # Public key
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($domain_name | is-empty) { error make --unspanned { msg: "path parameter 'domainName' must be non-empty" } }
-  let qp = [(serialize-qp "domain_name" $domain_name "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "domain_name" $qp_domain_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({domain_name: (encode-path-segment $domain_name)} | format pattern "/linuxhostings/{domain_name}/ssh/keys") $qp $auth.query)
   let req_body = {"public_key": $public_key} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1466,7 +1466,7 @@ export def "add-ssh-key" [
   let req = {
     method: "post"
     url: $full_url
-    query: ({"domain_name": $domain_name} | compact)
+    query: ({"domain_name": $qp_domain_name} | compact)
     headers: $auth.headers
     body: $req_body
     content_type: "application/json"
@@ -1493,20 +1493,20 @@ export def "delete-ssh-key" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --domain-name: string # Linux hosting domain name.
+  --qp-domain-name: string # Linux hosting domain name.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($domain_name | is-empty) { error make --unspanned { msg: "path parameter 'domainName' must be non-empty" } }
   if ($fingerprint | is-empty) { error make --unspanned { msg: "path parameter 'fingerprint' must be non-empty" } }
-  let qp = [(serialize-qp "domain_name" $domain_name "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "domain_name" $qp_domain_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({domain_name: (encode-path-segment $domain_name), fingerprint: (encode-path-segment $fingerprint)} | format pattern "/linuxhostings/{domain_name}/ssh/keys/{fingerprint}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
-    query: ({"domain_name": $domain_name} | compact)
+    query: ({"domain_name": $qp_domain_name} | compact)
     headers: $auth.headers
     body: null
     content_type: "application/json"
@@ -1533,7 +1533,7 @@ export def "change-auto-redirect" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --domain-name: string # Linux hosting domain name.
+  --qp-domain-name: string # Linux hosting domain name.
   --enabled: oneof<nothing, bool> # Enabled
 ]: any -> any {
   let input = $in
@@ -1541,7 +1541,7 @@ export def "change-auto-redirect" [
   let base = ($base_url | default $BASE_URL)
   if ($domain_name | is-empty) { error make --unspanned { msg: "path parameter 'domainName' must be non-empty" } }
   if ($hostname | is-empty) { error make --unspanned { msg: "path parameter 'hostname' must be non-empty" } }
-  let qp = [(serialize-qp "domain_name" $domain_name "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "domain_name" $qp_domain_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({domain_name: (encode-path-segment $domain_name), hostname: (encode-path-segment $hostname)} | format pattern "/linuxhostings/{domain_name}/sslsettings/{hostname}/autoredirect") $qp $auth.query)
   let req_body = {"enabled": $enabled} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1550,7 +1550,7 @@ export def "change-auto-redirect" [
   let req = {
     method: "put"
     url: $full_url
-    query: ({"domain_name": $domain_name} | compact)
+    query: ({"domain_name": $qp_domain_name} | compact)
     headers: $auth.headers
     body: $req_body
     content_type: "application/json"
@@ -1577,7 +1577,7 @@ export def "change-lets-encrypt" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --domain-name: string # Linux hosting domain name.
+  --qp-domain-name: string # Linux hosting domain name.
   --enabled: oneof<nothing, bool> # Enabled
 ]: any -> any {
   let input = $in
@@ -1585,7 +1585,7 @@ export def "change-lets-encrypt" [
   let base = ($base_url | default $BASE_URL)
   if ($domain_name | is-empty) { error make --unspanned { msg: "path parameter 'domainName' must be non-empty" } }
   if ($hostname | is-empty) { error make --unspanned { msg: "path parameter 'hostname' must be non-empty" } }
-  let qp = [(serialize-qp "domain_name" $domain_name "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "domain_name" $qp_domain_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({domain_name: (encode-path-segment $domain_name), hostname: (encode-path-segment $hostname)} | format pattern "/linuxhostings/{domain_name}/sslsettings/{hostname}/letsencrypt") $qp $auth.query)
   let req_body = {"enabled": $enabled} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1594,7 +1594,7 @@ export def "change-lets-encrypt" [
   let req = {
     method: "put"
     url: $full_url
-    query: ({"domain_name": $domain_name} | compact)
+    query: ({"domain_name": $qp_domain_name} | compact)
     headers: $auth.headers
     body: $req_body
     content_type: "application/json"
@@ -1620,7 +1620,7 @@ export def "create-subsite" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --domain-name: string # Linux hosting domain name.
+  --qp-domain-name: string # Linux hosting domain name.
   --body-domain-name: string # Subsite domain name (e.g. alias.be or subsite.site.be).
   --path: string # Folder location for the subsite (when empty we use /subsites/site (e.g. /subsites/subsite.site.be) The path MUST pre-exist on the server. It WILL NOT be created automatically.
 ]: any -> any {
@@ -1628,7 +1628,7 @@ export def "create-subsite" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($domain_name | is-empty) { error make --unspanned { msg: "path parameter 'domainName' must be non-empty" } }
-  let qp = [(serialize-qp "domain_name" $domain_name "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "domain_name" $qp_domain_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({domain_name: (encode-path-segment $domain_name)} | format pattern "/linuxhostings/{domain_name}/subsites") $qp $auth.query)
   let req_body = {"domain_name": $body_domain_name, "path": $path} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1637,7 +1637,7 @@ export def "create-subsite" [
   let req = {
     method: "post"
     url: $full_url
-    query: ({"domain_name": $domain_name} | compact)
+    query: ({"domain_name": $qp_domain_name} | compact)
     headers: $auth.headers
     body: $req_body
     content_type: "application/json"
@@ -1664,21 +1664,21 @@ export def "delete-subsite" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --domain-name: string # Linux hosting domain name.
-  --site-name: string # Name of the site on the linux hosting.
+  --qp-domain-name: string # Linux hosting domain name.
+  --qp-site-name: string # Name of the site on the linux hosting.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($domain_name | is-empty) { error make --unspanned { msg: "path parameter 'domainName' must be non-empty" } }
   if ($site_name | is-empty) { error make --unspanned { msg: "path parameter 'siteName' must be non-empty" } }
-  let qp = [(serialize-qp "domain_name" $domain_name "scalar") (serialize-qp "site_name" $site_name "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "domain_name" $qp_domain_name "scalar") (serialize-qp "site_name" $qp_site_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({domain_name: (encode-path-segment $domain_name), site_name: (encode-path-segment $site_name)} | format pattern "/linuxhostings/{domain_name}/subsites/{site_name}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
-    query: ({"domain_name": $domain_name, "site_name": $site_name} | compact)
+    query: ({"domain_name": $qp_domain_name, "site_name": $qp_site_name} | compact)
     headers: $auth.headers
     body: null
     content_type: "application/json"
@@ -1780,19 +1780,19 @@ export def "delete-mailbox" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --mailbox-name: string # Mailbox name.
+  --qp-mailbox-name: string # Mailbox name.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($mailbox_name | is-empty) { error make --unspanned { msg: "path parameter 'mailboxName' must be non-empty" } }
-  let qp = [(serialize-qp "mailbox_name" $mailbox_name "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "mailbox_name" $qp_mailbox_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({mailbox_name: (encode-path-segment $mailbox_name)} | format pattern "/mailboxes/{mailbox_name}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
-    query: ({"mailbox_name": $mailbox_name} | compact)
+    query: ({"mailbox_name": $qp_mailbox_name} | compact)
     headers: $auth.headers
     body: null
     content_type: "application/json"
@@ -1818,19 +1818,19 @@ export def "get-mailbox" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --mailbox-name: string # Mailbox name.
+  --qp-mailbox-name: string # Mailbox name.
 ]: nothing -> record<actual_size: int, auto_forward: record<copy_to_myself: bool, email_addresses: list<string>, enabled: bool>, auto_reply: record<enabled: bool, message: string, subject: string>, login: string, max_size: int, name: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($mailbox_name | is-empty) { error make --unspanned { msg: "path parameter 'mailboxName' must be non-empty" } }
-  let qp = [(serialize-qp "mailbox_name" $mailbox_name "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "mailbox_name" $qp_mailbox_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({mailbox_name: (encode-path-segment $mailbox_name)} | format pattern "/mailboxes/{mailbox_name}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"mailbox_name": $mailbox_name} | compact)
+    query: ({"mailbox_name": $qp_mailbox_name} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -1856,7 +1856,7 @@ export def "configure-mailbox-auto-forward" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --mailbox-name: string # Mailbox name.
+  --qp-mailbox-name: string # Mailbox name.
   --copy-to-myself: oneof<nothing, bool> # Copy to myself
   --email-addresses: list<string> # E-mail addresses to which e-mails are forwarded
   --enabled: oneof<nothing, bool> # Enabled
@@ -1865,7 +1865,7 @@ export def "configure-mailbox-auto-forward" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($mailbox_name | is-empty) { error make --unspanned { msg: "path parameter 'mailboxName' must be non-empty" } }
-  let qp = [(serialize-qp "mailbox_name" $mailbox_name "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "mailbox_name" $qp_mailbox_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({mailbox_name: (encode-path-segment $mailbox_name)} | format pattern "/mailboxes/{mailbox_name}/autoforward") $qp $auth.query)
   let req_body = {"copy_to_myself": $copy_to_myself, "email_addresses": $email_addresses, "enabled": $enabled} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1874,7 +1874,7 @@ export def "configure-mailbox-auto-forward" [
   let req = {
     method: "put"
     url: $full_url
-    query: ({"mailbox_name": $mailbox_name} | compact)
+    query: ({"mailbox_name": $qp_mailbox_name} | compact)
     headers: $auth.headers
     body: $req_body
     content_type: "application/json"
@@ -1900,7 +1900,7 @@ export def "configure-mailbox-auto-reply" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --mailbox-name: string # Mailbox name.
+  --qp-mailbox-name: string # Mailbox name.
   --enabled: oneof<nothing, bool> # Enabled
   --message: string # Message
   --subject: string # Subject
@@ -1909,7 +1909,7 @@ export def "configure-mailbox-auto-reply" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($mailbox_name | is-empty) { error make --unspanned { msg: "path parameter 'mailboxName' must be non-empty" } }
-  let qp = [(serialize-qp "mailbox_name" $mailbox_name "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "mailbox_name" $qp_mailbox_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({mailbox_name: (encode-path-segment $mailbox_name)} | format pattern "/mailboxes/{mailbox_name}/autoreply") $qp $auth.query)
   let req_body = {"enabled": $enabled, "message": $message, "subject": $subject} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1918,7 +1918,7 @@ export def "configure-mailbox-auto-reply" [
   let req = {
     method: "put"
     url: $full_url
-    query: ({"mailbox_name": $mailbox_name} | compact)
+    query: ({"mailbox_name": $qp_mailbox_name} | compact)
     headers: $auth.headers
     body: $req_body
     content_type: "application/json"
@@ -1944,14 +1944,14 @@ export def "change-mailbox-password" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --mailbox-name: string # Mailbox name.
+  --qp-mailbox-name: string # Mailbox name.
   --password: string # The password for the database user. Passwords have to adhere to following rules:Between 8-20 characters.Must be a mix of letters and digits.Must contain at least one digit (0-9).Must contain at least one letter (a-z).Cannot contain spaces.Cannot contain characters: * € $ & + } { ' " \
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($mailbox_name | is-empty) { error make --unspanned { msg: "path parameter 'mailboxName' must be non-empty" } }
-  let qp = [(serialize-qp "mailbox_name" $mailbox_name "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "mailbox_name" $qp_mailbox_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({mailbox_name: (encode-path-segment $mailbox_name)} | format pattern "/mailboxes/{mailbox_name}/password") $qp $auth.query)
   let req_body = {"password": $password} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -1960,7 +1960,7 @@ export def "change-mailbox-password" [
   let req = {
     method: "put"
     url: $full_url
-    query: ({"mailbox_name": $mailbox_name} | compact)
+    query: ({"mailbox_name": $qp_mailbox_name} | compact)
     headers: $auth.headers
     body: $req_body
     content_type: "application/json"
@@ -1986,19 +1986,19 @@ export def "get-mail-zone" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --domain-name: string # Mail zone domain name.
+  --qp-domain-name: string # Mail zone domain name.
 ]: nothing -> record<aliases: table<destinations: list, email_address: string>, anti_spam: record<allowed_types: list<string>, type: string>, available_accounts: table<account_id: int, size: int>, catch_all: record<email_addresses: list<string>>, enabled: bool, name: string, smtp_domains: table<enabled: bool, hostname: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($domain_name | is-empty) { error make --unspanned { msg: "path parameter 'domainName' must be non-empty" } }
-  let qp = [(serialize-qp "domain_name" $domain_name "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "domain_name" $qp_domain_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({domain_name: (encode-path-segment $domain_name)} | format pattern "/mailzones/{domain_name}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"domain_name": $domain_name} | compact)
+    query: ({"domain_name": $qp_domain_name} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -2024,7 +2024,7 @@ export def "create-alias" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --domain-name: string # Mail zone domain name.
+  --qp-domain-name: string # Mail zone domain name.
   --destinations: list<string> # The alias destination e-mail addresses
   --email-address: string # The alias e-mail
 ]: any -> any {
@@ -2032,7 +2032,7 @@ export def "create-alias" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($domain_name | is-empty) { error make --unspanned { msg: "path parameter 'domainName' must be non-empty" } }
-  let qp = [(serialize-qp "domain_name" $domain_name "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "domain_name" $qp_domain_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({domain_name: (encode-path-segment $domain_name)} | format pattern "/mailzones/{domain_name}/aliases") $qp $auth.query)
   let req_body = {"destinations": $destinations, "email_address": $email_address} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2041,7 +2041,7 @@ export def "create-alias" [
   let req = {
     method: "post"
     url: $full_url
-    query: ({"domain_name": $domain_name} | compact)
+    query: ({"domain_name": $qp_domain_name} | compact)
     headers: $auth.headers
     body: $req_body
     content_type: "application/json"
@@ -2068,21 +2068,21 @@ export def "delete-alias" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --domain-name: string # Mail zone domain name.
-  --email-address: string # Alias e-mail address.
+  --qp-domain-name: string # Mail zone domain name.
+  --qp-email-address: string # Alias e-mail address.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($domain_name | is-empty) { error make --unspanned { msg: "path parameter 'domainName' must be non-empty" } }
   if ($email_address | is-empty) { error make --unspanned { msg: "path parameter 'emailAddress' must be non-empty" } }
-  let qp = [(serialize-qp "domain_name" $domain_name "scalar") (serialize-qp "email_address" $email_address "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "domain_name" $qp_domain_name "scalar") (serialize-qp "email_address" $qp_email_address "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({domain_name: (encode-path-segment $domain_name), email_address: (encode-path-segment $email_address)} | format pattern "/mailzones/{domain_name}/aliases/{email_address}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
-    query: ({"domain_name": $domain_name, "email_address": $email_address} | compact)
+    query: ({"domain_name": $qp_domain_name, "email_address": $qp_email_address} | compact)
     headers: $auth.headers
     body: null
     content_type: "application/json"
@@ -2109,8 +2109,8 @@ export def "configure-alias" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --domain-name: string # Mail zone domain name.
-  --email-address: string # Alias e-mail address.
+  --qp-domain-name: string # Mail zone domain name.
+  --qp-email-address: string # Alias e-mail address.
   --destinations: list<string> # The alias destination e-mail addresses
 ]: any -> any {
   let input = $in
@@ -2118,7 +2118,7 @@ export def "configure-alias" [
   let base = ($base_url | default $BASE_URL)
   if ($domain_name | is-empty) { error make --unspanned { msg: "path parameter 'domainName' must be non-empty" } }
   if ($email_address | is-empty) { error make --unspanned { msg: "path parameter 'emailAddress' must be non-empty" } }
-  let qp = [(serialize-qp "domain_name" $domain_name "scalar") (serialize-qp "email_address" $email_address "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "domain_name" $qp_domain_name "scalar") (serialize-qp "email_address" $qp_email_address "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({domain_name: (encode-path-segment $domain_name), email_address: (encode-path-segment $email_address)} | format pattern "/mailzones/{domain_name}/aliases/{email_address}") $qp $auth.query)
   let req_body = {"destinations": $destinations} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2127,7 +2127,7 @@ export def "configure-alias" [
   let req = {
     method: "put"
     url: $full_url
-    query: ({"domain_name": $domain_name, "email_address": $email_address} | compact)
+    query: ({"domain_name": $qp_domain_name, "email_address": $qp_email_address} | compact)
     headers: $auth.headers
     body: $req_body
     content_type: "application/json"
@@ -2153,14 +2153,14 @@ export def "configure-anti-spam" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --domain-name: string # Mail zone domain name.
+  --qp-domain-name: string # Mail zone domain name.
   --type: string@type-completer # Types of anti-spam scanning
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($domain_name | is-empty) { error make --unspanned { msg: "path parameter 'domainName' must be non-empty" } }
-  let qp = [(serialize-qp "domain_name" $domain_name "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "domain_name" $qp_domain_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({domain_name: (encode-path-segment $domain_name)} | format pattern "/mailzones/{domain_name}/antispam") $qp $auth.query)
   let req_body = {"type": $type} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2169,7 +2169,7 @@ export def "configure-anti-spam" [
   let req = {
     method: "put"
     url: $full_url
-    query: ({"domain_name": $domain_name} | compact)
+    query: ({"domain_name": $qp_domain_name} | compact)
     headers: $auth.headers
     body: $req_body
     content_type: "application/json"
@@ -2195,14 +2195,14 @@ export def "create-catch-all" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --domain-name: string # Mail zone domain name.
+  --qp-domain-name: string # Mail zone domain name.
   --email-address: string # E-mail address to which all e-mails are sent to inexistent mailboxes or aliases
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($domain_name | is-empty) { error make --unspanned { msg: "path parameter 'domainName' must be non-empty" } }
-  let qp = [(serialize-qp "domain_name" $domain_name "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "domain_name" $qp_domain_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({domain_name: (encode-path-segment $domain_name)} | format pattern "/mailzones/{domain_name}/catchall") $qp $auth.query)
   let req_body = {"email_address": $email_address} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2211,7 +2211,7 @@ export def "create-catch-all" [
   let req = {
     method: "post"
     url: $full_url
-    query: ({"domain_name": $domain_name} | compact)
+    query: ({"domain_name": $qp_domain_name} | compact)
     headers: $auth.headers
     body: $req_body
     content_type: "application/json"
@@ -2238,21 +2238,21 @@ export def "delete-catch-all" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --domain-name: string # Mail zone domain name.
-  --email-address: string # E-mail address to which all e-mails are sent to inexistent mailboxes or aliases.
+  --qp-domain-name: string # Mail zone domain name.
+  --qp-email-address: string # E-mail address to which all e-mails are sent to inexistent mailboxes or aliases.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($domain_name | is-empty) { error make --unspanned { msg: "path parameter 'domainName' must be non-empty" } }
   if ($email_address | is-empty) { error make --unspanned { msg: "path parameter 'emailAddress' must be non-empty" } }
-  let qp = [(serialize-qp "domain_name" $domain_name "scalar") (serialize-qp "email_address" $email_address "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "domain_name" $qp_domain_name "scalar") (serialize-qp "email_address" $qp_email_address "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({domain_name: (encode-path-segment $domain_name), email_address: (encode-path-segment $email_address)} | format pattern "/mailzones/{domain_name}/catchall/{email_address}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
-    query: ({"domain_name": $domain_name, "email_address": $email_address} | compact)
+    query: ({"domain_name": $qp_domain_name, "email_address": $qp_email_address} | compact)
     headers: $auth.headers
     body: null
     content_type: "application/json"
@@ -2278,14 +2278,14 @@ export def "create-smtp-domain" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --domain-name: string # Mail zone domain name.
+  --qp-domain-name: string # Mail zone domain name.
   --hostname: string # The smtp domain name
 ]: any -> any {
   let input = $in
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($domain_name | is-empty) { error make --unspanned { msg: "path parameter 'domainName' must be non-empty" } }
-  let qp = [(serialize-qp "domain_name" $domain_name "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "domain_name" $qp_domain_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({domain_name: (encode-path-segment $domain_name)} | format pattern "/mailzones/{domain_name}/smtpdomains") $qp $auth.query)
   let req_body = {"hostname": $hostname} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2294,7 +2294,7 @@ export def "create-smtp-domain" [
   let req = {
     method: "post"
     url: $full_url
-    query: ({"domain_name": $domain_name} | compact)
+    query: ({"domain_name": $qp_domain_name} | compact)
     headers: $auth.headers
     body: $req_body
     content_type: "application/json"
@@ -2321,20 +2321,20 @@ export def "delete-smtp-domain" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --domain-name: string # Mail zone domain name.
+  --qp-domain-name: string # Mail zone domain name.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($domain_name | is-empty) { error make --unspanned { msg: "path parameter 'domainName' must be non-empty" } }
   if ($hostname | is-empty) { error make --unspanned { msg: "path parameter 'hostname' must be non-empty" } }
-  let qp = [(serialize-qp "domain_name" $domain_name "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "domain_name" $qp_domain_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({domain_name: (encode-path-segment $domain_name), hostname: (encode-path-segment $hostname)} | format pattern "/mailzones/{domain_name}/smtpdomains/{hostname}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
-    query: ({"domain_name": $domain_name} | compact)
+    query: ({"domain_name": $qp_domain_name} | compact)
     headers: $auth.headers
     body: null
     content_type: "application/json"
@@ -2361,7 +2361,7 @@ export def "configure-smtp-domain" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --domain-name: string # Mail zone domain name.
+  --qp-domain-name: string # Mail zone domain name.
   --enabled: oneof<nothing, bool> # Enabled
 ]: any -> any {
   let input = $in
@@ -2369,7 +2369,7 @@ export def "configure-smtp-domain" [
   let base = ($base_url | default $BASE_URL)
   if ($domain_name | is-empty) { error make --unspanned { msg: "path parameter 'domainName' must be non-empty" } }
   if ($hostname | is-empty) { error make --unspanned { msg: "path parameter 'hostname' must be non-empty" } }
-  let qp = [(serialize-qp "domain_name" $domain_name "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "domain_name" $qp_domain_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({domain_name: (encode-path-segment $domain_name), hostname: (encode-path-segment $hostname)} | format pattern "/mailzones/{domain_name}/smtpdomains/{hostname}") $qp $auth.query)
   let req_body = {"enabled": $enabled} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2378,7 +2378,7 @@ export def "configure-smtp-domain" [
   let req = {
     method: "put"
     url: $full_url
-    query: ({"domain_name": $domain_name} | compact)
+    query: ({"domain_name": $qp_domain_name} | compact)
     headers: $auth.headers
     body: $req_body
     content_type: "application/json"
@@ -2481,19 +2481,19 @@ export def "delete-database" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --database-name: string # Name of the database.
+  --qp-database-name: string # Name of the database.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($database_name | is-empty) { error make --unspanned { msg: "path parameter 'databaseName' must be non-empty" } }
-  let qp = [(serialize-qp "database_name" $database_name "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "database_name" $qp_database_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({database_name: (encode-path-segment $database_name)} | format pattern "/mysqldatabases/{database_name}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
-    query: ({"database_name": $database_name} | compact)
+    query: ({"database_name": $qp_database_name} | compact)
     headers: $auth.headers
     body: null
     content_type: "application/json"
@@ -2519,19 +2519,19 @@ export def "get-my-sql-database" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --database-name: string
+  --qp-database-name: string
 ]: nothing -> record<account_id: int, actual_size: int, hostname: string, max_size: int, name: string, user_count: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($database_name | is-empty) { error make --unspanned { msg: "path parameter 'databaseName' must be non-empty" } }
-  let qp = [(serialize-qp "database_name" $database_name "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "database_name" $qp_database_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({database_name: (encode-path-segment $database_name)} | format pattern "/mysqldatabases/{database_name}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"database_name": $database_name} | compact)
+    query: ({"database_name": $qp_database_name} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -2557,19 +2557,19 @@ export def "get-database-users" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --database-name: string # Name of the database.
+  --qp-database-name: string # Name of the database.
 ]: nothing -> table<enabled: bool, name: string, rights: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($database_name | is-empty) { error make --unspanned { msg: "path parameter 'databaseName' must be non-empty" } }
-  let qp = [(serialize-qp "database_name" $database_name "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "database_name" $qp_database_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({database_name: (encode-path-segment $database_name)} | format pattern "/mysqldatabases/{database_name}/users") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"database_name": $database_name} | compact)
+    query: ({"database_name": $qp_database_name} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -2595,7 +2595,7 @@ export def "create-my-sql-user" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --database-name: string # Name of the database.
+  --qp-database-name: string # Name of the database.
   --name: string # User name User names have to adhere to following rules:Between 2-14 characters.Must be a mix of letters and/or digits.Must be lower cased.Cannot contain spaces.
   --password: string # The password for the database user. Passwords have to adhere to following rules:Between 8-20 characters.Must be a mix of letters and digits.Must contain at least one digit (0-9).Must contain at least one letter (a-z).Cannot contain spaces.Cannot contain characters: * € $ & + } { ' " \
 ]: any -> any {
@@ -2603,7 +2603,7 @@ export def "create-my-sql-user" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($database_name | is-empty) { error make --unspanned { msg: "path parameter 'databaseName' must be non-empty" } }
-  let qp = [(serialize-qp "database_name" $database_name "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "database_name" $qp_database_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({database_name: (encode-path-segment $database_name)} | format pattern "/mysqldatabases/{database_name}/users") $qp $auth.query)
   let req_body = {"name": $name, "password": $password} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2612,7 +2612,7 @@ export def "create-my-sql-user" [
   let req = {
     method: "post"
     url: $full_url
-    query: ({"database_name": $database_name} | compact)
+    query: ({"database_name": $qp_database_name} | compact)
     headers: $auth.headers
     body: $req_body
     content_type: "application/json"
@@ -2639,21 +2639,21 @@ export def "delete-database-user" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --database-name: string # Name of the database.
-  --user-name: string # Name of the user.
+  --qp-database-name: string # Name of the database.
+  --qp-user-name: string # Name of the user.
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($database_name | is-empty) { error make --unspanned { msg: "path parameter 'databaseName' must be non-empty" } }
   if ($user_name | is-empty) { error make --unspanned { msg: "path parameter 'userName' must be non-empty" } }
-  let qp = [(serialize-qp "database_name" $database_name "scalar") (serialize-qp "user_name" $user_name "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "database_name" $qp_database_name "scalar") (serialize-qp "user_name" $qp_user_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({database_name: (encode-path-segment $database_name), user_name: (encode-path-segment $user_name)} | format pattern "/mysqldatabases/{database_name}/users/{user_name}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "delete"
     url: $full_url
-    query: ({"database_name": $database_name, "user_name": $user_name} | compact)
+    query: ({"database_name": $qp_database_name, "user_name": $qp_user_name} | compact)
     headers: $auth.headers
     body: null
     content_type: "application/json"
@@ -2680,8 +2680,8 @@ export def "change-database-user-password" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --database-name: string # Name of the database.
-  --user-name: string # Name of the user.
+  --qp-database-name: string # Name of the database.
+  --qp-user-name: string # Name of the user.
   --password: string # The password for the database user. Passwords have to adhere to following rules:Between 8-20 characters.Must be a mix of letters and digits.Must contain at least one digit (0-9).Must contain at least one letter (a-z).Cannot contain spaces.Cannot contain characters: * € $ & + } { ' " \
 ]: any -> any {
   let input = $in
@@ -2689,7 +2689,7 @@ export def "change-database-user-password" [
   let base = ($base_url | default $BASE_URL)
   if ($database_name | is-empty) { error make --unspanned { msg: "path parameter 'databaseName' must be non-empty" } }
   if ($user_name | is-empty) { error make --unspanned { msg: "path parameter 'userName' must be non-empty" } }
-  let qp = [(serialize-qp "database_name" $database_name "scalar") (serialize-qp "user_name" $user_name "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "database_name" $qp_database_name "scalar") (serialize-qp "user_name" $qp_user_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({database_name: (encode-path-segment $database_name), user_name: (encode-path-segment $user_name)} | format pattern "/mysqldatabases/{database_name}/users/{user_name}/password") $qp $auth.query)
   let req_body = {"password": $password} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2698,7 +2698,7 @@ export def "change-database-user-password" [
   let req = {
     method: "put"
     url: $full_url
-    query: ({"database_name": $database_name, "user_name": $user_name} | compact)
+    query: ({"database_name": $qp_database_name, "user_name": $qp_user_name} | compact)
     headers: $auth.headers
     body: $req_body
     content_type: "application/json"
@@ -2725,8 +2725,8 @@ export def "change-database-user-status" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --database-name: string # Name of the database.
-  --user-name: string # Name of the user.
+  --qp-database-name: string # Name of the database.
+  --qp-user-name: string # Name of the user.
   --enabled: oneof<nothing, bool> # Enabled
 ]: any -> any {
   let input = $in
@@ -2734,7 +2734,7 @@ export def "change-database-user-status" [
   let base = ($base_url | default $BASE_URL)
   if ($database_name | is-empty) { error make --unspanned { msg: "path parameter 'databaseName' must be non-empty" } }
   if ($user_name | is-empty) { error make --unspanned { msg: "path parameter 'userName' must be non-empty" } }
-  let qp = [(serialize-qp "database_name" $database_name "scalar") (serialize-qp "user_name" $user_name "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "database_name" $qp_database_name "scalar") (serialize-qp "user_name" $qp_user_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({database_name: (encode-path-segment $database_name), user_name: (encode-path-segment $user_name)} | format pattern "/mysqldatabases/{database_name}/users/{user_name}/status") $qp $auth.query)
   let req_body = {"enabled": $enabled} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2743,7 +2743,7 @@ export def "change-database-user-status" [
   let req = {
     method: "put"
     url: $full_url
-    query: ({"database_name": $database_name, "user_name": $user_name} | compact)
+    query: ({"database_name": $qp_database_name, "user_name": $qp_user_name} | compact)
     headers: $auth.headers
     body: $req_body
     content_type: "application/json"
@@ -2768,19 +2768,19 @@ export def "get-provisioningjobs-job-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --job-id: string # format: uuid
+  --qp-job-id: string # format: uuid
 ]: nothing -> record<completion: record<estimate: string>, id: string, status: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($job_id | is-empty) { error make --unspanned { msg: "path parameter 'jobId' must be non-empty" } }
-  let qp = [(serialize-qp "job_id" $job_id "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "job_id" $qp_job_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({job_id: (encode-path-segment $job_id)} | format pattern "/provisioningjobs/{job_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"job_id": $job_id} | compact)
+    query: ({"job_id": $qp_job_id} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -3065,19 +3065,19 @@ export def "get-ssl-certificate" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --sha1-fingerprint: string # The SHA-1 fingerprint of the certificate.
+  --qp-sha1-fingerprint: string # The SHA-1 fingerprint of the certificate.
 ]: nothing -> record<common_name: string, expires_after: string, sha1_fingerprint: string, subject_alt_names: table<type: string, value: string>, type: string, validation_level: string> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($sha1_fingerprint | is-empty) { error make --unspanned { msg: "path parameter 'sha1Fingerprint' must be non-empty" } }
-  let qp = [(serialize-qp "sha1_fingerprint" $sha1_fingerprint "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "sha1_fingerprint" $qp_sha1_fingerprint "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({sha1_fingerprint: (encode-path-segment $sha1_fingerprint)} | format pattern "/sslcertificates/{sha1_fingerprint}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"sha1_fingerprint": $sha1_fingerprint} | compact)
+    query: ({"sha1_fingerprint": $qp_sha1_fingerprint} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -3103,21 +3103,21 @@ export def "download-certificate" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --sha1-fingerprint: string # The SHA-1 fingerprint of the certificate.
+  --qp-sha1-fingerprint: string # The SHA-1 fingerprint of the certificate.
   --file-format: string@file-format-completer # The file format of the returned file stream: PFX: Also known as PKCS #12, is a single, password protected certificate archive that contains the entire certificate chain plus the matching private key.
   --password: string # The password used to protect the certificate file.
 ]: nothing -> oneof<string, record, nothing> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($sha1_fingerprint | is-empty) { error make --unspanned { msg: "path parameter 'sha1Fingerprint' must be non-empty" } }
-  let qp = [(serialize-qp "sha1_fingerprint" $sha1_fingerprint "scalar") (serialize-qp "file_format" $file_format "scalar") (serialize-qp "password" $password "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "sha1_fingerprint" $qp_sha1_fingerprint "scalar") (serialize-qp "file_format" $file_format "scalar") (serialize-qp "password" $password "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({sha1_fingerprint: (encode-path-segment $sha1_fingerprint)} | format pattern "/sslcertificates/{sha1_fingerprint}/download") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"sha1_fingerprint": $sha1_fingerprint, "file_format": $file_format, "password": $password} | compact)
+    query: ({"sha1_fingerprint": $qp_sha1_fingerprint, "file_format": $file_format, "password": $password} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -3180,19 +3180,19 @@ export def "get-windows-hosting" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --domain-name: string # The Windows hosting domain name.
+  --qp-domain-name: string # The Windows hosting domain name.
 ]: nothing -> record<actual_size: int, application_pool: record<installed_net_core_runtimes: list<string>, pipeline_mode: string, runtime: string>, domain_name: string, ftp_username: string, ip: string, ip_type: string, max_size: int, mssql_database_names: list<string>, servicepack_id: int, sites: table<bindings: list, name: string, path: string>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($domain_name | is-empty) { error make --unspanned { msg: "path parameter 'domainName' must be non-empty" } }
-  let qp = [(serialize-qp "domain_name" $domain_name "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "domain_name" $qp_domain_name "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({domain_name: (encode-path-segment $domain_name)} | format pattern "/windowshostings/{domain_name}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"domain_name": $domain_name} | compact)
+    query: ({"domain_name": $qp_domain_name} | compact)
     headers: $auth.headers
     body: null
     content_type: null

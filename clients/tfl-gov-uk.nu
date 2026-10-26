@@ -1076,8 +1076,8 @@ export def "line-status" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
   --detail: oneof<nothing, bool> # Include details of the disruptions that are causing the line status including the affected stops and routes
-  --start-date: string
-  --end-date: string
+  --qp-start-date: string
+  --qp-end-date: string
   --date-range-start-date: string # format: date-time
   --date-range-end-date: string # format: date-time
 ]: nothing -> table<created: string, crowding: record<passengerFlows: list, trainLoadings: list>, disruptions: list<record>, id: string, lineStatuses: list<record>, modeName: string, modified: string, name: string, routeSections: list<record>, serviceTypes: list<record>> {
@@ -1086,14 +1086,14 @@ export def "line-status" [
   if ($ids | is-empty) { error make --unspanned { msg: "path parameter 'ids' must be non-empty" } }
   if ($start_date | is-empty) { error make --unspanned { msg: "path parameter 'StartDate' must be non-empty" } }
   if ($end_date | is-empty) { error make --unspanned { msg: "path parameter 'EndDate' must be non-empty" } }
-  let qp = [(serialize-qp "detail" $detail "scalar") (serialize-qp "startDate" $start_date "scalar") (serialize-qp "endDate" $end_date "scalar") (serialize-qp "dateRange.startDate" $date_range_start_date "scalar") (serialize-qp "dateRange.endDate" $date_range_end_date "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "detail" $detail "scalar") (serialize-qp "startDate" $qp_start_date "scalar") (serialize-qp "endDate" $qp_end_date "scalar") (serialize-qp "dateRange.startDate" $date_range_start_date "scalar") (serialize-qp "dateRange.endDate" $date_range_end_date "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({ids: (encode-path-array $ids), start_date: (encode-path-segment $start_date), end_date: (encode-path-segment $end_date)} | format pattern "/Line/{ids}/Status/{start_date}/to/{end_date}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"detail": $detail, "startDate": $start_date, "endDate": $end_date, "dateRange.startDate": $date_range_start_date, "dateRange.endDate": $date_range_end_date} | compact)
+    query: ({"detail": $detail, "startDate": $qp_start_date, "endDate": $qp_end_date, "dateRange.startDate": $date_range_start_date, "dateRange.endDate": $date_range_end_date} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -1583,20 +1583,20 @@ export def "place-get-streets-by-post-code" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --postcode: string
+  --qp-postcode: string
   --postcode-input-postcode: string
 ]: nothing -> record {
   let auth = (build-auth $token ($auth_scheme | default "query-app_key"))
   let base = ($base_url | default $BASE_URL)
   if ($postcode | is-empty) { error make --unspanned { msg: "path parameter 'Postcode' must be non-empty" } }
-  let qp = [(serialize-qp "postcode" $postcode "scalar") (serialize-qp "postcodeInput.postcode" $postcode_input_postcode "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "postcode" $qp_postcode "scalar") (serialize-qp "postcodeInput.postcode" $postcode_input_postcode "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({postcode: (encode-path-segment $postcode)} | format pattern "/Place/Address/Streets/{postcode}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"postcode": $postcode, "postcodeInput.postcode": $postcode_input_postcode} | compact)
+    query: ({"postcode": $qp_postcode, "postcodeInput.postcode": $postcode_input_postcode} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -1811,8 +1811,8 @@ export def "place-get-at" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --lat: string
-  --lon: string
+  --qp-lat: string
+  --qp-lon: string
   --location-lat: float # format: double
   --location-lon: float # format: double
 ]: nothing -> record {
@@ -1821,14 +1821,14 @@ export def "place-get-at" [
   if ($type | is-empty) { error make --unspanned { msg: "path parameter 'type' must be non-empty" } }
   if ($lat | is-empty) { error make --unspanned { msg: "path parameter 'Lat' must be non-empty" } }
   if ($lon | is-empty) { error make --unspanned { msg: "path parameter 'Lon' must be non-empty" } }
-  let qp = [(serialize-qp "lat" $lat "scalar") (serialize-qp "lon" $lon "scalar") (serialize-qp "location.lat" $location_lat "scalar") (serialize-qp "location.lon" $location_lon "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "lat" $qp_lat "scalar") (serialize-qp "lon" $qp_lon "scalar") (serialize-qp "location.lat" $location_lat "scalar") (serialize-qp "location.lon" $location_lon "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({type: (encode-path-array $type), lat: (encode-path-segment $lat), lon: (encode-path-segment $lon)} | format pattern "/Place/{type}/At/{lat}/{lon}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"lat": $lat, "lon": $lon, "location.lat": $location_lat, "location.lon": $location_lon} | compact)
+    query: ({"lat": $qp_lat, "lon": $qp_lon, "location.lat": $location_lat, "location.lon": $location_lon} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -1860,8 +1860,8 @@ export def "place-get-overlay" [
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
   --accept: string@accept-completer # Response content type
-  --lat: string
-  --lon: string
+  --qp-lat: string
+  --qp-lon: string
   --location-lat: float # format: double
   --location-lon: float # format: double
 ]: nothing -> record {
@@ -1873,14 +1873,14 @@ export def "place-get-overlay" [
   if ($lon | is-empty) { error make --unspanned { msg: "path parameter 'Lon' must be non-empty" } }
   if ($width | is-empty) { error make --unspanned { msg: "path parameter 'width' must be non-empty" } }
   if ($height | is-empty) { error make --unspanned { msg: "path parameter 'height' must be non-empty" } }
-  let qp = [(serialize-qp "lat" $lat "scalar") (serialize-qp "lon" $lon "scalar") (serialize-qp "location.lat" $location_lat "scalar") (serialize-qp "location.lon" $location_lon "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "lat" $qp_lat "scalar") (serialize-qp "lon" $qp_lon "scalar") (serialize-qp "location.lat" $location_lat "scalar") (serialize-qp "location.lon" $location_lon "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({type: (encode-path-array $type), z: (encode-path-segment $z), lat: (encode-path-segment $lat), lon: (encode-path-segment $lon), width: (encode-path-segment $width), height: (encode-path-segment $height)} | format pattern "/Place/{type}/overlay/{z}/{lat}/{lon}/{width}/{height}") $qp $auth.query)
   let accept_val = ($accept | default "application/json")
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"lat": $lat, "lon": $lon, "location.lat": $location_lat, "location.lon": $location_lon} | compact)
+    query: ({"lat": $qp_lat, "lon": $qp_lon, "location.lat": $location_lat, "location.lon": $location_lon} | compact)
     headers: $auth.headers
     body: null
     content_type: null

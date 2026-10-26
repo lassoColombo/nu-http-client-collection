@@ -750,20 +750,20 @@ export def "list-group-principal-association" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --name: string # group name
+  --qp-name: string # group name
   --action: string # action name
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
-  let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "action" $action "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "name" $qp_name "scalar") (serialize-qp "action" $action "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/rest-service-fecru/admin/permission-schemes/{name}/groups") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"name": $name, "action": $action} | compact)
+    query: ({"name": $qp_name, "action": $action} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -1007,20 +1007,20 @@ export def "list-roles-principal-association" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --name: string # role name
+  --qp-name: string # role name
   --action: string # action name
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
-  let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "action" $action "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "name" $qp_name "scalar") (serialize-qp "action" $action "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/rest-service-fecru/admin/permission-schemes/{name}/review-roles") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"name": $name, "action": $action} | compact)
+    query: ({"name": $qp_name, "action": $action} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -1118,20 +1118,20 @@ export def "list-user-principal-association" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --name: string # permission scheme name
+  --qp-name: string # permission scheme name
   --action: string # action name
 ]: nothing -> any {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($name | is-empty) { error make --unspanned { msg: "path parameter 'name' must be non-empty" } }
-  let qp = [(serialize-qp "name" $name "scalar") (serialize-qp "action" $action "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "name" $qp_name "scalar") (serialize-qp "action" $action "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({name: (encode-path-segment $name)} | format pattern "/rest-service-fecru/admin/permission-schemes/{name}/users") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
   let req = {
     method: "get"
     url: $full_url
-    query: ({"name": $name, "action": $action} | compact)
+    query: ({"name": $qp_name, "action": $action} | compact)
     headers: $auth.headers
     body: null
     content_type: null

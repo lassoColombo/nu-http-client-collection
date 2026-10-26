@@ -392,13 +392,13 @@ export def "get-statement" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --statement-id: string # statement id for single object (format: uuid)
+  --qp-statement-id: string # statement id for single object (format: uuid)
   --xero-tenant-id: string # Xero identifier for Tenant
 ]: nothing -> record<endBalance: record<amount: float, creditDebitIndicator: string>, endDate: string, errors: table<detail: string, status: int, title: string, type: string>, feedConnectionId: string, id: string, startBalance: record<amount: float, creditDebitIndicator: string>, startDate: string, statementLineCount: int, statementLines: table<amount: float, chequeNumber: string, creditDebitIndicator: string, description: string, payeeName: string, postedDate: string, reference: string, transactionId: string>, status: any> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($statement_id | is-empty) { error make --unspanned { msg: "path parameter 'statementID' must be non-empty" } }
-  let qp = [(serialize-qp "statementId" $statement_id "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "statementId" $qp_statement_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({statement_id: (encode-path-segment $statement_id)} | format pattern "/Statements/{statement_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -407,7 +407,7 @@ export def "get-statement" [
   let req = {
     method: "get"
     url: $full_url
-    query: ({"statementId": $statement_id} | compact)
+    query: ({"statementId": $qp_statement_id} | compact)
     headers: $auth.headers
     body: null
     content_type: null

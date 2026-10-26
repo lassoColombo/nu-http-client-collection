@@ -2474,13 +2474,13 @@ export def "get-contactdb-lists-list-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --list-id: int # The ID of the list to retrieve.
+  --qp-list-id: int # The ID of the list to retrieve.
   --on-behalf-of: string
 ]: nothing -> record<id: int, name: string, recipient_count: int> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($list_id | is-empty) { error make --unspanned { msg: "path parameter 'list_id' must be non-empty" } }
-  let qp = [(serialize-qp "list_id" $list_id "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "list_id" $qp_list_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({list_id: (encode-path-segment $list_id)} | format pattern "/contactdb/lists/{list_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2489,7 +2489,7 @@ export def "get-contactdb-lists-list-id" [
   let req = {
     method: "get"
     url: $full_url
-    query: ({"list_id": $list_id} | compact)
+    query: ({"list_id": $qp_list_id} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -2515,7 +2515,7 @@ export def "patch-contactdb-lists-list-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --list-id: int # The ID of the list you are updating.
+  --qp-list-id: int # The ID of the list you are updating.
   --on-behalf-of: string
   name: string # The new name for your list.
 ]: any -> record<id: int, name: string, recipient_count: int> {
@@ -2523,7 +2523,7 @@ export def "patch-contactdb-lists-list-id" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($list_id | is-empty) { error make --unspanned { msg: "path parameter 'list_id' must be non-empty" } }
-  let qp = [(serialize-qp "list_id" $list_id "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "list_id" $qp_list_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({list_id: (encode-path-segment $list_id)} | format pattern "/contactdb/lists/{list_id}") $qp $auth.query)
   let req_body = {"name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2534,7 +2534,7 @@ export def "patch-contactdb-lists-list-id" [
   let req = {
     method: "patch"
     url: $full_url
-    query: ({"list_id": $list_id} | compact)
+    query: ({"list_id": $qp_list_id} | compact)
     headers: $auth.headers
     body: $req_body
     content_type: "application/json"
@@ -2562,13 +2562,13 @@ export def "get-contactdb-lists-list-id-recipients" [
   --dry-run(-n) # Return the request that would be sent without executing it
   --page: int # Page index of first recipient to return (must be a positive integer)
   --page-size: int # Number of recipients to return at a time (must be a positive integer between 1 and 1000)
-  --list-id: int # The ID of the list whose recipients you are requesting.
+  --qp-list-id: int # The ID of the list whose recipients you are requesting.
   --on-behalf-of: string
 ]: nothing -> record<recipients: table<recipients: list>> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($list_id | is-empty) { error make --unspanned { msg: "path parameter 'list_id' must be non-empty" } }
-  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "list_id" $list_id "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "page" $page "scalar") (serialize-qp "page_size" $page_size "scalar") (serialize-qp "list_id" $qp_list_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({list_id: (encode-path-segment $list_id)} | format pattern "/contactdb/lists/{list_id}/recipients") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -2577,7 +2577,7 @@ export def "get-contactdb-lists-list-id-recipients" [
   let req = {
     method: "get"
     url: $full_url
-    query: ({"page": $page, "page_size": $page_size, "list_id": $list_id} | compact)
+    query: ({"page": $page, "page_size": $page_size, "list_id": $qp_list_id} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -2647,8 +2647,8 @@ export def "delete-contactdb-lists-list-id-recipients-recipient-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --list-id: int # The ID of the list you are taking this recipient away from.
-  --recipient-id: int # The ID of the recipient to take off the list.
+  --qp-list-id: int # The ID of the list you are taking this recipient away from.
+  --qp-recipient-id: int # The ID of the recipient to take off the list.
   --on-behalf-of: string
   --body: record
 ]: any -> any {
@@ -2657,7 +2657,7 @@ export def "delete-contactdb-lists-list-id-recipients-recipient-id" [
   let base = ($base_url | default $BASE_URL)
   if ($list_id | is-empty) { error make --unspanned { msg: "path parameter 'list_id' must be non-empty" } }
   if ($recipient_id | is-empty) { error make --unspanned { msg: "path parameter 'recipient_id' must be non-empty" } }
-  let qp = [(serialize-qp "list_id" $list_id "scalar") (serialize-qp "recipient_id" $recipient_id "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "list_id" $qp_list_id "scalar") (serialize-qp "recipient_id" $qp_recipient_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({list_id: (encode-path-segment $list_id), recipient_id: (encode-path-segment $recipient_id)} | format pattern "/contactdb/lists/{list_id}/recipients/{recipient_id}") $qp $auth.query)
   let req_body = $body
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -2668,7 +2668,7 @@ export def "delete-contactdb-lists-list-id-recipients-recipient-id" [
   let req = {
     method: "delete"
     url: $full_url
-    query: ({"list_id": $list_id, "recipient_id": $recipient_id} | compact)
+    query: ({"list_id": $qp_list_id, "recipient_id": $qp_recipient_id} | compact)
     headers: $auth.headers
     body: $req_body
     content_type: "application/json"
@@ -3331,13 +3331,13 @@ export def "get-contactdb-segments-segment-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --segment-id: int # The ID of the segment you want to request.
+  --qp-segment-id: int # The ID of the segment you want to request.
   --on-behalf-of: string
 ]: nothing -> record<conditions: table<and_or: string, field: string, operator: string, value: string>, list_id: int, name: string, recipient_count: float> {
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($segment_id | is-empty) { error make --unspanned { msg: "path parameter 'segment_id' must be non-empty" } }
-  let qp = [(serialize-qp "segment_id" $segment_id "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "segment_id" $qp_segment_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({segment_id: (encode-path-segment $segment_id)} | format pattern "/contactdb/segments/{segment_id}") $qp $auth.query)
   let accept_val = "application/json"
   let auth = ($auth | update headers ($auth.headers | merge {Accept: $accept_val}))
@@ -3346,7 +3346,7 @@ export def "get-contactdb-segments-segment-id" [
   let req = {
     method: "get"
     url: $full_url
-    query: ({"segment_id": $segment_id} | compact)
+    query: ({"segment_id": $qp_segment_id} | compact)
     headers: $auth.headers
     body: null
     content_type: null
@@ -3373,7 +3373,7 @@ export def "patch-contactdb-segments-segment-id" [
   --allow-errors(-e) # Return full response without error handling
   --full(-F) # Return full response record {status, headers, body} while still raising on 4xx/5xx
   --dry-run(-n) # Return the request that would be sent without executing it
-  --segment-id: string # The ID of the segment you are updating.
+  --qp-segment-id: string # The ID of the segment you are updating.
   --on-behalf-of: string
   --conditions: list # The conditions by which this segment should be created. — item shape: {and_or?: "and"|"or"|"", field: string, operator: "eq"|"ne"|"lt"|"gt"|"contains", value: string}
   --list-id: float # The list ID you would like this segment to be built from.
@@ -3383,7 +3383,7 @@ export def "patch-contactdb-segments-segment-id" [
   let auth = (build-auth $token ($auth_scheme | default "bearer"))
   let base = ($base_url | default $BASE_URL)
   if ($segment_id | is-empty) { error make --unspanned { msg: "path parameter 'segment_id' must be non-empty" } }
-  let qp = [(serialize-qp "segment_id" $segment_id "scalar")] | flatten | str join "&"
+  let qp = [(serialize-qp "segment_id" $qp_segment_id "scalar")] | flatten | str join "&"
   let full_url = (build-url $base ({segment_id: (encode-path-segment $segment_id)} | format pattern "/contactdb/segments/{segment_id}") $qp $auth.query)
   let req_body = {"conditions": $conditions, "list_id": $list_id, "name": $name} | compact
   let req_body = if ($input | describe | str starts-with "record") { $input | merge deep ($req_body | default {}) } else { $req_body }
@@ -3394,7 +3394,7 @@ export def "patch-contactdb-segments-segment-id" [
   let req = {
     method: "patch"
     url: $full_url
-    query: ({"segment_id": $segment_id} | compact)
+    query: ({"segment_id": $qp_segment_id} | compact)
     headers: $auth.headers
     body: $req_body
     content_type: "application/json"
